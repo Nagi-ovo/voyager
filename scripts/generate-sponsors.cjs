@@ -38,8 +38,8 @@ async function main() {
   await ensureDir(OUTPUT_DIR);
 
   const [githubSponsors, afdianSponsors] = await Promise.all([
-    fetchGitHubSponsors(githubToken),
-    fetchAfdianSponsors(afdianUserId, afdianToken),
+    fetchGitHubSponsors(githubToken, { strict }),
+    fetchAfdianSponsors(afdianUserId, afdianToken, { strict }),
   ]);
 
   const svgContent = await buildSvg({ githubSponsors, afdianSponsors, friends });
@@ -99,7 +99,14 @@ async function writeFileAtomic(target, content) {
   }
 }
 
-async function fetchGitHubSponsors(token, fetchImpl = fetch) {
+function handleSourceFailure(message, strict) {
+  if (strict) {
+    throw new Error(message);
+  }
+  console.error(message);
+}
+
+async function fetchGitHubSponsors(token, { fetchImpl = fetch, strict = false } = {}) {
   if (!token) {
     console.warn('⚠️  No GitHub token available, GitHub sponsors will be skipped.');
     return [];
@@ -161,16 +168,19 @@ async function fetchGitHubSponsors(token, fetchImpl = fetch) {
 
     if (!res.ok) {
       const text = await res.text();
-      throw new Error(`Failed to fetch GitHub sponsors (${res.status}): ${text}`);
+      handleSourceFailure(`Failed to fetch GitHub sponsors (${res.status}): ${text}`, strict);
+      return sponsors;
     }
 
     const payload = await res.json();
     if (Array.isArray(payload?.errors) && payload.errors.length > 0) {
-      throw new Error(`GitHub Sponsors API error: ${JSON.stringify(payload.errors)}`);
+      handleSourceFailure(`GitHub Sponsors API error: ${JSON.stringify(payload.errors)}`, strict);
+      return sponsors;
     }
     const data = payload?.data?.user?.sponsorshipsAsMaintainer;
     if (!data || !Array.isArray(data.nodes) || !data.pageInfo) {
-      throw new Error('Unexpected response from GitHub Sponsors API.');
+      handleSourceFailure('Unexpected response from GitHub Sponsors API.', strict);
+      return sponsors;
     }
 
     for (const node of data.nodes || []) {
@@ -204,7 +214,7 @@ async function fetchGitHubSponsors(token, fetchImpl = fetch) {
   return sponsors;
 }
 
-async function fetchAfdianSponsors(userId, token, fetchImpl = fetch) {
+async function fetchAfdianSponsors(userId, token, { fetchImpl = fetch, strict = false } = {}) {
   if (!userId || !token) {
     console.warn('⚠️  No Afdian credentials available, Afdian sponsors will be skipped.');
     return [];
@@ -233,17 +243,20 @@ async function fetchAfdianSponsors(userId, token, fetchImpl = fetch) {
     });
 
     if (!res.ok) {
-      throw new Error(`Failed to fetch Afdian sponsors (${res.status})`);
+      handleSourceFailure(`Failed to fetch Afdian sponsors (${res.status})`, strict);
+      break;
     }
 
     const payload = await res.json();
     if (payload.ec !== 200) {
-      throw new Error(`Afdian API error: ${payload.em || 'unknown error'}`);
+      handleSourceFailure(`Afdian API error: ${payload.em || 'unknown error'}`, strict);
+      break;
     }
 
     const list = payload.data?.list;
     if (!Array.isArray(list)) {
-      throw new Error('Unexpected response from Afdian API.');
+      handleSourceFailure('Unexpected response from Afdian API.', strict);
+      break;
     }
     if (list.length === 0) break;
 
