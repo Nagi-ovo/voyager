@@ -115,10 +115,11 @@ export class ImageExportService {
         const turnIndex = idx + 1;
         const starred = turn.starred ? ' ⭐' : '';
         const userHtml = turn.userElement
-          ? DOMContentExtractor.extractUserContent(turn.userElement).html
+          ? DOMContentExtractor.extractUserContent(turn.userElement, turn.imageSelectors).html
           : this.formatPlainTextAsHtml(turn.user);
         const assistantHtml = turn.assistantElement
-          ? DOMContentExtractor.extractAssistantContent(turn.assistantElement).html
+          ? DOMContentExtractor.extractAssistantContent(turn.assistantElement, turn.imageSelectors)
+              .html
           : this.formatPlainTextAsHtml(turn.assistant);
 
         if (!turn.omitEmptySections) {

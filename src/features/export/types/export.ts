@@ -34,6 +34,8 @@ export interface ChatTurn {
   // Optional DOM elements for rich content extraction
   userElement?: HTMLElement;
   assistantElement?: HTMLElement;
+  /** Platform-specific image selectors from ExportPlatformAdapter.getImageSelectors(). */
+  imageSelectors?: string[];
 }
 
 /**
@@ -44,6 +46,8 @@ export interface ConversationMetadata {
   exportedAt: string;
   title?: string;
   count: number;
+  /** Platform display name, e.g. "ChatGPT", "Claude", "Gemini". */
+  platform?: string;
 }
 
 /**

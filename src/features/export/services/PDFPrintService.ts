@@ -501,7 +501,7 @@ export class PDFPrintService {
       : pageConversationTitle || metadataTitle || 'Untitled Conversation';
     // For PDF, avoid repeating the same title in smaller text under the H1.
     // Always derive a neutral "source" label from the URL instead of using metadata.title.
-    const urlTitle = this.extractTitleFromURL(metadata.url);
+    const urlTitle = this.extractTitleFromURL(metadata.url, metadata.platform);
     const date = this.formatDate(metadata.exportedAt);
     const turnsCount = metadata.count;
 
@@ -537,12 +537,13 @@ export class PDFPrintService {
     const starredClass = turn.starred ? 'gv-print-turn-starred' : '';
 
     const userContent = turn.userElement
-      ? DOMContentExtractor.extractUserContent(turn.userElement).html || '<em>No content</em>'
+      ? DOMContentExtractor.extractUserContent(turn.userElement, turn.imageSelectors).html ||
+        '<em>No content</em>'
       : this.formatContent(turn.user) || '<em>No content</em>';
 
     const assistantContent = turn.assistantElement
-      ? DOMContentExtractor.extractAssistantContent(turn.assistantElement).html ||
-        '<em>No content</em>'
+      ? DOMContentExtractor.extractAssistantContent(turn.assistantElement, turn.imageSelectors)
+          .html || '<em>No content</em>'
       : this.formatContent(turn.assistant) || '<em>No content</em>';
 
     if (!turn.omitEmptySections) {
@@ -1044,18 +1045,19 @@ export class PDFPrintService {
   /**
    * Helper: Extract title from URL
    */
-  private static extractTitleFromURL(url: string): string {
+  private static extractTitleFromURL(url: string, platform?: string): string {
+    const name = platform || 'Gemini';
     try {
       const urlObj = new URL(url);
       const pathname = urlObj.pathname;
-      const match = pathname.match(/\/(app|chat)\/([^/]+)/);
+      const match = pathname.match(/\/(app|chat|c)\/([^/]+)/);
       if (match) {
         const id = match[2];
-        return `Gemini Conversation ${id.substring(0, 8)}`;
+        return `${name} Conversation ${id.substring(0, 8)}`;
       }
-      return 'Gemini Conversation';
+      return `${name} Conversation`;
     } catch {
-      return 'Gemini Conversation';
+      return `${name} Conversation`;
     }
   }
 
@@ -1077,14 +1079,21 @@ export class PDFPrintService {
     }
   }
 
-  private static normalizeConversationTitle(rawTitle: string | undefined): string {
+  private static normalizeConversationTitle(
+    rawTitle: string | undefined,
+    platform?: string,
+  ): string {
     if (!rawTitle) return '';
-    const normalized = rawTitle
+    let normalized = rawTitle
       .trim()
       .replace(/\s+-\s+Gemini$/i, '')
       .replace(/\s+-\s+Google Gemini$/i, '')
       .replace(/\s+/g, ' ')
       .trim();
+    if (platform && platform !== 'Gemini') {
+      const escaped = platform.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      normalized = normalized.replace(new RegExp(`\\s+-\\s+${escaped}$`, 'i'), '').trim();
+    }
     return this.isMeaningfulConversationTitle(normalized) ? normalized : '';
   }
 
@@ -1092,16 +1101,20 @@ export class PDFPrintService {
     metadata: ConversationMetadata,
     preferMetadataTitle: boolean,
   ): string {
-    const metadataTitle = this.normalizeConversationTitle(metadata.title);
-    const conversationTitle = this.normalizeConversationTitle(this.getConversationTitle());
+    const platform = metadata.platform || 'Gemini';
+    const metadataTitle = this.normalizeConversationTitle(metadata.title, platform);
+    const conversationTitle = this.normalizeConversationTitle(
+      this.getConversationTitle(),
+      platform,
+    );
 
     if (preferMetadataTitle) {
-      return metadataTitle || conversationTitle || 'Gemini Conversation';
+      return metadataTitle || conversationTitle || `${platform} Conversation`;
     }
 
     const base = conversationTitle || metadataTitle;
-    if (!base) return 'Gemini Conversation';
-    return `${base} - Gemini`;
+    if (!base) return `${platform} Conversation`;
+    return `${base} - ${platform}`;
   }
 
   /**

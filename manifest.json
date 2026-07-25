@@ -35,6 +35,7 @@
     "https://business.gemini.google/*",
     "https://aistudio.google.com/*",
     "https://aistudio.google.cn/*",
+    "https://chatgpt.com/*",
     "https://*.googleapis.com/*",
     "https://accounts.google.com/*",
     "https://*.googleusercontent.com/*",
@@ -57,6 +58,11 @@
         "https://aistudio.google.com/*",
         "https://aistudio.google.cn/*"
       ],
+      "js": ["src/pages/content/index.tsx"],
+      "css": ["contentStyle.css"]
+    },
+    {
+      "matches": ["https://chatgpt.com/*"],
       "js": ["src/pages/content/index.tsx"],
       "css": ["contentStyle.css"]
     },

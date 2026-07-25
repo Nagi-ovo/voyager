@@ -10,7 +10,7 @@ describe('SiteRegistry.resolveByUrl', () => {
     expect(registry.resolveByUrl('https://aistudio.google.com/')?.id).toBe('aistudio');
     expect(registry.resolveByUrl('https://chatgpt.com/c/abc')?.id).toBe('chatgpt');
     expect(registry.resolveByUrl('https://chat.openai.com/c/abc')?.id).toBe('chatgpt');
-    expect(registry.resolveByUrl('https://claude.ai/chat/abc')?.id).toBe('claude');
+    expect(registry.resolveByUrl('https://claude.ai/chat/abc')).toBeNull();
   });
 
   it('returns null for sites with no adapter', () => {
@@ -22,7 +22,6 @@ describe('resolvePluginPlatformId', () => {
   it('returns the platform id for third-party plugin platforms', () => {
     expect(resolvePluginPlatformId('https://chatgpt.com/c/abc')).toBe('chatgpt');
     expect(resolvePluginPlatformId('https://chat.openai.com/')).toBe('chatgpt');
-    expect(resolvePluginPlatformId('https://claude.ai/chat/abc')).toBe('claude');
     expect(resolvePluginPlatformId('https://grok.com/')).toBe('grok');
   });
 

@@ -131,7 +131,10 @@ export class ConversationExportService {
 
       // Extract rich content with Markdown formatting from DOM elements if available
       if (turn.userElement) {
-        const extracted = DOMContentExtractor.extractUserContent(turn.userElement);
+        const extracted = DOMContentExtractor.extractUserContent(
+          turn.userElement,
+          turn.imageSelectors,
+        );
         if (extracted.text) {
           userContent = extracted.text;
         }
@@ -139,7 +142,10 @@ export class ConversationExportService {
       }
 
       if (turn.assistantElement) {
-        const extracted = DOMContentExtractor.extractAssistantContent(turn.assistantElement);
+        const extracted = DOMContentExtractor.extractAssistantContent(
+          turn.assistantElement,
+          turn.imageSelectors,
+        );
         if (extracted.text) {
           assistantContent = extracted.text;
         }
@@ -162,7 +168,8 @@ export class ConversationExportService {
       items: processedItems,
     };
 
-    const filename = options.filename || this.generateFilename('json', metadata.title);
+    const filename =
+      options.filename || this.generateFilename('json', metadata.title, metadata.platform);
     this.downloadJSON(payload, filename);
 
     return {
@@ -188,7 +195,8 @@ export class ConversationExportService {
       markdown = markdown.replace(/\n\*Source: \[[^\]]*\]\([^)]*\)\*\n/g, '\n');
     }
 
-    const filename = options.filename || this.generateFilename('md', metadata.title);
+    const filename =
+      options.filename || this.generateFilename('md', metadata.title, metadata.platform);
     const finalFilename = await this.downloadMarkdownOrZip(markdown, filename, 'chat.md');
     return { success: true, format: 'markdown' as ExportFormat, filename: finalFilename };
   }
@@ -208,7 +216,7 @@ export class ConversationExportService {
     return {
       success: true,
       format: 'pdf' as ExportFormat,
-      filename: options.filename || this.generateFilename('pdf', metadata.title),
+      filename: options.filename || this.generateFilename('pdf', metadata.title, metadata.platform),
     };
   }
 
@@ -220,7 +228,8 @@ export class ConversationExportService {
     metadata: ConversationMetadata,
     options: ExportOptions,
   ): Promise<ExportResult> {
-    const filename = options.filename || this.generateFilename('png', metadata.title);
+    const filename =
+      options.filename || this.generateFilename('png', metadata.title, metadata.platform);
     await ImageExportService.export(turns, metadata, {
       filename,
       fontSize: options.fontSize,
@@ -245,7 +254,8 @@ export class ConversationExportService {
       },
     };
 
-    const filename = options.filename || this.generateFilename('json', metadata.title);
+    const filename =
+      options.filename || this.generateFilename('json', metadata.title, metadata.platform);
     this.downloadJSON(payload, filename);
     return {
       success: true,
@@ -260,7 +270,8 @@ export class ConversationExportService {
     options: ExportOptions,
   ): Promise<ExportResult> {
     const markdown = this.composeDocumentMarkdown(content.markdown, metadata);
-    const filename = options.filename || this.generateFilename('md', metadata.title);
+    const filename =
+      options.filename || this.generateFilename('md', metadata.title, metadata.platform);
     const mdEntryName = filename.toLowerCase().endsWith('.md')
       ? filename.split('/').pop() || 'report.md'
       : 'report.md';
@@ -292,7 +303,7 @@ export class ConversationExportService {
     return {
       success: true,
       format: 'pdf' as ExportFormat,
-      filename: options.filename || this.generateFilename('pdf', metadata.title),
+      filename: options.filename || this.generateFilename('pdf', metadata.title, metadata.platform),
     };
   }
 
@@ -301,7 +312,8 @@ export class ConversationExportService {
     metadata: ConversationMetadata,
     options: ExportOptions,
   ): Promise<ExportResult> {
-    const filename = options.filename || this.generateFilename('png', metadata.title);
+    const filename =
+      options.filename || this.generateFilename('png', metadata.title, metadata.platform);
     await ImageExportService.exportDocument(
       {
         title: metadata.title || 'Deep Research Report',
@@ -334,7 +346,10 @@ export class ConversationExportService {
     }
 
     if (turn.assistantElement) {
-      const extracted = DOMContentExtractor.extractAssistantContent(turn.assistantElement);
+      const extracted = DOMContentExtractor.extractAssistantContent(
+        turn.assistantElement,
+        turn.imageSelectors,
+      );
       return {
         markdown: extracted.text || turn.assistant,
         html: extracted.html || this.formatPlainTextAsHtml(extracted.text || turn.assistant),
@@ -342,7 +357,10 @@ export class ConversationExportService {
     }
 
     if (turn.userElement) {
-      const extracted = DOMContentExtractor.extractUserContent(turn.userElement);
+      const extracted = DOMContentExtractor.extractUserContent(
+        turn.userElement,
+        turn.imageSelectors,
+      );
       return {
         markdown: extracted.text || turn.user,
         html: extracted.html || this.formatPlainTextAsHtml(extracted.text || turn.user),
@@ -615,12 +633,13 @@ export class ConversationExportService {
   /**
    * Generate filename with timestamp
    */
-  private static generateFilename(extension: string, title?: string): string {
+  private static generateFilename(extension: string, title?: string, platform?: string): string {
     const titlePart = this.sanitizeFilenamePart(title);
     if (titlePart) {
       return `${titlePart}.${extension}`;
     }
 
+    const slug = (platform || 'gemini').toLowerCase().replace(/\s+/g, '-');
     const pad = (n: number) => String(n).padStart(2, '0');
     const d = new Date();
     const y = d.getFullYear();
@@ -629,7 +648,7 @@ export class ConversationExportService {
     const hh = pad(d.getHours());
     const mm = pad(d.getMinutes());
     const ss = pad(d.getSeconds());
-    return `gemini-chat-${y}${m}${day}-${hh}${mm}${ss}.${extension}`;
+    return `${slug}-chat-${y}${m}${day}-${hh}${mm}${ss}.${extension}`;
   }
 
   private static sanitizeFilenamePart(title?: string): string {
