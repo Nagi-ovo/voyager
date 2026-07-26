@@ -54,6 +54,8 @@ import { startMermaid } from './mermaid/index';
 import { startBrandTheme } from './platformTheme';
 import { startPreventAutoScroll } from './preventAutoScroll/index';
 import { startPromptManager } from './prompt/index';
+import { slashPromptCoachmarkStep } from './prompt/slashPromptCoachmark';
+import { startSlashPromptFeature } from './prompt/slashPromptFeature';
 import { startQuoteReply } from './quoteReply/index';
 import { startRemoteAnnouncements } from './remoteAnnouncements/index';
 import { startResponseCompleteNotification } from './responseNotification/index';
@@ -101,6 +103,7 @@ let initializationTimer: number | null = null;
 let folderManagerInstance: Awaited<ReturnType<typeof startFolderManager>> | null = null;
 
 let promptManagerInstance: Awaited<ReturnType<typeof startPromptManager>> | null = null;
+let slashPromptFeatureInstance: Awaited<ReturnType<typeof startSlashPromptFeature>> | null = null;
 let quoteReplyCleanup: (() => void) | null = null;
 let inputVimModeCleanup: (() => void) | null = null;
 let sendBehaviorCleanup: (() => void) | null = null;
@@ -143,6 +146,7 @@ function showOnboardingCoachmarksWhenChangelogIsIdle(): void {
     usageCoachmarkStep,
     folderSearchCoachmarkStep,
     conversationSortCoachmarkStep,
+    slashPromptCoachmarkStep,
   ])
     .then((result) => {
       if (result !== 'skipped') onboardingCoachmarkShownThisPage = true;
@@ -193,6 +197,8 @@ async function initializeFeatures(): Promise<void> {
     if (!hasValidExtensionContext()) {
       return;
     }
+
+    slashPromptFeatureInstance = await startSlashPromptFeature();
 
     // Yield between features instead of sleeping a fixed amount. On an idle main
     // thread (the common foreground case) requestIdleCallback fires on the next
@@ -636,6 +642,10 @@ function handleVisibilityChange(): void {
         if (promptManagerInstance) {
           promptManagerInstance.destroy();
           promptManagerInstance = null;
+        }
+        if (slashPromptFeatureInstance) {
+          slashPromptFeatureInstance.destroy();
+          slashPromptFeatureInstance = null;
         }
         if (quoteReplyCleanup) {
           quoteReplyCleanup();

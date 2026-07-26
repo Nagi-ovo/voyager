@@ -54,6 +54,20 @@ describe('settings search', () => {
     expect(matches.has('general:section')).toBe(false);
   });
 
+  it('finds the slash prompt toggle through its localized copy', () => {
+    const matches = getSettingsSearchMatches(
+      [
+        {
+          id: 'promptManager:slashPromptEnabled',
+          keys: ['slashPromptEnabled', 'slashPromptEnabledHint'],
+        },
+      ],
+      '斜杠',
+    );
+
+    expect(matches.has('promptManager:slashPromptEnabled')).toBe(true);
+  });
+
   it('does not match unrelated words', () => {
     const matches = getSettingsSearchMatches(
       [{ id: 'general', keys: ['responseCompleteNotification'] }],

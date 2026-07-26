@@ -975,6 +975,14 @@
     "message": "隐藏页面上的提示词管理器悬浮球",
     "description": "隐藏提示词管理器功能提示"
   },
+  "slashPromptEnabled": {
+    "message": "启用斜杠快速插入提示词",
+    "description": "启用斜杠快速插入提示词开关"
+  },
+  "slashPromptEnabledHint": {
+    "message": "在 Gemini 输入框中输入 /，即可快速插入已保存的提示词。",
+    "description": "斜杠快速插入提示词说明"
+  },
   "promptInsertOnClick": {
     "message": "点击时直接插入提示词",
     "description": "启用后点击提示词时直接插入而不是复制"
@@ -2361,6 +2369,18 @@
   "timelineCoachmarkToggle": {
     "message": "使用紧凑索引",
     "description": "Inline toggle label in the compact-timeline coachmark"
+  },
+  "slashPromptCoachmarkTitle": {
+    "message": "新功能：斜杠提示词插入",
+    "description": "Coachmark title introducing slash prompt insertion"
+  },
+  "slashPromptCoachmarkBody": {
+    "message": "在 Gemini 输入框中输入 /，即可快速插入已保存的提示词。",
+    "description": "Coachmark body text introducing slash prompt insertion"
+  },
+  "slashPromptCoachmarkToggle": {
+    "message": "启用斜杠提示词插入",
+    "description": "Inline toggle label in the slash-prompt coachmark"
   },
   "coachmarkDismiss": {
     "message": "完成",

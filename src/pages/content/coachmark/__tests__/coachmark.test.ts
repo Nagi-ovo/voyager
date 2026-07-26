@@ -227,6 +227,19 @@ describe('showCoachmark', () => {
     expect(document.querySelector('.gv-coach')).toBeNull();
   });
 
+  it('skips a missing anchor without leaving DOM or marking the guide as seen', async () => {
+    const result = await showCoachmark({
+      id: 'missing-anchor',
+      anchor: () => null,
+      body: 'intro',
+    });
+
+    expect(result).toBe('skipped');
+    expect(document.querySelector('.gv-coach')).toBeNull();
+    expect(document.querySelector('.gv-coach-scrim')).toBeNull();
+    expect(await hasSeenCoachmark('missing-anchor')).toBe(false);
+  });
+
   it('keeps the guide open while switching and confirms the selected state with Done', async () => {
     const anchor = document.createElement('div');
     document.body.appendChild(anchor);
@@ -410,7 +423,7 @@ describe('showCoachmark', () => {
     expect(document.querySelector('.partial-preview')).toBeNull();
   });
 
-  it('labels the dialog, focuses its action, and restores focus after explicit close', async () => {
+  it('labels the dialog, focuses its action by default, and restores focus after close', async () => {
     const anchor = document.createElement('button');
     document.body.appendChild(anchor);
     anchor.focus();
@@ -440,6 +453,33 @@ describe('showCoachmark', () => {
     close?.click();
     await pending;
     expect(document.activeElement).toBe(anchor);
+  });
+
+  it('leaves page focus untouched on open and cleanup when focusOnOpen is false', async () => {
+    const composer = document.createElement('textarea');
+    const nextFocus = document.createElement('button');
+    document.body.append(composer, nextFocus);
+    composer.focus();
+
+    const pending = showCoachmark({
+      id: 'non-focusing-guide',
+      anchor: () => composer,
+      body: 'Feature explanation',
+      dismissLabel: 'Done',
+      focusOnOpen: false,
+    });
+    await flush();
+    await flush();
+
+    expect(document.activeElement).toBe(composer);
+
+    nextFocus.focus();
+    window.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+    );
+
+    expect(await pending).toBe('dismissed');
+    expect(document.activeElement).toBe(nextFocus);
   });
 
   it('does not show twice when once is left default (second call skips)', async () => {

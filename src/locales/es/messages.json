@@ -975,6 +975,14 @@
     "message": "Ocultar el botón flotante del Gestor de Prompts en la página",
     "description": "Hint for hiding prompt manager feature"
   },
+  "slashPromptEnabled": {
+    "message": "Activar la inserción rápida de prompts con /",
+    "description": "Enable slash prompt quick insertion toggle"
+  },
+  "slashPromptEnabledHint": {
+    "message": "Escribe / en el cuadro de texto de Gemini para insertar rápidamente un prompt guardado.",
+    "description": "Hint for slash prompt quick insertion"
+  },
   "promptInsertOnClick": {
     "message": "Insertar prompt al hacer clic",
     "description": "Enable direct prompt insertion instead of copying"
@@ -2363,6 +2371,18 @@
   "timelineCoachmarkToggle": {
     "message": "Usar cronología compacta",
     "description": "Inline toggle label in the compact-timeline coachmark"
+  },
+  "slashPromptCoachmarkTitle": {
+    "message": "Novedad: inserción de prompts con /",
+    "description": "Coachmark title introducing slash prompt insertion"
+  },
+  "slashPromptCoachmarkBody": {
+    "message": "Escribe / en el cuadro de texto de Gemini para insertar rápidamente un prompt guardado.",
+    "description": "Coachmark body text introducing slash prompt insertion"
+  },
+  "slashPromptCoachmarkToggle": {
+    "message": "Activar la inserción de prompts con /",
+    "description": "Inline toggle label in the slash-prompt coachmark"
   },
   "coachmarkDismiss": {
     "message": "Listo",

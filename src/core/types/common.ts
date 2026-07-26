@@ -98,6 +98,7 @@ export const StorageKeys = {
   PROMPT_INSERT_ON_CLICK: 'gvPromptInsertOnClick',
   PROMPT_VIEW_MODE: 'gvPromptViewMode',
   PROMPT_PANEL_VIEW: 'gvPromptPanelView',
+  SLASH_PROMPT_ENABLED: 'gvSlashPromptEnabled',
   // Persisted tag filter for the prompt manager (#729). chrome.storage.local
   // only — the selected tags are a per-device view over this machine's prompt
   // set, not a synced preference; syncing them could restore tags a device

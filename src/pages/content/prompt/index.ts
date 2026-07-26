@@ -51,11 +51,6 @@ import { extractPlainTitle } from './compactTitle';
 import { activatePromptText } from './promptClickAction';
 import { getPromptNameConflictIds, isPromptNameTaken, normalizePromptName } from './promptName';
 import { getScrollHintState } from './scrollHint';
-import {
-  createSlashPromptLifecycle,
-  isGeminiSlashPromptSurface,
-  startStoredPromptSlashCommand,
-} from './slashPrompt';
 import { formatStarredMessageTime } from './starredLibrary';
 import { sanitizeSelectedTags } from './tagFilterState';
 
@@ -429,18 +424,6 @@ function computeAnchoredPosition(
 }
 
 export async function startPromptManager(): Promise<{ destroy: () => void }> {
-  const slashPromptLifecycle = isGeminiSlashPromptSurface()
-    ? createSlashPromptLifecycle(startStoredPromptSlashCommand)
-    : null;
-  const setSlashPromptEnabled = async (enabled: boolean): Promise<void> => {
-    if (!slashPromptLifecycle) return;
-    try {
-      await slashPromptLifecycle.setEnabled(enabled);
-    } catch (error) {
-      pmLogger.warn('Failed to update slash prompt completion state', { enabled, error });
-    }
-  };
-
   let marked!: typeof MarkedFn;
   let DOMPurify!: typeof import('dompurify').default;
 
@@ -528,13 +511,6 @@ export async function startPromptManager(): Promise<{ destroy: () => void }> {
       // Ignore errors
     }
 
-    await setSlashPromptEnabled(!pmHiddenByUser);
-
-    if (pmHiddenByUser && !changelogBadgeActive) {
-      pmLogger.info('Prompt Manager is hidden by user settings');
-      return { destroy: () => {} };
-    }
-
     // Monkey patch console.warn to suppress KaTeX quirks mode warning in content script
     const originalWarn = console.warn;
     console.warn = function (...args) {
@@ -586,7 +562,7 @@ export async function startPromptManager(): Promise<{ destroy: () => void }> {
 
     // Prevent duplicate injection
     if (document.getElementById(ID.trigger)) {
-      return { destroy: () => slashPromptLifecycle?.destroy() };
+      return { destroy: () => {} };
     }
 
     // Trigger button
@@ -610,6 +586,9 @@ export async function startPromptManager(): Promise<{ destroy: () => void }> {
     trigger.appendChild(img);
     if (changelogBadgeActive) {
       trigger.classList.add('gv-pm-trigger-new');
+    }
+    if (pmHiddenByUser && !changelogBadgeActive) {
+      trigger.style.display = 'none';
     }
     document.body.appendChild(trigger);
     // Helper: place trigger near a target element (e.g. Gemini FAB touch target)
@@ -2163,7 +2142,6 @@ export async function startPromptManager(): Promise<{ destroy: () => void }> {
         const shouldHide = changes.gvHidePromptManager.newValue === true;
         pmHiddenByUser = shouldHide;
         pmLogger.info('Hide prompt manager setting changed', { shouldHide });
-        void setSlashPromptEnabled(!shouldHide);
         if (shouldHide && !changelogBadgeActive) {
           // Hide trigger and panel
           trigger.style.display = 'none';
@@ -2400,7 +2378,6 @@ export async function startPromptManager(): Promise<{ destroy: () => void }> {
     return {
       destroy: () => {
         try {
-          slashPromptLifecycle?.destroy();
           window.removeEventListener('resize', onWindowResize);
           window.removeEventListener('scroll', onReposition);
           window.removeEventListener('pointerdown', onWindowPointerDown, { capture: true });
@@ -2438,7 +2415,6 @@ export async function startPromptManager(): Promise<{ destroy: () => void }> {
       },
     };
   } catch (err) {
-    slashPromptLifecycle?.destroy();
     try {
       if (isExtensionContextInvalidatedError(err)) {
         return { destroy: () => {} };

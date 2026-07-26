@@ -5,14 +5,21 @@ import { describe, expect, it, vi } from 'vitest';
 import { createSlashPromptLifecycle } from '../slashPrompt';
 
 describe('prompt manager lifecycle', () => {
-  it('reconciles slash completion when the runtime hide setting changes', () => {
-    const code = readFileSync(resolve(process.cwd(), 'src/pages/content/prompt/index.ts'), 'utf8');
-    const hideSettingBranch =
-      code.match(
-        /if \(area === 'sync' && changes\?\.gvHidePromptManager\) \{[\s\S]*?\n      \}/,
-      )?.[0] ?? '';
+  it('drives slash completion only from its independent sync setting', () => {
+    const slashFeatureCode = readFileSync(
+      resolve(process.cwd(), 'src/pages/content/prompt/slashPromptFeature.ts'),
+      'utf8',
+    );
+    const promptManagerCode = readFileSync(
+      resolve(process.cwd(), 'src/pages/content/prompt/index.ts'),
+      'utf8',
+    );
 
-    expect(hideSettingBranch).toContain('void setSlashPromptEnabled(!shouldHide);');
+    expect(slashFeatureCode).toContain('StorageKeys.SLASH_PROMPT_ENABLED');
+    expect(slashFeatureCode).not.toContain('gvHidePromptManager');
+    expect(slashFeatureCode).not.toContain('HIDE_PROMPT_MANAGER');
+    expect(promptManagerCode).not.toContain('SLASH_PROMPT_ENABLED');
+    expect(promptManagerCode).not.toContain('setSlashPromptEnabled');
   });
 
   it('marks duplicate-name prompts with a persistent non-blocking badge', () => {

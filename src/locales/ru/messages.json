@@ -975,6 +975,14 @@
     "message": "Скрыть плавающую кнопку Менеджера промптов на странице",
     "description": "Hint for hiding prompt manager feature"
   },
+  "slashPromptEnabled": {
+    "message": "Включить быструю вставку промптов через /",
+    "description": "Enable slash prompt quick insertion toggle"
+  },
+  "slashPromptEnabledHint": {
+    "message": "Введите / в поле Gemini, чтобы быстро вставить сохранённый промпт.",
+    "description": "Hint for slash prompt quick insertion"
+  },
   "promptInsertOnClick": {
     "message": "Вставлять промпт по клику",
     "description": "Enable direct prompt insertion instead of copying"
@@ -2363,6 +2371,18 @@
   "timelineCoachmarkToggle": {
     "message": "Использовать компактную шкалу",
     "description": "Inline toggle label in the compact-timeline coachmark"
+  },
+  "slashPromptCoachmarkTitle": {
+    "message": "Новое: вставка промптов через /",
+    "description": "Coachmark title introducing slash prompt insertion"
+  },
+  "slashPromptCoachmarkBody": {
+    "message": "Введите / в поле Gemini, чтобы быстро вставить сохранённый промпт.",
+    "description": "Coachmark body text introducing slash prompt insertion"
+  },
+  "slashPromptCoachmarkToggle": {
+    "message": "Включить вставку промптов через /",
+    "description": "Inline toggle label in the slash-prompt coachmark"
   },
   "coachmarkDismiss": {
     "message": "Готово",

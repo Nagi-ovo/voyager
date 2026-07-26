@@ -5,6 +5,7 @@ import { StorageKeys } from '@/core/types/common';
 import type { PromptItem } from '@/core/types/sync';
 
 import {
+  hasSlashEligiblePrompts,
   isGeminiSlashPromptSurface,
   matchSlashPrompts,
   startPromptSlashCommand,
@@ -115,6 +116,25 @@ describe('matchSlashPrompts', () => {
 
     expect(matchSlashPrompts(items, 'translator').map((item) => item.id)).toEqual(['first']);
     expect(matchSlashPrompts(items, 'editor').map((item) => item.id)).toEqual(['second']);
+  });
+});
+
+describe('hasSlashEligiblePrompts', () => {
+  it('requires a non-empty name that is not part of a normalized conflict group', () => {
+    const duplicateNames: PromptItem[] = [
+      { id: 'first', name: 'Translator', text: 'First body', tags: [], createdAt: 1 },
+      { id: 'second', name: 'ＴＲＡＮＳＬＡＴＯＲ', text: 'Second body', tags: [], createdAt: 2 },
+      { id: 'legacy', text: 'Legacy body', tags: [], createdAt: 3 },
+      { id: 'blank', name: '  ', text: 'Blank name', tags: [], createdAt: 4 },
+    ];
+
+    expect(hasSlashEligiblePrompts(duplicateNames)).toBe(false);
+    expect(
+      hasSlashEligiblePrompts([
+        ...duplicateNames,
+        { id: 'unique', name: 'Summarizer', text: 'Unique body', tags: [], createdAt: 5 },
+      ]),
+    ).toBe(true);
   });
 });
 

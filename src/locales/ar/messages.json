@@ -975,6 +975,14 @@
     "message": "إخفاء الزر العائم لمدير المطالبات على الصفحة",
     "description": "Hint for hiding prompt manager feature"
   },
+  "slashPromptEnabled": {
+    "message": "تمكين الإدراج السريع للمطالبات باستخدام /",
+    "description": "Enable slash prompt quick insertion toggle"
+  },
+  "slashPromptEnabledHint": {
+    "message": "اكتب / في مربع كتابة Gemini لإدراج مطالبة محفوظة بسرعة.",
+    "description": "Hint for slash prompt quick insertion"
+  },
   "promptInsertOnClick": {
     "message": "إدراج المطالبة عند النقر",
     "description": "Enable direct prompt insertion instead of copying"
@@ -2363,6 +2371,18 @@
   "timelineCoachmarkToggle": {
     "message": "استخدام المخطط الزمني المضغوط",
     "description": "Inline toggle label in the compact-timeline coachmark"
+  },
+  "slashPromptCoachmarkTitle": {
+    "message": "جديد: إدراج المطالبات باستخدام /",
+    "description": "Coachmark title introducing slash prompt insertion"
+  },
+  "slashPromptCoachmarkBody": {
+    "message": "اكتب / في مربع كتابة Gemini لإدراج مطالبة محفوظة بسرعة.",
+    "description": "Coachmark body text introducing slash prompt insertion"
+  },
+  "slashPromptCoachmarkToggle": {
+    "message": "تمكين إدراج المطالبات باستخدام /",
+    "description": "Inline toggle label in the slash-prompt coachmark"
   },
   "coachmarkDismiss": {
     "message": "تم",

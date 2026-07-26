@@ -975,6 +975,14 @@
     "message": "페이지의 프롬프트 관리자 플로팅 볼을 숨깁니다",
     "description": "Hint for hiding prompt manager feature"
   },
+  "slashPromptEnabled": {
+    "message": "슬래시로 프롬프트 빠르게 삽입",
+    "description": "Enable slash prompt quick insertion toggle"
+  },
+  "slashPromptEnabledHint": {
+    "message": "Gemini 입력창에 /를 입력하여 저장된 프롬프트를 빠르게 삽입합니다.",
+    "description": "Hint for slash prompt quick insertion"
+  },
   "promptInsertOnClick": {
     "message": "클릭 시 프롬프트 바로 삽입",
     "description": "Enable direct prompt insertion instead of copying"
@@ -2363,6 +2371,18 @@
   "timelineCoachmarkToggle": {
     "message": "컴팩트 타임라인 사용",
     "description": "Inline toggle label in the compact-timeline coachmark"
+  },
+  "slashPromptCoachmarkTitle": {
+    "message": "새 기능: 슬래시 프롬프트 삽입",
+    "description": "Coachmark title introducing slash prompt insertion"
+  },
+  "slashPromptCoachmarkBody": {
+    "message": "Gemini 입력창에 /를 입력하여 저장된 프롬프트를 빠르게 삽입합니다.",
+    "description": "Coachmark body text introducing slash prompt insertion"
+  },
+  "slashPromptCoachmarkToggle": {
+    "message": "슬래시 프롬프트 삽입 사용",
+    "description": "Inline toggle label in the slash-prompt coachmark"
   },
   "coachmarkDismiss": {
     "message": "완료",

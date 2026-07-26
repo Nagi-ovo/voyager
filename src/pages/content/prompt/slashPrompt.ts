@@ -135,6 +135,11 @@ function usablePrompts(items: PromptItem[]): PromptItem[] {
   );
 }
 
+/** Returns whether at least one saved Prompt can be addressed unambiguously by slash completion. */
+export function hasSlashEligiblePrompts(items: PromptItem[]): boolean {
+  return usablePrompts(items).length > 0;
+}
+
 /** Matches names only. Prompt body and tags are deliberately excluded. */
 export function matchSlashPrompts(items: PromptItem[], query: string): PromptItem[] {
   const normalizedQuery = getPromptNameComparisonKey(query);

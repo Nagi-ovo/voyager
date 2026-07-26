@@ -975,6 +975,14 @@
     "message": "ページ上のプロンプトマネージャーのフローティングアイコンを非表示にします",
     "description": "Hint for hiding prompt manager feature"
   },
+  "slashPromptEnabled": {
+    "message": "スラッシュでプロンプトをすばやく挿入",
+    "description": "Enable slash prompt quick insertion toggle"
+  },
+  "slashPromptEnabledHint": {
+    "message": "Gemini の入力欄で / を入力すると、保存済みのプロンプトをすばやく挿入できます。",
+    "description": "Hint for slash prompt quick insertion"
+  },
   "promptInsertOnClick": {
     "message": "クリック時にプロンプトを直接挿入",
     "description": "Enable direct prompt insertion instead of copying"
@@ -2363,6 +2371,18 @@
   "timelineCoachmarkToggle": {
     "message": "コンパクト表示を使う",
     "description": "Inline toggle label in the compact-timeline coachmark"
+  },
+  "slashPromptCoachmarkTitle": {
+    "message": "新機能：スラッシュでプロンプトを挿入",
+    "description": "Coachmark title introducing slash prompt insertion"
+  },
+  "slashPromptCoachmarkBody": {
+    "message": "Gemini の入力欄で / を入力すると、保存済みのプロンプトをすばやく挿入できます。",
+    "description": "Coachmark body text introducing slash prompt insertion"
+  },
+  "slashPromptCoachmarkToggle": {
+    "message": "スラッシュでプロンプトを挿入",
+    "description": "Inline toggle label in the slash-prompt coachmark"
   },
   "coachmarkDismiss": {
     "message": "完了",

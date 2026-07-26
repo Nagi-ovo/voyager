@@ -396,6 +396,12 @@ const POPUP_SETTINGS_SEARCH_ITEMS = [
     'hidePromptManager',
     'hidePromptManagerHint',
   ]),
+  popupSearchTarget(
+    'promptManager',
+    'slashPromptEnabled',
+    ['slashPromptEnabled', 'slashPromptEnabledHint'],
+    ['slash autocomplete quick insert 斜杠 快速插入'],
+  ),
   popupSearchTarget('promptManager', 'promptInsertOnClick', [
     'promptInsertOnClick',
     'promptInsertOnClickHint',
@@ -745,6 +751,7 @@ interface SettingsUpdate {
   watermarkDownloadEnabled?: boolean;
   watermarkPreviewEnabled?: boolean;
   hidePromptManager?: boolean;
+  slashPromptEnabled?: boolean;
   promptInsertOnClickEnabled?: boolean;
   inputCollapseEnabled?: boolean;
   inputCollapseWhenNotEmpty?: boolean;
@@ -944,6 +951,7 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
   const [watermarkDownloadEnabled, setWatermarkDownloadEnabled] = useState<boolean>(true);
   const [watermarkPreviewEnabled, setWatermarkPreviewEnabled] = useState<boolean>(true);
   const [hidePromptManager, setHidePromptManager] = useState<boolean>(false);
+  const [slashPromptEnabled, setSlashPromptEnabled] = useState<boolean>(true);
   const [promptInsertOnClickEnabled, setPromptInsertOnClickEnabled] = useState<boolean>(false);
   const [promptMigrationStatus, setPromptMigrationStatus] = useState<{
     kind: 'ok' | 'warn' | 'err';
@@ -1276,6 +1284,8 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
       }
       if (typeof settings.hidePromptManager === 'boolean')
         payload.gvHidePromptManager = settings.hidePromptManager;
+      if (typeof settings.slashPromptEnabled === 'boolean')
+        payload[StorageKeys.SLASH_PROMPT_ENABLED] = settings.slashPromptEnabled;
       if (typeof settings.promptInsertOnClickEnabled === 'boolean')
         payload[StorageKeys.PROMPT_INSERT_ON_CLICK] = settings.promptInsertOnClickEnabled;
       if (typeof settings.inputCollapseEnabled === 'boolean')
@@ -1850,6 +1860,7 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
           [StorageKeys.WATERMARK_DOWNLOAD_ENABLED]: null,
           [StorageKeys.WATERMARK_PREVIEW_ENABLED]: null,
           gvHidePromptManager: false,
+          [StorageKeys.SLASH_PROMPT_ENABLED]: true,
           [StorageKeys.PROMPT_INSERT_ON_CLICK]: false,
           gvInputCollapseEnabled: false,
           gvInputCollapseWhenNotEmpty: false,
@@ -1938,6 +1949,7 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
             setWatermarkPreviewEnabled(watermarkSettings.preview);
           }
           setHidePromptManager(!!res?.gvHidePromptManager);
+          setSlashPromptEnabled(res?.[StorageKeys.SLASH_PROMPT_ENABLED] !== false);
           setPromptInsertOnClickEnabled(res?.[StorageKeys.PROMPT_INSERT_ON_CLICK] === true);
           setInputCollapseEnabled(res?.gvInputCollapseEnabled !== false);
           setInputCollapseWhenNotEmpty(res?.gvInputCollapseWhenNotEmpty === true);
@@ -3911,6 +3923,31 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
                     onChange={(e) => {
                       setHidePromptManager(e.target.checked);
                       apply({ hidePromptManager: e.target.checked });
+                    }}
+                  />
+                </div>,
+              )}
+              {renderSetting(
+                'promptManager',
+                'slashPromptEnabled',
+                <div className="group flex items-center justify-between">
+                  <div className="flex-1">
+                    <Label
+                      htmlFor="slash-prompt-enabled"
+                      className="group-hover:text-primary cursor-pointer text-sm font-medium transition-colors"
+                    >
+                      {t('slashPromptEnabled')}
+                    </Label>
+                    <p className="text-muted-foreground mt-1 text-xs">
+                      {t('slashPromptEnabledHint')}
+                    </p>
+                  </div>
+                  <Switch
+                    id="slash-prompt-enabled"
+                    checked={slashPromptEnabled}
+                    onChange={(e) => {
+                      setSlashPromptEnabled(e.target.checked);
+                      apply({ slashPromptEnabled: e.target.checked });
                     }}
                   />
                 </div>,
