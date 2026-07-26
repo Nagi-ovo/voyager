@@ -103,7 +103,6 @@
 - **🛠️ 파워 툴**:
   - **[일괄 삭제](https://voyager.nagi.fun/ko/guide/batch-delete)**: 여러 대화를 한꺼번에 삭제합니다.
   - **[인용 답장](https://voyager.nagi.fun/ko/guide/quote-reply)**: 텍스트를 선택하여 문맥과 함께 답장합니다.
-  - **[탭 제목 동기화](https://voyager.nagi.fun/ko/guide/tab-title)**: 브라우저 탭 제목을 자동으로 동기화합니다.
   - **[자동 스크롤 방지](https://voyager.nagi.fun/ko/guide/prevent-auto-scroll)**: 새로운 프롬프트를 전송할 때 발생하는 원치 않는 점프 동작을 차단합니다.
   - **[입력창 접기](https://voyager.nagi.fun/ko/guide/input-collapse)**: 더 많은 읽기 공간을 위해 자동으로 확장되는 입력 영역을 제공합니다.
   - **[기본 모델](https://voyager.nagi.fun/ko/guide/default-model)**: 좋아하는 모델을 기본값으로 설정하세요.

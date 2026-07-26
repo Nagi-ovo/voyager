@@ -103,7 +103,6 @@ AI チャットボット — Gemini、Claude、ChatGPT — は強力ですが、
 - **🛠️ パワーツール**:
   - **[一括削除](https://voyager.nagi.fun/ja/guide/batch-delete)**: 履歴をまとめてクリーンアップ。
   - **[引用返信](https://voyager.nagi.fun/ja/guide/quote-reply)**: テキストを選択してワンクリックで引用。
-  - **[タブタイトルの同期](https://voyager.nagi.fun/ja/guide/tab-title)**: タブの名前をチャットのタイトルに自動変更。
   - **[自動スクロール防止](https://voyager.nagi.fun/ja/guide/prevent-auto-scroll)**: 新しいプロンプトを送信する際の迷惑なジャンプ動作を阻止します。
   - **[入力欄の自動非表示](https://voyager.nagi.fun/ja/guide/input-collapse)**: 未入力時に折りたたんで表示スペースを確保。
   - **[デフォルトモデル](https://voyager.nagi.fun/ja/guide/default-model)**: 新しい対話に使用するデフォルトのモデルを設定します。

@@ -63,9 +63,6 @@ features:
   - icon: 🧜‍♀️
     title: Diagrammes Mermaid
     details: Du code aux visuels. Organigrammes, diagrammes de séquence, diagrammes de Gantt rendus instantanément.
-  - icon: 🏷️
-    title: Synchro Titre Onglet
-    details: Sachez en un coup d'œil. Synchro auto du titre de l'onglet avec votre chat.
   - icon: 🔀
     title: Bifurcation de Conversation (Expérimental)
     details: Pensée divergente. Séparez la conversation à n'importe quel point pour explorer d'autres possibilités.

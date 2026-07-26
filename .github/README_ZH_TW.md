@@ -109,7 +109,6 @@
 - **🛠️ 效率工具**:
   - **[批量刪除](https://voyager.nagi.fun/zh_TW/guide/batch-delete)**: 批量清理對話記錄。
   - **[引用回覆](https://voyager.nagi.fun/zh_TW/guide/quote-reply)**: 選中對話文本即可一鍵引用回覆。
-  - **[標籤頁標題同步](https://voyager.nagi.fun/zh_TW/guide/tab-title)**: 自動將標籤頁標題設為對話標題。
   - **[防自動跳轉](https://voyager.nagi.fun/zh_TW/guide/prevent-auto-scroll)**: 攔截每次發送新問題後頁面強制滾動到最底部的內建行為，找回絲滑體驗。
   - **[輸入框摺疊](https://voyager.nagi.fun/zh_TW/guide/input-collapse)**: 輸入框自動收納，釋放閱讀空間。
   - **[預設模型](https://voyager.nagi.fun/zh_TW/guide/default-model)**: 為新對話設置預設選中的模型。

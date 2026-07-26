@@ -185,10 +185,6 @@ Hide the "Recent" section and Gem cards from the sidebar for a cleaner interface
 
 Auto-switch to your preferred Gemini model (e.g., Gemini 2.5 Pro) on every new chat. Stop manually selecting your model each time.
 
-### Tab Title Sync
-
-Automatically sync the browser tab title with the current conversation title. Know which chat you're in at a glance when you have multiple tabs open.
-
 ### Conversation Fork (Experimental)
 
 Branch any conversation at any message node to explore different directions. Creates a divergent copy of the conversation from that point forward.

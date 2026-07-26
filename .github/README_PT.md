@@ -109,7 +109,6 @@ Para um guia completo, visite a nossa [Documentação](https://voyager.nagi.fun/
 - **🛠️ Ferramentas de Produtividade**:
   - **[Exclusão em Lote](https://voyager.nagi.fun/pt/guide/batch-delete)**: Limpe o seu histórico em massa.
   - **[Resposta com Citação](https://voyager.nagi.fun/pt/guide/quote-reply)**: Responda com contexto selecionando o texto.
-  - **[Sincronização do Título da Aba](https://voyager.nagi.fun/pt/guide/tab-title)**: Sincroniza automaticamente o título da aba do navegador.
   - **[Prevenir rolamento automático](https://voyager.nagi.fun/pt/guide/prevent-auto-scroll)**: Intercepta o comportamento de salto indesejado ao enviar uma mensagem.
   - **[Colapso de Entrada](https://voyager.nagi.fun/pt/guide/input-collapse)**: Área de entrada auto-colapsável para mais espaço de leitura.
   - **[Modelo Padrão](https://voyager.nagi.fun/pt/guide/default-model)**: Defina o seu modelo favorito como padrão.

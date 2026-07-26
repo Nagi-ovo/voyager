@@ -68,9 +68,6 @@ features:
   - icon: 🧜‍♀️
     title: Mermaid 图表
     details: 代码变图表。流程图、时序图、甘特图一键可视化。
-  - icon: 🏷️
-    title: 标签页标题同步
-    details: 一眼即知。自动将标签页标题同步为对话标题。
   - icon: 🔀
     title: 对话分支 (实验性)
     details: 发散思维。在任意节点分叉对话，探索不同可能。
