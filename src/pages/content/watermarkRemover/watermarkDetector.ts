@@ -25,6 +25,11 @@ const MAX_NEAR_BLACK_INCREASE = 0.05;
 const CLIP_ORIGINAL_THRESHOLD = 5;
 const CLIP_CANDIDATE_THRESHOLD = 0;
 const MAX_NEWLY_CLIPPED_RATIO = 0.03;
+const ALPHA_THRESHOLD = 0.002;
+const MAX_ALPHA = 0.99;
+const LOGO_VALUE = 255;
+const SEVERE_UNDERSHOOT_THRESHOLD = -5;
+const MAX_SEVERE_UNDERSHOOT_RATIO = 0.1;
 
 export interface WatermarkSignal {
   spatialScore: number;
@@ -38,6 +43,7 @@ export interface WatermarkRemovalAssessment {
   suppressionGain: number;
   nearBlackIncrease: number;
   newlyClippedRatio: number;
+  severeUndershootRatio: number;
 }
 
 function calculateLuminance(data: Uint8ClampedArray, index: number): number {
@@ -193,12 +199,51 @@ function hasStrongWatermarkRemovalEvidence(
   );
 }
 
+export function measureSevereUndershootRatio(
+  imageData: ImageData,
+  alphaMap: Float32Array,
+  position: WatermarkPosition,
+): number {
+  if (
+    !isRegionInBounds(imageData, position) ||
+    alphaMap.length !== position.width * position.height
+  ) {
+    return 0;
+  }
+
+  let severeUndershoot = 0;
+  for (let row = 0; row < position.height; row++) {
+    for (let col = 0; col < position.width; col++) {
+      const alphaIndex = row * position.width + col;
+      let alpha = alphaMap[alphaIndex];
+      if (alpha < ALPHA_THRESHOLD) continue;
+
+      alpha = Math.min(alpha, MAX_ALPHA);
+      const oneMinusAlpha = 1 - alpha;
+      const imageIndex = ((position.y + row) * imageData.width + position.x + col) * 4;
+      let severePixel = false;
+      for (let channel = 0; channel < 3; channel++) {
+        const watermarked = imageData.data[imageIndex + channel];
+        const rawOriginal = (watermarked - alpha * LOGO_VALUE) / oneMinusAlpha;
+        if (rawOriginal < SEVERE_UNDERSHOOT_THRESHOLD) {
+          severePixel = true;
+          break;
+        }
+      }
+      if (severePixel) severeUndershoot++;
+    }
+  }
+
+  return severeUndershoot / Math.max(1, position.width * position.height);
+}
+
 export function assessWatermarkRemovalCandidate(
   originalImageData: ImageData,
   candidateImageData: ImageData,
   alphaMap: Float32Array,
   position: WatermarkPosition,
   originalSignal = measureWatermarkSignal(originalImageData, alphaMap, position),
+  severeUndershootRatio = measureSevereUndershootRatio(originalImageData, alphaMap, position),
 ): WatermarkRemovalAssessment {
   const candidateSignal = measureWatermarkSignal(candidateImageData, alphaMap, position);
   const totalPixels = position.width * position.height;
@@ -244,8 +289,10 @@ export function assessWatermarkRemovalCandidate(
   const nearBlackIncrease = Math.max(0, candidateNearBlack - originalNearBlack) / ratioDenominator;
   const newlyClippedRatio = newlyClipped / ratioDenominator;
   const evidenceSafe = hasAcceptableWatermarkRemovalEvidence(candidateSignal, suppressionGain);
+  const exceedsLegacyDamageLimits =
+    nearBlackIncrease > MAX_NEAR_BLACK_INCREASE || newlyClippedRatio > MAX_NEWLY_CLIPPED_RATIO;
   const damageSafe =
-    nearBlackIncrease <= MAX_NEAR_BLACK_INCREASE && newlyClippedRatio <= MAX_NEWLY_CLIPPED_RATIO;
+    !exceedsLegacyDamageLimits || severeUndershootRatio < MAX_SEVERE_UNDERSHOOT_RATIO;
 
   return {
     safe: hasReliableWatermarkSignal(originalSignal) && evidenceSafe && damageSafe,
@@ -254,5 +301,6 @@ export function assessWatermarkRemovalCandidate(
     suppressionGain,
     nearBlackIncrease,
     newlyClippedRatio,
+    severeUndershootRatio,
   };
 }

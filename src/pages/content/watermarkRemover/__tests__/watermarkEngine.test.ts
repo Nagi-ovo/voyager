@@ -4,6 +4,7 @@ import {
   getWatermarkSignalStrength,
   hasAcceptableWatermarkRemovalEvidence,
   hasReliableWatermarkSignal,
+  measureSevereUndershootRatio,
   measureWatermarkSignal,
 } from '../watermarkDetector';
 import {
@@ -20,15 +21,19 @@ const TEST_ALPHA_MAP = Float32Array.from([
   0.02, 0.15, 0.15, 0.02, 0.15, 0.8, 0.8, 0.15, 0.15, 0.8, 0.8, 0.15, 0.02, 0.15, 0.15, 0.02,
 ]);
 
-function createImageDataWithWatermark(config: WatermarkConfig, layers = 1): ImageData {
+function createImageDataWithWatermark(
+  config: WatermarkConfig,
+  layers = 1,
+  baseValue = 80,
+): ImageData {
   const width = 24;
   const height = 24;
   const data = new Uint8ClampedArray(width * height * 4);
 
   for (let i = 0; i < data.length; i += 4) {
-    data[i] = 80;
-    data[i + 1] = 80;
-    data[i + 2] = 80;
+    data[i] = baseValue;
+    data[i + 1] = baseValue;
+    data[i + 2] = baseValue;
     data[i + 3] = 255;
   }
 
@@ -36,7 +41,7 @@ function createImageDataWithWatermark(config: WatermarkConfig, layers = 1): Imag
   for (let row = 0; row < position.height; row++) {
     for (let col = 0; col < position.width; col++) {
       const alpha = TEST_ALPHA_MAP[row * position.width + col];
-      let value = 80;
+      let value = baseValue;
       for (let layer = 0; layer < layers; layer++) {
         value = Math.round(255 * alpha + value * (1 - alpha));
       }
@@ -420,6 +425,26 @@ describe('watermarkEngine config detection', () => {
     expect(imageData.data).toEqual(originalPixels);
   });
 
+  it('accepts clipped pixels that reconstruct a dark background without severe undershoot', () => {
+    const config = { logoSize: 4, marginRight: 1, marginBottom: 1 };
+    const imageData = createImageDataWithWatermark(config, 1, 0);
+    const position = calculateWatermarkPosition(imageData.width, imageData.height, config);
+
+    expect(measureSevereUndershootRatio(imageData, TEST_ALPHA_MAP, position)).toBeLessThan(0.1);
+
+    const passes = removeWatermarkWithResidualCheck(imageData, TEST_ALPHA_MAP, position);
+
+    expect(passes).toBe(1);
+    for (let row = 0; row < position.height; row++) {
+      for (let col = 0; col < position.width; col++) {
+        const index = ((position.y + row) * imageData.width + position.x + col) * 4;
+        expect(imageData.data[index]).toBe(0);
+        expect(imageData.data[index + 1]).toBe(0);
+        expect(imageData.data[index + 2]).toBe(0);
+      }
+    }
+  });
+
   it('rejects a watermark-like pattern when trial removal would clip pixels', () => {
     const config = { logoSize: 4, marginRight: 1, marginBottom: 1 };
     const imageData = createImageDataWithWeakAlphaPattern(config);
@@ -429,6 +454,9 @@ describe('watermarkEngine config detection', () => {
     expect(
       hasReliableWatermarkSignal(measureWatermarkSignal(imageData, TEST_ALPHA_MAP, position)),
     ).toBe(true);
+    expect(
+      measureSevereUndershootRatio(imageData, TEST_ALPHA_MAP, position),
+    ).toBeGreaterThanOrEqual(0.1);
 
     const passes = removeWatermarkWithResidualCheck(imageData, TEST_ALPHA_MAP, position);
 

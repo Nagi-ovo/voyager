@@ -21,6 +21,7 @@ import {
   getWatermarkSignalStrength,
   hasReliableWatermarkSignal,
   hasResidualWatermarkEdges,
+  measureSevereUndershootRatio,
   measureWatermarkSignal,
 } from './watermarkDetector';
 
@@ -407,6 +408,7 @@ export function removeWatermarkWithResidualCheck(
 
   while (passes < WATERMARK_MAX_REMOVAL_PASSES) {
     const previousRegion = snapshotWatermarkRegion(imageData, position);
+    const severeUndershootRatio = measureSevereUndershootRatio(imageData, alphaMap, position);
     removeWatermark(imageData, alphaMap, position);
     const assessment = assessWatermarkRemovalCandidate(
       originalImageData,
@@ -414,6 +416,7 @@ export function removeWatermarkWithResidualCheck(
       alphaMap,
       position,
       currentSignal,
+      severeUndershootRatio,
     );
     if (!assessment.safe) {
       restoreWatermarkRegion(imageData, position, previousRegion);

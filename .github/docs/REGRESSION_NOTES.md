@@ -26,6 +26,37 @@ Regression test:
 Commit:
 ```
 
+## Dark watermark restoration must distinguish clipping from severe undershoot
+
+Symptom:
+
+Valid white watermarks on dark backgrounds were left untouched even when the
+template and anchor matched, because correct restoration produced many black
+or channel-clipped pixels.
+
+Root cause:
+
+The removal safety gate treated the number of newly black/clipped pixels as
+proof of damage. It could not distinguish a correct reconstruction near zero
+from an over-strong alpha subtraction that fell far below zero before clipping.
+
+Fix:
+
+When the legacy near-black or clipping limits are exceeded, only roll back if
+at least 10% of watermark-region pixels have a raw reverse-alpha channel below
+`-5`.
+
+Regression test:
+
+`src/pages/content/watermarkRemover/__tests__/watermarkEngine.test.ts`
+(`accepts clipped pixels that reconstruct a dark background without severe
+undershoot` and `rejects a watermark-like pattern when trial removal would clip
+pixels`).
+
+Commit:
+
+`fix(watermark): distinguish dark restoration from clipping damage`
+
 ## Mermaid must honor Gemini explicit light theme
 
 Symptom:
