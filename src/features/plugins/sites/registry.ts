@@ -8,6 +8,7 @@
 import type { SiteAdapter, SiteId } from '../types';
 import { aistudioAdapter } from './adapters/aistudio';
 import { chatgptAdapter } from './adapters/chatgpt';
+import { claudeAdapter } from './adapters/claude';
 import { geminiAdapter } from './adapters/gemini';
 import { grokAdapter } from './adapters/grok';
 import { matchesAnyPattern } from './matchPattern';
@@ -16,6 +17,7 @@ export const DEFAULT_ADAPTERS: readonly SiteAdapter[] = [
   geminiAdapter,
   aistudioAdapter,
   chatgptAdapter,
+  claudeAdapter,
   grokAdapter,
 ];
 

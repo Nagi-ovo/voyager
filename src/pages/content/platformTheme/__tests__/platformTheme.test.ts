@@ -37,7 +37,8 @@ const themedPlugin = (brand: string, matches: string[]): PluginManifest => ({
 });
 
 describe('resolveBrandColor', () => {
-  it('uses the adapter brandColor for ChatGPT', () => {
+  it('uses the adapter brandColor for Claude and ChatGPT', () => {
+    expect(resolveBrandColor('https://claude.ai/chat/1')).toBe('#d97757');
     expect(resolveBrandColor('https://chatgpt.com/c/1')).toBe('#0ea5e9');
     expect(resolveBrandColor('https://chat.openai.com/')).toBe('#0ea5e9');
   });
@@ -49,23 +50,23 @@ describe('resolveBrandColor', () => {
   });
 
   it('lets a matching plugin theme override the adapter default', () => {
-    const plugins = [themedPlugin('#ff0000', ['https://chatgpt.com/*'])];
-    expect(resolveBrandColor('https://chatgpt.com/x', plugins)).toBe('#ff0000');
+    const plugins = [themedPlugin('#ff0000', ['https://claude.ai/*'])];
+    expect(resolveBrandColor('https://claude.ai/x', plugins)).toBe('#ff0000');
   });
 
   it('ignores a plugin theme whose matches do not cover the url', () => {
-    const plugins = [themedPlugin('#ff0000', ['https://grok.com/*'])];
-    // Falls back to ChatGPT's adapter brandColor, not the Grok-scoped plugin.
-    expect(resolveBrandColor('https://chatgpt.com/x', plugins)).toBe('#0ea5e9');
+    const plugins = [themedPlugin('#ff0000', ['https://chatgpt.com/*'])];
+    // Falls back to Claude's adapter brandColor, not the ChatGPT-scoped plugin.
+    expect(resolveBrandColor('https://claude.ai/x', plugins)).toBe('#d97757');
   });
 
   it('lets a per-site override win over the adapter default and plugin theme', () => {
-    const plugins = [themedPlugin('#ff0000', ['https://chatgpt.com/*'])];
-    expect(resolveBrandColor('https://chatgpt.com/x', plugins, { chatgpt: '#123456' })).toBe(
+    const plugins = [themedPlugin('#ff0000', ['https://claude.ai/*'])];
+    expect(resolveBrandColor('https://claude.ai/x', plugins, { claude: '#123456' })).toBe(
       '#123456',
     );
-    // Override is scoped per site id: a gemini override does not leak to chatgpt.
-    expect(resolveBrandColor('https://chatgpt.com/x', [], { gemini: '#123456' })).toBe('#0ea5e9');
+    // Override is scoped per site id: a gemini override does not leak to claude.
+    expect(resolveBrandColor('https://claude.ai/x', [], { gemini: '#123456' })).toBe('#d97757');
   });
 
   it('applies a per-site override on Gemini (which otherwise has no colour)', () => {
@@ -82,9 +83,9 @@ describe('effectiveAccentForDisplay', () => {
     expect(effectiveAccentForDisplay('https://gemini.google.com/app')).toBe(DEFAULT_ACCENT);
   });
 
-  it('returns the adapter colour for ChatGPT and the override when set', () => {
-    expect(effectiveAccentForDisplay('https://chatgpt.com/x')).toBe('#0ea5e9');
-    expect(effectiveAccentForDisplay('https://chatgpt.com/x', [], { chatgpt: '#0f0f0f' })).toBe(
+  it('returns the adapter colour for Claude and the override when set', () => {
+    expect(effectiveAccentForDisplay('https://claude.ai/x')).toBe('#d97757');
+    expect(effectiveAccentForDisplay('https://claude.ai/x', [], { claude: '#0f0f0f' })).toBe(
       '#0f0f0f',
     );
   });
@@ -117,9 +118,9 @@ describe('accentHue', () => {
 
 describe('applyBrandTheme', () => {
   it('sets the themed class + --gv-pm-brand on the root for a themed site', () => {
-    applyBrandTheme('https://chatgpt.com/x', [], document);
+    applyBrandTheme('https://claude.ai/x', [], document);
     expect(document.documentElement.classList.contains(PLATFORM_THEME_CLASS)).toBe(true);
-    expect(document.documentElement.style.getPropertyValue('--gv-pm-brand')).toBe('#0ea5e9');
+    expect(document.documentElement.style.getPropertyValue('--gv-pm-brand')).toBe('#d97757');
   });
 
   it('adds nothing on Gemini', () => {
@@ -129,7 +130,7 @@ describe('applyBrandTheme', () => {
   });
 
   it('clears a previously-applied theme when navigating to an un-themed site', () => {
-    applyBrandTheme('https://chatgpt.com/x', [], document);
+    applyBrandTheme('https://claude.ai/x', [], document);
     applyBrandTheme('https://gemini.google.com/app', [], document);
     expect(document.documentElement.classList.contains(PLATFORM_THEME_CLASS)).toBe(false);
     expect(document.documentElement.style.getPropertyValue('--gv-pm-brand')).toBe('');
@@ -137,7 +138,7 @@ describe('applyBrandTheme', () => {
   });
 
   it('sets a luminance-matched --gv-pm-brand-fg alongside the brand', () => {
-    applyBrandTheme('https://chatgpt.com/x', [], document); // #0ea5e9 → white ink
+    applyBrandTheme('https://claude.ai/x', [], document); // #d97757 → white ink
     expect(document.documentElement.style.getPropertyValue('--gv-pm-brand-fg')).toBe('#ffffff');
   });
 
