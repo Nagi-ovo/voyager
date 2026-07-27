@@ -17,6 +17,7 @@ import BG_96_IMPORT from './assets/bg_96.png';
 import BG_96_20260520_IMPORT from './assets/bg_96_20260520.png';
 import { type WatermarkPosition, removeWatermark } from './blendModes';
 import {
+  assessDifficultWatermarkRemovalCandidate,
   assessWatermarkRemovalCandidate,
   getWatermarkSignalStrength,
   hasReliableWatermarkSignal,
@@ -246,6 +247,123 @@ function restoreWatermarkRegion(
       targetStart,
     );
   }
+}
+
+function isWatermarkPositionInBounds(imageData: ImageData, position: WatermarkPosition): boolean {
+  return (
+    position.width > 0 &&
+    position.height > 0 &&
+    position.x >= 0 &&
+    position.y >= 0 &&
+    position.x + position.width <= imageData.width &&
+    position.y + position.height <= imageData.height
+  );
+}
+
+function getDifficultWatermarkAnchorOptions(
+  options: WatermarkAnchorOption[],
+): WatermarkAnchorOption[] {
+  return options.flatMap((option) => {
+    const snapOffsets =
+      option.config.alphaVariant === '20260520-small' ? [-3, -2, -1, 0, 1, 2, 3] : [0];
+
+    return snapOffsets.flatMap((offsetX) =>
+      snapOffsets.map((offsetY) =>
+        offsetX === 0 && offsetY === 0
+          ? option
+          : {
+              ...option,
+              config: {
+                ...option.config,
+                marginRight: option.config.marginRight - offsetX,
+                marginBottom: option.config.marginBottom - offsetY,
+              },
+            },
+      ),
+    );
+  });
+}
+
+export function chooseDifficultWatermarkAnchorOption(
+  imageData: ImageData,
+  options: WatermarkAnchorOption[],
+): WatermarkAnchorOption | undefined {
+  let best:
+    | {
+        option: WatermarkAnchorOption;
+        suppression: number;
+      }
+    | undefined;
+
+  for (const option of getDifficultWatermarkAnchorOptions(options)) {
+    const position = calculateWatermarkPosition(imageData.width, imageData.height, option.config);
+    if (!isWatermarkPositionInBounds(imageData, position)) continue;
+
+    const originalSignal = measureWatermarkSignal(imageData, option.alphaMap, position);
+    const severeUndershootRatio = measureSevereUndershootRatio(
+      imageData,
+      option.alphaMap,
+      position,
+    );
+    const snapshot = snapshotWatermarkRegion(imageData, position);
+    let finalSignal: ReturnType<typeof measureWatermarkSignal>;
+
+    try {
+      removeWatermark(imageData, option.alphaMap, position);
+      finalSignal = measureWatermarkSignal(imageData, option.alphaMap, position);
+    } finally {
+      restoreWatermarkRegion(imageData, position, snapshot);
+    }
+
+    const assessment = assessDifficultWatermarkRemovalCandidate(
+      originalSignal,
+      finalSignal,
+      severeUndershootRatio,
+    );
+    if (!assessment.eligible) continue;
+    if (!best || assessment.suppression > best.suppression) {
+      best = {
+        option,
+        suppression: assessment.suppression,
+      };
+    }
+  }
+
+  return best?.option;
+}
+
+export function removeWatermarkFromAnchorOptions(
+  imageData: ImageData,
+  anchorOptions: WatermarkAnchorOption[],
+): void {
+  const trustedOption = chooseWatermarkAnchorOption(imageData, anchorOptions);
+  const trustedPosition = calculateWatermarkPosition(
+    imageData.width,
+    imageData.height,
+    trustedOption.config,
+  );
+  const trustedSignal = measureWatermarkSignal(imageData, trustedOption.alphaMap, trustedPosition);
+
+  if (hasReliableWatermarkSignal(trustedSignal)) {
+    // Keep the established trusted path unchanged. Gemini can stack multiple
+    // transparent marks after iterative edits, so this path may remove more
+    // than one layer and retains its existing safety rollback.
+    removeWatermarkWithResidualCheck(imageData, trustedOption.alphaMap, trustedPosition);
+    return;
+  }
+
+  // Only fall back after every known anchor misses the trusted thresholds.
+  // Each difficult candidate is trialed against, and restored to, the same
+  // original pixels before the strongest safe suppression is applied once.
+  const difficultOption = chooseDifficultWatermarkAnchorOption(imageData, anchorOptions);
+  if (!difficultOption) return;
+
+  const difficultPosition = calculateWatermarkPosition(
+    imageData.width,
+    imageData.height,
+    difficultOption.config,
+  );
+  removeWatermark(imageData, difficultOption.alphaMap, difficultPosition);
 }
 
 function createGaussianKernel(radius: number, sigma: number): Float32Array {
@@ -607,13 +725,7 @@ export class WatermarkEngine {
         alphaMap: await this.getAlphaMap(this.getAlphaMapKey(config)),
       })),
     );
-    const { config, alphaMap } = chooseWatermarkAnchorOption(imageData, anchorOptions);
-    const position = calculateWatermarkPosition(canvas.width, canvas.height, config);
-
-    // Remove watermark from image data. Gemini can stack multiple transparent
-    // marks after iterative image edits, so repeat only while the known alpha
-    // pattern is still clearly present at the selected anchor.
-    removeWatermarkWithResidualCheck(imageData, alphaMap, position);
+    removeWatermarkFromAnchorOptions(imageData, anchorOptions);
 
     // Write processed image data back to canvas
     ctx.putImageData(imageData, 0, 0);

@@ -26,6 +26,44 @@ Regression test:
 Commit:
 ```
 
+## Low-confidence watermark matches require isolated trial removal
+
+Symptom:
+
+Gemini watermarks at a known template and anchor could remain untouched when
+image content weakened their spatial and gradient correlations just below the
+trusted detection thresholds.
+
+Root cause:
+
+The anchor chooser returned the historical default when no candidate was
+trusted, and the removal path then rejected that same untrusted signal without
+testing whether one reverse-alpha pass would specifically suppress the known
+watermark pattern.
+
+Fix:
+
+When every known anchor misses the trusted thresholds, trial each preset
+template and allowed snap offset independently against the original pixels.
+Accept only candidates whose spatial and gradient signals both decrease, whose
+combined suppression exceeds `0.08`, and whose severe-undershoot ratio stays
+below `0.1`; restore every trial before applying the strongest candidate once.
+The existing trusted path remains unchanged and keeps priority.
+
+Regression test:
+
+`src/pages/content/watermarkRemover/__tests__/watermarkEngine.test.ts`
+(`accepts a difficult match only when both signals improve and removal stays
+safe`, `selects the strongest difficult candidate without retaining trial
+pixels`, `finds a difficult small watermark at a snapped offset`, and `leaves
+trial pixels unchanged when no difficult candidate qualifies`). The same file
+also verifies that the difficult path applies exactly one pass and never takes
+over after a trusted candidate's safety rollback.
+
+Commit:
+
+`fix(watermark): add difficult-match fallback`
+
 ## Dark watermark restoration must distinguish clipping from severe undershoot
 
 Symptom:

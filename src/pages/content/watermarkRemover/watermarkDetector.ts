@@ -20,6 +20,7 @@ const MAX_RESIDUAL_GRADIENT_SCORE = 0.18;
 const MIN_SUPPRESSION_GAIN = 0.25;
 const MIN_RELIABILITY_TRANSITION_GAIN = 0.2;
 const MIN_RELIABILITY_TRANSITION_RATIO = 0.4;
+const MIN_DIFFICULT_SUPPRESSION = 0.08;
 const NEAR_BLACK_THRESHOLD = 5;
 const MAX_NEAR_BLACK_INCREASE = 0.05;
 const CLIP_ORIGINAL_THRESHOLD = 5;
@@ -43,6 +44,14 @@ export interface WatermarkRemovalAssessment {
   suppressionGain: number;
   nearBlackIncrease: number;
   newlyClippedRatio: number;
+  severeUndershootRatio: number;
+}
+
+export interface DifficultWatermarkRemovalAssessment {
+  eligible: boolean;
+  originalStrength: number;
+  finalResidualStrength: number;
+  suppression: number;
   severeUndershootRatio: number;
 }
 
@@ -162,6 +171,32 @@ export function hasReliableWatermarkSignal(signal: WatermarkSignal): boolean {
 
 export function getWatermarkSignalStrength(signal: WatermarkSignal): number {
   return Math.max(0, signal.spatialScore) * 0.5 + Math.max(0, signal.gradientScore) * 0.3;
+}
+
+export function assessDifficultWatermarkRemovalCandidate(
+  originalSignal: WatermarkSignal,
+  finalSignal: WatermarkSignal,
+  severeUndershootRatio: number,
+): DifficultWatermarkRemovalAssessment {
+  const originalStrength = getWatermarkSignalStrength(originalSignal);
+  const finalResidualStrength =
+    Math.abs(finalSignal.spatialScore) * 0.5 + Math.max(0, finalSignal.gradientScore) * 0.3;
+  const suppression = originalStrength - finalResidualStrength;
+  const spatialReduced = Math.abs(finalSignal.spatialScore) < originalSignal.spatialScore;
+  const gradientReduced = finalSignal.gradientScore < originalSignal.gradientScore;
+  const eligible =
+    spatialReduced &&
+    gradientReduced &&
+    suppression > MIN_DIFFICULT_SUPPRESSION &&
+    severeUndershootRatio < MAX_SEVERE_UNDERSHOOT_RATIO;
+
+  return {
+    eligible,
+    originalStrength,
+    finalResidualStrength,
+    suppression,
+    severeUndershootRatio,
+  };
 }
 
 export function hasResidualWatermarkEdges(signal: WatermarkSignal): boolean {
