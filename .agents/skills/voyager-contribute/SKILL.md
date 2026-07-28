@@ -48,7 +48,7 @@ Verification is complete when every applicable automated check and browser check
    ```
 
 3. Inspect the commit with `git show --stat --format=fuller HEAD` and `git status --short`. Require no staged or unstaged changes in the contribution's paths; preserve and disclose unrelated pre-existing work. `HEAD` is the tested commit only while the verified paths match it, and any later change invalidates affected evidence.
-4. When publishing is authorized, push only the topic branch and open or update a draft PR targeting `main`. Contributors never push directly to `main`; use force-push only with explicit user approval — this repository squash-merges, so a merged branch will later look unmerged (see repo-traps.md) and must be deleted, not re-pushed.
+4. When publishing is authorized, push only the topic branch and open or update a draft PR targeting `main`. Contributors never push directly to `main`; use force-push only with explicit user approval — this repository squash-merges, so a merged branch will later look unmerged (see repo-traps.md) and must be deleted, not re-pushed. Exception: this rule governs contribution workflows; a maintainer with push access working outside a contribution follows the project-wide default push rules in `CLAUDE.md`/`AGENTS.md`, which take precedence.
 5. In the PR, state the linked Issue or direct authorization/rationale, scope, tested commit, commands run, live browser evidence, screenshots for UI changes, and all pending checks. Re-run affected checks after review changes.
 6. Verify the PR author, base branch, commit set, changed files, and CI state with `gh` before handoff.
 

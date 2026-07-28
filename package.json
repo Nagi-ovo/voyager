@@ -33,7 +33,7 @@
     "format:check": "prettier --check .",
     "i18n:check": "node scripts/check-locale-keys.mjs",
     "typecheck": "tsc --noEmit",
-    "verify:pr": "bun run format:check && bun run lint:check && bun run typecheck && bun run i18n:check && bun run test && bun run build:browsers && bun run docs:build",
+    "verify:pr": "bun run format:check && bun run lint:check && bun run typecheck && bun run i18n:check && bun run test && bun run build:all && bun run docs:build",
     "verify:katex-export": "bun scripts/verify-katex-export.ts",
     "verify:safari-resources": "node scripts/verify-safari-resources.mjs",
     "commitlint": "commitlint --edit $GIT_PARAMS",

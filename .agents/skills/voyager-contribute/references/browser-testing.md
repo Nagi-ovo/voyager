@@ -34,7 +34,7 @@ Missing hardware or access may be covered by another contributor. Record `Needs 
 | Firefox | `bun run build:firefox`                        | `dist_firefox/manifest.json` via `about:debugging`                                   |
 | Safari  | `bun run build:safari`                         | `dist_safari`; then follow the `update-safari-extension` skill                       |
 
-`bun run build:all` excludes Edge. `bun run build:browsers` and `bun run verify:pr` include the Edge package build.
+`bun run build:all` and `bun run verify:pr` exclude Edge (the Edge zip step needs the external `zip` executable, which Windows lacks by default — CI's `Build (edge)` covers it). `bun run build:browsers` includes the Edge package build.
 
 ## Baseline smoke
 

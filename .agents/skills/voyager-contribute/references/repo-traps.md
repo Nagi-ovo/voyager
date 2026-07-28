@@ -6,7 +6,7 @@ Every item below cost a real contributor at least one review round (source PR in
 
 - **This repository squash-merges.** After your PR merges, your local branch will show as unmerged or conflicting — that is normal. Delete it and branch fresh from `main`; never re-open a PR from the old branch (#867 was closed as a self-duplicate created exactly this way).
 - **The PR title becomes the squash commit header.** Title it `type(scope): imperative summary` — never the branch name or "Fixes #N" (#859, #865, #867).
-- **Check `git diff upstream/main --stat` before opening the PR** so unrelated churn (assets, lockfiles) never rides along (#865 accidentally wiped `sponsors.svg`).
+- **Check `git diff origin/main --stat` (or whichever remote tracks the base repository's `main`) before opening the PR** so unrelated churn (assets, lockfiles) never rides along (#865 accidentally wiped `sponsors.svg`).
 - **`@codex review` triggers the automated review** (bare `@codex` does nothing). Trigger it once per new head, re-trigger after any rebase/force-push, and don't re-trigger while a run is pending (#854). The human reviewer finalizes only after Codex has covered the exact current head SHA.
 
 ## Reuse the sibling precedent
@@ -21,7 +21,7 @@ Grep for the existing primitive before writing parallel logic — reviewers trea
 
 ## New-site features go through the plugin system
 
-- Adding support for a new site (ChatGPT, Claude, …) means a builtin plugin in `src/features/plugins/builtin/`: default-disabled, optional host permission, dynamic content-script registration, and a `start`/`stop` lifecycle with teardown. Never add static `content_scripts` or required `host_permissions` to `manifest*.json` — manifest permission escalation without prior Issue approval is a hard stop (#865).
+- Adding support for a new site (ChatGPT, Claude, …) goes through the plugin system: declarative CSS+JSON plugins belong in the bundled catalog (`src/features/plugins/catalog/` via `BundledCatalogPluginSource`); only native-function plugins that genuinely need JS go in `src/features/plugins/builtin/` with default-disabled state, optional host permission, dynamic content-script registration, and a `start`/`stop` lifecycle with teardown. Never add static `content_scripts` or required `host_permissions` to `manifest*.json` — manifest permission escalation without prior Issue approval is a hard stop (#865).
 - Platform registries are additive: never delete or narrow another platform's adapter or tests to make room for yours (#865).
 - Any storage-toggled feature needs a full lifecycle — working start AND destroy at page load and on runtime toggle. Hiding the UI is not disabling the feature (#854).
 
