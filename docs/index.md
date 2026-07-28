@@ -146,3 +146,5 @@ features:
 <p align="center">
   <img src="https://count.getloli.com/@gemini-voyager?name=gemini-voyager&theme=rule34&padding=7&offset=0&align=top&scale=1&pixelated=1&darkmode=auto" width="400">
 </p>
+
+<!-- CI path-routing verification (#843): docs-only change, PR will be closed without merging. -->
