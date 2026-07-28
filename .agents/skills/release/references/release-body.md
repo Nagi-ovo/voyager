@@ -20,9 +20,9 @@ This is the body that lands on `https://github.com/Nagi-ovo/voyager/releases/tag
 | Audience                         | File                                             | Format                                     |
 | -------------------------------- | ------------------------------------------------ | ------------------------------------------ |
 | End users (in-product)           | `src/pages/content/changelog/notes/{VERSION}.md` | 10 locales, bullet lists                   |
-| Developers (GitHub release page) | posted via `gh-anon release edit --notes-file`   | en + zh, tables with PR/commit attribution |
+| Developers (GitHub release page) | posted via `gh release edit --notes-file`        | en + zh, tables with PR/commit attribution |
 
-The workflow (`.github/workflows/release.yml`) generates a default body on tag push using its CI-scoped GitHub CLI token. The default has contributor attribution but is **not** the curated table. After the workflow finishes, overwrite the body with this template.
+The workflow (`.github/workflows/release.yml`) generates a default body on tag push using `gh api releases/generate-notes`. The default has contributor attribution but is **not** the curated table. After the workflow finishes, overwrite the body with this template.
 
 ## Layout principle — EN on top, ZH stacked below
 
@@ -127,13 +127,13 @@ Perform these steps after the tag push completes (see SKILL.md Step 6).
 ```bash
 PREV_TAG=$(git describe --tags --abbrev=0 v{VERSION}^)
 git log ${PREV_TAG}..v{VERSION} --oneline        # authoritative list of commits for the tables
-gh-anon api repos/Nagi-ovo/voyager/releases/generate-notes \
+gh api repos/Nagi-ovo/voyager/releases/generate-notes \
   -f tag_name=v{VERSION} \
   -f previous_tag_name=${PREV_TAG} \
   --jq '.body'                                    # use ONLY for the New Contributors section
 ```
 
-**Important:** `generate-notes` has a `"What's Changed"` section that looks like a PR list — **don't use it as your source of truth for the tables**. It filters to external-contributor PRs only; owner (`@Nagi-ovo`) PRs get silently dropped. For v1.4.0, that meant PR #616, #614, #613 (all owner PRs) didn't appear even though they're user-facing features. Always drive the tables from `git log`, where every `feat`/`fix` commit shows up with its `(#NNN)` suffix when applicable. Use `gh-anon pr view <NNN>` to confirm authors.
+**Important:** `generate-notes` has a `"What's Changed"` section that looks like a PR list — **don't use it as your source of truth for the tables**. It filters to external-contributor PRs only; owner (`@Nagi-ovo`) PRs get silently dropped. For v1.4.0, that meant PR #616, #614, #613 (all owner PRs) didn't appear even though they're user-facing features. Always drive the tables from `git log`, where every `feat`/`fix` commit shows up with its `(#NNN)` suffix when applicable. Use `gh pr view <NNN>` to confirm authors.
 
 ### 2. Filter commits for the tables
 
@@ -174,11 +174,11 @@ ZH:  | 可在弹窗中将时间线预览面板固定显示。 |
 - **Flavor 1 (owner-only release)**: no `By` column. Inline `(closes #NNN)` / `（关联 #NNN）` into the description for rows that reference an issue. Add the trailer line `_All changes by @Nagi-ovo unless noted._` (and ZH equivalent) below each language's tables.
 - **Flavor 2 (mixed contributors)**: keep the `By` / `提交者` column. External PR rows read `PR #NNN by @author`; owner rows read `—` (em-dash) so the column is uniform width without repeating the handle.
 
-Map commit → PR by scanning commit messages for `(#NNN)` suffixes, or by running `gh-anon pr list --state merged --search "<commit-short-sha>"`.
+Map commit → PR by scanning commit messages for `(#NNN)` suffixes, or by running `gh pr list --state merged --search "<commit-short-sha>"`.
 
 ### 4. New Contributors
 
-Take this section from `gh-anon api generate-notes` output — it correctly identifies first-time contributors across repo history. Don't handwrite it; you'll miss someone. This section stays English-only (GitHub auto-generates it that way and readers of both languages recognize the pattern).
+Take this section from `gh api generate-notes` output — it correctly identifies first-time contributors across repo history. Don't handwrite it; you'll miss someone. This section stays English-only (GitHub auto-generates it that way and readers of both languages recognize the pattern).
 
 ### 5. Paste together
 
@@ -200,19 +200,19 @@ Combine sections into `release_body.md` in this order (top to bottom):
 ### 6. Apply
 
 ```bash
-gh-anon release edit v{VERSION} --notes-file release_body.md
+gh release edit v{VERSION} --notes-file release_body.md
 ```
 
-This overwrites the body. The asset list and Installation block are preserved if they live as a separate field — check `gh-anon release view v{VERSION} --json body` immediately after and confirm the Installation section is still present and includes the Microsoft Edge Add-ons button alongside Chrome Web Store and Firefox. If it disappeared (because `--notes-file` replaced the entire body, including workflow-appended tail), append the Installation block manually before re-running.
+This overwrites the body. The asset list and Installation block are preserved if they live as a separate field — check `gh release view v{VERSION} --json body` immediately after and confirm the Installation section is still present and includes the Microsoft Edge Add-ons button alongside Chrome Web Store and Firefox. If it disappeared (because `--notes-file` replaced the entire body, including workflow-appended tail), append the Installation block manually before re-running.
 
 **Safer alternative:** first read the current body, strip the curated sections if present (from a previous attempt), prepend the new curated sections, and write back. This preserves whatever the workflow put there:
 
 ```bash
-CURRENT=$(gh-anon release view v{VERSION} --json body --jq '.body')
+CURRENT=$(gh release view v{VERSION} --json body --jq '.body')
 # Find the line "## 📥 Installation" and keep from there onward
 TAIL=$(echo "$CURRENT" | awk '/^## 📥 Installation/{flag=1} flag')
 printf "%s\n\n%s" "$(cat release_body.md)" "$TAIL" > final_body.md
-gh-anon release edit v{VERSION} --notes-file final_body.md
+gh release edit v{VERSION} --notes-file final_body.md
 ```
 
 ## Worked example — v1.3.9 (Flavor 2: external contributors present)

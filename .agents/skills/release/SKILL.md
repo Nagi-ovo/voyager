@@ -2,14 +2,12 @@
 name: release
 description: Cut or recover a Voyager release, including issue triage, verification, versioning, the 10-locale in-product changelog, commit and tag creation, GitHub Actions monitoring, Chrome Web Store, Firefox AMO, Edge Add-ons, and the signed/notarized Safari DMG with Sparkle updates. Use for “发版”, “release”, “bump”, “ship vX.Y.Z”, store retries, or Safari release failures.
 metadata:
-  version: '1.4.2'
+  version: '1.4.1'
 ---
 
 # Voyager Release Workflow
 
 Treat the repository scripts and `.github/workflows/release.yml` as the source of truth. The normal release path is CI-first: pushing the release tag builds every browser artifact, signs and notarizes Safari, creates the GitHub Release, and submits the stores.
-
-On this server, use `gh-anon` for every GitHub CLI operation. Before any GitHub write, verify `gh-anon api user --jq .login` prints `anontokyo-dev`; never use the plain `gh` profile.
 
 Copy this checklist into the response and update it while working:
 
@@ -18,8 +16,8 @@ Release Progress:
 - [ ] Step 1: Scope, issue triage, branch/worktree, secret-name preflight
 - [ ] Step 2: lint, typecheck, tests, production builds
 - [ ] Step 3: version bump and 10-locale changelog
-- [ ] Step 4: release commit, topic branch, and PR
-- [ ] Step 5: merged commit verification and confirmed tag push
+- [ ] Step 4: release commit and local tag
+- [ ] Step 5: confirmed tag push
 - [ ] Step 6: monitor the complete CI release pipeline
 - [ ] Step 7: curated GitHub release body
 - [ ] Step 8: assets, Sparkle, and store verification
@@ -29,9 +27,8 @@ Release Progress:
 
 ### Branch and worktree
 
-- Create a focused `release/v{VERSION}` branch from the latest `origin/main`; release changes must reach `main` through a PR.
+- Release from `main` unless the user explicitly chooses another branch.
 - Inspect `git status`. Preserve unrelated changes and never use `git add -A`.
-- Confirm `git config --local --get-all credential.https://github.com.helper` contains `gh-anon auth git-credential` before any branch or tag push. Stop if the repository is not bound to `gh-anon`.
 - Release files left from an interrupted attempt are acceptable only after verifying their target version and contents.
 
 ### Commit range
@@ -51,7 +48,7 @@ Use this same range for both the in-product changelog and GitHub release body.
 Read the current open issues and briefly classify recent bugs, `important` issues, and maintainer promises as blocking or non-blocking:
 
 ```bash
-gh-anon issue list --state open --limit 100 \
+gh issue list --state open --limit 100 \
   --json number,title,labels,createdAt,updatedAt,author
 ```
 
@@ -62,7 +59,7 @@ Show the user the possible blockers before changing the version.
 Checking secret names does not expose their values:
 
 ```bash
-gh-anon secret list -R Nagi-ovo/voyager --json name --jq '.[].name'
+gh secret list -R Nagi-ovo/voyager --json name --jq '.[].name'
 ```
 
 Confirm the workflow has names for:
@@ -83,10 +80,10 @@ bun run lint
 
 bun run typecheck
 bun run test
-bun run build:browsers
+bun run build:all
 ```
 
-Use `bun run test`, not raw `bun test`. `build:browsers` writes production outputs for Chrome, Edge, Firefox, and Safari; `dist_chrome_dev` is only for routine local Chrome development.
+Use `bun run test`, not raw `bun test`. `build:all` writes production outputs to `dist_chrome`, `dist_firefox`, and `dist_safari`; `dist_chrome_dev` is only for routine local Chrome development.
 
 Stop if any required check fails unless the user explicitly accepts the risk.
 
@@ -135,7 +132,7 @@ Before writing, cover every commit in `PREV_TAG..HEAD` with subagents, one commi
 
 This is a coverage gate, not optional parallelism. Write `zh` first, derive `en`, then translate the other eight locales while preserving the required on-disk locale order.
 
-## Step 4 — Commit and open the release PR
+## Step 4 — Commit and tag locally
 
 Stage only the release files:
 
@@ -147,28 +144,12 @@ git add \
 git diff --cached --name-only
 git diff --cached --check
 git commit -m "chore(release): v{VERSION}"
+git tag "v{VERSION}"
 ```
 
 If this release intentionally includes announcements or other release-only files, add them explicitly and re-check the staged list. Never absorb unrelated worktree changes.
 
-Push only `release/v{VERSION}`, open a focused PR into `main` with `gh-anon`, and wait for its required review and checks. Immediately before merge, ensure the branch incorporates the current `origin/main`; if `main` advanced, refresh and review the release range, changelog coverage, and affected verification. Do not tag the unmerged branch.
-
-## Step 5 — Verify the merge, confirm, and push the tag
-
-After the PR merges, resolve its immutable merge commit, fetch `origin/main`, and verify that exact commit is on `main`:
-
-```bash
-MERGE_SHA=$(gh-anon pr view <release-pr> --json mergeCommit --jq '.mergeCommit.oid')
-test -n "$MERGE_SHA"
-git fetch origin main --tags
-git merge-base --is-ancestor "$MERGE_SHA" origin/main
-```
-
-Audit every commit in `PREV_TAG..MERGE_SHA` against the changelog and the completed verification. If an uncovered commit entered during the merge window, do not tag; update the release through another focused PR, then restart this step using that latest PR and resolve a new `MERGE_SHA`. When coverage is complete, verify the version and changelog at `MERGE_SHA`, then create the tag on that commit—not on the moving `origin/main` tip:
-
-```bash
-git tag "v{VERSION}" "$MERGE_SHA"
-```
+## Step 5 — Confirm and push
 
 The tag push is an external, user-visible action. Confirm immediately before it:
 
@@ -177,6 +158,7 @@ The tag push is an external, user-visible action. Confirm immediately before it:
 After confirmation:
 
 ```bash
+git push origin main
 git push origin "v{VERSION}"
 ```
 
@@ -193,8 +175,8 @@ The tag workflow runs these gates:
 Monitor with:
 
 ```bash
-gh-anon run list --workflow release.yml --limit 3
-gh-anon run view {RUN_ID} --log-failed
+gh run list --workflow release.yml --limit 3
+gh run view {RUN_ID} --log-failed
 ```
 
 Do not run a second local Safari release in parallel with CI. Read `references/safari-dmg.md` only when diagnosing the Safari job or deliberately producing a local recovery artifact.
@@ -210,10 +192,10 @@ Important failure semantics:
 Read `references/release-body.md`. Replace the generated top section with concise English and Chinese feature/fix tables while preserving the workflow-generated `## 📥 Installation` tail.
 
 ```bash
-CURRENT=$(gh-anon release view "v{VERSION}" --json body --jq '.body')
+CURRENT=$(gh release view "v{VERSION}" --json body --jq '.body')
 TAIL=$(printf '%s\n' "$CURRENT" | awk '/^## 📥 Installation/{flag=1} flag')
 printf '%s\n\n%s\n' "$(cat release_body.md)" "$TAIL" > final_body.md
-gh-anon release edit "v{VERSION}" --notes-file final_body.md
+gh release edit "v{VERSION}" --notes-file final_body.md
 ```
 
 Verify the rendered body and ensure its Safari capability text still matches the current product.
@@ -228,7 +210,7 @@ Confirm the release contains:
 - `appcast.xml`
 
 ```bash
-gh-anon release view "v{VERSION}" --json assets --jq '.assets[].name'
+gh release view "v{VERSION}" --json assets --jq '.assets[].name'
 ```
 
 Also confirm:

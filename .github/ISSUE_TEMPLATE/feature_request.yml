@@ -21,6 +21,7 @@ body:
         - 无法保证能够投入精力，及时实现新的功能需求。 | The maintainer cannot guarantee they will be able to dedicate time to implement new features in a timely manner.
         - 我们非常**欢迎并鼓励社区贡献**！ | However, we **welcome and encourage community contributions**!
         - 如果您希望该功能被实现，提交高质量的 Pull Request 是最佳途径。编码前请先讨论并等待维护者明确同意方案；`/claim` 或被分配只代表负责人。 | A high-quality Pull Request is the best path to implementation. Before coding, discuss the approach and wait for explicit maintainer approval; `/claim` or assignment only selects an owner.
+        - 使用 AI Agent（Claude Code、Codex 等）贡献时，请让它使用仓库自带的 `voyager-contribute` skill，可显著减少评审返工。 | If contributing with an AI agent (Claude Code, Codex, …), tell it to use the bundled `voyager-contribute` skill — it dramatically reduces review churn.
   - type: textarea
     attributes:
       label: '🥰 需求描述 | Feature Description'

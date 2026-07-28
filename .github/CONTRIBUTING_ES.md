@@ -29,9 +29,11 @@ Aunque las herramientas de IA son grandes asistentes, las contribuciones de "cop
 
 1. Para una nueva funcionalidad, abre un Issue y espera la aprobación explícita del enfoque; `/claim` o una asignación solo selecciona a la persona responsable.
 2. Envía cada cambio mediante una PR enfocada desde una rama temática; no envíes directamente a `main`.
-3. Ejecuta `bun run format`, `bun run lint` y `bun run verify:pr`, en ese orden, e indica cualquier omisión.
+3. Ejecuta `bun run format`, `bun run lint` y `bun run verify:pr`, en ese orden, e indica cualquier omisión. Para cambios solo de documentación (docs/README), `bun run format:check` más `bun run docs:build` pueden sustituir al `verify:pr` completo.
 4. Añade pruebas de regresión para cambios de comportamiento o explica por qué la automatización no es útil.
 5. Carga el artefacto real en los navegadores afectados y prueba el flujo modificado; indica en la PR la cobertura pendiente y su responsable.
+
+> 💡 Si contribuyes con un agente de IA (Claude Code, Codex, …), pídele que use la skill `voyager-contribute` incluida en el repositorio (en `.claude/skills/` y `.agents/skills/`): codifica este flujo y las trampas específicas del repositorio que más rondas de revisión han costado.
 
 ## Tabla de Contenidos
 

@@ -36,9 +36,9 @@ Project-wide rules (always in effect):
 2. **Never commit `.env` or secrets.**
 3. **Never grant a page or feature direct `<all_urls>` permission.** If it is truly unavoidable, discuss it with the user first and get explicit approval before implementation.
 4. **When adding Material Symbol icons**, the popup uses the bundled font in `public/fonts/`; verify the glyph exists locally or update the bundled font assets. Do not add a remote Google Fonts URL.
-5. **Use the isolated `gh-anon` CLI for GitHub issue/PR/comment work on this server.** Before any GitHub write, verify `gh-anon api user --jq .login` returns `anontokyo-dev`; never use the plain `gh` profile for Voyager collaboration.
+5. **For GitHub issue/PR/comment work, prefer `gh` as the source of truth** instead of browser scraping or unstable connectors.
 6. **After fixing an issue with a pushed `Fixes #xxx` / `Closes #xxx` commit or PR**, leave a short GitHub comment in the reporter's language: the fix has landed, it will be available in the next version, and they are welcome to reopen the issue if the problem remains.
-7. **Every repository change goes through a PR.** Never push commits directly to `origin/main`; create a focused topic branch, push it with the `gh-anon`-bound repository credentials, and open a PR into `main`. Never force-push unless explicitly requested.
+7. **Default push target**: when asked to push without explicit branch/PR instructions, push a fast-forward update to `origin/main`. Never force-push unless explicitly requested.
 8. **Regression notes are required context.** Before implementing a non-trivial feature or bug fix, skim `.github/docs/REGRESSION_NOTES.md` for related traps. After fixing a non-obvious bug that future maintainers could plausibly repeat, proactively suggest adding a short entry with the protecting test or verification command.
 9. **Do not force-refresh Gemini's SPA for feature navigation.** For Gemini content-script navigation, prefer native in-app links first and History API / router events as the fallback. Do not introduce `location.assign`, `location.href`, or `location.reload` for normal conversation/session navigation unless the user explicitly accepts a full page reload. Preserve `/u/<index>/...` account scope when constructing routes.
 

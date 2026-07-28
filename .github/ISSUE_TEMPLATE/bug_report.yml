@@ -11,6 +11,7 @@ body:
         **本项目目前处于低频维护模式。 | This project is currently in Low Maintenance mode.**
 
         - 我们将优先处理带有测试代码的 Pull Request，而非 Issue。 | We prioritize Pull Requests with tests over Issues.
+        - 想自己动手修？用 AI Agent（Claude Code、Codex 等）时，请让它使用仓库自带的 `voyager-contribute` skill。 | Want to fix it yourself? If you use an AI agent (Claude Code, Codex, …), tell it to use the bundled `voyager-contribute` skill.
         - 对于未提供清晰复现步骤或环境信息的非核心 Bug，可能会被直接关闭。 | Non-critical bugs without minimal reproduction steps may be closed directly.
         - 维护者精力有限，回复可能会有显著延迟，请谅解。 | Please be patient as response times will be significantly delayed.
   - type: checkboxes

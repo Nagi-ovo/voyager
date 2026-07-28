@@ -13,13 +13,8 @@ Route issue investigation to the `issue-review` skill, Safari loading or native 
 2. Read the linked Issue and its comments when one exists. A new feature needs explicit maintainer approval of the approach, either in the Issue or as a direct instruction in the current task; assignment or `/claim` only selects an owner.
 3. Read related entries in `.github/docs/REGRESSION_NOTES.md` before a non-trivial feature or fix.
 4. Work on one focused topic branch targeting `main`. Keep secrets and generated `dist_*` artifacts out of commits.
-5. Before any GitHub write, run:
-
-   ```bash
-   gh-anon api user --jq .login
-   ```
-
-   Continue only when it prints `anontokyo-dev`. Use `gh-anon` for every Voyager Issue, PR, review, comment, and API write on this server.
+5. Read [repo-traps.md](references/repo-traps.md) — the repository-specific pitfalls that have cost past contributors the most review rounds.
+6. Use `gh` as the source of truth for Issue/PR state. Before any GitHub write, confirm `gh auth status` shows the account you intend to contribute as.
 
 Preflight is complete when the Issue or rationale, approval state, intended scope, current branch, and clean ownership of every changed file are known.
 
@@ -53,9 +48,9 @@ Verification is complete when every applicable automated check and browser check
    ```
 
 3. Inspect the commit with `git show --stat --format=fuller HEAD` and `git status --short`. Require no staged or unstaged changes in the contribution's paths; preserve and disclose unrelated pre-existing work. `HEAD` is the tested commit only while the verified paths match it, and any later change invalidates affected evidence.
-4. When publishing is authorized, confirm `git config --local --get-all credential.https://github.com.helper` contains `gh-anon auth git-credential`. Stop and request credential binding if it does not. Push only the topic branch and open or update a draft PR targeting `main`. Never push directly to `main`; use force-push only with explicit user approval.
+4. When publishing is authorized, push only the topic branch and open or update a draft PR targeting `main`. Contributors never push directly to `main`; use force-push only with explicit user approval — this repository squash-merges, so a merged branch will later look unmerged (see repo-traps.md) and must be deleted, not re-pushed.
 5. In the PR, state the linked Issue or direct authorization/rationale, scope, tested commit, commands run, live browser evidence, screenshots for UI changes, and all pending checks. Re-run affected checks after review changes.
-6. Verify the PR author, base branch, commit set, changed files, and CI state with `gh-anon` before handoff.
+6. Verify the PR author, base branch, commit set, changed files, and CI state with `gh` before handoff.
 
 Publishing is complete when the focused diff is on a topic branch, the draft PR accurately reports its evidence and gaps, and the user receives the PR URL plus pending review or CI work.
 

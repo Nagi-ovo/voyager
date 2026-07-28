@@ -53,7 +53,7 @@ The CI job checks these before building:
 - `APPLE_EXTENSION_PROVISIONING_PROFILE_BASE64`
 - `SPARKLE_PRIVATE_KEY`
 
-Only check secret names with `gh-anon secret list`; never print, download, or commit their values.
+Only check secret names with `gh secret list`; never print, download, or commit their values.
 
 The extension provisioning profile must permit CloudKit and the existing iCloud container. The workflow validates both before installing the profile.
 
@@ -150,7 +150,7 @@ Before uploading, inspect the exact artifact set and confirm the GitHub Release 
 ```bash
 node scripts/verify-release-privacy.mjs \
   "$OUT/voyager-v${VERSION}.dmg" "$OUT/appcast.xml"
-gh-anon release upload "$TAG" \
+gh release upload "$TAG" \
   "$OUT/voyager-v${VERSION}.dmg" "$OUT/appcast.xml" --clobber
 ```
 

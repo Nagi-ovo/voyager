@@ -29,9 +29,11 @@ Bien que les outils d'IA soient d'excellents assistants, les contributions "pare
 
 1. Pour une nouvelle fonctionnalité, ouvrez un Issue et attendez l'accord explicite sur l'approche ; `/claim` ou une assignation désigne seulement la personne responsable.
 2. Soumettez chaque changement dans une PR ciblée depuis une branche thématique ; ne poussez pas directement sur `main`.
-3. Exécutez `bun run format`, `bun run lint` et `bun run verify:pr`, dans cet ordre, et indiquez toute omission.
+3. Exécutez `bun run format`, `bun run lint` et `bun run verify:pr`, dans cet ordre, et indiquez toute omission. Pour les changements de documentation uniquement (docs/README), `bun run format:check` plus `bun run docs:build` peuvent remplacer le `verify:pr` complet.
 4. Ajoutez des tests de régression pour les changements de comportement ou expliquez pourquoi l'automatisation n'est pas utile.
 5. Chargez l'artefact réel dans les navigateurs concernés et testez le parcours modifié ; indiquez dans la PR la couverture restante et son responsable.
+
+> 💡 Si vous contribuez avec un agent IA (Claude Code, Codex, …), demandez-lui d'utiliser la skill `voyager-contribute` fournie dans le dépôt (dans `.claude/skills/` et `.agents/skills/`) : elle encode ce flux ainsi que les pièges spécifiques au dépôt qui ont coûté le plus de cycles de revue.
 
 ## Table des Matières
 

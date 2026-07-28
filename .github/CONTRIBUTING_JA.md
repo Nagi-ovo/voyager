@@ -29,9 +29,11 @@ AI ツールは優れたアシスタントですが、「怠惰な」コピー�
 
 1. 新機能は Issue を作成し、方針に対する明示的な承認を待ってください。`/claim` や割り当ては担当者を示すだけです。
 2. 各変更はトピックブランチから焦点を絞った PR として提出し、`main` へ直接プッシュしないでください。
-3. `bun run format`、`bun run lint`、`bun run verify:pr` の順に実行し、未実行項目を記載してください。
+3. `bun run format`、`bun run lint`、`bun run verify:pr` の順に実行し、未実行項目を記載してください。ドキュメントのみの変更（docs/README）の場合は、`bun run format:check` と `bun run docs:build` で完全な `verify:pr` を代替できます。
 4. 動作変更には回帰テストを追加するか、自動化が有用でない理由を説明してください。
 5. 影響するブラウザで実際の成果物を読み込み、変更したフローを確認してください。未確認項目と担当者は PR に記載します。
+
+> 💡 AI エージェント（Claude Code、Codex など）で貢献する場合は、リポジトリに同梱の `voyager-contribute` skill（`.claude/skills/` と `.agents/skills/`）を使うよう指示してください。本ワークフローに加え、過去の PR で最もレビュー往復を要したリポジトリ固有の落とし穴を網羅しています。
 
 ## 目次
 
