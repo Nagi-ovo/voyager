@@ -33,6 +33,7 @@ import {
 } from '@/core/utils/browser';
 import { getNativeOpenConversationUrl } from '@/core/utils/nativeOpenConversation';
 import { hasNotificationsPermission } from '@/core/utils/notificationsPermission';
+import { getPromptNameConflictIds } from '@/core/utils/promptName';
 import {
   SAFARI_CLIPBOARD_IMAGE_COPY_REQUEST,
   SAFARI_NATIVE_APP_ID,
@@ -54,7 +55,11 @@ import {
 } from '@/features/backup/services/HighlightImportExportService';
 import { PromptImportExportService } from '@/features/backup/services/PromptImportExportService';
 import { computeNudgeDomains, normalizeIconResourcePath } from '@/features/plugins/promptNudge';
-import { pluginsToOriginPatterns } from '@/features/plugins/runtime/siteRegistration';
+import {
+  partitionPluginOriginPatterns,
+  pluginsToOriginPatterns,
+} from '@/features/plugins/runtime/siteRegistration';
+import { matchesAnyPattern } from '@/features/plugins/sites/matchPattern';
 import { listPluginManifests } from '@/features/plugins/sources/defaultSources';
 import { loadPluginState } from '@/features/plugins/storage/pluginState';
 import type { PluginManifest } from '@/features/plugins/types';
@@ -74,6 +79,7 @@ import { isHandledBackgroundRuntimeMessage } from './runtimeMessageRouting';
 
 const CUSTOM_CONTENT_SCRIPT_ID = 'gv-custom-content-script';
 const PLUGIN_CONTENT_SCRIPT_ID = 'gv-plugin-content-script';
+const PLUGIN_EMBEDDED_CONTENT_SCRIPT_ID = 'gv-plugin-embedded-content-script';
 const CLAUDE_USAGE_MAIN_SCRIPT_ID = 'gv-plugin-claude-usage-main';
 const CUSTOM_WEBSITE_KEY = 'gvPromptCustomWebsites';
 const FETCH_INTERCEPTOR_SCRIPT_ID = 'gv-fetch-interceptor';
@@ -896,41 +902,69 @@ async function getEnabledPluginOrigins(): Promise<string[]> {
  * updated/reloaded underneath the page) have an invalidated runtime and cannot
  * respond, so they correctly read as "not injected".
  */
-async function hasLiveVoyagerContentScript(tabId: number): Promise<boolean> {
+async function hasLiveVoyagerContentScript(tabId: number, frameId?: number): Promise<boolean> {
   try {
-    const response = (await browser.tabs.sendMessage(tabId, { type: 'gv.content.ping' })) as
-      | { ok?: boolean }
-      | undefined;
+    const message = { type: 'gv.content.ping' };
+    const response = (
+      frameId === undefined
+        ? await browser.tabs.sendMessage(tabId, message)
+        : await browser.tabs.sendMessage(tabId, message, { frameId })
+    ) as { ok?: boolean } | undefined;
     return response?.ok === true;
   } catch {
     return false;
   }
 }
 
+async function getMatchingFrameIds(tabId: number, matches: readonly string[]): Promise<number[]> {
+  try {
+    const frames = await chrome.scripting.executeScript({
+      target: { tabId, allFrames: true },
+      func: () => location.href,
+    });
+    return frames.flatMap((frame) =>
+      typeof frame.result === 'string' && matchesAnyPattern(frame.result, matches)
+        ? [frame.frameId]
+        : [],
+    );
+  } catch {
+    // Never substitute the parent frame for an unresolvable companion frame.
+    // The persistent registration will cover it on the next navigation/reload.
+    return [];
+  }
+}
+
 async function injectPluginScriptIntoOpenTabs(
-  matches: string[],
+  tabMatches: string[],
+  frameMatches: string[] | undefined,
   jsResources: string[],
   cssResources: string[] | undefined,
 ): Promise<void> {
-  if (!chrome.scripting?.executeScript || !matches.length) return;
+  if (!chrome.scripting?.executeScript || !tabMatches.length) return;
   let tabs: chrome.tabs.Tab[] = [];
   try {
-    tabs = await chrome.tabs.query({ url: matches });
+    tabs = await chrome.tabs.query({ url: tabMatches });
   } catch {
     return;
   }
   for (const tab of tabs) {
     if (typeof tab.id !== 'number') continue;
     try {
-      // insertCSS APPENDS a fresh copy on every call — without this guard each
-      // plugin toggle / settings write stacks another full stylesheet into
-      // every open matching tab.
-      if (await hasLiveVoyagerContentScript(tab.id)) continue;
+      const frameIds = frameMatches ? await getMatchingFrameIds(tab.id, frameMatches) : [0];
+      const missingFrameIds: number[] = [];
+      for (const frameId of frameIds) {
+        // insertCSS APPENDS a fresh copy on every call. Check every matching
+        // frame independently so an already-live Claude parent does not prevent
+        // first-time injection into its artifact child frame.
+        if (!(await hasLiveVoyagerContentScript(tab.id, frameId))) missingFrameIds.push(frameId);
+      }
+      if (!missingFrameIds.length) continue;
+      const target = { tabId: tab.id, frameIds: missingFrameIds };
       if (cssResources?.length) {
-        await chrome.scripting.insertCSS({ target: { tabId: tab.id }, files: cssResources });
+        await chrome.scripting.insertCSS({ target, files: cssResources });
       }
       if (jsResources.length) {
-        await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: jsResources });
+        await chrome.scripting.executeScript({ target, files: jsResources });
       }
     } catch {
       // Tab may be discarded or disallow injection — ignore; reload will cover it.
@@ -959,7 +993,11 @@ async function doSyncPluginContentScripts(): Promise<void> {
 
   try {
     await chrome.scripting.unregisterContentScripts({
-      ids: [PLUGIN_CONTENT_SCRIPT_ID, CLAUDE_USAGE_MAIN_SCRIPT_ID],
+      ids: [
+        PLUGIN_CONTENT_SCRIPT_ID,
+        PLUGIN_EMBEDDED_CONTENT_SCRIPT_ID,
+        CLAUDE_USAGE_MAIN_SCRIPT_ID,
+      ],
     });
   } catch {
     // No-op if the script was not registered.
@@ -980,22 +1018,46 @@ async function doSyncPluginContentScripts(): Promise<void> {
   const cssResources = isFirefox()
     ? manifestContentScript.css?.map(toRelativeExtensionPath)
     : manifestContentScript.css;
+  const { topFrameOrigins, embeddedFrameOrigins } = partitionPluginOriginPatterns(grantedMatches);
 
   try {
-    await chrome.scripting.registerContentScripts([
-      {
+    const registrations: chrome.scripting.RegisteredContentScript[] = [];
+    if (topFrameOrigins.length) {
+      registrations.push({
         id: PLUGIN_CONTENT_SCRIPT_ID,
         js: jsResources,
         css: cssResources,
-        matches: grantedMatches,
-        allFrames: manifestContentScript.all_frames,
+        matches: topFrameOrigins,
+        allFrames: false,
         runAt,
         persistAcrossSessions: true,
-      },
-    ]);
+      });
+    }
+    if (embeddedFrameOrigins.length) {
+      registrations.push({
+        id: PLUGIN_EMBEDDED_CONTENT_SCRIPT_ID,
+        js: jsResources,
+        css: cssResources,
+        matches: embeddedFrameOrigins,
+        allFrames: true,
+        runAt,
+        persistAcrossSessions: true,
+      });
+    }
+    if (registrations.length) {
+      await chrome.scripting.registerContentScripts(registrations);
+    }
     // Inject into already-open matching tabs so the user sees the effect without
     // a manual reload.
-    await injectPluginScriptIntoOpenTabs(grantedMatches, jsResources, cssResources);
+    await injectPluginScriptIntoOpenTabs(topFrameOrigins, undefined, jsResources, cssResources);
+    if (embeddedFrameOrigins.length) {
+      await injectPluginScriptIntoOpenTabs(
+        grantedMatches,
+        embeddedFrameOrigins,
+        jsResources,
+        cssResources,
+      );
+    }
   } catch (error) {
     console.error('[Background] Failed to register plugin content scripts:', error);
   }
@@ -2334,6 +2396,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
               ok: merged.success,
               imported: merged.success ? merged.data.imported : 0,
               duplicates: merged.success ? merged.data.duplicates : 0,
+              nameConflicts: merged.success ? merged.data.nameConflicts : 0,
               state: await googleDriveSyncService.getState(),
             });
             return;
@@ -2355,7 +2418,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             );
             const validated = PromptImportExportService.validatePayload(cloudPayload);
             if (validated.success) {
-              await PromptImportExportService.importFromPayload(validated.data);
+              const merged = await PromptImportExportService.importFromPayload(validated.data);
+              if (!merged.success) {
+                sendResponse({
+                  ok: false,
+                  state: await googleDriveSyncService.getState(),
+                });
+                return;
+              }
             }
             const localResult = await PromptImportExportService.loadPrompts();
             const localPrompts = localResult.success ? localResult.data : [];
@@ -2367,6 +2437,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             sendResponse({
               ok: uploaded,
               count: localPrompts.length,
+              nameConflicts: getPromptNameConflictIds(localPrompts).size,
               state: await googleDriveSyncService.getState(),
             });
             return;

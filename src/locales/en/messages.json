@@ -171,6 +171,10 @@
     "message": "Imported {count} prompts",
     "description": "Import success"
   },
+  "promptNameConflictsDetected": {
+    "message": "Kept all prompts. {count} have duplicate names and cannot use / until renamed",
+    "description": "Non-blocking notice when import or cloud merge preserves duplicate prompt names"
+  },
   "pm_duplicate": {
     "message": "Duplicate prompt",
     "description": "Duplicate on add"
@@ -256,8 +260,20 @@
     "description": "View-mode toggle tooltip - switch from compact rows to comfortable cards with markdown preview"
   },
   "pm_name_placeholder": {
-    "message": "Name (optional)",
-    "description": "Placeholder for the optional prompt name/label input used as the compact-mode headline"
+    "message": "Name",
+    "description": "Placeholder for the required prompt name input"
+  },
+  "pm_name_required": {
+    "message": "Prompt name is required",
+    "description": "Validation shown when saving a prompt without a name"
+  },
+  "pm_name_duplicate": {
+    "message": "Prompt name already exists",
+    "description": "Validation shown when saving a prompt with an existing name"
+  },
+  "pm_name_conflict_badge": {
+    "message": "Duplicate name — rename to use /",
+    "description": "Badge shown on prompts excluded from slash completion by a duplicate name"
   },
   "pm_prompt_manager": {
     "message": "Prompt Manager",
@@ -958,6 +974,14 @@
   "hidePromptManagerHint": {
     "message": "Hide the Prompt Manager floating ball on the page",
     "description": "Hint for hiding prompt manager feature"
+  },
+  "slashPromptEnabled": {
+    "message": "Enable slash prompt quick insertion",
+    "description": "Enable slash prompt quick insertion toggle"
+  },
+  "slashPromptEnabledHint": {
+    "message": "Type / in the Gemini composer to quickly insert a saved Prompt.",
+    "description": "Hint for slash prompt quick insertion"
   },
   "promptInsertOnClick": {
     "message": "Insert prompt on click",
@@ -2288,6 +2312,10 @@
     "message": "Site permission denied — the plugin can't run without it.",
     "description": "Shown when the user denies the site permission for a plugin"
   },
+  "pluginGrantRequiredAccess": {
+    "message": "Grant required site access",
+    "description": "Button that repairs missing optional site access for an enabled plugin"
+  },
   "pluginUnsupportedPlatform": {
     "message": "Unsupported on this browser — it can't grant the site access this plugin needs.",
     "description": "Shown when a plugin can't be enabled because the browser can't grant the site access it needs (e.g. Safari)"
@@ -2347,6 +2375,18 @@
   "timelineCoachmarkToggle": {
     "message": "Use compact timeline",
     "description": "Inline toggle label in the compact-timeline coachmark"
+  },
+  "slashPromptCoachmarkTitle": {
+    "message": "New: slash prompt insertion",
+    "description": "Coachmark title introducing slash prompt insertion"
+  },
+  "slashPromptCoachmarkBody": {
+    "message": "Type / in the Gemini composer to quickly insert a saved Prompt.",
+    "description": "Coachmark body text introducing slash prompt insertion"
+  },
+  "slashPromptCoachmarkToggle": {
+    "message": "Enable slash prompt insertion",
+    "description": "Inline toggle label in the slash-prompt coachmark"
   },
   "coachmarkDismiss": {
     "message": "Done",

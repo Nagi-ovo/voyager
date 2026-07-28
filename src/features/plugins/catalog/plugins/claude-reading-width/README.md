@@ -2,11 +2,12 @@
 id: voyager.claude-reading-width
 name: Claude · Comfortable Reading Width
 category: readability
-version: 1.3.0
+version: 1.4.0
 author: voyager-official
 license: MIT
 matches:
   - https://claude.ai/*
+  - https://*.frame.claudeusercontent.com/*
 engine: '>=1.2.0'
 settings:
   width: 'number (600–1600, default 768) — max reading width in pixels'
@@ -27,6 +28,10 @@ single centered column of the same width.
   `mx-auto` and therefore stay centered.
 - The user message is flipped from its right-aligned bubble to **left-aligned**,
   matching the assistant, so the whole thread reads as one column.
+- Claude document artifacts load from a cross-origin
+  `*.frame.claudeusercontent.com` iframe. Their direct `.wrap` reading column is
+  widened there as well, with `border-box` sizing so the configured pixel value
+  remains the visible width (including the artifact's horizontal padding).
 
 ## Adjustable
 

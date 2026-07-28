@@ -3,12 +3,13 @@
  * Generate the sponsor board SVG with GitHub Sponsors, Afdian, and Tipping Friends.
  *
  * Usage:
- *   node sponsorkit/generate-sponsors.js
+ *   node scripts/generate-sponsors.cjs
  *
  * Environment variables:
  *   GITHUB_TOKEN - GitHub token for fetching sponsors
  *   AFDIAN_USER_ID - Afdian user ID
  *   AFDIAN_TOKEN - Afdian API token
+ *   SPONSORS_STRICT - Set to "1" in automation to require every credential
  */
 const fsp = require('fs/promises');
 const path = require('path');
@@ -27,26 +28,41 @@ const FONT_FAMILY =
   "-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji'";
 
 async function main() {
-  const friends = await loadFriends();
-  await ensureDir(OUTPUT_DIR);
-
   const githubToken = process.env.GITHUB_TOKEN;
   const afdianUserId = process.env.AFDIAN_USER_ID;
   const afdianToken = process.env.AFDIAN_TOKEN;
+  const strict = process.env.SPONSORS_STRICT === '1';
+  validateCredentials({ githubToken, afdianUserId, afdianToken }, strict);
+
+  const friends = await loadFriends(strict);
+  await ensureDir(OUTPUT_DIR);
 
   const [githubSponsors, afdianSponsors] = await Promise.all([
-    fetchGitHubSponsors(githubToken),
-    fetchAfdianSponsors(afdianUserId, afdianToken),
+    fetchGitHubSponsors(githubToken, { strict }),
+    fetchAfdianSponsors(afdianUserId, afdianToken, { strict }),
   ]);
 
   const svgContent = await buildSvg({ githubSponsors, afdianSponsors, friends });
-  await fsp.writeFile(OUTPUT_PATH, svgContent, 'utf8');
+  await writeFileAtomic(OUTPUT_PATH, svgContent);
   console.log(
     `Generated ${path.relative(ROOT, OUTPUT_PATH)} with ${githubSponsors.length} GitHub sponsors, ${afdianSponsors.length} Afdian sponsors, and ${friends.length} tipping friends.`,
   );
 }
 
-async function loadFriends() {
+function validateCredentials({ githubToken, afdianUserId, afdianToken }, strict) {
+  if (!strict) return;
+
+  const missing = [];
+  if (!githubToken) missing.push('GITHUB_TOKEN');
+  if (!afdianUserId) missing.push('AFDIAN_USER_ID');
+  if (!afdianToken) missing.push('AFDIAN_TOKEN');
+
+  if (missing.length > 0) {
+    throw new Error(`Missing required sponsor credentials: ${missing.join(', ')}`);
+  }
+}
+
+async function loadFriends(strict = false) {
   try {
     const raw = await fsp.readFile(FRIENDS_PATH, 'utf8');
     const list = JSON.parse(raw);
@@ -60,6 +76,9 @@ async function loadFriends() {
       })
       .filter(Boolean);
   } catch (e) {
+    if (strict) {
+      throw new Error(`Failed to load friends list: ${e.message}`);
+    }
     console.warn('⚠️  Failed to load friends list:', e.message);
     return [];
   }
@@ -69,7 +88,25 @@ async function ensureDir(target) {
   await fsp.mkdir(target, { recursive: true });
 }
 
-async function fetchGitHubSponsors(token) {
+async function writeFileAtomic(target, content) {
+  const tempPath = `${target}.${process.pid}.${Date.now()}.tmp`;
+  try {
+    await fsp.writeFile(tempPath, content, 'utf8');
+    await fsp.rename(tempPath, target);
+  } catch (error) {
+    await fsp.rm(tempPath, { force: true }).catch(() => {});
+    throw error;
+  }
+}
+
+function handleSourceFailure(message, strict) {
+  if (strict) {
+    throw new Error(message);
+  }
+  console.error(message);
+}
+
+async function fetchGitHubSponsors(token, { fetchImpl = fetch, strict = false } = {}) {
   if (!token) {
     console.warn('⚠️  No GitHub token available, GitHub sponsors will be skipped.');
     return [];
@@ -123,7 +160,7 @@ async function fetchGitHubSponsors(token) {
       },
     };
 
-    const res = await fetch(GRAPHQL_ENDPOINT, {
+    const res = await fetchImpl(GRAPHQL_ENDPOINT, {
       method: 'POST',
       headers,
       body: JSON.stringify(body),
@@ -131,14 +168,18 @@ async function fetchGitHubSponsors(token) {
 
     if (!res.ok) {
       const text = await res.text();
-      console.error(`Failed to fetch GitHub sponsors (${res.status}): ${text}`);
+      handleSourceFailure(`Failed to fetch GitHub sponsors (${res.status}): ${text}`, strict);
       return sponsors;
     }
 
     const payload = await res.json();
+    if (Array.isArray(payload?.errors) && payload.errors.length > 0) {
+      handleSourceFailure(`GitHub Sponsors API error: ${JSON.stringify(payload.errors)}`, strict);
+      return sponsors;
+    }
     const data = payload?.data?.user?.sponsorshipsAsMaintainer;
-    if (!data) {
-      console.error('Unexpected response from GitHub Sponsors API.');
+    if (!data || !Array.isArray(data.nodes) || !data.pageInfo) {
+      handleSourceFailure('Unexpected response from GitHub Sponsors API.', strict);
       return sponsors;
     }
 
@@ -173,7 +214,7 @@ async function fetchGitHubSponsors(token) {
   return sponsors;
 }
 
-async function fetchAfdianSponsors(userId, token) {
+async function fetchAfdianSponsors(userId, token, { fetchImpl = fetch, strict = false } = {}) {
   if (!userId || !token) {
     console.warn('⚠️  No Afdian credentials available, Afdian sponsors will be skipped.');
     return [];
@@ -190,7 +231,7 @@ async function fetchAfdianSponsors(userId, token) {
       .update(`${token}params${params}ts${ts}user_id${userId}`)
       .digest('hex');
 
-    const res = await fetch(AFDIAN_API, {
+    const res = await fetchImpl(AFDIAN_API, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -202,17 +243,21 @@ async function fetchAfdianSponsors(userId, token) {
     });
 
     if (!res.ok) {
-      console.error(`Failed to fetch Afdian sponsors (${res.status})`);
+      handleSourceFailure(`Failed to fetch Afdian sponsors (${res.status})`, strict);
       break;
     }
 
     const payload = await res.json();
     if (payload.ec !== 200) {
-      console.error('Afdian API error:', payload.em);
+      handleSourceFailure(`Afdian API error: ${payload.em || 'unknown error'}`, strict);
       break;
     }
 
-    const list = payload.data?.list || [];
+    const list = payload.data?.list;
+    if (!Array.isArray(list)) {
+      handleSourceFailure('Unexpected response from Afdian API.', strict);
+      break;
+    }
     if (list.length === 0) break;
 
     for (const item of list) {
@@ -436,7 +481,16 @@ function escapeAttr(value) {
   return escapeText(value).replace(/"/g, '&quot;');
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exitCode = 1;
-});
+if (require.main === module) {
+  main().catch((err) => {
+    console.error(err);
+    process.exitCode = 1;
+  });
+}
+
+module.exports = {
+  fetchAfdianSponsors,
+  fetchGitHubSponsors,
+  validateCredentials,
+  writeFileAtomic,
+};

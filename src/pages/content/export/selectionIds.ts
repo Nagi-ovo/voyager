@@ -1,5 +1,11 @@
 import { hashString } from '@/core/utils/hash';
 
+import { makeStableTurnId, readServerTurnId } from '../fork/turnId';
+
+function readOrCreateTurnId(element: HTMLElement, index: number): string {
+  return readServerTurnId(element) ?? (element.dataset.turnId?.trim() || makeStableTurnId(index));
+}
+
 function normalizeTurnText(element: HTMLElement, index: number): string {
   return (
     String(element.textContent || '')
@@ -26,8 +32,8 @@ function ownsActiveExportSelector(element: HTMLElement, turnId: string): boolean
 export function resolveUniqueExportTurnIds(elements: HTMLElement[]): string[] {
   const ownersById = new Map<string, HTMLElement[]>();
 
-  elements.forEach((element) => {
-    const id = element.dataset.turnId?.trim();
+  elements.forEach((element, index) => {
+    const id = readOrCreateTurnId(element, index);
     if (!id) return;
     const owners = ownersById.get(id) ?? [];
     owners.push(element);
@@ -44,7 +50,7 @@ export function resolveUniqueExportTurnIds(elements: HTMLElement[]): string[] {
   const usedIds = new Set<string>();
 
   return elements.map((element, index) => {
-    const existingId = element.dataset.turnId?.trim() || '';
+    const existingId = readOrCreateTurnId(element, index);
     if (existingId && preferredOwnerById.get(existingId) === element && !usedIds.has(existingId)) {
       usedIds.add(existingId);
       return existingId;

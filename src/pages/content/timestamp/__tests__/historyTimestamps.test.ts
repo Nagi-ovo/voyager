@@ -1,14 +1,18 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { StorageKeys } from '@/core/types/common';
+
 import {
   HistoryTimestampStore,
+  extractHistoryTurnIdentities,
   extractHistoryTurns,
-  matchTimestampsToMarkers,
   normalizeTurnText,
 } from '../historyTimestamps';
 
 const CID = 'c_26dfc929fd75fe3d';
 const NATIVE_ID = '26dfc929fd75fe3d';
+const localGetMock = chrome.storage.local.get as unknown as ReturnType<typeof vi.fn>;
+const localSetMock = chrome.storage.local.set as unknown as ReturnType<typeof vi.fn>;
 
 /**
  * A turn mirroring the hNvQHb payload shape captured from a real
@@ -16,9 +20,15 @@ const NATIVE_ID = '26dfc929fd75fe3d';
  * response candidates, metadata, and the `[seconds, nanos]` pair as a direct
  * child near the end.
  */
-function makeTurn(userText: string, epochSec: number, nanos = 261_574_000, cid = CID): unknown[] {
+function makeTurn(
+  userText: string,
+  epochSec: number,
+  nanos = 261_574_000,
+  cid = CID,
+  responseId = `r_${epochSec.toString(16).padStart(16, '0')}`,
+): unknown[] {
   return [
-    [cid, 'r_b6eb23222c6b10a2'],
+    [cid, responseId],
     [cid, 'r_a23872877afd8022', 'rc_27a9438ecdf0a13d'],
     [[userText, null, null, null, [[]]], 2, null, 1, '56fdd199312815e2', null, null, null, false],
     [[['rc_b2d1629d6a044d8a', ['model answer text'], null, null, null, null, null, [2], 'zh']]],
@@ -62,8 +72,16 @@ describe('extractHistoryTurns', () => {
     expect(byCid.size).toBe(1);
     const turns = byCid.get(CID);
     expect(turns).toHaveLength(2);
-    expect(turns?.[0]).toEqual({ userText: '第一个问题', timestampMs: 1_783_370_737_262 });
-    expect(turns?.[1]).toEqual({ userText: '第二个问题', timestampMs: 1_783_370_831_262 });
+    expect(turns?.[0]).toEqual({
+      turnId: 's-000000006a4c13f1',
+      userText: '第一个问题',
+      timestampMs: 1_783_370_737_262,
+    });
+    expect(turns?.[1]).toEqual({
+      turnId: 's-000000006a4c144f',
+      userText: '第二个问题',
+      timestampMs: 1_783_370_831_262,
+    });
   });
 
   it('collapses whitespace in user text', () => {
@@ -89,74 +107,31 @@ describe('extractHistoryTurns', () => {
     expect(extractHistoryTurns([[turn]]).size).toBe(0);
   });
 
+  it('keeps ids in the ordered identity list when optional fields are missing', () => {
+    const first = makeTurn('第一个问题', 1_783_370_737);
+    const second = makeTurn('第二个问题', 1_783_370_831);
+    first[2] = [[null], 2, null, 1];
+    second.pop();
+
+    expect(extractHistoryTurnIdentities([[first, second]]).get(CID)).toEqual([
+      {
+        turnId: 's-000000006a4c13f1',
+        userText: null,
+        timestampMs: 1_783_370_737_262,
+      },
+      {
+        turnId: 's-000000006a4c144f',
+        userText: '第二个问题',
+        timestampMs: null,
+      },
+    ]);
+  });
+
   it('rejects timestamp-shaped pairs outside the epoch sanity window', () => {
     // e.g. the [2] flag arrays and [1, 2] metadata must not be read as times
     const turn = makeTurn('问题', 1_783_370_737);
     turn[turn.length - 1] = [12345, 42];
     expect(extractHistoryTurns([[turn]]).size).toBe(0);
-  });
-});
-
-describe('matchTimestampsToMarkers', () => {
-  const turns = [
-    { userText: '第二个问题', timestampMs: 2000 },
-    { userText: '第一个问题', timestampMs: 1000 },
-  ];
-
-  it('matches markers to turns by exact text regardless of payload order', () => {
-    const result = matchTimestampsToMarkers(turns, [
-      { id: 'u-0', text: '第一个问题' },
-      { id: 'u-1', text: '第二个问题' },
-    ]);
-    expect(result.get('u-0')).toBe(1000);
-    expect(result.get('u-1')).toBe(2000);
-  });
-
-  it('assigns duplicate texts chronologically in DOM order', () => {
-    const result = matchTimestampsToMarkers(
-      [
-        { userText: '同样的问题', timestampMs: 5000 },
-        { userText: '同样的问题', timestampMs: 3000 },
-      ],
-      [
-        { id: 'u-0', text: '同样的问题' },
-        { id: 'u-1', text: '同样的问题' },
-      ],
-    );
-    expect(result.get('u-0')).toBe(3000);
-    expect(result.get('u-1')).toBe(5000);
-  });
-
-  it('leaves unmatched markers alone', () => {
-    const result = matchTimestampsToMarkers(turns, [{ id: 'u-0', text: '完全不同的内容' }]);
-    expect(result.size).toBe(0);
-  });
-
-  it('falls back to a unique prefix match for drifted tails', () => {
-    const result = matchTimestampsToMarkers(
-      [{ userText: 'a long enough question about timestamps, full tail', timestampMs: 7000 }],
-      [{ id: 'u-0', text: 'a long enough question about timestamps' }],
-    );
-    expect(result.get('u-0')).toBe(7000);
-  });
-
-  it('refuses prefix matches that are short or ambiguous', () => {
-    expect(
-      matchTimestampsToMarkers(
-        [{ userText: 'short text!', timestampMs: 7000 }],
-        [{ id: 'u-0', text: 'short text' }],
-      ).size,
-    ).toBe(0);
-
-    expect(
-      matchTimestampsToMarkers(
-        [
-          { userText: 'a long enough question about timestamps A', timestampMs: 1 },
-          { userText: 'a long enough question about timestamps B', timestampMs: 2 },
-        ],
-        [{ id: 'u-0', text: 'a long enough question about timestamps' }],
-      ).size,
-    ).toBe(0);
   });
 });
 
@@ -172,19 +147,25 @@ describe('HistoryTimestampStore', () => {
   afterEach(() => {
     store?.stop();
     store = null;
+    localGetMock.mockReset();
+    localSetMock.mockReset();
   });
 
   it('ingests bridged captures and exposes turns by native conversation id', () => {
     store = new HistoryTimestampStore();
     const onUpdate = vi.fn();
-    store.start(true);
+    void store.start();
     store.subscribe(onUpdate);
 
     postCapture(makeEnvelope([makeTurn('第一个问题', 1_783_370_737)]));
 
     expect(onUpdate).toHaveBeenCalledWith([CID]);
     expect(store.getTurns(NATIVE_ID)).toEqual([
-      { userText: '第一个问题', timestampMs: 1_783_370_737_262 },
+      {
+        turnId: 's-000000006a4c13f1',
+        userText: '第一个问题',
+        timestampMs: 1_783_370_737_262,
+      },
     ]);
     expect(store.getTurns('unknown')).toBeNull();
   });
@@ -192,7 +173,7 @@ describe('HistoryTimestampStore', () => {
   it('merges later captures and dedupes repeats without re-notifying', () => {
     store = new HistoryTimestampStore();
     const onUpdate = vi.fn();
-    store.start(true);
+    void store.start();
     store.subscribe(onUpdate);
 
     const body = makeEnvelope([makeTurn('第一个问题', 1_783_370_737)]);
@@ -219,7 +200,7 @@ describe('HistoryTimestampStore', () => {
   it('ignores foreign messages and malformed bodies', () => {
     store = new HistoryTimestampStore();
     const onUpdate = vi.fn();
-    store.start(true);
+    void store.start();
     store.subscribe(onUpdate);
 
     window.dispatchEvent(
@@ -239,7 +220,7 @@ describe('HistoryTimestampStore', () => {
   it('stops listening after dispose', () => {
     store = new HistoryTimestampStore();
     const onUpdate = vi.fn();
-    store.start(true);
+    void store.start();
     store.subscribe(onUpdate);
     store.stop();
 
@@ -249,7 +230,7 @@ describe('HistoryTimestampStore', () => {
 
   it('keeps parsed data across UI subscriber replacement', () => {
     store = new HistoryTimestampStore();
-    store.start(true);
+    void store.start();
     const firstSubscriber = vi.fn();
     const unsubscribe = store.subscribe(firstSubscriber);
 
@@ -259,7 +240,11 @@ describe('HistoryTimestampStore', () => {
     const secondSubscriber = vi.fn();
     store.subscribe(secondSubscriber);
     expect(store.getTurns(NATIVE_ID)).toEqual([
-      { userText: '第一个问题', timestampMs: 1_783_370_737_262 },
+      {
+        turnId: 's-000000006a4c13f1',
+        userText: '第一个问题',
+        timestampMs: 1_783_370_737_262,
+      },
     ]);
 
     postCapture(makeEnvelope([makeTurn('第二个问题', 1_783_370_831)]), 'capture-b');
@@ -267,18 +252,18 @@ describe('HistoryTimestampStore', () => {
     expect(secondSubscriber).toHaveBeenCalledWith([CID]);
   });
 
-  it('acks captures without decoding while disabled', () => {
+  it('captures identity even when the legacy timestamp argument is false', () => {
     store = new HistoryTimestampStore();
     const postMessage = vi.spyOn(window, 'postMessage').mockImplementation(() => {});
     const onUpdate = vi.fn();
-    store.start(false);
+    void store.start(false);
     store.subscribe(onUpdate);
     postMessage.mockClear();
 
-    postCapture(makeEnvelope([makeTurn('不应解析', 1_783_370_737)]), 'disabled-capture');
+    postCapture(makeEnvelope([makeTurn('仍应解析身份', 1_783_370_737)]), 'disabled-capture');
 
-    expect(onUpdate).not.toHaveBeenCalled();
-    expect(store.getTurns(NATIVE_ID)).toBeNull();
+    expect(onUpdate).toHaveBeenCalledWith([CID]);
+    expect(store.resolveCanonicalTurnId(NATIVE_ID, 'u-0')).toBe('s-000000006a4c13f1');
     expect(postMessage).toHaveBeenCalledWith(
       {
         source: 'gv-history-observer-cmd',
@@ -289,11 +274,11 @@ describe('HistoryTimestampStore', () => {
     );
   });
 
-  it('starts idempotently and clears parsed data when disabled', () => {
+  it('starts idempotently and ignores timestamp-toggle changes', () => {
     store = new HistoryTimestampStore();
     const addEventListener = vi.spyOn(window, 'addEventListener');
-    store.start(true);
-    store.start(true);
+    void store.start();
+    void store.start();
 
     const messageRegistrations = addEventListener.mock.calls.filter(([type]) => type === 'message');
     expect(messageRegistrations).toHaveLength(1);
@@ -304,46 +289,112 @@ describe('HistoryTimestampStore', () => {
     expect(firstRevision).toBeGreaterThan(0);
 
     store.setEnabled(false);
-    expect(store.getTurns(NATIVE_ID)).toBeNull();
-    expect(store.getRevision(NATIVE_ID)).toBe(0);
-
-    store.setEnabled(true);
-    postCapture(makeEnvelope([makeTurn('第一个问题', 1_783_370_737)]), 'capture-b');
-    expect(store.getRevision(NATIVE_ID)).toBeGreaterThan(firstRevision);
+    expect(store.getTurns(NATIVE_ID)).not.toBeNull();
+    expect(store.getRevision(NATIVE_ID)).toBe(firstRevision);
+    expect(store.resolveCanonicalTurnId(NATIVE_ID, 'u-0')).toBe('s-000000006a4c13f1');
   });
 
-  it('tracks setting changes while no TimelineManager subscriber exists', () => {
+  it('maps legacy positions through the complete server ordering, not a mounted tail', () => {
     store = new HistoryTimestampStore();
-    const addListener = chrome.storage.onChanged.addListener as unknown as ReturnType<typeof vi.fn>;
-    const callIndex = addListener.mock.calls.length;
-    store.start(false);
-    const storageListener = addListener.mock.calls[callIndex][0] as (
-      changes: Record<string, chrome.storage.StorageChange>,
-      areaName: string,
-    ) => void;
+    void store.start();
+    postCapture(
+      makeEnvelope([
+        makeTurn('first', 1_783_370_737),
+        makeTurn('middle', 1_783_370_831),
+        makeTurn('mounted tail', 1_783_370_900),
+      ]),
+      'full-ordering',
+    );
 
-    storageListener(
-      {
-        gvShowMessageTimestamps: {
-          oldValue: false,
-          newValue: true,
+    expect(store.getTurnIdAliases(NATIVE_ID, 's-000000006a4c1494')).toEqual([
+      's-000000006a4c1494',
+      'u-2',
+    ]);
+    expect(store.resolveCanonicalTurnId(NATIVE_ID, 'u-0')).toBe('s-000000006a4c13f1');
+    expect(store.resolveCanonicalTurnId(NATIVE_ID, 'u-2')).toBe('s-000000006a4c1494');
+    expect(store.resolveCanonicalTurnId(NATIVE_ID, 'u-3')).toBeNull();
+  });
+
+  it('hydrates the ordered aliases after a hard reload without a new hNvQHb response', async () => {
+    const cached = {
+      version: 1,
+      conversations: {
+        [CID]: {
+          turnIds: ['s-1111111111111111', 's-2222222222222222'],
+          updatedAt: 123,
         },
       },
-      'sync',
-    );
-    postCapture(makeEnvelope([makeTurn('切换期间捕获', 1_783_370_737)]), 'capture-during-gap');
+    };
+    localGetMock.mockResolvedValue({
+      [StorageKeys.GV_TURN_IDENTITY_CACHE]: cached,
+    });
 
-    const subscriber = vi.fn();
-    store.subscribe(subscriber);
-    expect(store.getTurns(NATIVE_ID)).toEqual([
-      { userText: '切换期间捕获', timestampMs: 1_783_370_737_262 },
+    store = new HistoryTimestampStore();
+    await store.start();
+
+    expect(store.hasTurnIdentityMap(NATIVE_ID)).toBe(true);
+    expect(store.resolveCanonicalTurnId(NATIVE_ID, 'u-0')).toBe('s-1111111111111111');
+    expect(store.getTurnIdAliases(NATIVE_ID, 's-2222222222222222')).toEqual([
+      's-2222222222222222',
+      'u-1',
     ]);
-    expect(subscriber).not.toHaveBeenCalled();
+  });
+
+  it('persists only bounded response ids, never prompt text or response bodies', async () => {
+    localGetMock.mockResolvedValue({});
+    store = new HistoryTimestampStore();
+    await store.start();
+
+    postCapture(makeEnvelope([makeTurn('private prompt text', 1_783_370_737)]), 'persist-ids');
+    await vi.waitFor(() => expect(chrome.storage.local.set).toHaveBeenCalled());
+
+    const write = localSetMock.mock.calls.at(-1)?.[0];
+    const serialized = JSON.stringify(write);
+    expect(serialized).toContain('s-000000006a4c13f1');
+    expect(serialized).not.toContain('private prompt text');
+    expect(serialized).not.toContain('model answer text');
+  });
+
+  it('merges a live capture with other conversations still loading from cache', async () => {
+    let resolveCache!: (value: Record<string, unknown>) => void;
+    localGetMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveCache = resolve;
+        }),
+    );
+    store = new HistoryTimestampStore();
+    const ready = store.start();
+
+    postCapture(makeEnvelope([makeTurn('live conversation', 1_783_370_737)]), 'live-before-cache');
+    expect(chrome.storage.local.set).not.toHaveBeenCalled();
+
+    resolveCache({
+      [StorageKeys.GV_TURN_IDENTITY_CACHE]: {
+        version: 1,
+        conversations: {
+          c_aaaaaaaaaaaaaaaa: {
+            turnIds: ['s-aaaaaaaaaaaaaaaa'],
+            updatedAt: 100,
+          },
+        },
+      },
+    });
+    await ready;
+    await vi.waitFor(() => expect(chrome.storage.local.set).toHaveBeenCalled());
+
+    const write = localSetMock.mock.calls.at(-1)?.[0] as Record<string, unknown> | undefined;
+    const conversations = (
+      write?.[StorageKeys.GV_TURN_IDENTITY_CACHE] as {
+        conversations?: Record<string, unknown>;
+      }
+    )?.conversations;
+    expect(Object.keys(conversations ?? {}).sort()).toEqual([CID, 'c_aaaaaaaaaaaaaaaa'].sort());
   });
 
   it('bounds parsed conversation history with an LRU', () => {
     store = new HistoryTimestampStore();
-    store.start(true);
+    void store.start();
 
     for (let index = 0; index < 17; index++) {
       const cid = `c_${String(index).padStart(16, '0')}`;
@@ -356,7 +407,11 @@ describe('HistoryTimestampStore', () => {
     expect(store.getTurns('0000000000000000')).toBeNull();
     expect(store.getRevision('0000000000000000')).toBe(0);
     expect(store.getTurns('0000000000000016')).toEqual([
-      { userText: '问题 16', timestampMs: 1_783_370_753_000 },
+      {
+        turnId: 's-000000006a4c1401',
+        userText: '问题 16',
+        timestampMs: 1_783_370_753_000,
+      },
     ]);
     expect(store.getRevision('0000000000000016')).toBeGreaterThan(0);
   });

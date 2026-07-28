@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { renderElementToImageBlob } from '../ImageRenderService';
 import { PDFPrintService } from '../PDFPrintService';
+
+vi.mock('../ImageRenderService', () => ({
+  renderElementToImageBlob: vi.fn(async () => new Blob(['png'], { type: 'image/png' })),
+}));
 
 describe('PDFPrintService', () => {
   afterEach(() => {
@@ -10,6 +15,7 @@ describe('PDFPrintService', () => {
       /* ignore */
     }
     vi.useRealTimers();
+    vi.clearAllMocks();
     document.body.innerHTML = '';
     document.title = 'Gemini';
     try {
@@ -196,6 +202,122 @@ describe('PDFPrintService', () => {
     const styleText = document.getElementById('gv-pdf-print-styles')?.textContent ?? '';
     expect(attachment?.textContent).toContain('proposal.pdf');
     expect(styleText).toContain('.gv-print-turn-text .gv-export-attachment');
+  });
+
+  it('renders Mermaid SVG with print-safe scoped styles', async () => {
+    window.print = vi.fn();
+    const assistantElement = document.createElement('div');
+    assistantElement.innerHTML = `
+      <message-content>
+        <div class="markdown">
+          <div class="gv-mermaid-wrapper" data-gv-mermaid-theme="dark">
+            <code-block style="display: none;">
+              <div class="code-block-decoration">mermaid</div>
+              <pre><code role="text">flowchart TD\nA --&gt; B</code></pre>
+            </code-block>
+            <div class="gv-mermaid-toggle"><button>Diagram</button></div>
+            <div class="gv-mermaid-diagram">
+              <svg data-render-theme="dark" viewBox="0 0 640 1190"><g><text>A</text><text>B</text></g></svg>
+            </div>
+            <template class="gv-mermaid-light-export">
+              <svg data-export-theme="light" viewBox="0 0 640 1190">
+                <foreignObject width="160" height="24">
+                  <div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell">
+                    <span class="nodeLabel"><p>核心能力构建</p></span>
+                  </div>
+                </foreignObject>
+              </svg>
+            </template>
+          </div>
+        </div>
+      </message-content>
+    `;
+
+    await PDFPrintService.export(
+      [{ user: 'Diagram', assistant: '', starred: false, assistantElement }],
+      {
+        url: 'https://gemini.google.com/app/x',
+        exportedAt: new Date().toISOString(),
+        count: 1,
+        title: 'Mermaid Export',
+      },
+    );
+
+    const turnText = document.querySelector('.gv-print-turn-assistant .gv-print-turn-text');
+    const styleText = document.getElementById('gv-pdf-print-styles')?.textContent ?? '';
+    const mermaidImage = turnText?.querySelector<HTMLImageElement>(
+      '.gv-export-mermaid img.gv-export-mermaid-image',
+    );
+    const dataUrl = mermaidImage?.getAttribute('src') || '';
+    expect(mermaidImage).toBeTruthy();
+    expect(dataUrl).toMatch(/^data:image\/png;base64,/);
+    expect(turnText?.querySelector('.gv-export-mermaid svg')).toBeNull();
+    expect(turnText?.querySelector('pre, code-block, .gv-mermaid-toggle')).toBeNull();
+    expect(styleText).toContain('.gv-print-turn-text .gv-export-mermaid');
+    expect(styleText).toContain('.gv-print-turn-text .gv-export-mermaid > img {');
+    expect(styleText).toContain('display: block !important;');
+    expect(styleText).toContain('break-inside: avoid;');
+    expect(styleText).toContain('page-break-inside: avoid;');
+    expect(styleText).toContain('max-width: 100%;');
+    expect(styleText).toContain('height: auto;');
+    expect(styleText).toContain('max-height: 160mm;');
+    expect(styleText).toContain('object-fit: contain;');
+    expect(vi.mocked(renderElementToImageBlob)).toHaveBeenCalledWith(
+      expect.any(HTMLElement),
+      expect.objectContaining({ pixelRatio: 2 }),
+    );
+    expect(turnText?.textContent).not.toContain('核心能力构建');
+    expect(
+      turnText?.querySelector('.gv-export-mermaid')?.getAttribute('data-gv-mermaid-theme'),
+    ).toBe('light');
+    expect(styleText).not.toContain('.gv-export-mermaid[data-gv-mermaid-theme="dark"]');
+    expect(styleText).not.toContain('background: #1f2020;');
+    expect(styleText).toContain('print-color-adjust: exact;');
+    expect(styleText).toContain('-webkit-print-color-adjust: exact;');
+  });
+
+  it('falls back to an isolated Mermaid SVG image when rasterization fails', async () => {
+    window.print = vi.fn();
+    vi.mocked(renderElementToImageBlob).mockRejectedValueOnce(
+      new Error('Mermaid rasterization failed'),
+    );
+    const assistantElement = document.createElement('div');
+    assistantElement.innerHTML = `
+      <message-content>
+        <div class="markdown">
+          <div class="gv-mermaid-wrapper" data-gv-mermaid-theme="light">
+            <code-block style="display: none;">
+              <div class="code-block-decoration">mermaid</div>
+              <pre><code role="text">flowchart TD\nA --&gt; B</code></pre>
+            </code-block>
+            <div class="gv-mermaid-diagram">
+              <svg aria-label="Workflow diagram" viewBox="0 0 640 480">
+                <g><text>A</text><text>B</text></g>
+              </svg>
+            </div>
+          </div>
+        </div>
+      </message-content>
+    `;
+
+    await PDFPrintService.export(
+      [{ user: 'Diagram', assistant: '', starred: false, assistantElement }],
+      {
+        url: 'https://gemini.google.com/app/x',
+        exportedAt: new Date().toISOString(),
+        count: 1,
+        title: 'Mermaid Fallback Export',
+      },
+    );
+
+    const wrapper = document.querySelector<HTMLElement>(
+      '.gv-print-turn-assistant .gv-export-mermaid',
+    );
+    const image = wrapper?.querySelector<HTMLImageElement>('img.gv-export-mermaid-image');
+    expect(image?.src).toMatch(/^data:image\/svg\+xml;charset=utf-8,/);
+    expect(image?.alt).toBe('Workflow diagram');
+    expect(wrapper?.querySelector('svg')).toBeNull();
+    expect(wrapper?.getAttribute('data-gv-mermaid-theme')).toBe('light');
   });
 
   it('normalizes metadata title suffix when page title is generic', async () => {

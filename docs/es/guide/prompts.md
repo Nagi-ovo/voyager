@@ -37,13 +37,17 @@ El botón `≡ / ▦` a la derecha de la barra de búsqueda alterna entre **List
 - **Lista compacta**: un prompt por fila, unas 10 visibles a la vez. A la derecha aparecen etiquetas · expandir · editar · eliminar
 - **Vista cómoda**: vista previa de Markdown completa, ideal para colecciones pequeñas
 
-### Etiqueta de nombre opcional
+### Nombre obligatorio
 
-El campo **Nombre (opcional)** al principio del formulario de agregar/editar permite dar al prompt un título corto. En la vista compacta este nombre reemplaza la primera línea extraída automáticamente; si se deja vacío, se mantiene el comportamiento original.
+El campo **Nombre** al principio del formulario es obligatorio al agregar o editar un prompt. Los prompts antiguos sin nombre se conservan, pero habrá que asignarles uno la próxima vez que se editen.
 
 ### Vista previa rápida al pasar el ratón
 
 En modo compacto, mantén el ratón sobre cualquier fila unos **250 ms** para ver el contenido completo en un tooltip flotante — sustituye al tooltip nativo `title` del navegador (que puede tardar 1–3 s en aparecer).
+
+### Inserción rápida con barra
+
+En el cuadro de chat, escribe `/` seguido de parte del nombre de un prompt. La lista muestra solo los nombres y etiquetas coincidentes; pasa el ratón por un elemento para ver el contenido completo y selecciónalo con un clic izquierdo o con `Tab` / `Enter`. El nombre aparece como un token resaltado y al enviar se usa el cuerpo completo del prompt.
 
 ![Vista de lista compacta](/assets/gemini-prompt-manager-compact.png)
 

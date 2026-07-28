@@ -33,7 +33,6 @@ Voyager is an open-source (GPLv3) browser extension that transforms the Google G
 - **Message Timestamps**: Auto-record when each message was sent
 - **Sidebar Auto-hide**: Sidebar collapses when your mouse leaves for distraction-free conversations
 - **Conversation Fork**: Branch any conversation at any message node to explore different directions
-- **Tab Title Sync**: Browser tab title automatically reflects the current conversation
 - **Send Behavior**: Choose between Enter-to-send or Ctrl+Enter-to-send
 - **Font Size Control**: Adjust chat font size for comfortable reading
 

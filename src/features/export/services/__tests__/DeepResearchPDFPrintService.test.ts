@@ -113,6 +113,61 @@ describe('DeepResearchPDFPrintService', () => {
     expect(styleText).toContain('background: #fff !important;');
   });
 
+  it('isolates Mermaid SVG styles in a sanitized data image', async () => {
+    window.print = vi.fn();
+
+    await DeepResearchPDFPrintService.export({
+      title: 'Report',
+      url: 'https://gemini.google.com/app/abc12345',
+      exportedAt: new Date().toISOString(),
+      markdown: 'Body',
+      html: `
+        <style>.outer-style { color: red; }</style>
+        <p class="outer-style" onclick="alert('unsafe')">Body</p>
+        <span class="katex">x</span>
+        <div class="gv-export-mermaid" data-gv-mermaid-theme="light">
+          <svg viewBox="0 0 120 80" width="100%" style="max-width: 640px" onclick="alert('unsafe')">
+            <style>.node { fill: red; }</style>
+            <script>alert('unsafe')</script>
+            <template><g></g></template>
+            <g onload="alert('unsafe')"><text>Diagram</text></g>
+          </svg>
+        </div>
+      `,
+    });
+
+    const report = document.querySelector('.gv-dr-print-report');
+    const mermaidImage = report?.querySelector<HTMLImageElement>('.gv-export-mermaid img');
+    const dataUrl = mermaidImage?.getAttribute('src') || '';
+    const serializedSvg = decodeURIComponent(dataUrl.split(',')[1] || '');
+    const styleText =
+      document.getElementById('gv-deep-research-pdf-print-styles')?.textContent || '';
+
+    expect(mermaidImage).toBeTruthy();
+    expect(dataUrl).toMatch(/^data:image\/svg\+xml;charset=utf-8,/);
+    expect(mermaidImage?.style.width).toBe('100%');
+    expect(mermaidImage?.style.maxWidth).toBe('640px');
+    expect(serializedSvg).toContain('<style>.node { fill: red; }</style>');
+    expect(serializedSvg).not.toContain('<script');
+    expect(serializedSvg).not.toContain('<template');
+    expect(serializedSvg).not.toMatch(/\son[a-z]+=/i);
+    expect(report?.querySelector('style')).toBeNull();
+    expect(report?.querySelector('p')?.getAttribute('onclick')).toBeNull();
+    expect(report?.querySelector('.katex')?.textContent).toBe('x');
+    expect(report?.querySelector('.gv-export-mermaid')?.getAttribute('data-gv-mermaid-theme')).toBe(
+      'light',
+    );
+    expect(styleText).toContain('.gv-dr-print-report .gv-export-mermaid > img');
+    expect(styleText).toContain('margin: 0.75em auto;');
+    expect(styleText).not.toContain('.gv-export-mermaid[data-gv-mermaid-theme="dark"]');
+    expect(styleText).not.toContain('background: #1f2020;');
+    expect(styleText).toContain('print-color-adjust: exact;');
+    expect(styleText).toContain('-webkit-print-color-adjust: exact;');
+    expect(styleText).toContain('page-break-inside: avoid;');
+    expect(styleText).toContain('max-height: 160mm;');
+    expect(styleText).toContain('object-fit: contain;');
+  });
+
   it('applies Safari-only print override class and style rules', async () => {
     setUserAgentVendor(
       'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_7_1) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15',

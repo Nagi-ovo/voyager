@@ -26,6 +26,41 @@ import { logger } from '@/core/services/LoggerService';
 import { matchesAnyPattern } from '../sites/matchPattern';
 import type { PluginManifest } from '../types';
 
+const CLAUDE_ARTIFACT_FRAME_ORIGIN = 'https://*.frame.claudeusercontent.com/*';
+
+const EMBEDDED_ORIGIN_PATTERNS_BY_PARENT_HOST: Readonly<Record<string, readonly string[]>> = {
+  'claude.ai': [CLAUDE_ARTIFACT_FRAME_ORIGIN],
+};
+
+const EMBEDDED_PLUGIN_ORIGIN_PATTERNS = new Set<string>([CLAUDE_ARTIFACT_FRAME_ORIGIN]);
+
+export interface PluginOriginPatternGroups {
+  topFrameOrigins: string[];
+  embeddedFrameOrigins: string[];
+}
+
+/**
+ * Keep child-frame injection opt-in. Ordinary plugin match patterns are broad
+ * enough to match same-origin iframes, but only explicitly registered companion
+ * origins should receive the plugin runtime outside the top frame.
+ */
+export function partitionPluginOriginPatterns(
+  origins: readonly string[],
+): PluginOriginPatternGroups {
+  const topFrameOrigins: string[] = [];
+  const embeddedFrameOrigins: string[] = [];
+
+  for (const origin of origins) {
+    if (EMBEDDED_PLUGIN_ORIGIN_PATTERNS.has(origin)) {
+      embeddedFrameOrigins.push(origin);
+    } else {
+      topFrameOrigins.push(origin);
+    }
+  }
+
+  return { topFrameOrigins, embeddedFrameOrigins };
+}
+
 /**
  * Derive the set of `https://host/*` origin permission patterns required to run a
  * set of plugins. Strips path/scheme wildcards down to an origin grant suitable
@@ -57,7 +92,12 @@ export function pluginToOriginPatternsForActiveUrl(
     try {
       const url = new URL(activeUrl);
       if (url.protocol === 'http:' || url.protocol === 'https:') {
-        return [`${url.protocol}//${url.hostname}/*`];
+        const declaredOrigins = new Set(pluginsToOriginPatterns([manifest]));
+        const selectedOrigins = new Set<string>([`${url.protocol}//${url.hostname}/*`]);
+        for (const pattern of EMBEDDED_ORIGIN_PATTERNS_BY_PARENT_HOST[url.hostname] ?? []) {
+          if (declaredOrigins.has(pattern)) selectedOrigins.add(pattern);
+        }
+        return [...selectedOrigins].sort();
       }
     } catch {
       // Fall back to all manifest origins below.

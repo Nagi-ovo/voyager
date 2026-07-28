@@ -16,6 +16,8 @@ import {
 import { DOMContentExtractor } from './DOMContentExtractor';
 import { renderElementToImageBlob } from './ImageRenderService';
 import { buildKatexExportStyles } from './katexExportStyles';
+import { buildMermaidExportStyles } from './mermaidExportStyles';
+import { rasterizeMermaidSvgImages } from './mermaidSvgImage';
 
 export interface RenderableDocumentContent {
   title: string;
@@ -213,6 +215,10 @@ export class ImageExportService {
         gap: 8px;
       }
 
+      .gv-image-export-doc a {
+        color: #2563eb !important;
+      }
+
       .gv-image-export-turn {
         margin: 24px 0;
         padding: 20px 0;
@@ -249,6 +255,11 @@ export class ImageExportService {
         display: block;
         margin: 12px 0;
       }
+
+      ${buildMermaidExportStyles('.gv-image-export-content', {
+        containerMargin: '20px auto',
+        diagramSelector: '> img',
+      })}
 
       .gv-image-export-content .gv-export-attachment {
         display: flex;
@@ -375,6 +386,10 @@ export class ImageExportService {
         gap: 0.4em;
       }
 
+      .gv-image-export-doc a {
+        color: #2563eb !important;
+      }
+
       .gv-image-export-report-content {
         margin: 0.9em 0 1.2em;
         color: #1a1a1a;
@@ -391,6 +406,11 @@ export class ImageExportService {
         display: block;
         margin: 0.6em 0;
       }
+
+      ${buildMermaidExportStyles('.gv-image-export-report-content', {
+        containerMargin: '1em auto',
+        diagramSelector: '> img',
+      })}
 
       .gv-image-export-report-content pre {
         background: rgba(0,0,0,0.05);
@@ -538,6 +558,7 @@ export class ImageExportService {
     document.body.appendChild(container);
 
     try {
+      await rasterizeMermaidSvgImages(container);
       await this.inlineImages(container);
       return await this.renderWithSafariFallback(container);
     } finally {

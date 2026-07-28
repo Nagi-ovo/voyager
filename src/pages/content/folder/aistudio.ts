@@ -11,7 +11,10 @@ import { StorageKeys } from '@/core/types/common';
 import type { PromptItem, SyncAccountScope } from '@/core/types/sync';
 import { isSafari } from '@/core/utils/browser';
 import { createTranslator, initI18n } from '@/utils/i18n';
-import { mergeFolderData as mergeSyncedFolderData } from '@/utils/merge';
+import {
+  mergeFolderData as mergeSyncedFolderData,
+  mergePrompts as mergeSyncedPrompts,
+} from '@/utils/merge';
 
 import { watchRouteChanges } from '../utils/routeWatcher';
 import {
@@ -3842,33 +3845,11 @@ export class AIStudioFolderManager {
   }
 
   /**
-   * Merge prompts by ID (simple deduplication)
+   * Merge prompts through the shared sync policy so legacy cloud records
+   * cannot erase names that exist only in local storage.
    */
   private mergePromptsData(local: PromptItem[], cloud: PromptItem[]): PromptItem[] {
-    const promptMap = new Map<string, PromptItem>();
-
-    // Add local prompts first
-    local.forEach((p) => {
-      if (p?.id) promptMap.set(p.id, p);
-    });
-
-    // Add cloud prompts (cloud takes priority for newer items)
-    cloud.forEach((p) => {
-      if (!p?.id) return;
-      const existing = promptMap.get(p.id);
-      if (!existing) {
-        promptMap.set(p.id, p);
-      } else {
-        // Compare timestamps, prefer newer
-        const cloudTime = p.updatedAt || p.createdAt || 0;
-        const localTime = existing.updatedAt || existing.createdAt || 0;
-        if (cloudTime > localTime) {
-          promptMap.set(p.id, p);
-        }
-      }
-    });
-
-    return Array.from(promptMap.values());
+    return mergeSyncedPrompts(local, cloud);
   }
 
   /**

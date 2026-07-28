@@ -80,6 +80,8 @@ export interface CoachmarkConfig {
   placement?: 'top' | 'bottom';
   /** Dim the page behind the coachmark. Default true. */
   scrim?: boolean;
+  /** Move focus into the coachmark on open and restore it on close. Default true. */
+  focusOnOpen?: boolean;
   /** Set false to always show (ignores + does not record seen state). */
   once?: boolean;
 }
@@ -217,6 +219,7 @@ function positionBubble(bubble: HTMLElement, anchor: HTMLElement, prefer: 'top' 
 
 export async function showCoachmark(cfg: CoachmarkConfig): Promise<CoachmarkResult> {
   const once = cfg.once !== false;
+  const focusOnOpen = cfg.focusOnOpen !== false;
   if (activeId) return 'skipped';
   if (once && (await hasSeenCoachmark(cfg.id))) return 'skipped';
 
@@ -351,7 +354,7 @@ export async function showCoachmark(cfg: CoachmarkConfig): Promise<CoachmarkResu
             /* gone */
           }
         }
-        if (restoreFocus && previouslyFocused?.isConnected) {
+        if (restoreFocus && focusOnOpen && previouslyFocused?.isConnected) {
           try {
             previouslyFocused.focus({ preventScroll: true });
           } catch {
@@ -435,8 +438,10 @@ export async function showCoachmark(cfg: CoachmarkConfig): Promise<CoachmarkResu
       window.addEventListener('click', onOutside, true);
       window.addEventListener('keydown', onKey, true);
       window.addEventListener('resize', onReflow);
-      const initialFocus = bubble.querySelector<HTMLElement>('.gv-coach-dismiss') ?? close;
-      initialFocus.focus({ preventScroll: true });
+      if (focusOnOpen) {
+        const initialFocus = bubble.querySelector<HTMLElement>('.gv-coach-dismiss') ?? close;
+        initialFocus.focus({ preventScroll: true });
+      }
     }, 0);
   });
 }

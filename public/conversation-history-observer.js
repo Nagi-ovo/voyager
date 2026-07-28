@@ -5,14 +5,14 @@
  *
  * Gemini loads a conversation's messages through a `batchexecute` RPC
  * (rpcid `hNvQHb`) whose payload carries a server-side `[seconds, nanos]`
- * timestamp for every turn. Captures stay buffered only until the isolated
+ * timestamp and stable response id for every turn. Captures stay buffered only until the isolated
  * content script acknowledges them; SPA navigation therefore never replays
  * already-parsed multi-megabyte responses.
  *
- * The observer starts in an `unknown` state while the document_start loader
- * reads the feature setting. It may preserve at most one response during that
- * short race so enabled users do not lose the eager conversation-load RPC.
- * Once configured disabled, it never clones or reads response bodies.
+ * The observer starts in an `unknown` state until the document_start loader
+ * confirms that the isolated-world parser is ready. It preserves only a small
+ * bounded set of responses during that short race so eager conversation-load
+ * RPCs are not lost.
  *
  * The fetch wrapper deliberately returns the original promise. Making it an
  * async wrapper breaks Angular's zone.js change detection (see

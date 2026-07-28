@@ -4,7 +4,7 @@ import {
   filterOutDeepResearchImmersiveNodes,
   resolveConversationRoot,
 } from '../export/conversationDom';
-import { makeStableTurnId } from './turnId';
+import { makeTurnId } from './turnId';
 
 export interface ForkChatPair {
   turnId: string;
@@ -147,7 +147,7 @@ export function collectForkChatPairs(): ForkChatPair[] {
 
   for (let i = 0; i < users.length; i++) {
     const userEl = users[i];
-    const turnId = makeStableTurnId(i);
+    const turnId = makeTurnId(userEl, i);
     userEl.dataset.turnId = turnId;
 
     const userExtracted = DOMContentExtractor.extractUserContent(userEl).text;

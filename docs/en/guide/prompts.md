@@ -37,13 +37,17 @@ The `≡ / ▦` button on the right of the search bar switches between **Compact
 - **Compact list**: one prompt per row, ~10 visible at once; the right side shows tags · expand · edit · delete
 - **Comfortable view**: full Markdown preview, best for a small collection
 
-### Optional name label
+### Required name
 
-The **Name (optional)** field at the top of the add/edit form lets you give a prompt a short title. In compact view this overrides the auto-extracted first line; leave blank to keep the previous behavior.
+The **Name** field at the top of the add/edit form gives each prompt a short title and is required when creating or editing a prompt. Legacy prompts without a name remain available, but need a name the next time they are edited.
 
 ### Fast hover preview
 
 In compact mode, hover any row for **~250 ms** to see its full content in a floating tooltip — replaces the browser's native `title` tooltip (which can take 1–3 s to open).
+
+### Slash quick insert
+
+In a chat input, type `/` followed by part of a prompt name. The list shows matching names and tags; hover an item to preview its full body, then click it or press `Tab` / `Enter` to select it. The editor displays the selected name as a highlighted token and sends the complete prompt body.
 
 ![Compact list view](/assets/gemini-prompt-manager-compact.png)
 

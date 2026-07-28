@@ -396,6 +396,12 @@ const POPUP_SETTINGS_SEARCH_ITEMS = [
     'hidePromptManager',
     'hidePromptManagerHint',
   ]),
+  popupSearchTarget(
+    'promptManager',
+    'slashPromptEnabled',
+    ['slashPromptEnabled', 'slashPromptEnabledHint'],
+    ['slash autocomplete quick insert 斜杠 快速插入'],
+  ),
   popupSearchTarget('promptManager', 'promptInsertOnClick', [
     'promptInsertOnClick',
     'promptInsertOnClickHint',
@@ -745,6 +751,7 @@ interface SettingsUpdate {
   watermarkDownloadEnabled?: boolean;
   watermarkPreviewEnabled?: boolean;
   hidePromptManager?: boolean;
+  slashPromptEnabled?: boolean;
   promptInsertOnClickEnabled?: boolean;
   inputCollapseEnabled?: boolean;
   inputCollapseWhenNotEmpty?: boolean;
@@ -944,9 +951,10 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
   const [watermarkDownloadEnabled, setWatermarkDownloadEnabled] = useState<boolean>(true);
   const [watermarkPreviewEnabled, setWatermarkPreviewEnabled] = useState<boolean>(true);
   const [hidePromptManager, setHidePromptManager] = useState<boolean>(false);
+  const [slashPromptEnabled, setSlashPromptEnabled] = useState<boolean>(true);
   const [promptInsertOnClickEnabled, setPromptInsertOnClickEnabled] = useState<boolean>(false);
   const [promptMigrationStatus, setPromptMigrationStatus] = useState<{
-    kind: 'ok' | 'err';
+    kind: 'ok' | 'warn' | 'err';
     text: string;
   } | null>(null);
   const [promptMigrationBusy, setPromptMigrationBusy] = useState<boolean>(false);
@@ -1276,6 +1284,8 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
       }
       if (typeof settings.hidePromptManager === 'boolean')
         payload.gvHidePromptManager = settings.hidePromptManager;
+      if (typeof settings.slashPromptEnabled === 'boolean')
+        payload[StorageKeys.SLASH_PROMPT_ENABLED] = settings.slashPromptEnabled;
       if (typeof settings.promptInsertOnClickEnabled === 'boolean')
         payload[StorageKeys.PROMPT_INSERT_ON_CLICK] = settings.promptInsertOnClickEnabled;
       if (typeof settings.inputCollapseEnabled === 'boolean')
@@ -1396,8 +1406,14 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
 
         const processed = importResult.data.imported + importResult.data.duplicates;
         setPromptMigrationStatus({
-          kind: 'ok',
-          text: t('pm_import_success').replace('{count}', String(processed)),
+          kind: importResult.data.nameConflicts > 0 ? 'warn' : 'ok',
+          text:
+            importResult.data.nameConflicts > 0
+              ? t('promptNameConflictsDetected').replace(
+                  '{count}',
+                  String(importResult.data.nameConflicts),
+                )
+              : t('pm_import_success').replace('{count}', String(processed)),
         });
       } catch (error) {
         console.error('[Gemini Voyager] Failed to import prompts:', error);
@@ -1420,7 +1436,15 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
       const response = (await chrome.runtime.sendMessage({
         type: 'gv.sync.pullPromptsMerge',
         payload: { interactive: true },
-      })) as { ok?: boolean; empty?: boolean; imported?: number; duplicates?: number } | undefined;
+      })) as
+        | {
+            ok?: boolean;
+            empty?: boolean;
+            imported?: number;
+            duplicates?: number;
+            nameConflicts?: number;
+          }
+        | undefined;
 
       if (!response?.ok) {
         setPromptMigrationStatus({ kind: 'err', text: t('promptCloudError') });
@@ -1433,8 +1457,14 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
 
       const processed = (response.imported ?? 0) + (response.duplicates ?? 0);
       setPromptMigrationStatus({
-        kind: 'ok',
-        text: t('promptCloudPullSuccess').replace('{count}', String(processed)),
+        kind: (response.nameConflicts ?? 0) > 0 ? 'warn' : 'ok',
+        text:
+          (response.nameConflicts ?? 0) > 0
+            ? t('promptNameConflictsDetected').replace(
+                '{count}',
+                String(response.nameConflicts ?? 0),
+              )
+            : t('promptCloudPullSuccess').replace('{count}', String(processed)),
       });
     } catch (error) {
       console.error('[Gemini Voyager] Failed to pull prompts from cloud:', error);
@@ -1451,16 +1481,21 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
       const response = (await chrome.runtime.sendMessage({
         type: 'gv.sync.pushPromptsMerge',
         payload: { interactive: true },
-      })) as { ok?: boolean; count?: number } | undefined;
+      })) as { ok?: boolean; count?: number; nameConflicts?: number } | undefined;
 
       if (!response?.ok) {
         setPromptMigrationStatus({ kind: 'err', text: t('promptCloudError') });
         return;
       }
-
       setPromptMigrationStatus({
-        kind: 'ok',
-        text: t('promptCloudPushSuccess').replace('{count}', String(response.count ?? 0)),
+        kind: (response.nameConflicts ?? 0) > 0 ? 'warn' : 'ok',
+        text:
+          (response.nameConflicts ?? 0) > 0
+            ? t('promptNameConflictsDetected').replace(
+                '{count}',
+                String(response.nameConflicts ?? 0),
+              )
+            : t('promptCloudPushSuccess').replace('{count}', String(response.count ?? 0)),
       });
     } catch (error) {
       console.error('[Gemini Voyager] Failed to push prompts to cloud:', error);
@@ -1825,6 +1860,7 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
           [StorageKeys.WATERMARK_DOWNLOAD_ENABLED]: null,
           [StorageKeys.WATERMARK_PREVIEW_ENABLED]: null,
           gvHidePromptManager: false,
+          [StorageKeys.SLASH_PROMPT_ENABLED]: true,
           [StorageKeys.PROMPT_INSERT_ON_CLICK]: false,
           gvInputCollapseEnabled: false,
           gvInputCollapseWhenNotEmpty: false,
@@ -1913,6 +1949,7 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
             setWatermarkPreviewEnabled(watermarkSettings.preview);
           }
           setHidePromptManager(!!res?.gvHidePromptManager);
+          setSlashPromptEnabled(res?.[StorageKeys.SLASH_PROMPT_ENABLED] !== false);
           setPromptInsertOnClickEnabled(res?.[StorageKeys.PROMPT_INSERT_ON_CLICK] === true);
           setInputCollapseEnabled(res?.gvInputCollapseEnabled !== false);
           setInputCollapseWhenNotEmpty(res?.gvInputCollapseWhenNotEmpty === true);
@@ -2444,7 +2481,9 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
           className={`text-xs ${
             promptMigrationStatus.kind === 'ok'
               ? 'text-emerald-600 dark:text-emerald-400'
-              : 'text-destructive'
+              : promptMigrationStatus.kind === 'warn'
+                ? 'text-amber-600 dark:text-amber-400'
+                : 'text-destructive'
           }`}
         >
           {promptMigrationStatus.text}
@@ -3884,6 +3923,31 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
                     onChange={(e) => {
                       setHidePromptManager(e.target.checked);
                       apply({ hidePromptManager: e.target.checked });
+                    }}
+                  />
+                </div>,
+              )}
+              {renderSetting(
+                'promptManager',
+                'slashPromptEnabled',
+                <div className="group flex items-center justify-between">
+                  <div className="flex-1">
+                    <Label
+                      htmlFor="slash-prompt-enabled"
+                      className="group-hover:text-primary cursor-pointer text-sm font-medium transition-colors"
+                    >
+                      {t('slashPromptEnabled')}
+                    </Label>
+                    <p className="text-muted-foreground mt-1 text-xs">
+                      {t('slashPromptEnabledHint')}
+                    </p>
+                  </div>
+                  <Switch
+                    id="slash-prompt-enabled"
+                    checked={slashPromptEnabled}
+                    onChange={(e) => {
+                      setSlashPromptEnabled(e.target.checked);
+                      apply({ slashPromptEnabled: e.target.checked });
                     }}
                   />
                 </div>,

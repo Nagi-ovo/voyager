@@ -67,7 +67,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Users
 
 - Chrome/Firefox: No changes needed
-- Safari: See [installation guide](.github/docs/safari/INSTALLATION.md)
+- Safari: See [installation guide](safari/INSTALLATION.md)
 
 ### Developers
 

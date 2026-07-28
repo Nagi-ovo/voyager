@@ -74,6 +74,7 @@ export const BACKUPABLE_SYNC_SETTINGS_DEFAULTS = {
   [StorageKeys.PROMPT_INSERT_ON_CLICK]: false,
   [StorageKeys.PROMPT_VIEW_MODE]: 'compact',
   [StorageKeys.PROMPT_PANEL_VIEW]: 'prompts',
+  [StorageKeys.SLASH_PROMPT_ENABLED]: true,
   [StorageKeys.LANGUAGE]: null,
   [StorageKeys.FORMULA_COPY_FORMAT]: 'latex',
   [StorageKeys.WATERMARK_REMOVER_ENABLED]: true,
@@ -348,6 +349,12 @@ export const NON_SETTINGS_BACKUP_POLICIES = {
     storage: 'local',
     disposition: 'local-data',
     reason: 'Message timestamp history is local data, not a setting.',
+  },
+  [StorageKeys.GV_TURN_IDENTITY_CACHE]: {
+    storage: 'local',
+    disposition: 'cache',
+    reason:
+      'Gemini response-id aliases are bounded, device-local, and rebuilt from conversation history.',
   },
   [StorageKeys.FOLDER_PROJECT_PENDING_FOLDER_ID]: {
     storage: 'local',

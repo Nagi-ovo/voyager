@@ -8,13 +8,11 @@ type PreviewUpdate = {
   summary: string;
   index: number;
   starred: boolean;
-  starredAt?: number;
 };
 
 type TimelineManagerInternal = {
   conversationId: string | null;
   starred: Set<string>;
-  starredAtMap: Map<string, number>;
   markers: Array<{
     id: string;
     element: HTMLElement;
@@ -62,7 +60,6 @@ describe('TimelineManager preview starred sync', () => {
 
     internal.conversationId = 'gemini:conv:test';
     internal.starred = new Set();
-    internal.starredAtMap = new Map();
     internal.markers = [createMarker('turn-0', 'first'), createMarker('turn-1', 'second')];
     internal.previewPanel = { updateMarkers };
     internal.saveStars = vi.fn();
@@ -84,7 +81,7 @@ describe('TimelineManager preview starred sync', () => {
 
     let previewMarkers = getLastPreviewUpdate(updateMarkers);
     expect(previewMarkers[1]?.starred).toBe(true);
-    expect(previewMarkers[1]?.starredAt).toBe(1710000000000);
+    expect(previewMarkers[1]).not.toHaveProperty('starredAt');
 
     internal.applySharedStarredData({
       messages: {
@@ -94,39 +91,7 @@ describe('TimelineManager preview starred sync', () => {
 
     previewMarkers = getLastPreviewUpdate(updateMarkers);
     expect(previewMarkers[1]?.starred).toBe(false);
-    expect(previewMarkers[1]?.starredAt).toBeUndefined();
-  });
-
-  it('refreshes preview metadata even when the starred id set is unchanged', () => {
-    const manager = new TimelineManager();
-    const updateMarkers = vi.fn();
-    const internal = manager as unknown as TimelineManagerInternal;
-
-    internal.conversationId = 'gemini:conv:test';
-    internal.starred = new Set(['turn-1']);
-    internal.starredAtMap = new Map([['turn-1', 100]]);
-    internal.markers = [createMarker('turn-0', 'first'), createMarker('turn-1', 'second', true)];
-    internal.previewPanel = { updateMarkers };
-    internal.saveStars = vi.fn();
-
-    internal.applySharedStarredData({
-      messages: {
-        'gemini:conv:test': [
-          {
-            turnId: 'turn-1',
-            content: 'second',
-            conversationId: 'gemini:conv:test',
-            conversationUrl: 'https://gemini.google.com/app/test',
-            conversationTitle: 'test',
-            starredAt: 200,
-          },
-        ],
-      },
-    });
-
-    const previewMarkers = getLastPreviewUpdate(updateMarkers);
-    expect(previewMarkers[1]?.starred).toBe(true);
-    expect(previewMarkers[1]?.starredAt).toBe(200);
+    expect(previewMarkers[1]).not.toHaveProperty('starredAt');
   });
 
   it('keeps stars stored under a legacy conversation key when a star changes in another conversation', () => {
@@ -141,7 +106,6 @@ describe('TimelineManager preview starred sync', () => {
 
       internal.conversationId = 'gemini:conv:abc123';
       internal.starred = new Set(['turn-0']);
-      internal.starredAtMap = new Map([['turn-0', 100]]);
       internal.markers = [createMarker('turn-0', 'first', true)];
       internal.previewPanel = { updateMarkers };
       internal.saveStars = vi.fn();

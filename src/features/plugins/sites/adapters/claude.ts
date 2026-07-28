@@ -6,7 +6,7 @@ import type { SiteAdapter, SiteCapability } from '../../types';
 export const claudeAdapter: SiteAdapter = {
   id: 'claude',
   label: 'Claude',
-  matches: ['https://claude.ai/*'],
+  matches: ['https://claude.ai/*', 'https://*.frame.claudeusercontent.com/*'],
   selectors: {
     userTurn: '[data-testid="user-message"]',
     assistantTurn: '.font-claude-message, [data-testid="assistant-message"]',

@@ -190,6 +190,7 @@ export function PluginManager({
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [deniedId, setDeniedId] = useState<string | null>(null);
   const [unsupportedId, setUnsupportedId] = useState<string | null>(null);
+  const [missingPermissionIds, setMissingPermissionIds] = useState<Set<string>>(new Set());
 
   // Coalesced persistence for setting sliders (see handleSetting). Keyed by
   // `${pluginId}:${settingKey}` so independent sliders keep independent timers.
@@ -219,6 +220,34 @@ export function PluginManager({
       unsubscribe();
     };
   }, []);
+
+  // Plugin updates can add a narrowly-scoped companion origin after a user has
+  // already enabled the plugin. Chrome cannot grant that new optional origin in
+  // the background, so surface an explicit user-gesture repair instead of
+  // silently leaving the new surface inactive.
+  useEffect(() => {
+    let active = true;
+    if (!browser.permissions?.contains) return;
+
+    const enabledPlugins = manifests.filter((plugin) => enabledMap[plugin.id] === true);
+    void Promise.all(
+      enabledPlugins.map(async (plugin): Promise<string | null> => {
+        const origins = pluginToOriginPatternsForActiveUrl(plugin, activeUrl);
+        if (!origins.length) return null;
+        try {
+          return (await browser.permissions.contains({ origins })) ? null : plugin.id;
+        } catch {
+          return null;
+        }
+      }),
+    ).then((missingIds) => {
+      if (active) setMissingPermissionIds(new Set(missingIds.filter((id): id is string => !!id)));
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [activeUrl, enabledMap, manifests]);
 
   const handleToggle = useCallback(
     async (plugin: PluginManifest, next: boolean) => {
@@ -310,6 +339,44 @@ export function PluginManager({
     [],
   );
 
+  const handleGrantRequiredAccess = useCallback(
+    async (plugin: PluginManifest) => {
+      setDeniedId(null);
+      setUnsupportedId(null);
+      const origins = pluginToOriginPatternsForActiveUrl(plugin, activeUrl);
+      if (!origins.length) {
+        setMissingPermissionIds((previous) => {
+          const next = new Set(previous);
+          next.delete(plugin.id);
+          return next;
+        });
+        return;
+      }
+      if (
+        !browser.permissions?.request ||
+        !supportsOptionalHostPermissions() ||
+        !supportsDynamicContentScriptRegistration()
+      ) {
+        setUnsupportedId(plugin.id);
+        return;
+      }
+      try {
+        if (!(await browser.permissions.request({ origins }))) {
+          setDeniedId(plugin.id);
+          return;
+        }
+        setMissingPermissionIds((previous) => {
+          const next = new Set(previous);
+          next.delete(plugin.id);
+          return next;
+        });
+      } catch {
+        setDeniedId(plugin.id);
+      }
+    },
+    [activeUrl],
+  );
+
   // Flush any pending setting write if the popup closes mid-drag, so the user's
   // final value is never lost to the debounce window.
   useEffect(() => {
@@ -381,6 +448,7 @@ export function PluginManager({
           const settingsSchema = plugin.contributes.settings;
           const badge = platformBadge(plugin, currentSiteId);
           const localizedName = pickLocalized(plugin, 'name', language);
+          const needsSiteAccess = enabled && missingPermissionIds.has(plugin.id);
           return (
             <div key={plugin.id} className="border-border/60 rounded-lg border p-3">
               <div className="flex items-start justify-between gap-3">
@@ -443,8 +511,20 @@ export function PluginManager({
                     </>
                   )}
 
+                  {needsSiteAccess && (
+                    <button
+                      type="button"
+                      onClick={() => void handleGrantRequiredAccess(plugin)}
+                      className="border-primary/25 bg-primary/5 text-primary hover:bg-primary/10 mt-2 flex w-full items-center justify-center rounded-md border px-2.5 py-2 text-xs font-medium transition-colors"
+                    >
+                      {t('pluginGrantRequiredAccess')}
+                    </button>
+                  )}
+
                   {/* Settings stay visible even when the description is collapsed, so a
-                      slider-based plugin (e.g. reading width) is always adjustable. */}
+                      slider-based plugin (e.g. reading width) is always adjustable. A missing
+                      companion-frame grant must not disable settings that still affect the
+                      already-authorized parent page. */}
                   {enabled && settingsSchema && (
                     <div className="mt-2 space-y-2.5">
                       {Object.entries(settingsSchema).map(([key, field]) => {

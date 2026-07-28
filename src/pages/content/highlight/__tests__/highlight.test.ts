@@ -9,9 +9,10 @@ import type {
 } from '@/core/types/highlight';
 import { isHighlightColor, normalizeHighlightColorPalette } from '@/core/types/highlight';
 
+import { historyTimestampStore } from '../../timestamp/historyTimestamps';
 import { buildHighlightAnchor, resolveHighlightAnchor } from '../anchor';
 import { HighlightClient } from '../client';
-import { collectHighlightTurns, getHighlightSelectionContext } from '../dom';
+import { collectHighlightTurns, findHighlightTurn, getHighlightSelectionContext } from '../dom';
 import { HighlightManager } from '../manager';
 
 vi.mock('@/core/services/AccountIsolationService', () => ({
@@ -49,7 +50,7 @@ function makeRecord(
     conversationId: 'gemini:conv:test',
     conversationUrl: 'https://gemini.google.com/app/test',
     conversationTitle: 'Test',
-    turnId: 'u-0',
+    turnId: 's-1111111111111111',
     role: 'assistant',
     anchor,
     color: 'yellow',
@@ -126,8 +127,10 @@ class FakeHighlightClient extends HighlightClient {
 function installConversation(responseText = 'Alpha target Omega'): HTMLElement {
   document.body.innerHTML = `
     <main>
-      <div class="user-query-bubble-with-background">Question</div>
-      <model-response><message-content id="response"></message-content></model-response>
+      <div class="conversation-container" id="1111111111111111">
+        <div class="user-query-bubble-with-background">Question</div>
+        <model-response><message-content id="response"></message-content></model-response>
+      </div>
     </main>
     <div class="gemini-timeline-bar">
       <div class="timeline-track"><div class="timeline-track-content"></div></div>
@@ -250,6 +253,34 @@ describe('highlight conversation DOM', () => {
 
     expect(collectHighlightTurns()).toHaveLength(1);
     expect(getHighlightSelectionContext(selectText(report, 'Report body'))).toBeNull();
+  });
+
+  it('resolves a legacy highlight through the complete identity map', () => {
+    history.replaceState({}, '', '/app/test');
+    installConversation();
+    const resolve = vi
+      .spyOn(historyTimestampStore, 'resolveCanonicalTurnId')
+      .mockImplementation((_conversationId, turnId) =>
+        turnId === 'u-0' || turnId === 's-1111111111111111' ? 's-1111111111111111' : null,
+      );
+
+    expect(findHighlightTurn('u-0')?.turnId).toBe('s-1111111111111111');
+
+    resolve.mockRestore();
+  });
+
+  it('does not create a highlight from a mounted positional fallback', () => {
+    history.replaceState({}, '', '/app/test');
+    const response = installConversation();
+    document.querySelector('.conversation-container')?.removeAttribute('id');
+    const resolve = vi
+      .spyOn(historyTimestampStore, 'resolveCanonicalTurnId')
+      .mockReturnValue('s-1111111111111111');
+
+    expect(getHighlightSelectionContext(selectText(response, 'target'))).toBeNull();
+    expect(resolve).not.toHaveBeenCalled();
+
+    resolve.mockRestore();
   });
 });
 

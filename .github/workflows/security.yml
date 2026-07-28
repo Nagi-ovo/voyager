@@ -1,0 +1,136 @@
+name: Security
+
+# Dependency vulnerability checks (#850).
+#
+# Exit behavior by event:
+#   pull_request       -> advisory findings never fail this event (baseline not yet clean)
+#   push (main)        -> advisory findings never fail this event
+#   workflow_dispatch  -> advisory findings never fail this event (manual verification)
+#   schedule           -> fails when high/critical advisories exist, to notify maintainers
+# Operational failures fail the job on EVERY event: a missing, empty, or
+# malformed audit output is never treated as "no findings".
+#
+# This workflow only checks and reports. It never modifies package.json or
+# bun.lock and never opens upgrade PRs.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'package.json'
+      - 'bun.lock'
+      - '.github/workflows/**'
+  push:
+    branches: [main]
+    paths:
+      - 'package.json'
+      - 'bun.lock'
+      - '.github/workflows/**'
+  schedule:
+    # Weekly sweep so new advisories against existing deps surface without a push
+    - cron: '17 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # ── Dependency Review ──────────────────────────────────────────────────
+  # Fails a PR that introduces a dependency with a high+ advisory.
+  # Coverage: GitHub's dependency graph does not parse bun.lock, so this only
+  # sees direct dependencies from package.json and GitHub Actions. The full
+  # transitive tree is covered by the audit job below.
+  dependency-review:
+    name: Dependency Review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4
+        with:
+          fail-on-severity: high
+          # Default scope is runtime only; build/dev tooling is part of the
+          # extension's supply chain, so block those too. unknown fails closed.
+          fail-on-scopes: runtime, development, unknown
+
+  # ── Bun Audit ──────────────────────────────────────────────────────────
+  # Audits the full bun.lock tree against known advisories. Writes severity
+  # counts to the job summary and uploads the raw JSON as an artifact.
+  audit:
+    name: Bun Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          # Keep aligned with ci.yml so audit results do not drift between workflows
+          bun-version: '1.3.12'
+      - run: bun install --frozen-lockfile
+      - name: Run bun audit
+        run: |
+          audit_exit=0
+          bun audit --json > audit.json || audit_exit=$?
+
+          # Fail closed on every event when the audit itself broke (network,
+          # registry, CLI error): advisory findings are a valid result and stay
+          # report-only below, but a missing, empty, or malformed report must
+          # never pass as "no findings".
+          if [ ! -s audit.json ]; then
+            echo "::error::bun audit produced no output (exit $audit_exit)"
+            exit 1
+          fi
+          if ! jq -e 'type == "object" and ([.[][]] | all(type == "object" and has("severity")))' audit.json > /dev/null; then
+            echo "::error::bun audit output is not the expected advisory map (exit $audit_exit)"
+            exit 1
+          fi
+
+          TOTAL=$(jq '[.[][]] | length' audit.json)
+          CRITICAL=$(jq '[.[][] | select(.severity == "critical")] | length' audit.json)
+          HIGH=$(jq '[.[][] | select(.severity == "high")] | length' audit.json)
+          MODERATE=$(jq '[.[][] | select(.severity == "moderate")] | length' audit.json)
+          LOW=$(jq '[.[][] | select(.severity == "low")] | length' audit.json)
+
+          # A nonzero exit with zero parsed advisories cannot be a real audit
+          # result (bun exits nonzero because it found advisories) — treat it
+          # as a failed audit rather than a clean one.
+          if [ "$audit_exit" -ne 0 ] && [ "$TOTAL" -eq 0 ]; then
+            echo "::error::bun audit exited $audit_exit without reporting advisories"
+            exit 1
+          fi
+
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            MODE="enforcing: fails on high/critical"
+          else
+            MODE="report-only"
+          fi
+
+          {
+            echo "## bun audit report"
+            echo ""
+            echo "- Bun version: $(bun --version)"
+            echo "- Event: \`${{ github.event_name }}\` ($MODE)"
+            echo "- Total advisories: **$TOTAL**"
+            echo ""
+            echo "| Severity | Count |"
+            echo "|---|---|"
+            echo "| critical | $CRITICAL |"
+            echo "| high | $HIGH |"
+            echo "| moderate | $MODERATE |"
+            echo "| low | $LOW |"
+            echo ""
+            echo "Raw output is attached as the \`bun-audit-report\` artifact."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "${{ github.event_name }}" = "schedule" ] && [ "$((CRITICAL + HIGH))" -gt 0 ]; then
+            echo "::error::bun audit found $CRITICAL critical and $HIGH high advisories"
+            exit 1
+          fi
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: bun-audit-report
+          path: audit.json

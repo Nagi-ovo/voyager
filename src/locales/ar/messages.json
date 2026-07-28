@@ -171,6 +171,10 @@
     "message": "تم استيراد {count} مطالبة",
     "description": "Import success"
   },
+  "promptNameConflictsDetected": {
+    "message": "تم الاحتفاظ بجميع المطالبات. هناك {count} بأسماء مكررة ولن تتاح عبر / حتى إعادة تسميتها",
+    "description": "إشعار غير معيق عند الاحتفاظ بأسماء مطالبات مكررة أثناء الاستيراد أو الدمج السحابي"
+  },
   "pm_duplicate": {
     "message": "تكرار المطالبة",
     "description": "Duplicate on add"
@@ -256,8 +260,20 @@
     "description": "View-mode toggle tooltip - switch from compact rows to comfortable cards with markdown preview"
   },
   "pm_name_placeholder": {
-    "message": "الاسم (اختياري)",
-    "description": "Placeholder for the optional prompt name/label input used as the compact-mode headline"
+    "message": "الاسم",
+    "description": "Placeholder for the required prompt name input"
+  },
+  "pm_name_required": {
+    "message": "اسم الموجّه مطلوب",
+    "description": "Validation shown when saving a prompt without a name"
+  },
+  "pm_name_duplicate": {
+    "message": "يوجد بالفعل موجّه بهذا الاسم",
+    "description": "Validation shown when saving a prompt with an existing name"
+  },
+  "pm_name_conflict_badge": {
+    "message": "اسم مكرر — أعد التسمية لاستخدام /",
+    "description": "شارة للمطالبات المستبعدة من الإكمال عبر / بسبب تكرار الاسم"
   },
   "pm_prompt_manager": {
     "message": "مدير المطالبات",
@@ -958,6 +974,14 @@
   "hidePromptManagerHint": {
     "message": "إخفاء الزر العائم لمدير المطالبات على الصفحة",
     "description": "Hint for hiding prompt manager feature"
+  },
+  "slashPromptEnabled": {
+    "message": "تمكين الإدراج السريع للمطالبات باستخدام /",
+    "description": "Enable slash prompt quick insertion toggle"
+  },
+  "slashPromptEnabledHint": {
+    "message": "اكتب / في مربع كتابة Gemini لإدراج مطالبة محفوظة بسرعة.",
+    "description": "Hint for slash prompt quick insertion"
   },
   "promptInsertOnClick": {
     "message": "إدراج المطالبة عند النقر",
@@ -2288,6 +2312,10 @@
     "message": "تم رفض إذن الموقع، ولا يمكن تشغيل الإضافة بدونه.",
     "description": "Shown when the user denies the site permission for a plugin"
   },
+  "pluginGrantRequiredAccess": {
+    "message": "منح إذن الوصول المطلوب إلى الموقع",
+    "description": "Button that repairs missing optional site access for an enabled plugin"
+  },
   "pluginUnsupportedPlatform": {
     "message": "غير مدعوم في هذا المتصفّح — لا يمكن منح إذن الموقع الذي تحتاجه الإضافة.",
     "description": "Shown when a plugin can't be enabled because the browser can't grant the site access it needs (e.g. Safari)"
@@ -2347,6 +2375,18 @@
   "timelineCoachmarkToggle": {
     "message": "استخدام المخطط الزمني المضغوط",
     "description": "Inline toggle label in the compact-timeline coachmark"
+  },
+  "slashPromptCoachmarkTitle": {
+    "message": "جديد: إدراج المطالبات باستخدام /",
+    "description": "Coachmark title introducing slash prompt insertion"
+  },
+  "slashPromptCoachmarkBody": {
+    "message": "اكتب / في مربع كتابة Gemini لإدراج مطالبة محفوظة بسرعة.",
+    "description": "Coachmark body text introducing slash prompt insertion"
+  },
+  "slashPromptCoachmarkToggle": {
+    "message": "تمكين إدراج المطالبات باستخدام /",
+    "description": "Inline toggle label in the slash-prompt coachmark"
   },
   "coachmarkDismiss": {
     "message": "تم",

@@ -57,6 +57,15 @@ function selectSourceText(start = 0, end = 5) {
   selection?.addRange(range);
 }
 
+function installHighlightConversation(): void {
+  document.querySelector('main')!.innerHTML = `
+    <div class="conversation-container" id="1111111111111111">
+      <div class="user-query-bubble-with-background">Question</div>
+      <model-response><message-content><p id="source">Hello world</p></message-content></model-response>
+    </div>
+  `;
+}
+
 function triggerQuoteReply() {
   selectSourceText();
   document.dispatchEvent(new MouseEvent('mouseup'));
@@ -536,10 +545,7 @@ describe('quote reply', () => {
   });
 
   it('uses the same selection toolbar for Highlight when Quote Reply is disabled', () => {
-    document.querySelector('main')!.innerHTML = `
-      <div class="user-query-bubble-with-background">Question</div>
-      <model-response><message-content><p id="source">Hello world</p></message-content></model-response>
-    `;
+    installHighlightConversation();
     const cleanup = startQuoteReply({ quoteEnabled: false });
 
     selectSourceText();
@@ -557,10 +563,7 @@ describe('quote reply', () => {
   });
 
   it('previews the selected color immediately and saves it with Highlight', async () => {
-    document.querySelector('main')!.innerHTML = `
-      <div class="user-query-bubble-with-background">Question</div>
-      <model-response><message-content><p id="source">Hello world</p></message-content></model-response>
-    `;
+    installHighlightConversation();
     const createFromRange = vi
       .spyOn(HighlightManager.prototype, 'createFromRange')
       .mockResolvedValue(true);
@@ -634,10 +637,7 @@ describe('quote reply', () => {
   });
 
   it('uses and remembers a custom highlight color', async () => {
-    document.querySelector('main')!.innerHTML = `
-      <div class="user-query-bubble-with-background">Question</div>
-      <model-response><message-content><p id="source">Hello world</p></message-content></model-response>
-    `;
+    installHighlightConversation();
     const createFromRange = vi
       .spyOn(HighlightManager.prototype, 'createFromRange')
       .mockResolvedValue(true);
@@ -685,10 +685,7 @@ describe('quote reply', () => {
   });
 
   it('keeps the palette inside the viewport near the bottom-right edge', () => {
-    document.querySelector('main')!.innerHTML = `
-      <div class="user-query-bubble-with-background">Question</div>
-      <model-response><message-content><p id="source">Hello world</p></message-content></model-response>
-    `;
+    installHighlightConversation();
     const cleanup = startQuoteReply({ quoteEnabled: false });
 
     selectSourceText();
@@ -731,10 +728,7 @@ describe('quote reply', () => {
   });
 
   it('does not leave an empty toolbar when Highlight is disabled live', () => {
-    document.querySelector('main')!.innerHTML = `
-      <div class="user-query-bubble-with-background">Question</div>
-      <model-response><message-content><p id="source">Hello world</p></message-content></model-response>
-    `;
+    installHighlightConversation();
     const cleanup = startQuoteReply({ quoteEnabled: false, highlightEnabled: true });
 
     selectSourceText();
@@ -760,10 +754,7 @@ describe('quote reply', () => {
   });
 
   it('hides Highlight and its color picker when the feature is disabled', () => {
-    document.querySelector('main')!.innerHTML = `
-      <div class="user-query-bubble-with-background">Question</div>
-      <model-response><message-content><p id="source">Hello world</p></message-content></model-response>
-    `;
+    installHighlightConversation();
     const cleanup = startQuoteReply({ quoteEnabled: true, highlightEnabled: false });
 
     selectSourceText();

@@ -42,6 +42,30 @@ describe('resolveForkPlan', () => {
       nextForkIndex: 2,
     });
   });
+
+  it('reuses a legacy fork only when the shared identity resolver proves its alias', () => {
+    const serverId = 's-6060606060606060';
+    const resolveTurnId = (turnId: string) => {
+      if (turnId === 'u-60' || turnId === serverId) return serverId;
+      return null;
+    };
+    const existing = createNode({ turnId: 'u-60', forkIndex: 0 });
+
+    const plan = resolveForkPlan(
+      'conv-1',
+      serverId,
+      [existing],
+      { 'group-1': [existing] },
+      () => 'new-group',
+      resolveTurnId,
+    );
+
+    expect(plan).toEqual({
+      forkGroupId: 'group-1',
+      sourceForkIndex: 0,
+      nextForkIndex: 1,
+    });
+  });
 });
 
 describe('buildBranchDisplayNodes', () => {

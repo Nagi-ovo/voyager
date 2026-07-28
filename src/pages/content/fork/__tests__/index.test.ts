@@ -132,18 +132,20 @@ describe('startFork style injection', () => {
       window.history.replaceState({}, '', currentPath);
       document.body.innerHTML = `
         <main>
-          <div class="user-query-container">
-            <div class="user-query-bubble-with-background">user-1</div>
-            <div class="actions">
-              <div id="copy-anchor">
-                <button data-test-id="copy-button" class="action-button" aria-label="Copy prompt">
-                  <mat-icon fonticon="content_copy"></mat-icon>
-                </button>
+          <div class="conversation-container" id="1111111111111111">
+            <div class="user-query-container">
+              <div class="user-query-bubble-with-background">user-1</div>
+              <div class="actions">
+                <div id="copy-anchor">
+                  <button data-test-id="copy-button" class="action-button" aria-label="Copy prompt">
+                    <mat-icon fonticon="content_copy"></mat-icon>
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-          <div class="response-container">
-            <div class="markdown-main-panel">assistant-1</div>
+            <div class="response-container">
+              <div class="markdown-main-panel">assistant-1</div>
+            </div>
           </div>
         </main>
       `;
@@ -195,18 +197,20 @@ describe('startFork style injection', () => {
     document.title = 'Source / Long:Title';
     document.body.innerHTML = `
       <main>
-        <div class="user-query-container">
-          <div class="user-query-bubble-with-background">user-1</div>
-          <div class="actions">
-            <div id="copy-anchor">
-              <button data-test-id="copy-button" class="action-button" aria-label="Copy prompt">
-                <mat-icon fonticon="content_copy"></mat-icon>
-              </button>
+        <div class="conversation-container" id="1111111111111111">
+          <div class="user-query-container">
+            <div class="user-query-bubble-with-background">user-1</div>
+            <div class="actions">
+              <div id="copy-anchor">
+                <button data-test-id="copy-button" class="action-button" aria-label="Copy prompt">
+                  <mat-icon fonticon="content_copy"></mat-icon>
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-        <div class="response-container">
-          <div class="markdown-main-panel">assistant-1</div>
+          <div class="response-container">
+            <div class="markdown-main-panel">assistant-1</div>
+          </div>
         </div>
       </main>
     `;
@@ -275,6 +279,40 @@ describe('startFork style injection', () => {
 
     openSpy.mockRestore();
     anchorClickSpy.mockRestore();
+  });
+
+  it('does not fork a mounted positional turn even when a legacy map may exist', async () => {
+    window.history.replaceState({}, '', '/app/conv-source');
+    document.body.innerHTML = `
+      <main>
+        <div class="user-query-container">
+          <div class="user-query-bubble-with-background">mounted tail turn</div>
+        </div>
+        <div class="response-container">
+          <div class="markdown-main-panel">assistant</div>
+        </div>
+      </main>
+    `;
+
+    const userContainer = document.querySelector<HTMLElement>('.user-query-container');
+    const responseContainer = document.querySelector<HTMLElement>('.response-container');
+    if (!userContainer || !responseContainer) throw new Error('test DOM setup failed');
+    Object.defineProperty(userContainer, 'offsetTop', { value: 0, configurable: true });
+    Object.defineProperty(responseContainer, 'offsetTop', { value: 100, configurable: true });
+
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue({} as Window);
+    cleanup = startFork();
+    vi.advanceTimersByTime(1000);
+    await flushMicrotasks();
+
+    document.querySelector<HTMLElement>('.gv-fork-btn')?.click();
+    document.querySelector<HTMLElement>('.gv-fork-primary')?.click();
+
+    expect(openSpy).not.toHaveBeenCalled();
+    expect(vi.mocked(browser.storage.local.set)).not.toHaveBeenCalledWith(
+      expect.objectContaining({ gvPendingFork: expect.anything() }),
+    );
+    openSpy.mockRestore();
   });
 
   it('links a manual Markdown fork when the new conversation starts inside the upload window', async () => {
@@ -374,18 +412,20 @@ describe('startFork style injection', () => {
       <main>
         <a href="/app/conv-source">source</a>
         <a href="/app/conv-fork">fork</a>
-        <div class="user-query-container">
-          <div class="user-query-bubble-with-background">user-1</div>
-          <div class="actions">
-            <div id="copy-anchor">
-              <button data-test-id="copy-button" class="action-button" aria-label="Copy prompt">
-                <mat-icon fonticon="content_copy"></mat-icon>
-              </button>
+        <div class="conversation-container" id="6060606060606060">
+          <div class="user-query-container">
+            <div class="user-query-bubble-with-background">user-1</div>
+            <div class="actions">
+              <div id="copy-anchor">
+                <button data-test-id="copy-button" class="action-button" aria-label="Copy prompt">
+                  <mat-icon fonticon="content_copy"></mat-icon>
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-        <div class="response-container">
-          <div class="markdown-main-panel">assistant-1</div>
+          <div class="response-container">
+            <div class="markdown-main-panel">assistant-1</div>
+          </div>
         </div>
       </main>
     `;
@@ -401,7 +441,7 @@ describe('startFork style injection', () => {
     Object.defineProperty(responseContainer, 'offsetTop', { value: 100, configurable: true });
 
     const sourceNode: ForkNode = {
-      turnId: 'u-0',
+      turnId: 's-6060606060606060',
       conversationId: 'conv-source',
       conversationUrl: 'https://gemini.google.com/app/conv-source',
       conversationTitle: 'Source',

@@ -2,8 +2,9 @@ import { describe, expect, it } from 'vitest';
 
 import type { ConversationId, FolderId } from '@/core/types/common';
 import type { ConversationReference, Folder, FolderData } from '@/core/types/folder';
+import type { PromptItem } from '@/core/types/sync';
 
-import { mergeFolderData } from './merge';
+import { mergeFolderData, mergePromptsWithStats } from './merge';
 
 // Helper to create test folder
 function createFolder(
@@ -264,5 +265,82 @@ describe('mergeFolderData', () => {
       expect(result.folderContents.f1).toHaveLength(2);
       expect(result.folderContents.f1.map((c) => c.conversationId).sort()).toEqual(['c1', 'c2']);
     });
+  });
+});
+
+describe('mergePromptsWithStats', () => {
+  function prompt(id: string, name: string | undefined, text: string, updatedAt = 1): PromptItem {
+    return { id, name, text, tags: [], createdAt: 1, updatedAt };
+  }
+
+  it('preserves every cloud prompt and reports all members of duplicate-name groups', () => {
+    const local = [
+      prompt('legacy-a', 'Translator', 'First local body'),
+      prompt('legacy-b', 'Ｔｒａｎｓｌａｔｏｒ', 'Second local body'),
+    ];
+    const cloud = [
+      prompt('conflict', 'translator', 'Conflicting cloud body'),
+      prompt('unique', 'Summarizer', 'Unique cloud body'),
+    ];
+
+    const result = mergePromptsWithStats(local, cloud);
+
+    expect(result.nameConflicts).toBe(3);
+    expect(result.items.map((item) => item.id)).toEqual([
+      'legacy-a',
+      'legacy-b',
+      'conflict',
+      'unique',
+    ]);
+  });
+
+  it('applies same-ID updates while reporting a legacy duplicate-name group', () => {
+    const local = [
+      prompt('first', 'Translator', 'First body'),
+      prompt('editing', 'translator', 'Old body'),
+    ];
+    const cloud = [prompt('editing', 'TRANSLATOR', 'Updated body', 2)];
+
+    const result = mergePromptsWithStats(local, cloud);
+
+    expect(result.nameConflicts).toBe(2);
+    expect(result.items.find((item) => item.id === 'editing')).toMatchObject({
+      name: 'TRANSLATOR',
+      text: 'Updated body',
+    });
+  });
+
+  it('keeps a newer conflicting cloud rename and reports both affected prompts', () => {
+    const local = [
+      prompt('editing', 'Translator', 'Old body'),
+      prompt('other', 'Summarizer', 'Other body'),
+    ];
+    const cloud = [prompt('editing', 'summarizer', 'Updated body', 2)];
+
+    const result = mergePromptsWithStats(local, cloud);
+
+    expect(result.nameConflicts).toBe(2);
+    expect(result.items.find((item) => item.id === 'editing')).toMatchObject({
+      name: 'summarizer',
+      text: 'Updated body',
+    });
+  });
+
+  it('keeps the local name when a newer legacy cloud prompt omits it', () => {
+    const local = [prompt('editing', 'Translator', 'Old body')];
+    const cloud = [{ ...prompt('editing', undefined, 'Updated body', 2), tags: ['cloud'] }];
+
+    const result = mergePromptsWithStats(local, cloud);
+
+    expect(result.nameConflicts).toBe(0);
+    expect(result.items).toEqual([
+      expect.objectContaining({
+        id: 'editing',
+        name: 'Translator',
+        text: 'Updated body',
+        tags: ['cloud'],
+        updatedAt: 2,
+      }),
+    ]);
   });
 });

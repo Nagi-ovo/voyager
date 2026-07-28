@@ -27,7 +27,20 @@ describe('ImageRenderService', () => {
 
     expect(result).toBe(blob);
     expect(toBlob).toHaveBeenCalledTimes(1);
-    expect(toBlob).toHaveBeenCalledWith(target, expect.objectContaining({ skipFonts: true }));
+    expect(toBlob).toHaveBeenCalledWith(
+      target,
+      expect.objectContaining({ pixelRatio: 1.2, skipFonts: true }),
+    );
+  });
+
+  it('uses the requested pixel ratio', async () => {
+    const target = document.createElement('div');
+    const blob = new Blob(['ok'], { type: 'image/png' });
+    (toBlob as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(blob);
+
+    await renderElementToImageBlob(target, { pixelRatio: 2 });
+
+    expect(toBlob).toHaveBeenCalledWith(target, expect.objectContaining({ pixelRatio: 2 }));
   });
 
   it('embeds fonts for math content so KaTeX radicals render correctly', async () => {
@@ -184,6 +197,54 @@ describe('ImageRenderService', () => {
     expect(root?.style.getPropertyValue('margin-left')).toBe('0.2777777778em');
     expect(root?.style.getPropertyValue('margin-right')).toBe('-0.5555555556em');
     expect(root?.style.getPropertyPriority('margin-left')).toBe('important');
+  });
+
+  it('inlines Mermaid foreignObject label colors before rendering', async () => {
+    const style = document.createElement('style');
+    style.dataset.gvTestStyle = 'mermaid-label';
+    style.textContent = `
+      .nodeLabel,
+      .ordinaryLabel {
+        color: rgb(204, 204, 204);
+        fill: rgb(204, 204, 204);
+      }
+    `;
+    document.head.appendChild(style);
+
+    const target = document.createElement('div');
+    target.innerHTML = `
+      <div class="gv-export-mermaid" data-gv-mermaid-theme="dark">
+        <svg xmlns="http://www.w3.org/2000/svg">
+          <foreignObject>
+            <div xmlns="http://www.w3.org/1999/xhtml">
+              <span class="nodeLabel">Analysis</span>
+            </div>
+          </foreignObject>
+        </svg>
+      </div>
+      <svg xmlns="http://www.w3.org/2000/svg">
+        <foreignObject>
+          <div xmlns="http://www.w3.org/1999/xhtml">
+            <span class="ordinaryLabel">Untouched</span>
+          </div>
+        </foreignObject>
+      </svg>
+    `;
+    document.body.appendChild(target);
+    const blob = new Blob(['ok'], { type: 'image/png' });
+    (toBlob as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(blob);
+
+    await renderElementToImageBlob(target);
+
+    const label = target.querySelector<HTMLElement>('.nodeLabel');
+    const ordinaryLabel = target.querySelector<HTMLElement>('.ordinaryLabel');
+    expect(label?.style.getPropertyValue('color')).toBe('rgb(204, 204, 204)');
+    expect(label?.style.getPropertyValue('fill')).toBe('rgb(204, 204, 204)');
+    expect(label?.style.getPropertyValue('-webkit-text-fill-color')).toBe('rgb(204, 204, 204)');
+    expect(label?.style.getPropertyPriority('color')).toBe('important');
+    expect(ordinaryLabel?.style.getPropertyValue('color')).toBe('');
+    expect(ordinaryLabel?.style.getPropertyValue('fill')).toBe('');
+    expect(ordinaryLabel?.style.getPropertyValue('-webkit-text-fill-color')).toBe('');
   });
 
   it('retries when shouldRetry returns true and later succeeds', async () => {

@@ -171,6 +171,10 @@
     "message": "已导入 {count} 条",
     "description": "导入成功"
   },
+  "promptNameConflictsDetected": {
+    "message": "已保留全部 Prompt；其中 {count} 个名称重复，改名后才能使用 / 快速插入",
+    "description": "导入或云端合并保留重名 Prompt 时的非阻断提示"
+  },
   "pm_duplicate": {
     "message": "重复的 prompt",
     "description": "新增重复"
@@ -256,8 +260,20 @@
     "description": "View-mode toggle tooltip - switch from compact rows to comfortable cards with markdown preview"
   },
   "pm_name_placeholder": {
-    "message": "备注名（可选）",
-    "description": "Placeholder for the optional prompt name/label input used as the compact-mode headline"
+    "message": "备注名",
+    "description": "Placeholder for the required prompt name input"
+  },
+  "pm_name_required": {
+    "message": "必须填写 Prompt 名称",
+    "description": "Validation shown when saving a prompt without a name"
+  },
+  "pm_name_duplicate": {
+    "message": "Prompt 名称已存在",
+    "description": "Validation shown when saving a prompt with an existing name"
+  },
+  "pm_name_conflict_badge": {
+    "message": "名称重复——改名后可使用 /",
+    "description": "名称重复而无法使用 / 快速插入时显示的标记"
   },
   "pm_prompt_manager": {
     "message": "提示词管理器",
@@ -958,6 +974,14 @@
   "hidePromptManagerHint": {
     "message": "隐藏页面上的提示词管理器悬浮球",
     "description": "隐藏提示词管理器功能提示"
+  },
+  "slashPromptEnabled": {
+    "message": "启用斜杠快速插入提示词",
+    "description": "启用斜杠快速插入提示词开关"
+  },
+  "slashPromptEnabledHint": {
+    "message": "在 Gemini 输入框中输入 /，即可快速插入已保存的提示词。",
+    "description": "斜杠快速插入提示词说明"
   },
   "promptInsertOnClick": {
     "message": "点击时直接插入提示词",
@@ -2286,6 +2310,10 @@
     "message": "网站权限被拒绝，插件无法运行。",
     "description": "Shown when the user denies the site permission for a plugin"
   },
+  "pluginGrantRequiredAccess": {
+    "message": "授予所需站点访问权限",
+    "description": "Button that repairs missing optional site access for an enabled plugin"
+  },
   "pluginUnsupportedPlatform": {
     "message": "此浏览器不支持——无法授予该插件所需的网站权限。",
     "description": "Shown when a plugin can't be enabled because the browser can't grant the site access it needs (e.g. Safari)"
@@ -2345,6 +2373,18 @@
   "timelineCoachmarkToggle": {
     "message": "使用紧凑索引",
     "description": "Inline toggle label in the compact-timeline coachmark"
+  },
+  "slashPromptCoachmarkTitle": {
+    "message": "新功能：斜杠提示词插入",
+    "description": "Coachmark title introducing slash prompt insertion"
+  },
+  "slashPromptCoachmarkBody": {
+    "message": "在 Gemini 输入框中输入 /，即可快速插入已保存的提示词。",
+    "description": "Coachmark body text introducing slash prompt insertion"
+  },
+  "slashPromptCoachmarkToggle": {
+    "message": "启用斜杠提示词插入",
+    "description": "Inline toggle label in the slash-prompt coachmark"
   },
   "coachmarkDismiss": {
     "message": "完成",

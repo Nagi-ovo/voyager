@@ -10,6 +10,7 @@ on:
 
 jobs:
   update-sponsors:
+    if: github.repository == 'Nagi-ovo/voyager'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -25,6 +26,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.SPONSORKIT_GITHUB_TOKEN }}
           AFDIAN_USER_ID: ${{ secrets.AFDIAN_USER_ID }}
           AFDIAN_TOKEN: ${{ secrets.AFDIAN_TOKEN }}
+          SPONSORS_STRICT: '1'
 
       - name: Commit changes
         uses: stefanzweifel/git-auto-commit-action@b863ae1933cb653a53c021fe36dbb774e1fb9403 # v5

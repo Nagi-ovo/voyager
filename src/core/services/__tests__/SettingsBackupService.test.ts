@@ -29,6 +29,7 @@ describe('SettingsBackupService', () => {
         [StorageKeys.DEFAULT_THINKING_LEVEL]: null,
         [StorageKeys.COACHMARKS_SEEN]: [],
         [StorageKeys.EXPORT_IMAGE_WIDTH]: 620,
+        [StorageKeys.SLASH_PROMPT_ENABLED]: true,
       }),
     );
     expect(BACKUPABLE_SYNC_SETTINGS_DEFAULTS).not.toHaveProperty(StorageKeys.PLUGINS_STATE);

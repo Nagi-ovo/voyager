@@ -65,6 +65,21 @@ describe('BundledCatalogPluginSource', () => {
     expect(centeredTurnRule).toBeGreaterThan(footerOverride);
   });
 
+  it('widens Claude document artifacts inside their cross-origin frame', async () => {
+    const manifests = await new BundledCatalogPluginSource().list();
+    const claudeWidth = manifests.find((plugin) => plugin.id === 'voyager.claude-reading-width');
+    const file = '../catalog/plugins/claude-reading-width/style.css';
+    const css = readFileSync(new URL(file, import.meta.url), 'utf8');
+
+    expect(claudeWidth?.matches).toEqual([
+      'https://claude.ai/*',
+      'https://*.frame.claudeusercontent.com/*',
+    ]);
+    expect(css).toMatch(
+      /body\.gv-plugin-claude-readable > \.wrap\s*\{[\s\S]*box-sizing:\s*border-box\s*!important;[\s\S]*max-width:\s*var\(--gv-plugin-reading-width, 768px\)\s*!important;/,
+    );
+  });
+
   it('offers an opt-in centered conversation mode without narrowing the reading width', async () => {
     const manifests = await new BundledCatalogPluginSource().list();
     const chatgptWidth = manifests.find((plugin) => plugin.id === 'voyager.chatgpt-reading-width');
@@ -101,6 +116,7 @@ describe('BundledCatalogPluginSource', () => {
     const manifests = await new BundledCatalogPluginSource().list();
 
     expect(pluginsToOriginPatterns(manifests)).toEqual([
+      'https://*.frame.claudeusercontent.com/*',
       'https://chat.openai.com/*',
       'https://chatgpt.com/*',
       'https://claude.ai/*',

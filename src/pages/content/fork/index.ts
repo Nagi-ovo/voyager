@@ -13,6 +13,7 @@ import { isExtensionContextInvalidatedError } from '@/core/utils/extensionContex
 import { generateUniqueId } from '@/core/utils/hash';
 
 import { getTranslationSync } from '../../../utils/i18n';
+import { historyTimestampStore } from '../timestamp/historyTimestamps';
 import { setInputText } from '../utils/inputHelper';
 import { ForkNodesService } from './ForkNodesService';
 import { buildBranchDisplayNodes, resolveForkPlan } from './branching';
@@ -20,7 +21,7 @@ import { collectForkChatPairs } from './chatPairs';
 import { composeForkInputWithContext } from './forkContext';
 import type { ForkNode } from './forkTypes';
 import { type ForkExtractedTurn, buildForkMarkdown } from './markdown';
-import { makeStableTurnId, normalizeTurnId } from './turnId';
+import { getLegacyTurnIndex, makeTurnId, normalizeTurnId } from './turnId';
 
 // ============================================================================
 // Constants
@@ -341,6 +342,17 @@ function extractConversationIdFromUrl(): string | null {
   return gemMatch?.[1] || null;
 }
 
+function resolveCurrentConversationTurnId(turnId: string): string | null {
+  const conversationId = extractConversationIdFromUrl();
+  if (!conversationId) return normalizeTurnId(turnId);
+  return historyTimestampStore.resolveCanonicalTurnId(conversationId, turnId);
+}
+
+function isSameCurrentConversationTurn(left: string, right: string): boolean {
+  const resolvedLeft = resolveCurrentConversationTurnId(left);
+  return resolvedLeft !== null && resolvedLeft === resolveCurrentConversationTurnId(right);
+}
+
 function getNewConversationUrlForCurrentAccount(): string {
   const accountPrefix = window.location.pathname.match(/^\/u\/\d+(?=\/)/)?.[0] || '';
   return `${window.location.origin}${accountPrefix}/app`;
@@ -394,7 +406,7 @@ function formatTranslation(template: string, values: Record<string, string>): st
 }
 
 function ensureTurnId(el: HTMLElement, index: number): string {
-  const stableId = makeStableTurnId(index);
+  const stableId = makeTurnId(el, index);
   const current = el.dataset?.turnId || '';
   if (normalizeTurnId(current) !== stableId) {
     el.dataset.turnId = stableId;
@@ -598,8 +610,8 @@ function extractConversationUpToTurn(userTurnIndex: number, sourceTurnId: string
   const pairs = collectForkChatPairs();
   if (pairs.length === 0) return '';
 
-  const sourceIndex = pairs.findIndex(
-    (pair) => normalizeTurnId(pair.turnId) === normalizeTurnId(sourceTurnId),
+  const sourceIndex = pairs.findIndex((pair) =>
+    isSameCurrentConversationTurn(pair.turnId, sourceTurnId),
   );
   const targetIndex = sourceIndex >= 0 ? sourceIndex : userTurnIndex;
   const turns: ForkExtractedTurn[] = [];
@@ -756,6 +768,10 @@ async function executeFork(
   }
 
   const turnId = ensureTurnId(userEl, turnIndex);
+  if (getLegacyTurnIndex(turnId) !== null) {
+    console.warn('[Fork] Stable turn identity is not available yet');
+    return;
+  }
   const markdown = extractConversationUpToTurn(turnIndex, turnId);
   if (!markdown.trim()) {
     console.warn('[Fork] No content extracted');
@@ -785,7 +801,7 @@ async function executeFork(
     const candidateGroupIds = Array.from(
       new Set(
         conversationNodes
-          .filter((node) => normalizeTurnId(node.turnId) === normalizeTurnId(turnId))
+          .filter((node) => isSameCurrentConversationTurn(node.turnId, turnId))
           .map((node) => node.forkGroupId),
       ),
     );
@@ -795,8 +811,13 @@ async function executeFork(
       groups[groupId] = await ForkNodesService.getGroup(groupId);
     }
 
-    const plan = resolveForkPlan(conversationId, turnId, conversationNodes, groups, () =>
-      generateUniqueId('fork'),
+    const plan = resolveForkPlan(
+      conversationId,
+      turnId,
+      conversationNodes,
+      groups,
+      () => generateUniqueId('fork'),
+      resolveCurrentConversationTurnId,
     );
 
     forkGroupId = plan.forkGroupId;
@@ -1158,7 +1179,8 @@ async function injectForkIndicators(): Promise<void> {
   // Build a map of normalized turnId -> forkGroupIds
   const turnForkMap = new Map<string, Set<string>>();
   for (const node of forkNodes) {
-    const normalizedTurnId = normalizeTurnId(node.turnId);
+    const normalizedTurnId = resolveCurrentConversationTurnId(node.turnId);
+    if (!normalizedTurnId) continue;
     if (!turnForkMap.has(normalizedTurnId)) {
       turnForkMap.set(normalizedTurnId, new Set<string>());
     }
@@ -1171,7 +1193,10 @@ async function injectForkIndicators(): Promise<void> {
 
   for (let index = 0; index < pairs.length; index++) {
     const userEl = pairs[index].userElement;
-    const turnId = normalizeTurnId(ensureTurnId(userEl, index));
+    const mountedTurnId = ensureTurnId(userEl, index);
+    if (getLegacyTurnIndex(mountedTurnId) !== null) continue;
+    const turnId = resolveCurrentConversationTurnId(mountedTurnId);
+    if (!turnId) continue;
     const hostEl = resolveUserMessageHost(userEl);
     const forkGroupIds = turnForkMap.get(turnId);
     if (!forkGroupIds || forkGroupIds.size === 0) continue;

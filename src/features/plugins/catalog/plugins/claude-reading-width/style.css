@@ -13,3 +13,13 @@
 .gv-plugin-claude-readable div[class*='items-end']:has([data-testid='user-message']) {
   align-items: flex-start !important;
 }
+
+/* Claude document artifacts render inside a cross-origin
+ * *.frame.claudeusercontent.com iframe. Static report artifacts commonly use a
+ * direct .wrap child with content-box padding, so border-box keeps the slider's
+ * pixel value equal to the visible reading column and preserves the native
+ * 768px width at the default setting. */
+body.gv-plugin-claude-readable > .wrap {
+  box-sizing: border-box !important;
+  max-width: var(--gv-plugin-reading-width, 768px) !important;
+}

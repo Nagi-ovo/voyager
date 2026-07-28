@@ -5,6 +5,8 @@ import { buildConversationIdFromUrl } from '@/core/utils/conversationIdentity';
 import { TimestampService } from '../../timestamp/TimestampService';
 import { TimelineManager } from '../manager';
 
+const SERVER_TURN_ID = 's-1111111111111111';
+
 function setElementTop(el: HTMLElement, top: number): void {
   Object.defineProperty(el, 'offsetTop', { value: top, configurable: true });
   vi.spyOn(el, 'getBoundingClientRect').mockReturnValue({
@@ -56,13 +58,15 @@ describe('TimelineManager message timestamps', () => {
     scrollContainer.appendChild(container);
 
     const first = document.createElement('div');
-    first.className = 'user';
+    first.className = 'user conversation-container';
+    first.id = '1111111111111111';
     first.textContent = 'A';
     setElementTop(first, 0);
     container.appendChild(first);
 
     const second = document.createElement('div');
-    second.className = 'user';
+    second.className = 'user conversation-container';
+    second.id = '2222222222222222';
     second.textContent = 'B';
     setElementTop(second, 100);
     container.appendChild(second);
@@ -124,7 +128,8 @@ describe('TimelineManager message timestamps', () => {
     await vi.advanceTimersByTimeAsync(801);
 
     const third = document.createElement('div');
-    third.className = 'user';
+    third.className = 'user conversation-container';
+    third.id = '3333333333333333';
     third.textContent = 'C';
     setElementTop(third, 200);
     container.appendChild(third);
@@ -132,7 +137,7 @@ describe('TimelineManager message timestamps', () => {
     internal.recalculateAndRenderMarkers();
 
     expect(recordTimestamp).toHaveBeenCalledTimes(1);
-    expect(recordTimestamp).toHaveBeenCalledWith('gemini:conv:test', expect.stringMatching(/^u-/));
+    expect(recordTimestamp).toHaveBeenCalledWith('gemini:conv:test', 's-3333333333333333');
   });
 
   it('does not record timestamps while the timestamps feature is disabled', () => {
@@ -154,11 +159,13 @@ describe('TimelineManager message timestamps', () => {
     } as unknown as TimestampService;
     internal.showMessageTimestampsEnabled = false;
 
-    internal.recordTimestampForTurn('u-1');
+    internal.recordTimestampForTurn(SERVER_TURN_ID);
     expect(recordTimestamp).not.toHaveBeenCalled();
 
     internal.showMessageTimestampsEnabled = true;
     internal.recordTimestampForTurn('u-1');
+    expect(recordTimestamp).not.toHaveBeenCalled();
+    internal.recordTimestampForTurn(SERVER_TURN_ID);
     expect(recordTimestamp).toHaveBeenCalledTimes(1);
   });
 
@@ -196,7 +203,7 @@ describe('TimelineManager message timestamps', () => {
     internal.showMessageTimestampsEnabled = true;
     internal.markers = [
       {
-        id: 'u-1',
+        id: SERVER_TURN_ID,
         element: message,
         summary: 'hello',
         n: 0,
@@ -231,13 +238,13 @@ describe('TimelineManager message timestamps', () => {
 
     const firstDuplicate = document.createElement('div');
     firstDuplicate.className = 'gv-timestamp gv-timestamp-user';
-    firstDuplicate.setAttribute('data-gv-turn-id', 'u-1');
+    firstDuplicate.setAttribute('data-gv-turn-id', SERVER_TURN_ID);
     firstDuplicate.textContent = 'old';
     container.appendChild(firstDuplicate);
 
     const secondDuplicate = document.createElement('div');
     secondDuplicate.className = 'gv-timestamp gv-timestamp-user';
-    secondDuplicate.setAttribute('data-gv-turn-id', 'u-1');
+    secondDuplicate.setAttribute('data-gv-turn-id', SERVER_TURN_ID);
     secondDuplicate.textContent = 'old';
     container.appendChild(secondDuplicate);
 
@@ -266,7 +273,7 @@ describe('TimelineManager message timestamps', () => {
     internal.showMessageTimestampsEnabled = true;
     internal.markers = [
       {
-        id: 'u-1',
+        id: SERVER_TURN_ID,
         element: message,
         summary: 'hello',
         n: 0,
@@ -278,7 +285,9 @@ describe('TimelineManager message timestamps', () => {
 
     await internal.injectMessageTimestamps();
 
-    const timestamps = document.querySelectorAll('.gv-timestamp[data-gv-turn-id="u-1"]');
+    const timestamps = document.querySelectorAll(
+      `.gv-timestamp[data-gv-turn-id="${SERVER_TURN_ID}"]`,
+    );
     expect(timestamps).toHaveLength(1);
     expect(timestamps[0]).toBe(firstDuplicate);
     expect(timestamps[0]?.textContent).toBe('2024-01-01 00:00:01');
@@ -323,7 +332,7 @@ describe('TimelineManager message timestamps', () => {
     internal.showMessageTimestampsEnabled = true;
     internal.markers = [
       {
-        id: 'u-1',
+        id: SERVER_TURN_ID,
         element: firstMessage,
         summary: 'hello',
         n: 0,
@@ -332,7 +341,7 @@ describe('TimelineManager message timestamps', () => {
         starred: false,
       },
       {
-        id: 'u-1',
+        id: SERVER_TURN_ID,
         element: duplicateMessage,
         summary: 'hello clone',
         n: 0.5,
@@ -344,7 +353,9 @@ describe('TimelineManager message timestamps', () => {
 
     await internal.injectMessageTimestamps();
 
-    expect(document.querySelectorAll('.gv-timestamp[data-gv-turn-id="u-1"]')).toHaveLength(1);
+    expect(
+      document.querySelectorAll(`.gv-timestamp[data-gv-turn-id="${SERVER_TURN_ID}"]`),
+    ).toHaveLength(1);
   });
 
   it('keeps timestamp turn ids stable when Gemini replaces a rendered message element', async () => {
@@ -370,11 +381,16 @@ describe('TimelineManager message timestamps', () => {
     const container = document.createElement('div');
     scrollContainer.appendChild(container);
 
+    const serverContainer = document.createElement('div');
+    serverContainer.className = 'conversation-container';
+    serverContainer.id = '1111111111111111';
+    container.appendChild(serverContainer);
+
     const message = document.createElement('div');
     message.className = 'user';
     message.textContent = 'raw $x^2$';
     setElementTop(message, 0);
-    container.appendChild(message);
+    serverContainer.appendChild(message);
 
     const timelineBar = document.createElement('div');
     const trackContent = document.createElement('div');
@@ -423,7 +439,7 @@ describe('TimelineManager message timestamps', () => {
 
     internal.recalculateAndRenderMarkers();
     const firstTurnId = internal.markers[0]?.id;
-    expect(firstTurnId).toBe('u-0');
+    expect(firstTurnId).toBe(SERVER_TURN_ID);
 
     const rerendered = document.createElement('div');
     rerendered.className = 'user';
@@ -469,11 +485,16 @@ describe('TimelineManager message timestamps', () => {
     rowWrapper.style.justifyContent = 'flex-end';
     scrollContainer.appendChild(rowWrapper);
 
+    const serverContainer = document.createElement('div');
+    serverContainer.className = 'conversation-container';
+    serverContainer.id = '1111111111111111';
+    rowWrapper.appendChild(serverContainer);
+
     const message = document.createElement('div');
     message.className = 'user';
     message.textContent = 'first turn';
     setElementTop(message, 0);
-    rowWrapper.appendChild(message);
+    serverContainer.appendChild(message);
 
     const timelineBar = document.createElement('div');
     const trackContent = document.createElement('div');
@@ -505,7 +526,7 @@ describe('TimelineManager message timestamps', () => {
       'https://gemini.google.com/app',
     );
     const liveTimestamps = new Map<string, Map<string, number>>([
-      [scopedDraftConversationId, new Map([['u-1', Date.now()]])],
+      [scopedDraftConversationId, new Map([[SERVER_TURN_ID, Date.now()]])],
     ]);
 
     const timestampServiceMock = {
@@ -526,7 +547,7 @@ describe('TimelineManager message timestamps', () => {
       }),
     } as unknown as TimestampService;
 
-    message.dataset.turnId = 'u-1';
+    message.dataset.turnId = SERVER_TURN_ID;
     internal.conversationContainer = scrollContainer;
     internal.scrollContainer = scrollContainer;
     internal.userTurnSelector = '.user';
@@ -583,12 +604,17 @@ describe('TimelineManager message timestamps', () => {
     rowWrapper.style.justifyContent = 'flex-end';
     scrollContainer.appendChild(rowWrapper);
 
+    const serverContainer = document.createElement('div');
+    serverContainer.className = 'conversation-container';
+    serverContainer.id = '1111111111111111';
+    rowWrapper.appendChild(serverContainer);
+
     const message = document.createElement('div');
     message.className = 'user';
     message.textContent = 'first turn';
-    message.dataset.turnId = 'u-1';
+    message.dataset.turnId = SERVER_TURN_ID;
     setElementTop(message, 0);
-    rowWrapper.appendChild(message);
+    serverContainer.appendChild(message);
 
     const timelineBar = document.createElement('div');
     const trackContent = document.createElement('div');
@@ -597,7 +623,7 @@ describe('TimelineManager message timestamps', () => {
 
     const draftConversationId = buildConversationIdFromUrl('https://gemini.google.com/app');
     const liveTimestamps = new Map<string, Map<string, number>>([
-      [draftConversationId, new Map([['u-1', Date.now()]])],
+      [draftConversationId, new Map([[SERVER_TURN_ID, Date.now()]])],
     ]);
 
     const timestampServiceMock = {
@@ -695,7 +721,7 @@ describe('TimelineManager applyHistoryTimestamps', () => {
     } as unknown as TimestampService;
     internal.markers = [
       {
-        id: 'u-0',
+        id: SERVER_TURN_ID,
         element: document.createElement('div'),
         summary: 'hello from this conversation',
         n: 0,
@@ -706,7 +732,11 @@ describe('TimelineManager applyHistoryTimestamps', () => {
     ];
     let storeRevision = 1;
     const getTurns = vi.fn(() => [
-      { userText: 'hello from this conversation', timestampMs: 1_783_370_737_000 },
+      {
+        turnId: SERVER_TURN_ID,
+        userText: 'hello from this conversation',
+        timestampMs: 1_783_370_737_000,
+      },
     ]);
     internal.historyTimestampStore = {
       getRevision: vi.fn(() => storeRevision),
@@ -763,7 +793,7 @@ describe('TimelineManager applyHistoryTimestamps', () => {
       conversationId: 'gemini:conv:convB',
       urlPath: '/app/convB',
     });
-    internal.markers[0].summary = 'a different question with no matching server turn';
+    internal.markers[0].id = 's-2222222222222222';
 
     expect(internal.applyHistoryTimestamps()).toBe(false);
     expect(internal.applyHistoryTimestamps()).toBe(false);
@@ -792,16 +822,25 @@ describe('TimelineManager applyHistoryTimestamps', () => {
       height: 0,
       toJSON: () => ({}),
     } as DOMRect);
+    const serverContainer = document.createElement('div');
+    serverContainer.className = 'conversation-container';
+    serverContainer.id = '1111111111111111';
+    scrollContainer.appendChild(serverContainer);
+
     message.className = 'user';
     message.textContent = 'hello from this conversation';
     setElementTop(message, 0);
-    scrollContainer.appendChild(message);
+    serverContainer.appendChild(message);
     main.appendChild(scrollContainer);
     timelineBar.appendChild(trackContent);
     document.body.append(main, timelineBar);
 
     const getTurns = vi.fn(() => [
-      { userText: 'hello from this conversation', timestampMs: 1_783_370_737_000 },
+      {
+        turnId: SERVER_TURN_ID,
+        userText: 'hello from this conversation',
+        timestampMs: 1_783_370_737_000,
+      },
     ]);
     const manager = new TimelineManager();
     const internal = manager as unknown as HistoryInternal & {
@@ -879,7 +918,11 @@ describe('TimelineManager applyHistoryTimestamps', () => {
 
     expect(internal.applyHistoryTimestamps()).toBe(true);
     expect(recordTimestamp).toHaveBeenCalledTimes(1);
-    expect(recordTimestamp).toHaveBeenCalledWith('gemini:conv:convB', 'u-0', 1_783_370_737_000);
+    expect(recordTimestamp).toHaveBeenCalledWith(
+      'gemini:conv:convB',
+      SERVER_TURN_ID,
+      1_783_370_737_000,
+    );
   });
 
   it('does not write timestamps while the feature toggle is off', () => {

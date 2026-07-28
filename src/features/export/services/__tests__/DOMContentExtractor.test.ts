@@ -51,6 +51,386 @@ describe('DOMContentExtractor', () => {
     expect(extracted.text).not.toContain('📎 photo.png');
   });
 
+  it('exports rendered Mermaid SVG in HTML while preserving Mermaid source in text', () => {
+    const assistant = document.createElement('div');
+    assistant.innerHTML = `
+      <message-content>
+        <div class="markdown">
+          <div class="gv-mermaid-wrapper" data-gv-mermaid-theme="dark">
+            <code-block style="display: none;">
+              <div class="code-block-decoration">Code snippet</div>
+              <pre><code role="text">flowchart TD\nA --&gt; B</code></pre>
+            </code-block>
+            <div class="gv-mermaid-toggle">
+              <button class="active">Diagram</button>
+              <button>Code</button>
+            </div>
+            <div class="gv-mermaid-diagram">
+              <svg data-render-theme="dark" viewBox="0 0 120 80" aria-label="Flowchart">
+                <g><text>A</text><text>B</text></g>
+              </svg>
+            </div>
+            <template class="gv-mermaid-light-export">
+              <svg data-export-theme="light" viewBox="0 0 120 80" aria-label="Flowchart">
+                <g><text>A</text><text>B</text></g>
+              </svg>
+            </template>
+          </div>
+        </div>
+      </message-content>
+    `;
+
+    const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+
+    expect(extracted.hasCode).toBe(true);
+    expect(extracted.html).toContain('class="gv-export-mermaid"');
+    expect(extracted.html).toContain('data-export-theme="light"');
+    expect(extracted.html).not.toContain('data-render-theme="dark"');
+    expect(extracted.html).not.toContain('<pre><code');
+    expect(extracted.html).not.toContain('gv-mermaid-toggle');
+    expect(extracted.html).toContain('data-gv-mermaid-theme="light"');
+    expect(extracted.text).toContain('```mermaid\nflowchart TD\nA --> B\n```');
+    expect(extracted.text).not.toContain('```code snippet');
+  });
+
+  it('falls back to source for an invalid Mermaid theme marker', () => {
+    const assistant = document.createElement('div');
+    assistant.innerHTML = `
+      <message-content>
+        <div class="markdown">
+          <div class="gv-mermaid-wrapper" data-gv-mermaid-theme="neon">
+            <code-block><div class="code-block-decoration">mermaid</div><pre><code role="text">flowchart TD\nA --&gt; B</code></pre></code-block>
+            <div class="gv-mermaid-diagram"><svg viewBox="0 0 120 80"><text>Diagram</text></svg></div>
+          </div>
+        </div>
+      </message-content>
+    `;
+
+    const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+
+    expect(extracted.html).toContain('<pre><code class="language-mermaid">');
+    expect(extracted.html).not.toContain('class="gv-export-mermaid"');
+    expect(extracted.html).not.toContain('data-gv-mermaid-theme');
+  });
+
+  it('falls back to source when a dark diagram has no light export SVG', () => {
+    const assistant = document.createElement('div');
+    assistant.innerHTML = `
+      <message-content>
+        <div class="markdown">
+          <div class="gv-mermaid-wrapper" data-gv-mermaid-theme="dark">
+            <code-block><pre><code role="text">flowchart TD\nA --&gt; B</code></pre></code-block>
+            <div class="gv-mermaid-diagram"><svg viewBox="0 0 120 80"></svg></div>
+          </div>
+        </div>
+      </message-content>
+    `;
+
+    const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+
+    expect(extracted.html).toContain('<pre><code class="language-mermaid">');
+    expect(extracted.html).not.toContain('class="gv-export-mermaid"');
+  });
+
+  it('falls back to Mermaid source when a rendered SVG is unavailable', () => {
+    const assistant = document.createElement('div');
+    assistant.innerHTML = `
+      <message-content>
+        <div class="markdown">
+          <div class="gv-mermaid-wrapper">
+            <code-block>
+              <div class="code-block-decoration">mermaid</div>
+              <pre><code role="text">flowchart TD\nA --&gt; B</code></pre>
+            </code-block>
+            <div class="gv-mermaid-diagram"></div>
+          </div>
+        </div>
+      </message-content>
+    `;
+
+    const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+
+    expect(extracted.hasCode).toBe(true);
+    expect(extracted.html).toContain('<pre><code class="language-mermaid">');
+    expect(extracted.html).not.toContain('class="gv-export-mermaid"');
+    expect(extracted.text).toContain('```mermaid\nflowchart TD\nA --> B\n```');
+  });
+
+  it('reaches a rendered Mermaid wrapper nested in a response element', () => {
+    const assistant = document.createElement('div');
+    assistant.innerHTML = `
+      <message-content>
+        <div class="markdown">
+          <response-element>
+            <div class="gv-mermaid-wrapper" data-gv-mermaid-theme="light">
+              <code-block style="display: none;">
+                <div class="code-block-decoration">mermaid</div>
+                <pre><code role="text">flowchart TD\nA --&gt; B</code></pre>
+              </code-block>
+              <div class="gv-mermaid-toggle"><button>Diagram</button></div>
+              <div class="gv-mermaid-diagram">
+                <svg viewBox="0 0 120 80"><text>Rendered diagram</text></svg>
+              </div>
+            </div>
+          </response-element>
+        </div>
+      </message-content>
+    `;
+
+    const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+
+    expect(extracted.html).toContain('class="gv-export-mermaid"');
+    expect(extracted.html).toContain('<svg viewBox="0 0 120 80">');
+    expect(extracted.html).not.toContain('<pre><code');
+    expect(extracted.text).toContain('```mermaid\nflowchart TD\nA --> B\n```');
+  });
+
+  it('reaches a rendered Mermaid wrapper through an intervening container', () => {
+    const assistant = document.createElement('div');
+    assistant.innerHTML = `
+      <message-content>
+        <div class="markdown">
+          <response-element>
+            <section>
+              <div class="gv-mermaid-wrapper" data-gv-mermaid-theme="light">
+                <code-block style="display: none;">
+                  <div class="code-block-decoration">mermaid</div>
+                  <pre><code role="text">flowchart TD\nA --&gt; B</code></pre>
+                </code-block>
+                <div class="gv-mermaid-diagram"><svg viewBox="0 0 120 80"><text>Rendered diagram</text></svg></div>
+              </div>
+            </section>
+          </response-element>
+        </div>
+      </message-content>
+    `;
+
+    const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+
+    expect(extracted.html).toContain('class="gv-export-mermaid"');
+    expect(extracted.html).toContain('<svg viewBox="0 0 120 80">');
+    expect(extracted.html).not.toContain('<pre><code');
+    expect(extracted.text).toContain('```mermaid\nflowchart TD\nA --> B\n```');
+  });
+
+  it('preserves rendered Mermaid diagrams and fenced source inside list items', () => {
+    const assistant = document.createElement('div');
+    assistant.innerHTML = `
+      <message-content>
+        <div class="markdown">
+          <ul>
+            <li>
+              <span>Diagram</span>
+              <div class="gv-mermaid-wrapper" data-gv-mermaid-theme="light">
+                <code-block style="display: none;">
+                  <div class="code-block-decoration">mermaid</div>
+                  <pre><code role="text">flowchart TD\nA --&gt; B</code></pre>
+                </code-block>
+                <div class="gv-mermaid-toggle"><button>Diagram</button></div>
+                <div class="gv-mermaid-diagram">
+                  <svg viewBox="0 0 120 80"><text>Rendered diagram</text></svg>
+                </div>
+              </div>
+            </li>
+          </ul>
+        </div>
+      </message-content>
+    `;
+
+    const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+
+    expect(extracted.hasCode).toBe(true);
+    expect(extracted.html).toContain('<ul>');
+    expect(extracted.html).toContain('class="gv-export-mermaid"');
+    expect(extracted.html).toContain('<svg viewBox="0 0 120 80">');
+    expect(extracted.html).not.toContain('gv-mermaid-wrapper');
+    expect(extracted.html).not.toContain('<pre><code');
+    expect(extracted.text).toContain('- Diagram\n  ```mermaid\n  flowchart TD\n  A --> B\n  ```');
+  });
+
+  it('preserves regular fenced code when list extraction handles block content', () => {
+    const assistant = document.createElement('div');
+    assistant.innerHTML = `
+      <message-content>
+        <div class="markdown">
+          <ul>
+            <li>
+              <span>Example</span>
+              <code-block>
+                <div class="code-block-decoration">typescript</div>
+                <pre><code role="text">const answer = 42;</code></pre>
+              </code-block>
+            </li>
+          </ul>
+        </div>
+      </message-content>
+    `;
+
+    const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+
+    expect(extracted.hasCode).toBe(true);
+    expect(extracted.html).toContain('<ul>');
+    expect(extracted.html).toContain('<pre><code class="language-typescript">');
+    expect(extracted.html).not.toContain('<code-block>');
+    expect(extracted.text).toContain('- Example\n  ```typescript\n  const answer = 42;\n  ```');
+  });
+
+  it('preserves prose, ordinary code, and subsequent prose order inside list items', () => {
+    const assistant = document.createElement('div');
+    assistant.innerHTML = `
+      <message-content>
+        <div class="markdown">
+          <ul>
+            <li>
+              <span>Before ordinary code.</span>
+              <code-block>
+                <div class="code-block-decoration">typescript</div>
+                <pre><code role="text">const answer = 42;</code></pre>
+              </code-block>
+              <span>After ordinary code.</span>
+            </li>
+          </ul>
+        </div>
+      </message-content>
+    `;
+
+    const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+
+    expect(extracted.hasCode).toBe(true);
+    expect(extracted.text).toContain(
+      '- Before ordinary code.\n  ```typescript\n  const answer = 42;\n  ```\n  After ordinary code.',
+    );
+  });
+
+  it('preserves Mermaid blocks and nested lists at their original list-item positions', () => {
+    const assistant = document.createElement('div');
+    assistant.innerHTML = `
+      <message-content>
+        <div class="markdown">
+          <ul>
+            <li>
+              <span>Before Mermaid.</span>
+              <div class="gv-mermaid-wrapper" data-gv-mermaid-theme="light">
+                <code-block><div class="code-block-decoration">mermaid</div><pre><code role="text">flowchart TD\nA --&gt; B</code></pre></code-block>
+                <div class="gv-mermaid-diagram"><svg viewBox="0 0 120 80"><text>Diagram</text></svg></div>
+              </div>
+              <ul><li>Nested item</li></ul>
+              <span>After Mermaid.</span>
+            </li>
+          </ul>
+        </div>
+      </message-content>
+    `;
+
+    const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+
+    expect(extracted.hasCode).toBe(true);
+    expect(extracted.html).toContain('class="gv-export-mermaid"');
+    expect(extracted.text).toContain(
+      '- Before Mermaid.\n  ```mermaid\n  flowchart TD\n  A --> B\n  ```\n  - Nested item\n  After Mermaid.',
+    );
+  });
+
+  it('keeps interleaved ordinary and Mermaid blocks in list DOM order', () => {
+    const assistant = document.createElement('div');
+    assistant.innerHTML = `
+      <message-content>
+        <div class="markdown">
+          <ol>
+            <li>
+              <span>First prose.</span>
+              <code-block><div class="code-block-decoration">json</div><pre><code role="text">{}</code></pre></code-block>
+              <span>Second prose.</span>
+              <div class="gv-mermaid-wrapper" data-gv-mermaid-theme="light">
+                <code-block><div class="code-block-decoration">mermaid</div><pre><code role="text">graph LR\nA --&gt; B</code></pre></code-block>
+                <div class="gv-mermaid-diagram"><svg viewBox="0 0 120 80"><text>Diagram</text></svg></div>
+              </div>
+              <span>Third prose with <span class="math-inline" data-math="x^2">x²</span>.</span>
+            </li>
+          </ol>
+        </div>
+      </message-content>
+    `;
+
+    const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+
+    expect(extracted.hasCode).toBe(true);
+    expect(extracted.hasFormulas).toBe(true);
+    expect(extracted.text).toContain(
+      '1. First prose.\n   ```json\n   {}\n   ```\n   Second prose.\n   ```mermaid\n   graph LR\n   A --> B\n   ```\n   Third prose with $x^2$.',
+    );
+  });
+
+  it('extracts Mermaid blocks wrapped by response elements inside list items', () => {
+    const assistant = document.createElement('div');
+    assistant.innerHTML = `
+      <message-content>
+        <div class="markdown">
+          <ul>
+            <li>
+              <span>Before wrapped Mermaid.</span>
+              <response-element>
+                <div class="gv-mermaid-wrapper" data-gv-mermaid-theme="light">
+                  <code-block><div class="code-block-decoration">mermaid</div><pre><code role="text">flowchart LR\nA --&gt; B</code></pre></code-block>
+                  <div class="gv-mermaid-diagram"><svg viewBox="0 0 120 80"><text>Diagram</text></svg></div>
+                </div>
+              </response-element>
+              <span>After wrapped Mermaid.</span>
+            </li>
+          </ul>
+        </div>
+      </message-content>
+    `;
+
+    const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+
+    expect(extracted.hasCode).toBe(true);
+    expect(extracted.html).toContain('class="gv-export-mermaid"');
+    expect(extracted.text).toContain(
+      '- Before wrapped Mermaid.\n  ```mermaid\n  flowchart LR\n  A --> B\n  ```\n  After wrapped Mermaid.',
+    );
+  });
+
+  it('preserves block order through section and div containers inside list items', () => {
+    const assistant = document.createElement('div');
+    assistant.innerHTML = `
+      <message-content>
+        <div class="markdown">
+          <ul>
+            <li>
+              <section>
+                <p>Before ordinary code.</p>
+                <div>
+                  <code-block><div class="code-block-decoration">typescript</div><pre><code role="text">const answer = 42;</code></pre></code-block>
+                </div>
+                <p>Before Mermaid.</p>
+                <div>
+                  <div>
+                    <div class="gv-mermaid-wrapper" data-gv-mermaid-theme="light">
+                      <code-block><div class="code-block-decoration">Code snippet</div><pre><code role="text">flowchart TD\nA --&gt; B</code></pre></code-block>
+                      <div class="gv-mermaid-diagram"><svg viewBox="0 0 120 80"><text>Diagram</text></svg></div>
+                    </div>
+                  </div>
+                </div>
+                <ol><li>Nested item</li></ol>
+                <p>After nested list.</p>
+              </section>
+            </li>
+          </ul>
+        </div>
+      </message-content>
+    `;
+
+    const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+
+    expect(extracted.hasCode).toBe(true);
+    expect(extracted.html).toContain('class="gv-export-mermaid"');
+    expect(extracted.text).toContain(
+      '- Before ordinary code.\n  ```typescript\n  const answer = 42;\n  ```\n  Before Mermaid.\n  ```mermaid\n  flowchart TD\n  A --> B\n  ```\n  1. Nested item\n  After nested list.',
+    );
+    expect(extracted.text).not.toContain('```code snippet');
+  });
+
   it('should strip Gemini inline source chips (link icons) from assistant export', () => {
     const assistant = document.createElement('div');
     assistant.innerHTML = `

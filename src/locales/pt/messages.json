@@ -171,6 +171,10 @@
     "message": "Importado(s) {count} prompt(s)",
     "description": "Import success"
   },
+  "promptNameConflictsDetected": {
+    "message": "Todos os prompts foram mantidos. {count} têm nomes duplicados e não podem usar / até serem renomeados",
+    "description": "Aviso não bloqueante quando a importação ou mesclagem na nuvem preserva nomes duplicados"
+  },
   "pm_duplicate": {
     "message": "Duplicar prompt",
     "description": "Duplicate on add"
@@ -256,8 +260,20 @@
     "description": "View-mode toggle tooltip - switch from compact rows to comfortable cards with markdown preview"
   },
   "pm_name_placeholder": {
-    "message": "Nome (opcional)",
-    "description": "Placeholder for the optional prompt name/label input used as the compact-mode headline"
+    "message": "Nome",
+    "description": "Placeholder for the required prompt name input"
+  },
+  "pm_name_required": {
+    "message": "O nome do prompt é obrigatório",
+    "description": "Validation shown when saving a prompt without a name"
+  },
+  "pm_name_duplicate": {
+    "message": "Já existe um prompt com este nome",
+    "description": "Validation shown when saving a prompt with an existing name"
+  },
+  "pm_name_conflict_badge": {
+    "message": "Nome duplicado — renomeie para usar /",
+    "description": "Selo para prompts excluídos do preenchimento com / por terem nome duplicado"
   },
   "pm_prompt_manager": {
     "message": "Gestor de prompts",
@@ -958,6 +974,14 @@
   "hidePromptManagerHint": {
     "message": "Ocultar o botão flutuante do Gerenciador de Prompts na página",
     "description": "Hint for hiding prompt manager feature"
+  },
+  "slashPromptEnabled": {
+    "message": "Ativar inserção rápida de prompts com /",
+    "description": "Enable slash prompt quick insertion toggle"
+  },
+  "slashPromptEnabledHint": {
+    "message": "Digite / no campo de texto do Gemini para inserir rapidamente um prompt salvo.",
+    "description": "Hint for slash prompt quick insertion"
   },
   "promptInsertOnClick": {
     "message": "Inserir prompt ao clicar",
@@ -2288,6 +2312,10 @@
     "message": "Permissão do site negada; o plugin não pode ser executado.",
     "description": "Shown when the user denies the site permission for a plugin"
   },
+  "pluginGrantRequiredAccess": {
+    "message": "Conceder o acesso necessário ao site",
+    "description": "Button that repairs missing optional site access for an enabled plugin"
+  },
   "pluginUnsupportedPlatform": {
     "message": "Sem suporte neste navegador: não é possível conceder o acesso ao site de que o plugin precisa.",
     "description": "Shown when a plugin can't be enabled because the browser can't grant the site access it needs (e.g. Safari)"
@@ -2347,6 +2375,18 @@
   "timelineCoachmarkToggle": {
     "message": "Usar linha do tempo compacta",
     "description": "Inline toggle label in the compact-timeline coachmark"
+  },
+  "slashPromptCoachmarkTitle": {
+    "message": "Novidade: inserção de prompts com /",
+    "description": "Coachmark title introducing slash prompt insertion"
+  },
+  "slashPromptCoachmarkBody": {
+    "message": "Digite / no campo de texto do Gemini para inserir rapidamente um prompt salvo.",
+    "description": "Coachmark body text introducing slash prompt insertion"
+  },
+  "slashPromptCoachmarkToggle": {
+    "message": "Ativar inserção de prompts com /",
+    "description": "Inline toggle label in the slash-prompt coachmark"
   },
   "coachmarkDismiss": {
     "message": "Concluir",

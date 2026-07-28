@@ -14,10 +14,10 @@
     <img src="https://img.shields.io/badge/Brave-✓-FB542B?style=flat-square&logo=brave&logoColor=white" alt="Brave">
   </p>
   <p>
-    <img src="../badges/github-stars.svg" alt="GitHub Star">
-    <img src="../badges/github-forks.svg" alt="GitHub Fork">
-    <img src="../badges/github-release.svg" alt="最新バージョン">
-    <img src="../badges/github-downloads.svg" alt="GitHub ダウンロード数">
+    <img src="../docs/public/badges/github-stars.svg" alt="GitHub Star">
+    <img src="../docs/public/badges/github-forks.svg" alt="GitHub Fork">
+    <img src="../docs/public/badges/github-release.svg" alt="最新バージョン">
+    <img src="../docs/public/badges/github-downloads.svg" alt="GitHub ダウンロード数">
     <img src="https://img.shields.io/chrome-web-store/users/iifacdnjakkhjjiengaffnegbndgingi?style=flat-square&logo=google-chrome" alt="Chrome ユーザー数">
     <img src="https://img.shields.io/chrome-web-store/rating/iifacdnjakkhjjiengaffnegbndgingi?style=flat-square&logo=google-chrome" alt="Chrome 評価">
     <img src="https://img.shields.io/badge/edge%20users-50k%2B-0078D7?style=flat-square&logo=microsoftedge&logoColor=white" alt="Edge ユーザー数">
@@ -103,7 +103,6 @@ AI チャットボット — Gemini、Claude、ChatGPT — は強力ですが、
 - **🛠️ パワーツール**:
   - **[一括削除](https://voyager.nagi.fun/ja/guide/batch-delete)**: 履歴をまとめてクリーンアップ。
   - **[引用返信](https://voyager.nagi.fun/ja/guide/quote-reply)**: テキストを選択してワンクリックで引用。
-  - **[タブタイトルの同期](https://voyager.nagi.fun/ja/guide/tab-title)**: タブの名前をチャットのタイトルに自動変更。
   - **[自動スクロール防止](https://voyager.nagi.fun/ja/guide/prevent-auto-scroll)**: 新しいプロンプトを送信する際の迷惑なジャンプ動作を阻止します。
   - **[入力欄の自動非表示](https://voyager.nagi.fun/ja/guide/input-collapse)**: 未入力時に折りたたんで表示スペースを確保。
   - **[デフォルトモデル](https://voyager.nagi.fun/ja/guide/default-model)**: 新しい対話に使用するデフォルトのモデルを設定します。

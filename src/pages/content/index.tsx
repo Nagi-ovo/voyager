@@ -54,6 +54,8 @@ import { startMermaid } from './mermaid/index';
 import { startBrandTheme } from './platformTheme';
 import { startPreventAutoScroll } from './preventAutoScroll/index';
 import { startPromptManager } from './prompt/index';
+import { slashPromptCoachmarkStep } from './prompt/slashPromptCoachmark';
+import { startSlashPromptFeature } from './prompt/slashPromptFeature';
 import { startQuoteReply } from './quoteReply/index';
 import { startRemoteAnnouncements } from './remoteAnnouncements/index';
 import { startResponseCompleteNotification } from './responseNotification/index';
@@ -101,6 +103,7 @@ let initializationTimer: number | null = null;
 let folderManagerInstance: Awaited<ReturnType<typeof startFolderManager>> | null = null;
 
 let promptManagerInstance: Awaited<ReturnType<typeof startPromptManager>> | null = null;
+let slashPromptFeatureInstance: Awaited<ReturnType<typeof startSlashPromptFeature>> | null = null;
 let quoteReplyCleanup: (() => void) | null = null;
 let inputVimModeCleanup: (() => void) | null = null;
 let sendBehaviorCleanup: (() => void) | null = null;
@@ -143,6 +146,7 @@ function showOnboardingCoachmarksWhenChangelogIsIdle(): void {
     usageCoachmarkStep,
     folderSearchCoachmarkStep,
     conversationSortCoachmarkStep,
+    slashPromptCoachmarkStep,
   ])
     .then((result) => {
       if (result !== 'skipped') onboardingCoachmarkShownThisPage = true;
@@ -193,6 +197,8 @@ async function initializeFeatures(): Promise<void> {
     if (!hasValidExtensionContext()) {
       return;
     }
+
+    slashPromptFeatureInstance = await startSlashPromptFeature();
 
     // Yield between features instead of sleeping a fixed amount. On an idle main
     // thread (the common foreground case) requestIdleCallback fires on the next
@@ -456,11 +462,14 @@ function handleVisibilityChange(): void {
   try {
     if (!hasValidExtensionContext()) return;
 
+    const pluginPlatformId = resolvePluginPlatformId(location.href);
+    const isPluginSubframe = window.top !== window && pluginPlatformId !== null;
+
     // Snow, rain and sakura are fullscreen canvas effects with no host-UI
-    // dependency. This bundle only reaches native Voyager sites or origins the
-    // user already enabled for Prompt Manager / plugins, so start them before
-    // platform-specific branches return.
-    startVisualEffects();
+    // dependency. Keep them out of embedded plugin frames: those frames only
+    // need the declarative plugin host and would otherwise render a duplicate
+    // effect above their parent page.
+    if (!isPluginSubframe) startVisualEffects();
 
     // Answer the background's ping so injectPluginScriptIntoOpenTabs can tell
     // a live content script from a missing/orphaned one and skip re-injecting
@@ -473,7 +482,7 @@ function handleVisibilityChange(): void {
 
     // Saved Library and cloud sync need the same account identity as highlights.
     // This bridge must exist even when optional Folder Manager code never starts.
-    accountContextBridgeCleanup = startAccountContextBridge();
+    if (!isPluginSubframe) accountContextBridgeCleanup = startAccountContextBridge();
 
     // Plugin ecosystem host. Started up-front on EVERY page the content script is
     // injected into (Gemini / AI Studio, and any site a user enabled a plugin for,
@@ -504,7 +513,7 @@ function handleVisibilityChange(): void {
     // class; CSS derives the rest). Applies the adapter's built-in colour at
     // once, then lets an enabled plugin's declared theme override it live. No-op
     // on Gemini / AI Studio.
-    brandThemeCleanup = startBrandTheme();
+    if (!isPluginSubframe) brandThemeCleanup = startBrandTheme();
 
     const onUnhandledRejection = (event: PromiseRejectionEvent) => {
       if (isExtensionContextInvalidatedError(event.reason)) {
@@ -550,9 +559,7 @@ function handleVisibilityChange(): void {
       hostname.includes('business.gemini.google') ||
       hostname.includes('aistudio.google.com') ||
       hostname.includes('aistudio.google.cn');
-    const pluginPlatformId = resolvePluginPlatformId(location.href);
-
-    if (isSupportedSite || pluginPlatformId) {
+    if (!isPluginSubframe && (isSupportedSite || pluginPlatformId)) {
       remoteAnnouncementsCleanup = startRemoteAnnouncements();
     }
 
@@ -576,8 +583,9 @@ function handleVisibilityChange(): void {
       // `initialized` so the visibilitychange handler doesn't later fall into
       // initializeFeatures() (which is Gemini/AI-Studio/custom-site shaped).
       if (pluginPlatformId) {
-        console.log('[Gemini Voyager] Plugin platform: prompt manager');
         initialized = true;
+        if (isPluginSubframe) return;
+        console.log('[Gemini Voyager] Plugin platform: prompt manager');
         void startPromptManager()
           .then((instance) => {
             promptManagerInstance = instance;
@@ -636,6 +644,10 @@ function handleVisibilityChange(): void {
         if (promptManagerInstance) {
           promptManagerInstance.destroy();
           promptManagerInstance = null;
+        }
+        if (slashPromptFeatureInstance) {
+          slashPromptFeatureInstance.destroy();
+          slashPromptFeatureInstance = null;
         }
         if (quoteReplyCleanup) {
           quoteReplyCleanup();

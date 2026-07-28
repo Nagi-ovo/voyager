@@ -103,7 +103,6 @@ That's why I built **Voyager**. It's a companion that helps you keep your AI con
 - **🔬 [Deep Research](https://voyager.nagi.fun/en/guide/deep-research)**: Extract thinking processes and research links from Deep Research sessions.
 - **🛠️ Power Tools**:
   - **[Quote Reply](https://voyager.nagi.fun/en/guide/quote-reply)**: Reply with context by selecting text.
-  - **[Tab Title Sync](https://voyager.nagi.fun/en/guide/tab-title)**: Auto-sync browser tab titles.
   - **[Prevent Auto Scroll](https://voyager.nagi.fun/en/guide/prevent-auto-scroll)**: Intercepts unwanted jumping behavior when hitting enter to send a new prompt.
   - **[Input Collapse](https://voyager.nagi.fun/en/guide/input-collapse)**: Auto-expandable input area for more reading space.
   - **[Default Model](https://voyager.nagi.fun/en/guide/default-model)**: Set your favorite model as default.

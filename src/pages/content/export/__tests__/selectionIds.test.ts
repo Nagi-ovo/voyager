@@ -52,4 +52,15 @@ describe('export selection turn ids', () => {
 
     expect(resolveUniqueExportTurnIds([first])).toEqual(resolveUniqueExportTurnIds([replacement]));
   });
+
+  it('prefers Gemini response ids over stale positional datasets', () => {
+    const container = document.createElement('div');
+    container.className = 'conversation-container';
+    container.id = 'b6eb23222c6b10a2';
+    const turn = createTurn('u-0', 'mounted tail turn');
+    container.appendChild(turn);
+    document.body.appendChild(container);
+
+    expect(resolveUniqueExportTurnIds([turn])).toEqual(['s-b6eb23222c6b10a2']);
+  });
 });

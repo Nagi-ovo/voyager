@@ -171,6 +171,10 @@
     "message": "{count}개의 프롬프트를 가져왔습니다",
     "description": "Import success"
   },
+  "promptNameConflictsDetected": {
+    "message": "모든 프롬프트를 유지했습니다. 이름이 중복된 {count}개는 이름을 바꿀 때까지 / 빠른 삽입에서 사용할 수 없습니다",
+    "description": "가져오기 또는 클라우드 병합에서 중복 이름을 보존할 때 표시하는 비차단 알림"
+  },
   "pm_duplicate": {
     "message": "중복 프롬프트",
     "description": "Duplicate on add"
@@ -256,8 +260,20 @@
     "description": "View-mode toggle tooltip - switch from compact rows to comfortable cards with markdown preview"
   },
   "pm_name_placeholder": {
-    "message": "이름 (선택 사항)",
-    "description": "Placeholder for the optional prompt name/label input used as the compact-mode headline"
+    "message": "이름",
+    "description": "Placeholder for the required prompt name input"
+  },
+  "pm_name_required": {
+    "message": "프롬프트 이름을 입력해야 합니다",
+    "description": "Validation shown when saving a prompt without a name"
+  },
+  "pm_name_duplicate": {
+    "message": "같은 프롬프트 이름이 이미 있습니다",
+    "description": "Validation shown when saving a prompt with an existing name"
+  },
+  "pm_name_conflict_badge": {
+    "message": "이름 중복 — / 사용을 위해 이름 변경",
+    "description": "이름 중복으로 / 자동 완성에서 제외된 프롬프트 배지"
   },
   "pm_prompt_manager": {
     "message": "프롬프트 관리자",
@@ -958,6 +974,14 @@
   "hidePromptManagerHint": {
     "message": "페이지의 프롬프트 관리자 플로팅 볼을 숨깁니다",
     "description": "Hint for hiding prompt manager feature"
+  },
+  "slashPromptEnabled": {
+    "message": "슬래시로 프롬프트 빠르게 삽입",
+    "description": "Enable slash prompt quick insertion toggle"
+  },
+  "slashPromptEnabledHint": {
+    "message": "Gemini 입력창에 /를 입력하여 저장된 프롬프트를 빠르게 삽입합니다.",
+    "description": "Hint for slash prompt quick insertion"
   },
   "promptInsertOnClick": {
     "message": "클릭 시 프롬프트 바로 삽입",
@@ -2288,6 +2312,10 @@
     "message": "사이트 권한이 거부되어 플러그인을 실행할 수 없습니다.",
     "description": "Shown when the user denies the site permission for a plugin"
   },
+  "pluginGrantRequiredAccess": {
+    "message": "필요한 사이트 접근 권한 부여",
+    "description": "Button that repairs missing optional site access for an enabled plugin"
+  },
   "pluginUnsupportedPlatform": {
     "message": "이 브라우저에서는 지원되지 않습니다. 플러그인에 필요한 사이트 권한을 부여할 수 없습니다.",
     "description": "Shown when a plugin can't be enabled because the browser can't grant the site access it needs (e.g. Safari)"
@@ -2347,6 +2375,18 @@
   "timelineCoachmarkToggle": {
     "message": "컴팩트 타임라인 사용",
     "description": "Inline toggle label in the compact-timeline coachmark"
+  },
+  "slashPromptCoachmarkTitle": {
+    "message": "새 기능: 슬래시 프롬프트 삽입",
+    "description": "Coachmark title introducing slash prompt insertion"
+  },
+  "slashPromptCoachmarkBody": {
+    "message": "Gemini 입력창에 /를 입력하여 저장된 프롬프트를 빠르게 삽입합니다.",
+    "description": "Coachmark body text introducing slash prompt insertion"
+  },
+  "slashPromptCoachmarkToggle": {
+    "message": "슬래시 프롬프트 삽입 사용",
+    "description": "Inline toggle label in the slash-prompt coachmark"
   },
   "coachmarkDismiss": {
     "message": "완료",

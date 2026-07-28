@@ -98,6 +98,7 @@ export const StorageKeys = {
   PROMPT_INSERT_ON_CLICK: 'gvPromptInsertOnClick',
   PROMPT_VIEW_MODE: 'gvPromptViewMode',
   PROMPT_PANEL_VIEW: 'gvPromptPanelView',
+  SLASH_PROMPT_ENABLED: 'gvSlashPromptEnabled',
   // Persisted tag filter for the prompt manager (#729). chrome.storage.local
   // only — the selected tags are a per-device view over this machine's prompt
   // set, not a synced preference; syncing them could restore tags a device
@@ -261,6 +262,10 @@ export const StorageKeys = {
   // Message timestamps
   GV_SHOW_MESSAGE_TIMESTAMPS: 'gvShowMessageTimestamps',
   GV_MESSAGE_TIMESTAMPS: 'gvMessageTimestamps',
+  // Local-only cache of Gemini's complete ordered response-id list per
+  // conversation. It lets legacy positional turn ids resolve safely after a
+  // full reload without persisting message text or response bodies.
+  GV_TURN_IDENTITY_CACHE: 'gvTurnIdentityCache',
 
   // Popup section order
   GV_POPUP_SECTION_ORDER: 'gvPopupSectionOrder',

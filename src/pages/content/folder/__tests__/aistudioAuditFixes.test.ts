@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import browser from 'webextension-polyfill';
 
+import type { PromptItem } from '@/core/types/sync';
+
 import { AIStudioFolderManager } from '../aistudio';
 
 vi.mock('webextension-polyfill', () => ({
@@ -64,6 +66,7 @@ type ManagerInternals = {
   initializeFolderUI: () => Promise<void>;
   syncConversationTitlesFromPromptList: () => Promise<void>;
   applyHideArchivedToLibraryTable: () => void;
+  mergePromptsData: (local: PromptItem[], cloud: PromptItem[]) => PromptItem[];
   save: () => Promise<void>;
   render: () => void;
 };
@@ -186,6 +189,31 @@ describe('H1 — runtime message listener response contract', () => {
 
     expect(result).toBe(true);
     expect(sendResponse).toHaveBeenCalledWith(expect.objectContaining({ ok: true }));
+  });
+});
+
+describe('Drive prompt merge', () => {
+  it('preserves the local name when a newer legacy cloud prompt omits it', () => {
+    const { internals } = createManager();
+    const local: PromptItem = {
+      id: 'prompt-1',
+      name: 'Keep this name',
+      text: 'local text',
+      tags: ['local'],
+      createdAt: 1,
+      updatedAt: 10,
+    };
+    const cloud: PromptItem = {
+      id: 'prompt-1',
+      text: 'newer cloud text',
+      tags: ['cloud'],
+      createdAt: 1,
+      updatedAt: 20,
+    };
+
+    expect(internals.mergePromptsData([local], [cloud])).toEqual([
+      { ...cloud, name: 'Keep this name' },
+    ]);
   });
 });
 

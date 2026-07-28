@@ -15,7 +15,11 @@ import { isExtensionContextInvalidatedError } from '@/core/utils/extensionContex
 import { FolderImportExportService } from '@/features/folder/services/FolderImportExportService';
 import type { ImportStrategy } from '@/features/folder/types/import-export';
 import { getTranslationSync, getTranslationSyncUnsafe, initI18n } from '@/utils/i18n';
-import { mergeFolderData, mergeTimelineHierarchy } from '@/utils/merge';
+import {
+  mergeFolderData,
+  mergePrompts as mergeSyncedPrompts,
+  mergeTimelineHierarchy,
+} from '@/utils/merge';
 
 import { hasSeenCoachmark, markCoachmarkSeen } from '../coachmark';
 import {
@@ -10531,33 +10535,11 @@ export class FolderManager {
   }
 
   /**
-   * Merge prompts by ID (simple deduplication)
+   * Merge prompts through the shared sync policy so legacy cloud records
+   * cannot erase names that exist only in local storage.
    */
   private mergePrompts(local: PromptItem[], cloud: PromptItem[]): PromptItem[] {
-    const promptMap = new Map<string, PromptItem>();
-
-    // Add local prompts first
-    local.forEach((p) => {
-      if (p?.id) promptMap.set(p.id, p);
-    });
-
-    // Add cloud prompts (cloud takes priority for newer items)
-    cloud.forEach((p) => {
-      if (!p?.id) return;
-      const existing = promptMap.get(p.id);
-      if (!existing) {
-        promptMap.set(p.id, p);
-      } else {
-        // Compare timestamps, prefer newer
-        const cloudTime = p.updatedAt || p.createdAt || 0;
-        const localTime = existing.updatedAt || existing.createdAt || 0;
-        if (cloudTime > localTime) {
-          promptMap.set(p.id, p);
-        }
-      }
-    });
-
-    return Array.from(promptMap.values());
+    return mergeSyncedPrompts(local, cloud);
   }
 
   /**

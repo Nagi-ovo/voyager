@@ -63,9 +63,6 @@ features:
   - icon: 🧜‍♀️
     title: Gráficos Mermaid
     details: De código a visuales. Diagramas de flujo, de secuencia y de Gantt renderizados al instante.
-  - icon: 🏷️
-    title: Sincronización de Título de Pestaña
-    details: De un vistazo. Sincroniza automáticamente el título de la pestaña con el título de la conversación.
   - icon: 🔀
     title: Bifurcación de Conversación (Experimental)
     details: Pensamiento divergente. Bifurca la conversación en cualquier nodo para explorar diferentes posibilidades.

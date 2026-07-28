@@ -21,6 +21,7 @@ import type {
 } from '@/core/types/sync';
 import { DEFAULT_SYNC_STATE } from '@/core/types/sync';
 import { getVoyagerBuildTarget, isSafari } from '@/core/utils/browser';
+import { getPromptNameConflictIds } from '@/core/utils/promptName';
 import { deleteSafariICloudBackup } from '@/core/utils/safariICloudSync';
 import { restorePluginState } from '@/features/plugins/storage/pluginState';
 import {
@@ -38,7 +39,7 @@ import { Switch } from '../../../components/ui/switch';
 import { useLanguage } from '../../../contexts/LanguageContext';
 import {
   mergeFolderData,
-  mergePrompts,
+  mergePromptsWithStats,
   mergeStarredMessages,
   mergeTimelineHierarchy,
 } from '../../../utils/merge';
@@ -750,9 +751,13 @@ export function CloudSyncSettings({ sourceTabId }: CloudSyncSettingsProps = {}) 
         const nextFolders = shouldOverwrite
           ? cloudFolderData
           : mergeFolderData(localFolders, cloudFolderData);
-        const nextPrompts = shouldOverwrite
-          ? cloudPromptItems
-          : mergePrompts(localPrompts, cloudPromptItems);
+        const promptMerge = shouldOverwrite
+          ? {
+              items: cloudPromptItems,
+              nameConflicts: getPromptNameConflictIds(cloudPromptItems).size,
+            }
+          : mergePromptsWithStats(localPrompts, cloudPromptItems);
+        const nextPrompts = promptMerge.items;
         const nextStarred = shouldOverwrite
           ? cloudStarredData
           : mergeStarredMessages(localStarred, cloudStarredData);
@@ -816,14 +821,23 @@ export function CloudSyncSettings({ sourceTabId }: CloudSyncSettingsProps = {}) 
 
         const foldersMissing = !hasCloudFolderData;
         setStatusMessage({
-          text: t(
-            foldersMissing
-              ? 'syncSuccessFoldersMissing'
-              : response.highlights?.skipped
-                ? 'syncSuccessHighlightsSkipped'
-                : 'syncSuccess',
-          ),
-          kind: foldersMissing || response.highlights?.skipped ? 'warn' : 'ok',
+          text:
+            promptMerge.nameConflicts > 0
+              ? t('promptNameConflictsDetected').replace(
+                  '{count}',
+                  String(promptMerge.nameConflicts),
+                )
+              : t(
+                  foldersMissing
+                    ? 'syncSuccessFoldersMissing'
+                    : response.highlights?.skipped
+                      ? 'syncSuccessHighlightsSkipped'
+                      : 'syncSuccess',
+                ),
+          kind:
+            foldersMissing || response.highlights?.skipped || promptMerge.nameConflicts > 0
+              ? 'warn'
+              : 'ok',
         });
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Download failed';

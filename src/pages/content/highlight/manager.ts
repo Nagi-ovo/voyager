@@ -27,6 +27,8 @@ import {
   findHighlightTurn,
   findScrollableAncestor,
   getHighlightSelectionContext,
+  resolveMountedHighlightTurnId,
+  resolveStoredHighlightTurnId,
 } from './dom';
 
 const STYLE_ID = 'gv-highlight-style';
@@ -710,7 +712,10 @@ export class HighlightManager {
     this.observer?.disconnect();
     try {
       const turns = new Map(
-        collectHighlightTurns().map((turn) => [turn.turnId.replace(/^u-(\d+).*$/, 'u-$1'), turn]),
+        collectHighlightTurns().flatMap((turn) => {
+          const resolved = resolveMountedHighlightTurnId(turn.turnId);
+          return resolved ? [[resolved, turn] as const] : [];
+        }),
       );
       for (const [id, record] of this.records) {
         const existing = (this.marks.get(id) ?? []).filter((mark) => mark.isConnected);
@@ -724,7 +729,8 @@ export class HighlightManager {
         existing.reverse().forEach(unwrapMark);
 
         this.marks.delete(id);
-        const normalizedTurnId = record.turnId.replace(/^u-(\d+).*$/, 'u-$1');
+        const normalizedTurnId = resolveStoredHighlightTurnId(record.turnId);
+        if (!normalizedTurnId) continue;
         const turn = turns.get(normalizedTurnId);
         if (!turn) continue;
         const range = resolveHighlightAnchor(turn.assistantRoot, record.anchor);

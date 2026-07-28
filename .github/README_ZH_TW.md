@@ -14,10 +14,10 @@
     <img src="https://img.shields.io/badge/Brave-✓-FB542B?style=flat-square&logo=brave&logoColor=white" alt="Brave">
   </p>
   <p>
-    <img src="../badges/github-stars.svg" alt="GitHub Star">
-    <img src="../badges/github-forks.svg" alt="GitHub Fork">
-    <img src="../badges/github-release.svg" alt="最新版本">
-    <img src="../badges/github-downloads.svg" alt="GitHub 下載量">
+    <img src="../docs/public/badges/github-stars.svg" alt="GitHub Star">
+    <img src="../docs/public/badges/github-forks.svg" alt="GitHub Fork">
+    <img src="../docs/public/badges/github-release.svg" alt="最新版本">
+    <img src="../docs/public/badges/github-downloads.svg" alt="GitHub 下載量">
     <img src="https://img.shields.io/chrome-web-store/users/iifacdnjakkhjjiengaffnegbndgingi?style=flat-square&logo=google-chrome" alt="Chrome 商店用戶數">
     <img src="https://img.shields.io/chrome-web-store/rating/iifacdnjakkhjjiengaffnegbndgingi?style=flat-square&logo=google-chrome" alt="Chrome 商店評分">
     <img src="https://img.shields.io/badge/edge%20users-50k%2B-0078D7?style=flat-square&logo=microsoftedge&logoColor=white" alt="Edge 商店用戶數">
@@ -109,7 +109,6 @@
 - **🛠️ 效率工具**:
   - **[批量刪除](https://voyager.nagi.fun/zh_TW/guide/batch-delete)**: 批量清理對話記錄。
   - **[引用回覆](https://voyager.nagi.fun/zh_TW/guide/quote-reply)**: 選中對話文本即可一鍵引用回覆。
-  - **[標籤頁標題同步](https://voyager.nagi.fun/zh_TW/guide/tab-title)**: 自動將標籤頁標題設為對話標題。
   - **[防自動跳轉](https://voyager.nagi.fun/zh_TW/guide/prevent-auto-scroll)**: 攔截每次發送新問題後頁面強制滾動到最底部的內建行為，找回絲滑體驗。
   - **[輸入框摺疊](https://voyager.nagi.fun/zh_TW/guide/input-collapse)**: 輸入框自動收納，釋放閱讀空間。
   - **[預設模型](https://voyager.nagi.fun/zh_TW/guide/default-model)**: 為新對話設置預設選中的模型。

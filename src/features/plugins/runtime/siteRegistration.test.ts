@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
 import type { PluginManifest } from '../types';
-import { pluginToOriginPatternsForActiveUrl, pluginsToOriginPatterns } from './siteRegistration';
+import {
+  partitionPluginOriginPatterns,
+  pluginToOriginPatternsForActiveUrl,
+  pluginsToOriginPatterns,
+} from './siteRegistration';
 
 function mk(matches: string[]): PluginManifest {
   return {
@@ -43,6 +47,10 @@ describe('pluginsToOriginPatterns', () => {
 
 describe('pluginToOriginPatternsForActiveUrl', () => {
   const chatgptPlugin = mk(['https://chatgpt.com/*', 'https://chat.openai.com/*']);
+  const claudeArtifactPlugin = mk([
+    'https://claude.ai/*',
+    'https://*.frame.claudeusercontent.com/*',
+  ]);
 
   it('requests only the currently open ChatGPT origin', () => {
     expect(
@@ -57,5 +65,29 @@ describe('pluginToOriginPatternsForActiveUrl', () => {
     expect(
       pluginToOriginPatternsForActiveUrl(chatgptPlugin, 'https://gemini.google.com/app'),
     ).toEqual(['https://chat.openai.com/*', 'https://chatgpt.com/*']);
+  });
+
+  it('includes Claude artifact frames when enabling from the parent site', () => {
+    expect(
+      pluginToOriginPatternsForActiveUrl(
+        claudeArtifactPlugin,
+        'https://claude.ai/code/artifact/example',
+      ),
+    ).toEqual(['https://*.frame.claudeusercontent.com/*', 'https://claude.ai/*']);
+  });
+});
+
+describe('partitionPluginOriginPatterns', () => {
+  it('limits child-frame injection to explicit companion origins', () => {
+    expect(
+      partitionPluginOriginPatterns([
+        'https://claude.ai/*',
+        'https://*.frame.claudeusercontent.com/*',
+        'https://chatgpt.com/*',
+      ]),
+    ).toEqual({
+      topFrameOrigins: ['https://claude.ai/*', 'https://chatgpt.com/*'],
+      embeddedFrameOrigins: ['https://*.frame.claudeusercontent.com/*'],
+    });
   });
 });

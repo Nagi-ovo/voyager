@@ -28,6 +28,8 @@ import type {
 import { ExportDialog } from '../../../features/export/ui/ExportDialog';
 import { resolveExportErrorMessage } from '../../../features/export/ui/ExportErrorMessage';
 import { showExportToast } from '../../../features/export/ui/ExportToast';
+import { isServerTurnId } from '../fork/turnId';
+import { historyTimestampStore } from '../timestamp/historyTimestamps';
 import { assistantHasCanvasDoc, extractAllCanvasDocs, isAnyCanvasOpen } from './canvasDocExtractor';
 import { filterOutDeepResearchImmersiveNodes, resolveConversationRoot } from './conversationDom';
 import {
@@ -527,6 +529,7 @@ function collectChatPairs(): ChatTurn[] {
   const assistantOffsets = assistants.map((el) => (el as HTMLElement).offsetTop || 0);
 
   const starredSet = readStarredSet();
+  const nativeConversationId = extractConversationIdFromUrl();
   const pairs: ChatTurn[] = [];
   const offsetsAreZero =
     userOffsets.every((o) => o === 0) && assistantOffsets.every((o) => o === 0);
@@ -591,7 +594,13 @@ function collectChatPairs(): ChatTurn[] {
       }
     }
     const turnId = uniqueTurnIds[i];
-    const starred = !!turnId && starredSet.has(turnId);
+    const turnIdAliases =
+      turnId && nativeConversationId && isServerTurnId(turnId)
+        ? historyTimestampStore.getTurnIdAliases(nativeConversationId, turnId)
+        : turnId && isServerTurnId(turnId)
+          ? [turnId]
+          : [];
+    const starred = turnIdAliases.some((alias) => starredSet.has(alias));
     if (uText || aText) {
       // Prefer a richer assistant container for downstream rich extraction
       let finalAssistantEl: HTMLElement | undefined = undefined;

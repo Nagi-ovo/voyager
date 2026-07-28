@@ -64,6 +64,8 @@ export interface PromptItem {
   tags: string[];
   createdAt: number;
   updatedAt?: number;
+  /** Optional only for prompts created before names became required. */
+  name?: string;
 }
 
 /**

@@ -8,6 +8,8 @@ import { isSafari } from '@/core/utils/browser';
 import type { ChatTurn, ConversationMetadata } from '../types/export';
 import { DOMContentExtractor } from './DOMContentExtractor';
 import { buildKatexExportStyles } from './katexExportStyles';
+import { buildMermaidExportStyles } from './mermaidExportStyles';
+import { isolateMermaidSvgImages, rasterizeMermaidSvgImages } from './mermaidSvgImage';
 
 export interface PrintableDocumentContent {
   title: string;
@@ -76,8 +78,15 @@ export class PDFPrintService {
     // Ensure we don't leave a previous export container around (e.g. if a prior export failed)
     this.cleanup();
 
+    const safari = isSafari();
+
     // Create print container
     const container = this.createPrintContainer(turns, metadata, preferMetadataTitle);
+    if (safari) {
+      isolateMermaidSvgImages(container);
+    } else {
+      await rasterizeMermaidSvgImages(container);
+    }
     document.body.appendChild(container);
 
     // Remove existing print styles so we can re-inject with new font size
@@ -94,8 +103,6 @@ export class PDFPrintService {
     if (printDialogTitle) {
       document.title = printDialogTitle;
     }
-
-    const safari = isSafari();
 
     // Inline images as data URLs (best-effort) to avoid auth-bound links failing in print.
     // Safari is very strict about `window.print()` being called with a user gesture; awaiting here
@@ -196,7 +203,6 @@ export class PDFPrintService {
         ${this.renderFooter(metadata)}
       </div>
     `;
-
     return container;
   }
 
@@ -902,6 +908,15 @@ export class PDFPrintService {
         .gv-print-turn-text .gv-export-attachment-name {
           overflow-wrap: anywhere;
         }
+
+        ${buildMermaidExportStyles('.gv-print-turn-text', {
+          containerMargin: '1em auto',
+          avoidContainerBreak: true,
+          diagramSelector: '> img',
+          importantDisplay: true,
+          preservePrintBackground: true,
+          diagramMaxHeight: '160mm',
+        })}
 
         .gv-print-turn-assistant .gv-print-turn-text {
           border-left-color: #93c5fd;

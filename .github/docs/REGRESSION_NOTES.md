@@ -26,6 +26,33 @@ Regression test:
 Commit:
 ```
 
+## Mermaid must honor Gemini explicit light theme
+
+Symptom:
+
+With Gemini set to light while the browser reported a dark system preference,
+Mermaid diagrams rendered with the dark theme.
+
+Root cause:
+
+Mermaid treated generic `body`/`html` dark markers as equal to Gemini's
+higher-priority `.theme-host.light-theme`, so stale outer markers could
+override the active Gemini theme.
+
+Fix:
+
+Resolve `.theme-host` first, then generic page markers, and only then fall back
+to the browser preference.
+
+Regression test:
+
+`src/pages/content/mermaid/__tests__/mermaid.test.ts`
+(`resolveMermaidTheme`).
+
+Commit:
+
+`fix(mermaid): honor explicit Gemini light theme`
+
 ## Folder recovery must remove untracked sidebar clones
 
 Symptom:
@@ -373,6 +400,7 @@ rendering.
 
 Regression test:
 `src/features/export/services/__tests__/DOMContentExtractor.test.ts`
+`src/features/export/services/__tests__/PDFPrintService.test.ts`
 `src/features/export/services/__tests__/ImageRenderService.test.ts`
 `src/features/export/services/__tests__/PDFPrintService.test.ts`
 `bun run verify:katex-export`
@@ -663,6 +691,38 @@ image has full-size pixel dimensions, not merely that a PNG file exists.
 Commit:
 `d3f0e71a fix(safari): restore full-size watermark downloads`
 
+## Duplicate prompt names are a slash eligibility conflict, not invalid data
+
+Symptom:
+Import or cloud sync could silently drop an entire Prompt whose name matched an
+existing Prompt. Historical duplicate-name groups also produced ambiguous slash
+completion entries.
+
+Root cause:
+Name uniqueness was enforced while merging stored data. Conflict branches
+skipped new records or replaced a newer same-ID name, while slash completion
+accepted every non-empty name without grouping normalized equivalents.
+Two page-level Drive merge paths also kept parallel timestamp-merge
+implementations, so a newer legacy cloud record without `name` could erase the
+local name even after the shared merge helper was fixed.
+
+Fix:
+Always preserve imported and synced Prompt records. Detect duplicate groups
+with the shared trimmed, NFKC-normalized, case-insensitive key; exclude every
+member of a duplicate group from slash completion and show a non-blocking
+Prompt Manager badge until the names become unique. Route every Drive prompt
+merge through the shared helper, which carries forward a local name when the
+newer cloud record predates prompt names.
+
+Regression tests:
+`src/features/backup/services/__tests__/PromptImportExportService.test.ts`
+`src/utils/merge.test.ts`
+`src/pages/content/folder/__tests__/auditFixes.test.ts`
+`src/pages/content/folder/__tests__/aistudioAuditFixes.test.ts`
+`src/pages/content/prompt/__tests__/promptName.test.ts`
+`src/pages/content/prompt/__tests__/slashPrompt.test.ts`
+`src/pages/background/__tests__/runtimeMessageRouting.test.ts`
+
 ## Google Drive backup folders need a stable identity beyond their display name
 
 Symptom:
@@ -692,3 +752,69 @@ Regression tests:
 (`testDriveFolderIdentityMigratesOnlyAnUnambiguousLegacyName`). A live Drive
 check must also preserve the original folder ID, parent location, and JSON
 contents while changing only the legacy display name.
+
+## Mermaid exports must prefer the rendered diagram over hidden source
+
+Symptom:
+PDF and image exports showed Mermaid source code even when Voyager displayed a
+rendered diagram in the conversation.
+
+Root cause:
+The Mermaid wrapper contains both the hidden `code-block` and the rendered SVG.
+The DOM extractor's generic nested-code-block branch matched the wrapper first,
+emitted `<pre><code>`, and skipped the diagram. The same shortcut could match a
+parent `response-element` or list before traversal reached the wrapper.
+
+Fix:
+When a `.gv-mermaid-wrapper` contains a rendered diagram SVG, emit a clean
+`.gv-export-mermaid` clone for rich exports while preserving the original fenced
+source in text output. Recurse through Mermaid response wrappers and preserve
+list structure with indented fenced source. Fall back to the source block when
+no SVG is available. Before opening the regular PDF print dialog or rendering a
+whole-document PNG, rasterize only the Mermaid clone at 2x resolution: browser
+renderers can otherwise preserve the SVG shapes while dropping or clipping
+labels inside `foreignObject`. Keep the rest of the PDF as native text, and cap
+the diagram to one printable page with proportional scaling. If rasterization
+fails, replace the original SVG with a sanitized SVG data image directly; never
+leave the raw SVG in the print DOM.
+
+Regression test:
+`src/features/export/services/__tests__/DOMContentExtractor.test.ts`
+`src/features/export/services/__tests__/PDFPrintService.test.ts`
+`src/features/export/services/__tests__/ImageRenderService.test.ts`
+`src/features/export/services/__tests__/ImageExportService.test.ts`
+
+Commit:
+`fix(export): render Mermaid diagrams in exports`
+
+## Gemini turn identity must not come from the mounted DOM index
+
+Symptom:
+After reloading a long conversation, bookmarks (stars) in Timeline Navigation
+appeared on the wrong turns. Un-starring one of those wrong dots silently
+deleted the original bookmark record.
+
+Root cause:
+Voyager used the current user-turn DOM index (`u-<index>`) as content identity.
+Gemini virtualizes long conversations: after a reload the first mounted node
+can be turn 60, yet it receives `u-0`. Prompt text cannot repair this reliably
+because prompts can be duplicated, edited, truncated, or rendered differently.
+
+Fix:
+Use Gemini's response id (`rid`) as the canonical `s-<rid>` turn id. The
+`hNvQHb` response supplies the complete ordered turn list, including unmounted
+turns, so cache only that bounded id list per conversation and use it to map
+legacy `u-N` records. Never derive a legacy alias from the current DOM window
+and never guess by prompt text. If the complete map is unavailable, keep the
+legacy record untouched but do not display, migrate, or delete it. Timeline
+stars, hierarchy/collapse, timestamps, forks, highlights, and exports all use
+the same resolver.
+
+Regression test:
+`src/pages/content/timeline/__tests__/starredResolution.test.ts`
+`src/pages/content/timeline/__tests__/TimelineManagerStarredRelocation.test.ts`
+`src/pages/content/timeline/__tests__/TimelineManagerIdentityAliases.test.ts`
+`src/pages/content/timestamp/__tests__/historyTimestamps.test.ts`
+
+Commit:
+`fix(timeline): use stable Gemini turn identities`

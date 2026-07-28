@@ -171,6 +171,10 @@
     "message": "Импортировано {count} промптов",
     "description": "Import success"
   },
+  "promptNameConflictsDetected": {
+    "message": "Все промпты сохранены. У {count} совпадают имена, поэтому они недоступны через / до переименования",
+    "description": "Неблокирующее уведомление о сохранённых совпадающих именах при импорте или облачном слиянии"
+  },
   "pm_duplicate": {
     "message": "Дублировать промпт",
     "description": "Duplicate on add"
@@ -256,8 +260,20 @@
     "description": "View-mode toggle tooltip - switch from compact rows to comfortable cards with markdown preview"
   },
   "pm_name_placeholder": {
-    "message": "Название (необязательно)",
-    "description": "Placeholder for the optional prompt name/label input used as the compact-mode headline"
+    "message": "Название",
+    "description": "Placeholder for the required prompt name input"
+  },
+  "pm_name_required": {
+    "message": "Название промпта обязательно",
+    "description": "Validation shown when saving a prompt without a name"
+  },
+  "pm_name_duplicate": {
+    "message": "Промпт с таким названием уже существует",
+    "description": "Validation shown when saving a prompt with an existing name"
+  },
+  "pm_name_conflict_badge": {
+    "message": "Имя дублируется — переименуйте для /",
+    "description": "Метка промптов, исключённых из дополнения через / из-за совпадающего имени"
   },
   "pm_prompt_manager": {
     "message": "Менеджер промптов",
@@ -958,6 +974,14 @@
   "hidePromptManagerHint": {
     "message": "Скрыть плавающую кнопку Менеджера промптов на странице",
     "description": "Hint for hiding prompt manager feature"
+  },
+  "slashPromptEnabled": {
+    "message": "Включить быструю вставку промптов через /",
+    "description": "Enable slash prompt quick insertion toggle"
+  },
+  "slashPromptEnabledHint": {
+    "message": "Введите / в поле Gemini, чтобы быстро вставить сохранённый промпт.",
+    "description": "Hint for slash prompt quick insertion"
   },
   "promptInsertOnClick": {
     "message": "Вставлять промпт по клику",
@@ -2288,6 +2312,10 @@
     "message": "Доступ к сайту отклонён — плагин не может работать без него.",
     "description": "Shown when the user denies the site permission for a plugin"
   },
+  "pluginGrantRequiredAccess": {
+    "message": "Предоставить необходимый доступ к сайту",
+    "description": "Button that repairs missing optional site access for an enabled plugin"
+  },
   "pluginUnsupportedPlatform": {
     "message": "Не поддерживается в этом браузере — невозможно предоставить доступ к сайту, нужный плагину.",
     "description": "Shown when a plugin can't be enabled because the browser can't grant the site access it needs (e.g. Safari)"
@@ -2347,6 +2375,18 @@
   "timelineCoachmarkToggle": {
     "message": "Использовать компактную шкалу",
     "description": "Inline toggle label in the compact-timeline coachmark"
+  },
+  "slashPromptCoachmarkTitle": {
+    "message": "Новое: вставка промптов через /",
+    "description": "Coachmark title introducing slash prompt insertion"
+  },
+  "slashPromptCoachmarkBody": {
+    "message": "Введите / в поле Gemini, чтобы быстро вставить сохранённый промпт.",
+    "description": "Coachmark body text introducing slash prompt insertion"
+  },
+  "slashPromptCoachmarkToggle": {
+    "message": "Включить вставку промптов через /",
+    "description": "Inline toggle label in the slash-prompt coachmark"
   },
   "coachmarkDismiss": {
     "message": "Готово",

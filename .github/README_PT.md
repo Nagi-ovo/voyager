@@ -14,10 +14,10 @@
     <img src="https://img.shields.io/badge/Brave-✓-FB542B?style=flat-square&logo=brave&logoColor=white" alt="Brave">
   </p>
   <p>
-    <img src="../badges/github-stars.svg" alt="GitHub stars">
-    <img src="../badges/github-forks.svg" alt="GitHub forks">
-    <img src="../badges/github-release.svg" alt="Latest version">
-    <img src="../badges/github-downloads.svg" alt="GitHub downloads">
+    <img src="../docs/public/badges/github-stars.svg" alt="GitHub stars">
+    <img src="../docs/public/badges/github-forks.svg" alt="GitHub forks">
+    <img src="../docs/public/badges/github-release.svg" alt="Latest version">
+    <img src="../docs/public/badges/github-downloads.svg" alt="GitHub downloads">
     <img src="https://img.shields.io/chrome-web-store/users/iifacdnjakkhjjiengaffnegbndgingi?style=flat-square&logo=google-chrome" alt="Chrome Web Store users">
     <img src="https://img.shields.io/chrome-web-store/rating/iifacdnjakkhjjiengaffnegbndgingi?style=flat-square&logo=google-chrome" alt="Chrome Web Store rating">
     <img src="https://img.shields.io/badge/edge%20users-50k%2B-0078D7?style=flat-square&logo=microsoftedge&logoColor=white" alt="Edge Add-ons users">
@@ -109,7 +109,6 @@ Para um guia completo, visite a nossa [Documentação](https://voyager.nagi.fun/
 - **🛠️ Ferramentas de Produtividade**:
   - **[Exclusão em Lote](https://voyager.nagi.fun/pt/guide/batch-delete)**: Limpe o seu histórico em massa.
   - **[Resposta com Citação](https://voyager.nagi.fun/pt/guide/quote-reply)**: Responda com contexto selecionando o texto.
-  - **[Sincronização do Título da Aba](https://voyager.nagi.fun/pt/guide/tab-title)**: Sincroniza automaticamente o título da aba do navegador.
   - **[Prevenir rolamento automático](https://voyager.nagi.fun/pt/guide/prevent-auto-scroll)**: Intercepta o comportamento de salto indesejado ao enviar uma mensagem.
   - **[Colapso de Entrada](https://voyager.nagi.fun/pt/guide/input-collapse)**: Área de entrada auto-colapsável para mais espaço de leitura.
   - **[Modelo Padrão](https://voyager.nagi.fun/pt/guide/default-model)**: Defina o seu modelo favorito como padrão.

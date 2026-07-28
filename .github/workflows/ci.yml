@@ -15,6 +15,57 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # ── Change detection ──────────────────────────────────────────────────
+  # Routes jobs by changed paths so docs-only changes skip extension and
+  # native builds. `core` is a catch-all: any file NOT classified as docs,
+  # app, native, or repo prose (markdown/meta) triggers the full CI.
+  changes:
+    name: Changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      docs: ${{ steps.filter.outputs.docs }}
+      app: ${{ steps.filter.outputs.app }}
+      native: ${{ steps.filter.outputs.native }}
+      core: ${{ steps.catchall.outputs.core }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - id: filter
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
+        with:
+          filters: |
+            docs:
+              - 'docs/**'
+              - 'CNAME'
+            app:
+              - 'src/**'
+              - 'public/**'
+              # Read by src/pages/popup/__tests__/releaseArtifacts.test.ts
+              - '.github/RELEASE_TEMPLATE.md'
+            native:
+              - 'Voyager/**'
+      # Everything not matched below forces the full CI (build configs,
+      # workflows, scripts, dependencies, and any unclassified new file).
+      - id: catchall
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
+        with:
+          predicate-quantifier: 'every'
+          filters: |
+            core:
+              - '!docs/**'
+              - '!CNAME'
+              - '!src/**'
+              - '!public/**'
+              - '!Voyager/**'
+              - '!**/*.md'
+              - '!LICENSE'
+              - '!.gitignore'
+              - '!.gitattributes'
+
   # ── Prettier ───────────────────────────────────────────────────────────
   format:
     name: Format
@@ -32,6 +83,8 @@ jobs:
   # ── ESLint ─────────────────────────────────────────────────────────────
   lint:
     name: Lint
+    needs: changes
+    if: needs.changes.outputs.app == 'true' || needs.changes.outputs.core == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -46,6 +99,8 @@ jobs:
   # ── TypeScript ─────────────────────────────────────────────────────────
   typecheck:
     name: Typecheck
+    needs: changes
+    if: needs.changes.outputs.app == 'true' || needs.changes.outputs.core == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -60,6 +115,8 @@ jobs:
   # ── Tests ──────────────────────────────────────────────────────────────
   test:
     name: Test
+    needs: changes
+    if: needs.changes.outputs.app == 'true' || needs.changes.outputs.core == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -88,6 +145,11 @@ jobs:
   # ── Native Swift Tests + Xcode Build ─────────────────────────────────
   native-test:
     name: Native Swift Test & Xcode Build
+    needs: changes
+    if: >-
+      needs.changes.outputs.app == 'true' ||
+      needs.changes.outputs.native == 'true' ||
+      needs.changes.outputs.core == 'true'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -112,6 +174,8 @@ jobs:
   # ── Build (all browsers) ──────────────────────────────────────────────
   build:
     name: Build
+    needs: changes
+    if: needs.changes.outputs.app == 'true' || needs.changes.outputs.core == 'true'
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -126,9 +190,27 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run build:${{ matrix.browser }}
 
+  # ── Docs build ────────────────────────────────────────────────────────
+  docs-build:
+    name: Docs Build
+    needs: changes
+    if: needs.changes.outputs.docs == 'true' || needs.changes.outputs.core == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: '1.3.12'
+      - run: bun install --frozen-lockfile
+      - run: bun run docs:build
+
   # ── i18n consistency ──────────────────────────────────────────────────
   i18n:
     name: i18n
+    needs: changes
+    if: needs.changes.outputs.app == 'true' || needs.changes.outputs.core == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -171,3 +253,24 @@ jobs:
             }
             await github.rest.issues.addLabels({ owner, repo, issue_number: pr, labels: [label] });
             core.info(`PR #${pr}: ${changes} changed lines → ${label}`);
+
+  # ── Summary (required-check anchor) ───────────────────────────────────
+  # Always runs, so branch protection can require this single check even
+  # when path filtering skips individual jobs. Skipped jobs pass; any
+  # failed or cancelled job fails the summary.
+  ci-summary:
+    name: CI Summary
+    if: always()
+    needs: [changes, format, lint, typecheck, test, native-test, build, docs-build, i18n]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify job results
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: |
+          echo "$NEEDS_JSON"
+          if echo "$NEEDS_JSON" | grep -Eq '"result": "(failure|cancelled)"'; then
+            echo "One or more CI jobs failed or were cancelled."
+            exit 1
+          fi
+          echo "All CI jobs succeeded or were skipped by path filtering."

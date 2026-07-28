@@ -11,6 +11,9 @@ describe('SiteRegistry.resolveByUrl', () => {
     expect(registry.resolveByUrl('https://chatgpt.com/c/abc')?.id).toBe('chatgpt');
     expect(registry.resolveByUrl('https://chat.openai.com/c/abc')?.id).toBe('chatgpt');
     expect(registry.resolveByUrl('https://claude.ai/chat/abc')?.id).toBe('claude');
+    expect(
+      registry.resolveByUrl('https://artifact-id.frame.claudeusercontent.com/_f/version/')?.id,
+    ).toBe('claude');
   });
 
   it('returns null for sites with no adapter', () => {
@@ -23,6 +26,9 @@ describe('resolvePluginPlatformId', () => {
     expect(resolvePluginPlatformId('https://chatgpt.com/c/abc')).toBe('chatgpt');
     expect(resolvePluginPlatformId('https://chat.openai.com/')).toBe('chatgpt');
     expect(resolvePluginPlatformId('https://claude.ai/chat/abc')).toBe('claude');
+    expect(
+      resolvePluginPlatformId('https://artifact-id.frame.claudeusercontent.com/_f/version/'),
+    ).toBe('claude');
     expect(resolvePluginPlatformId('https://grok.com/')).toBe('grok');
   });
 

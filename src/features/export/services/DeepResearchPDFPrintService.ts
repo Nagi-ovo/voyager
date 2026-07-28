@@ -2,6 +2,8 @@ import { isSafari } from '@/core/utils/browser';
 
 import type { PrintableDocumentContent } from './PDFPrintService';
 import { buildKatexExportStyles } from './katexExportStyles';
+import { buildMermaidExportStyles } from './mermaidExportStyles';
+import { isolateMermaidSvgImages } from './mermaidSvgImage';
 
 /**
  * Dedicated PDF print path for Deep Research reports.
@@ -190,6 +192,7 @@ export class DeepResearchPDFPrintService {
 
     const container = document.createElement('div');
     container.innerHTML = trimmed;
+    isolateMermaidSvgImages(container);
     container.querySelectorAll('script, style, template').forEach((element) => element.remove());
 
     const elements = Array.from(container.querySelectorAll<HTMLElement>('*'));
@@ -443,6 +446,16 @@ export class DeepResearchPDFPrintService {
           margin: 0.75em 0;
           page-break-inside: avoid;
         }
+
+        ${buildMermaidExportStyles(`body.${this.PRINT_BODY_CLASS} .gv-dr-print-report`, {
+          containerMaxWidth: true,
+          avoidContainerBreak: true,
+          diagramSelector: '> img',
+          diagramMargin: '0.75em auto',
+          avoidDiagramBreak: true,
+          preservePrintBackground: true,
+          diagramMaxHeight: '160mm',
+        })}
 
         body.${this.PRINT_BODY_CLASS} .gv-dr-print-report pre,
         body.${this.PRINT_BODY_CLASS} .gv-dr-print-report code {

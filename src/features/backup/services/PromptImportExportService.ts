@@ -5,6 +5,7 @@
  */
 import { AppError, ErrorCode } from '@/core/errors/AppError';
 import { type Result, StorageKeys } from '@/core/types/common';
+import { getPromptNameConflictIds } from '@/core/utils/promptName';
 import { EXTENSION_VERSION } from '@/core/utils/version';
 
 import type { PromptExportPayload, PromptItem } from '../types/backup';
@@ -267,6 +268,7 @@ export class PromptImportExportService {
     Result<{
       imported: number;
       duplicates: number;
+      nameConflicts: number;
       total: number;
     }>
   > {
@@ -277,13 +279,18 @@ export class PromptImportExportService {
         return loadResult;
       }
 
-      const existingItems = loadResult.data;
+      const mergedItems = [...loadResult.data];
       const importItems = payload.items;
 
-      // Deduplicate and merge
-      const existingMap = new Map<string, PromptItem>();
-      for (const item of existingItems) {
-        existingMap.set(item.text.toLowerCase(), item);
+      // Index one merge target per body without using the map as the final
+      // collection. Historical stores may themselves contain duplicates and
+      // must never be collapsed by a later import.
+      const existingByText = new Map<string, PromptItem>();
+      const existingById = new Map<string, PromptItem>();
+      for (const item of mergedItems) {
+        const key = item.text.toLowerCase();
+        if (!existingByText.has(key)) existingByText.set(key, item);
+        if (!existingById.has(item.id)) existingById.set(item.id, item);
       }
 
       let imported = 0;
@@ -291,29 +298,48 @@ export class PromptImportExportService {
 
       for (const item of importItems) {
         const key = item.text.toLowerCase();
-        if (existingMap.has(key)) {
+        const existingWithId = existingById.get(item.id);
+        const existing = existingWithId ?? existingByText.get(key);
+        if (existing) {
           // Merge tags if duplicate
-          const existing = existingMap.get(key)!;
           const mergedTags = Array.from(new Set([...(existing.tags || []), ...(item.tags || [])]));
           existing.tags = mergedTags;
-          if (!existing.name && item.name) {
+          const incomingTime = item.updatedAt || item.createdAt || 0;
+          const existingTime = existing.updatedAt || existing.createdAt || 0;
+          const shouldApplySameIdUpdate =
+            existingWithId === existing && incomingTime > existingTime;
+
+          if (item.name && (shouldApplySameIdUpdate || !existing.name)) {
             existing.name = item.name;
+          }
+
+          if (shouldApplySameIdUpdate) {
+            existing.text = item.text;
+            existingByText.clear();
+            for (const mergedItem of mergedItems) {
+              const mergedKey = mergedItem.text.toLowerCase();
+              if (!existingByText.has(mergedKey)) {
+                existingByText.set(mergedKey, mergedItem);
+              }
+            }
           }
           existing.updatedAt = Date.now();
           duplicates++;
         } else {
-          existingMap.set(key, {
+          const importedItem = {
             ...item,
             createdAt: Date.now(),
-          });
+          };
+          existingByText.set(key, importedItem);
+          existingById.set(importedItem.id, importedItem);
+          mergedItems.push(importedItem);
           imported++;
         }
       }
 
       // Save merged results
-      const mergedItems = Array.from(existingMap.values()).sort(
-        (a, b) => (b.createdAt || 0) - (a.createdAt || 0),
-      );
+      mergedItems.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+      const nameConflicts = getPromptNameConflictIds(mergedItems).size;
 
       const saveResult = await this.savePrompts(mergedItems);
       if (!saveResult.success) {
@@ -325,6 +351,7 @@ export class PromptImportExportService {
         data: {
           imported,
           duplicates,
+          nameConflicts,
           total: mergedItems.length,
         },
       };

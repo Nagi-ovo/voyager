@@ -16,13 +16,9 @@ import { hashString } from '@/core/utils/hash';
 import { GV_RTL_CLASS, applyRTLClass } from '@/core/utils/rtl';
 
 import { getTranslationSync, initI18n } from '../../../utils/i18n';
-import { makeStableTurnId } from '../fork/turnId';
+import { getLegacyTurnIndex, makeStableTurnId, readServerTurnId } from '../fork/turnId';
 import { TimestampService } from '../timestamp/TimestampService';
-import {
-  type HistoryTimestampStore,
-  historyTimestampStore,
-  matchTimestampsToMarkers,
-} from '../timestamp/historyTimestamps';
+import { type HistoryTimestampStore, historyTimestampStore } from '../timestamp/historyTimestamps';
 import { eventBus } from './EventBus';
 import { StarredMessagesService } from './StarredMessagesService';
 import { TimelinePreviewPanel } from './TimelinePreviewPanel';
@@ -37,6 +33,7 @@ import {
   getLegacyTimelineLevelsStorageKey,
 } from './hierarchyTypes';
 import { findMatchingStarredMessages } from './starredLookup';
+import { resolveStarredDisplay } from './starredResolution';
 import type { StarredMessage, StarredMessagesData } from './starredTypes';
 import type { DotElement, MarkerLevel } from './types';
 
@@ -212,8 +209,10 @@ export class TimelineManager {
   private onSyncSettingsChanged: SyncSettingsListener | null = null;
   private savedTimelinePosition: TimelinePositionData | null = null;
   private starred: Set<string> = new Set();
-  /** Map of turnId → starredAt timestamp (ms). Populated from service/storage; used for preview labels. */
-  private starredAtMap: Map<string, number> = new Map();
+  /** Marker id → forced star display state, derived from the identity map. */
+  private starDisplayOverride: Map<string, boolean> = new Map();
+  /** Marker id → every stored turnId record represented by its painted star. */
+  private starStorageIdsByMarkerId: Map<string, string[]> = new Map();
   private markerMap: Map<
     string,
     {
@@ -316,11 +315,18 @@ export class TimelineManager {
     // Real server-side message times captured from Gemini's conversation-load
     // RPC override first-seen recording whenever available.
     this.historyTimestampStore = historyTimestampStore;
-    this.historyTimestampStore.start(this.showMessageTimestampsEnabled);
+    await this.historyTimestampStore.start();
+    if (this.destroyed) return;
     this.historyTimestampUnsubscribe = this.historyTimestampStore.subscribe((updatedCids) => {
       if (this.destroyed) return;
       const nativeConversationId = extractConversationIdFromUrl(window.location.href);
       if (!nativeConversationId || !updatedCids.includes(`c_${nativeConversationId}`)) return;
+      // The response-id ordering can arrive after the first DOM render on SPA
+      // navigation. Re-evaluate every identity-backed Timeline view now rather
+      // than waiting for an unrelated later mutation.
+      this.syncMarkerStarredState();
+      this.updateTimelineGeometry();
+      this.updateVirtualRangeAndRender();
       if (this.applyHistoryTimestamps()) {
         this.injectMessageTimestamps().catch(() => {});
       }
@@ -732,14 +738,12 @@ export class TimelineManager {
     summary: string;
     index: number;
     starred: boolean;
-    starredAt?: number;
   }> {
     return this.markers.map((m, i) => ({
       id: m.id,
       summary: m.summary,
       index: i,
       starred: m.starred,
-      starredAt: m.starred ? this.starredAtMap.get(m.id) : undefined,
     }));
   }
 
@@ -747,23 +751,46 @@ export class TimelineManager {
     this.previewPanel?.updateMarkers(this.buildPreviewMarkers());
   }
 
-  private applyStarredIdSet(nextSet: Set<string>, persistLocal = true): void {
-    if (this.areStarredSetsEqual(this.starred, nextSet)) {
-      this.updatePreviewMarkers();
-      return;
+  /**
+   * Recompute which mounted turn each stored star belongs to. Cheap enough to
+   * run on every star/marker change; never touches storage.
+   */
+  private recomputeStarredDisplay(): void {
+    const { displayByMarkerId, storageIdsByMarkerId } = resolveStarredDisplay({
+      markers: this.markers,
+      starredIds: this.starred,
+      resolveCanonicalId: (storedId) => this.resolveCanonicalTurnId(storedId),
+    });
+    this.starDisplayOverride = displayByMarkerId;
+    this.starStorageIdsByMarkerId = storageIdsByMarkerId;
+  }
+
+  private isMarkerStarred(markerId: string): boolean {
+    const override = this.starDisplayOverride.get(markerId);
+    if (override !== undefined) return override;
+    return this.starred.has(markerId);
+  }
+
+  private getStarStorageIds(markerId: string): string[] {
+    return this.starStorageIdsByMarkerId.get(markerId) ?? [markerId];
+  }
+
+  private resolveCanonicalTurnId(turnId: string): string | null {
+    const nativeConversationId = extractConversationIdFromUrl(window.location.href);
+    if (nativeConversationId) {
+      return (this.historyTimestampStore ?? historyTimestampStore).resolveCanonicalTurnId(
+        nativeConversationId,
+        turnId,
+      );
     }
+    return getLegacyTurnIndex(turnId) === null ? turnId : null;
+  }
 
-    // Clean up starredAtMap for removed entries
-    for (const id of this.starred) {
-      if (!nextSet.has(id)) this.starredAtMap.delete(id);
-    }
-
-    this.starred = new Set(nextSet);
-
-    if (persistLocal) this.saveStars();
-
+  /** Recompute star ownership and repaint every marker to match. */
+  private syncMarkerStarredState(): void {
+    this.recomputeStarredDisplay();
     for (const marker of this.markers) {
-      const want = this.starred.has(marker.id);
+      const want = this.isMarkerStarred(marker.id);
       if (marker.starred !== want) {
         marker.starred = want;
         if (marker.dotElement) {
@@ -773,6 +800,19 @@ export class TimelineManager {
       }
     }
     this.updatePreviewMarkers();
+  }
+
+  private applyStarredIdSet(nextSet: Set<string>, persistLocal = true): void {
+    if (this.areStarredSetsEqual(this.starred, nextSet)) {
+      this.syncMarkerStarredState();
+      return;
+    }
+
+    this.starred = new Set(nextSet);
+
+    if (persistLocal) this.saveStars();
+
+    this.syncMarkerStarredState();
 
     if (this.ui.tooltip?.classList.contains('visible')) {
       const currentDot = this.ui.timelineBar?.querySelector(
@@ -796,11 +836,6 @@ export class TimelineManager {
       window.location.href,
     );
     const nextSet = new Set(matched.messages.map((message) => String(message.turnId)));
-
-    // Update starredAt map from shared data
-    for (const msg of matched.messages) {
-      if (msg.starredAt) this.starredAtMap.set(String(msg.turnId), msg.starredAt);
-    }
 
     this.applyStarredIdSet(nextSet);
   }
@@ -828,11 +863,6 @@ export class TimelineManager {
       }
 
       const nextSet = new Set(messages.map((message) => String(message.turnId)));
-
-      // Update starredAt map from service data
-      for (const msg of messages) {
-        if (msg.starredAt) this.starredAtMap.set(String(msg.turnId), msg.starredAt);
-      }
 
       this.applyStarredIdSet(nextSet);
     } catch (error) {
@@ -1393,6 +1423,19 @@ export class TimelineManager {
     previousMarkerElementsById: Map<string, Set<HTMLElement>>,
   ): string {
     const asEl = el as HTMLElement & { dataset?: DOMStringMap & { turnId?: string } };
+
+    // Gemini's response id is the canonical identity. It survives full reloads
+    // and partial DOM windows, unlike every positional fallback.
+    const serverId = readServerTurnId(asEl);
+    if (serverId && !usedIds.has(serverId)) {
+      try {
+        if (asEl.dataset) asEl.dataset.turnId = serverId;
+      } catch {}
+      usedIds.add(serverId);
+      this.turnIdByIndex.set(index, serverId);
+      return serverId;
+    }
+
     const existingId = asEl.dataset?.turnId?.trim() || '';
     if (
       existingId &&
@@ -1418,25 +1461,26 @@ export class TimelineManager {
     return id;
   }
 
-  private getLegacyContentTurnId(el: HTMLElement, index: number): string {
-    const basis = this.getTurnTextCached(el) || `user-${index}`;
-    return `u-${hashString(basis + '|' + index)}`;
-  }
-
   private getTimestampForMarker(
     conversationId: string,
     marker: TimelineMarker,
-    index: number,
+    _index: number,
   ): number | null {
     if (!this.timestampService) return null;
 
-    const timestamp = this.timestampService.getTimestamp(conversationId, marker.id as TurnId);
-    if (timestamp != null) return timestamp;
+    const aliases = this.getStoredTurnIdAliases(marker.id);
+    for (const alias of aliases) {
+      const timestamp = this.timestampService.getTimestamp(conversationId, alias as TurnId);
+      if (timestamp != null) return timestamp;
+    }
 
-    const legacyTurnId = this.getLegacyContentTurnId(marker.element, index);
-    if (legacyTurnId === marker.id) return null;
-
-    return this.timestampService.getTimestamp(conversationId, legacyTurnId as TurnId);
+    // Versions before positional ids used a content+full-index hash. Rebuild it
+    // only when hNvQHb proves the full index; never use the mounted-window index.
+    const legacyIndex = aliases.map(getLegacyTurnIndex).find((value) => value !== null);
+    if (legacyIndex === undefined) return null;
+    const basis = this.getTurnTextCached(marker.element) || `user-${legacyIndex}`;
+    const legacyContentId = `u-${hashString(basis + '|' + legacyIndex)}`;
+    return this.timestampService.getTimestamp(conversationId, legacyContentId as TurnId);
   }
 
   private detectCssVarTopSupport(pad: number, usableC: number): boolean {
@@ -1693,6 +1737,10 @@ export class TimelineManager {
       return m;
     });
     this.markers = nextMarkers;
+    // Legacy stored ids may need the complete server ordering before they can
+    // safely resolve to these mounted server-id markers (#871).
+    this.recomputeStarredDisplay();
+    for (const marker of this.markers) marker.starred = this.isMarkerStarred(marker.id);
     if (this.didHistoryTimestampMarkerInputsChange(previousMarkers, nextMarkers)) {
       this.historyTimestampMarkerRevision++;
     }
@@ -2135,9 +2183,8 @@ export class TimelineManager {
           if (tsEnabledChange) {
             this.showMessageTimestampsEnabled = tsEnabledChange.newValue === true;
             this.lastHistoryTimestampMatch = null;
-            this.historyTimestampStore?.setEnabled(this.showMessageTimestampsEnabled);
-            // Recording is gated on the toggle, so captures that arrived while
-            // it was off have not been applied yet — apply before rendering.
+            // Identity capture is always active; the toggle only controls
+            // timestamp persistence and rendering.
             if (this.showMessageTimestampsEnabled) this.applyHistoryTimestamps();
             this.injectMessageTimestamps().catch(() => {});
           }
@@ -2155,18 +2202,8 @@ export class TimelineManager {
         // Update local starred set
         if (this.starred.has(turnId)) {
           this.starred.delete(turnId);
-          this.starredAtMap.delete(turnId);
           this.saveStars();
-
-          // Update marker UI
-          const marker = this.markerMap.get(turnId);
-          if (marker && marker.dotElement) {
-            marker.starred = false;
-            marker.dotElement.classList.remove('starred');
-            marker.dotElement.setAttribute('aria-pressed', 'false');
-          }
-
-          this.updatePreviewMarkers();
+          this.syncMarkerStarredState();
           console.log('[Timeline] Starred removed via EventBus:', turnId);
         }
       }),
@@ -2180,18 +2217,8 @@ export class TimelineManager {
         // Update local starred set
         if (!this.starred.has(turnId)) {
           this.starred.add(turnId);
-          this.starredAtMap.set(turnId, Date.now());
           this.saveStars();
-
-          // Update marker UI
-          const marker = this.markerMap.get(turnId);
-          if (marker && marker.dotElement) {
-            marker.starred = true;
-            marker.dotElement.classList.add('starred');
-            marker.dotElement.setAttribute('aria-pressed', 'true');
-          }
-
-          this.updatePreviewMarkers();
+          this.syncMarkerStarredState();
           console.log('[Timeline] Starred added via EventBus:', turnId);
         }
       }),
@@ -2688,7 +2715,7 @@ export class TimelineManager {
   private buildTooltipText(dot: DotElement): string {
     let fullText = (dot.getAttribute('aria-label') || '').trim();
     const id = dot.dataset.targetTurnId || '';
-    if (id && this.starred.has(id)) fullText = `★ ${fullText}`;
+    if (id && this.isMarkerStarred(id)) fullText = `★ ${fullText}`;
 
     const timestampConversationId = this.getTimestampConversationId();
     if (
@@ -3204,12 +3231,20 @@ export class TimelineManager {
   private async toggleStar(turnId: string): Promise<void> {
     const id = String(turnId || '');
     if (!id) return;
+    // A mounted `u-N` is only the current DOM-window index. Even when a cache
+    // exists, it is not evidence that this node is full-conversation turn N.
+    if (getLegacyTurnIndex(id) !== null) return;
 
-    const wasStarred = this.starred.has(id);
+    const wasStarred = this.isMarkerStarred(id);
+    const marker = this.markerMap.get(id);
+    // A stable marker may represent both its current server-id record and an
+    // older verified positional alias. Removing the star clears both records.
+    const storageIds = wasStarred ? this.getStarStorageIds(id) : [id];
 
     if (wasStarred) {
-      this.starred.delete(id);
-      this.starredAtMap.delete(id);
+      storageIds.forEach((storageId) => {
+        this.starred.delete(storageId);
+      });
     } else {
       this.starred.add(id);
     }
@@ -3218,42 +3253,46 @@ export class TimelineManager {
 
     // Update global starred messages service
     if (wasStarred) {
-      // Remove from global storage
-      await StarredMessagesService.removeStarredMessage(this.conversationId!, id);
+      await Promise.all(
+        storageIds.map((storageId) =>
+          StarredMessagesService.removeStarredMessage(this.conversationId!, storageId),
+        ),
+      );
     } else {
       // Add to global storage with full message info
-      const m = this.markerMap.get(id);
-      if (m) {
+      if (marker) {
         const conversationTitle = this.getConversationTitle();
         const now = Date.now();
         const message: StarredMessage = {
           turnId: id,
-          content: m.summary,
+          content: marker.summary,
           conversationId: this.conversationId!,
           conversationUrl: window.location.href,
           conversationTitle,
           starredAt: now,
         };
-        this.starredAtMap.set(id, now);
         await StarredMessagesService.addStarredMessage(message);
       }
     }
 
-    // Update UI for ALL markers with this ID (handle duplicates)
-    const isStarredNow = this.starred.has(id);
+    this.syncMarkerStarredState();
+
+    // Only refresh tooltips actually on screen (checked inside the helper).
     this.markers.forEach((m) => {
-      if (m.id === id) {
-        m.starred = isStarredNow;
-        if (m.dotElement) {
-          m.dotElement.classList.toggle('starred', isStarredNow);
-          m.dotElement.setAttribute('aria-pressed', isStarredNow ? 'true' : 'false');
-          // Only refresh tooltip if this specific dot is actively hovered/focused
-          // (checked internally by refreshTooltipForDot)
-          this.refreshTooltipForDot(m.dotElement);
-        }
-      }
+      if (m.id === id && m.dotElement) this.refreshTooltipForDot(m.dotElement);
     });
-    this.updatePreviewMarkers();
+  }
+
+  /**
+   * Resolve which mounted marker currently carries a stored star. Used by
+   * `#gv-turn-<id>` deep links, whose ids come from storage and may have been
+   * relocated onto a different index.
+   */
+  private resolveMarkerIdForStorageId(storageId: string): string {
+    for (const [markerId, ids] of this.starStorageIdsByMarkerId) {
+      if (ids.includes(storageId)) return markerId;
+    }
+    return storageId;
   }
 
   /**
@@ -3567,12 +3606,29 @@ export class TimelineManager {
   }
 
   private isMarkerCollapsed(turnId: string): boolean {
-    return this.collapsedMarkers.has(turnId);
+    return this.getStoredTurnIdAliases(turnId).some((alias) => this.collapsedMarkers.has(alias));
+  }
+
+  /** Current id plus a legacy alias proved by the complete hNvQHb list. */
+  private getStoredTurnIdAliases(turnId: string): string[] {
+    // This method receives a mounted marker id. Never reinterpret its fallback
+    // DOM-window position as a stored full-conversation position.
+    if (getLegacyTurnIndex(turnId) !== null) return [];
+    const nativeConversationId = extractConversationIdFromUrl(window.location.href);
+    if (!nativeConversationId) return [turnId];
+    const aliases = (this.historyTimestampStore ?? historyTimestampStore).getTurnIdAliases(
+      nativeConversationId,
+      turnId,
+    );
+    if (aliases.length > 0) return aliases;
+    return getLegacyTurnIndex(turnId) === null ? [turnId] : [];
   }
 
   private toggleCollapse(turnId: string): void {
-    if (this.collapsedMarkers.has(turnId)) {
-      this.collapsedMarkers.delete(turnId);
+    const aliases = this.getStoredTurnIdAliases(turnId);
+    if (aliases.length === 0) return;
+    if (aliases.some((alias) => this.collapsedMarkers.has(alias))) {
+      aliases.forEach((alias) => this.collapsedMarkers.delete(alias));
     } else {
       this.collapsedMarkers.add(turnId);
     }
@@ -3598,7 +3654,7 @@ export class TimelineManager {
       const level = this.getMarkerLevel(marker.id);
 
       // If this marker is collapsed, hide all subsequent lower-level markers
-      if (this.collapsedMarkers.has(marker.id)) {
+      if (this.isMarkerCollapsed(marker.id)) {
         for (let j = i + 1; j < this.markers.length; j++) {
           const nextMarker = this.markers[j];
           const nextLevel = this.getMarkerLevel(nextMarker.id);
@@ -3624,7 +3680,7 @@ export class TimelineManager {
     const baseN = marker.baseN ?? marker.n ?? 0;
 
     // If this marker is not collapsed, just return its baseN
-    if (!this.collapsedMarkers.has(marker.id)) {
+    if (!this.isMarkerCollapsed(marker.id)) {
       return baseN;
     }
 
@@ -3716,13 +3772,22 @@ export class TimelineManager {
   }
 
   private getMarkerLevel(turnId: string): MarkerLevel {
-    return this.markerLevels.get(turnId) || 1;
+    for (const alias of this.getStoredTurnIdAliases(turnId)) {
+      const level = this.markerLevels.get(alias);
+      if (level) return level;
+    }
+    return 1;
   }
 
   private setMarkerLevel(turnId: string, level: MarkerLevel): void {
+    // A user edit is a safe point to converge a verified legacy alias onto the
+    // canonical server id. Delete every known representation first so reset to
+    // level 1 cannot be shadowed by an old u-N entry.
+    const aliases = this.getStoredTurnIdAliases(turnId);
+    if (aliases.length === 0) return;
+    aliases.forEach((alias) => this.markerLevels.delete(alias));
     if (level === 1) {
-      // Level 1 is default, remove from storage to save space
-      this.markerLevels.delete(turnId);
+      // Level 1 is default, keep storage empty.
     } else {
       this.markerLevels.set(turnId, level);
     }
@@ -4203,7 +4268,7 @@ export class TimelineManager {
       const checkAndScroll = (): boolean => {
         if (this.markers.length === 0) return false;
 
-        const marker = this.markerMap.get(turnId);
+        const marker = this.markerMap.get(this.resolveMarkerIdForStorageId(turnId));
         if (marker && marker.element) {
           console.log('[Timeline] Found target marker, scrolling');
 
@@ -4523,6 +4588,7 @@ export class TimelineManager {
     // Only record while the message-timestamps feature is enabled; existing
     // stored timestamps are kept untouched (backward compatibility).
     if (!this.showMessageTimestampsEnabled) return;
+    if (getLegacyTurnIndex(turnId) !== null) return;
     const timestampConversationId = this.getTimestampConversationId();
     if (!this.timestampService || !timestampConversationId) return;
     if (this.timestampService.getTimestamp(timestampConversationId, turnId as TurnId) !== null)
@@ -4550,8 +4616,8 @@ export class TimelineManager {
 
   /**
    * Overwrite first-seen timestamps with real server-side times captured from
-   * Gemini's conversation-load RPC. Matching goes by turn text, so unmatched
-   * markers (edited turns, drifted DOM text) safely keep their previous value.
+   * Gemini's conversation-load RPC. Matching uses the same server turn id as
+   * Timeline identity, so duplicate or edited prompt text is irrelevant.
    * Returns whether any stored timestamp changed.
    */
   private applyHistoryTimestamps(): boolean {
@@ -4565,9 +4631,7 @@ export class TimelineManager {
     if (!nativeConversationId) return false;
     // Stale-manager guard: during an SPA conversation switch there is a window
     // where the URL already points at the next conversation while this instance
-    // (and its markers) still belongs to the previous one. Marker ids are
-    // per-index (`u-<n>`), not per-conversation, so writing through that window
-    // would persist conversation B's times under conversation A's storage key.
+    // (and its markers) still belongs to the previous one.
     if (this.conversationId !== buildConversationIdFromUrl(window.location.href)) return false;
     const timestampConversationId = this.getTimestampConversationId();
     if (!timestampConversationId) return false;
@@ -4594,14 +4658,13 @@ export class TimelineManager {
     const turns = store.getTurns(nativeConversationId);
     if (!turns) return false;
 
-    const matches = matchTimestampsToMarkers(
-      turns,
-      this.markers.map((marker) => ({ id: marker.id, text: marker.summary })),
-    );
+    const mountedTurnIds = new Set(this.markers.map((marker) => marker.id));
     this.lastHistoryTimestampMatch = matchKey;
 
     let changed = false;
-    matches.forEach((timestampMs, turnId) => {
+    turns.forEach(({ turnId, timestampMs }) => {
+      if (!turnId) return;
+      if (!mountedTurnIds.has(turnId)) return;
       if (
         timestampService.getTimestamp(timestampConversationId, turnId as TurnId) === timestampMs
       ) {

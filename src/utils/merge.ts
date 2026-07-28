@@ -1,4 +1,5 @@
 import type { PromptItem } from '@/core/types/sync';
+import { getPromptNameConflictIds } from '@/core/utils/promptName';
 import type { ForkNode, ForkNodesData } from '@/pages/content/fork/forkTypes';
 import type {
   TimelineHierarchyConversationData,
@@ -26,43 +27,6 @@ type MergeableFolderData<
   folders: TFolder[];
   folderContents: Record<string, TConversation[]>;
 };
-
-/**
- * Merges two lists of items based on ID and updatedAt timestamp.
- * Prefers the item with the later updatedAt timestamp.
- */
-function mergeItems<T extends { id: string; updatedAt?: number; createdAt?: number }>(
-  localItems: T[],
-  cloudItems: T[],
-): T[] {
-  const itemMap = new Map<string, T>();
-
-  // Add all local items first
-  localItems.forEach((item) => {
-    itemMap.set(item.id, item);
-  });
-
-  // Merge cloud items
-  cloudItems.forEach((cloudItem) => {
-    const localItem = itemMap.get(cloudItem.id);
-    if (!localItem) {
-      // New item from cloud
-      itemMap.set(cloudItem.id, cloudItem);
-    } else {
-      // Conflict: compare timestamps
-      // Use createdAt as fallback for updatedAt
-      const cloudTime = cloudItem.updatedAt || cloudItem.createdAt || 0;
-      const localTime = localItem.updatedAt || localItem.createdAt || 0;
-
-      if (cloudTime > localTime) {
-        itemMap.set(cloudItem.id, cloudItem);
-      }
-      // If local is newer or equal, keep local
-    }
-  });
-
-  return Array.from(itemMap.values());
-}
 
 /**
  * Merges local and cloud folder data.
@@ -266,7 +230,42 @@ function resolveFolderPath<TFolder extends MergeableFolder>(
  * Merges local and cloud prompts.
  */
 export function mergePrompts(local: PromptItem[], cloud: PromptItem[]): PromptItem[] {
-  return mergeItems(local, cloud);
+  return mergePromptsWithStats(local, cloud).items;
+}
+
+export interface PromptMergeResult {
+  items: PromptItem[];
+  nameConflicts: number;
+}
+
+/**
+ * Preserves every prompt even when names conflict. Newer same-ID content wins,
+ * while a local name survives a legacy cloud record that omits the field.
+ * Duplicate-name groups are reported so callers can show a non-blocking
+ * warning and slash completion can disable the ambiguous names.
+ */
+export function mergePromptsWithStats(local: PromptItem[], cloud: PromptItem[]): PromptMergeResult {
+  const itemMap = new Map<string, PromptItem>(local.map((item) => [item.id, item]));
+
+  for (const cloudItem of cloud) {
+    const localItem = itemMap.get(cloudItem.id);
+    if (!localItem) {
+      itemMap.set(cloudItem.id, cloudItem);
+      continue;
+    }
+
+    const cloudTime = cloudItem.updatedAt || cloudItem.createdAt || 0;
+    const localTime = localItem.updatedAt || localItem.createdAt || 0;
+    if (cloudTime <= localTime) continue;
+
+    itemMap.set(
+      cloudItem.id,
+      cloudItem.name === undefined ? { ...cloudItem, name: localItem.name } : cloudItem,
+    );
+  }
+
+  const items = Array.from(itemMap.values());
+  return { items, nameConflicts: getPromptNameConflictIds(items).size };
 }
 
 /**

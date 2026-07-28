@@ -37,13 +37,17 @@ Le bouton `≡ / ▦` à droite de la barre de recherche bascule entre **Liste c
 - **Liste compacte** : un prompt par ligne, ~10 visibles à la fois. À droite : étiquettes · déplier · modifier · supprimer
 - **Vue confortable** : aperçu Markdown complet, idéal pour une petite collection
 
-### Nom optionnel
+### Nom obligatoire
 
-Le champ **Nom (optionnel)** en haut du formulaire d'ajout/édition vous permet de donner un titre court à un prompt. En vue compacte, ce nom remplace la première ligne extraite automatiquement ; laissez-le vide pour conserver le comportement précédent.
+Le champ **Nom** en haut du formulaire est obligatoire lors de l'ajout ou de la modification d'un prompt. Les anciens prompts sans nom sont conservés, mais devront recevoir un nom à leur prochaine modification.
 
 ### Aperçu rapide au survol
 
 En mode compact, survolez n'importe quelle ligne pendant **~250 ms** pour voir le contenu complet dans une infobulle flottante — remplace l'infobulle `title` native du navigateur (qui peut mettre 1 à 3 s à apparaître).
+
+### Insertion rapide avec une barre oblique
+
+Dans la zone de saisie du chat, tapez `/` puis une partie du nom d'un prompt. La liste affiche uniquement les noms et étiquettes correspondants ; survolez un élément pour prévisualiser son contenu, puis cliquez ou appuyez sur `Tab` / `Entrée` pour le sélectionner. Le nom apparaît sous forme de jeton surligné et le contenu complet est envoyé.
 
 ![Vue en liste compacte](/assets/gemini-prompt-manager-compact.png)
 

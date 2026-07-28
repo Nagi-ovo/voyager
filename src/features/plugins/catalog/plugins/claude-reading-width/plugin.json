@@ -1,7 +1,7 @@
 {
   "id": "voyager.claude-reading-width",
   "name": "Claude · Comfortable Reading Width",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Widen Claude's conversation to one centered, adjustable column, with user and assistant messages aligned together.",
   "i18n": {
     "zh": {
@@ -110,7 +110,7 @@
   "homepage": "https://github.com/Nagi-ovo/voyager/tree/main/src/features/plugins/catalog/plugins/claude-reading-width",
   "engine": ">=1.2.0",
   "tier": "declarative",
-  "matches": ["https://claude.ai/*"],
+  "matches": ["https://claude.ai/*", "https://*.frame.claudeusercontent.com/*"],
   "contributes": {
     "settings": {
       "width": {

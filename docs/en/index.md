@@ -68,9 +68,6 @@ features:
   - icon: 🧜‍♀️
     title: Mermaid Diagrams
     details: Code to visuals. Flowcharts, sequence diagrams, Gantt charts rendered instantly.
-  - icon: 🏷️
-    title: Tab Title Sync
-    details: Know at a glance. Auto-sync browser tab title with your chat.
   - icon: 🔀
     title: Conversation Fork (Experimental)
     details: Divergent thinking. Branch conversation at any node to explore different possibilities.

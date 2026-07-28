@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { PromptItem } from '@/core/types/sync';
+
 import { FolderManager } from '../manager';
-import type { ConversationReference, FolderData } from '../types';
+import type { FolderData } from '../types';
 
 const { mockBrowser } = vi.hoisted(() => ({
   mockBrowser: {
@@ -62,6 +64,7 @@ type TestableManager = {
   buildConversationUrlFromId: (hexId: string) => string;
   createFoldersList: () => HTMLElement;
   createFolderSearch: () => HTMLElement;
+  mergePrompts: (local: PromptItem[], cloud: PromptItem[]) => PromptItem[];
   storage: { saveData: (key: string, data: FolderData) => Promise<boolean> };
 };
 
@@ -201,6 +204,32 @@ describe('folder manager audit fixes', () => {
   });
 
   // ── H2: self-write storage echo suppression ────────────────────────────────
+
+  describe('Drive prompt merge', () => {
+    it('preserves the local name when a newer legacy cloud prompt omits it', () => {
+      const { manager: m, internals } = makeManager();
+      manager = m;
+      const local: PromptItem = {
+        id: 'prompt-1',
+        name: 'Keep this name',
+        text: 'local text',
+        tags: ['local'],
+        createdAt: 1,
+        updatedAt: 10,
+      };
+      const cloud: PromptItem = {
+        id: 'prompt-1',
+        text: 'newer cloud text',
+        tags: ['cloud'],
+        createdAt: 1,
+        updatedAt: 20,
+      };
+
+      expect(internals.mergePrompts([local], [cloud])).toEqual([
+        { ...cloud, name: 'Keep this name' },
+      ]);
+    });
+  });
 
   describe('storage echo suppression (H2)', () => {
     function getStorageListener(internals: TestableManager): StorageChangeListener {

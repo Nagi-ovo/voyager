@@ -12,6 +12,4 @@ export interface PreviewMarkerData {
   readonly summary: string;
   readonly index: number;
   readonly starred: boolean;
-  /** Timestamp (ms since epoch) when the message was starred; undefined if not starred. */
-  readonly starredAt?: number;
 }

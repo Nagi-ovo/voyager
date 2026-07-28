@@ -1,10 +1,14 @@
-import { buildConversationIdFromUrl } from '@/core/utils/conversationIdentity';
+import {
+  buildConversationIdFromUrl,
+  extractConversationIdFromUrl,
+} from '@/core/utils/conversationIdentity';
 
 import {
   filterOutDeepResearchImmersiveNodes,
   resolveConversationRoot,
 } from '../export/conversationDom';
-import { makeStableTurnId, normalizeTurnId } from '../fork/turnId';
+import { getLegacyTurnIndex, makeTurnId, normalizeTurnId } from '../fork/turnId';
+import { historyTimestampStore } from '../timestamp/historyTimestamps';
 
 const USER_SELECTORS = [
   '.user-query-bubble-with-background',
@@ -157,7 +161,7 @@ export function collectHighlightTurns(): HighlightTurnDom[] {
     if (!assistantHost) return;
     assistantIndex += 1;
 
-    const turnId = userElement.dataset.turnId?.trim() || makeStableTurnId(index);
+    const turnId = makeTurnId(userElement, index);
     userElement.dataset.turnId = turnId;
     turns.push({
       turnId,
@@ -183,6 +187,8 @@ export function getHighlightSelectionContext(range: Range): HighlightSelectionCo
     ({ assistantHost }) => assistantHost === target || assistantHost.contains(target),
   );
   if (!turn) return null;
+  const stableTurnId = resolveMountedHighlightTurnId(turn.turnId);
+  if (!stableTurnId) return null;
 
   const assistantRoot = findAssistantRootForTarget(turn.assistantHost, target);
   if (
@@ -196,6 +202,7 @@ export function getHighlightSelectionContext(range: Range): HighlightSelectionCo
   const conversationUrl = `${location.origin}${location.pathname}${location.search}`;
   return {
     ...turn,
+    turnId: stableTurnId,
     assistantRoot,
     conversationId: buildConversationIdFromUrl(conversationUrl),
     conversationUrl,
@@ -204,10 +211,26 @@ export function getHighlightSelectionContext(range: Range): HighlightSelectionCo
 }
 
 export function findHighlightTurn(turnId: string): HighlightTurnDom | null {
-  const normalized = normalizeTurnId(turnId);
+  const normalized = resolveStoredHighlightTurnId(turnId);
+  if (!normalized) return null;
   return (
-    collectHighlightTurns().find((turn) => normalizeTurnId(turn.turnId) === normalized) ?? null
+    collectHighlightTurns().find(
+      (turn) => resolveMountedHighlightTurnId(turn.turnId) === normalized,
+    ) ?? null
   );
+}
+
+/** Resolve persisted ids, including verified legacy aliases. */
+export function resolveStoredHighlightTurnId(turnId: string): string | null {
+  const nativeConversationId = extractConversationIdFromUrl(window.location.href);
+  if (!nativeConversationId) return normalizeTurnId(turnId);
+  return historyTimestampStore.resolveCanonicalTurnId(nativeConversationId, turnId);
+}
+
+/** A live positional fallback is never proof of full-conversation identity. */
+export function resolveMountedHighlightTurnId(turnId: string): string | null {
+  if (getLegacyTurnIndex(turnId) !== null) return null;
+  return resolveStoredHighlightTurnId(turnId);
 }
 
 export function findScrollableAncestor(element: HTMLElement): HTMLElement {

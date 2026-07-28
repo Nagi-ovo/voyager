@@ -63,9 +63,6 @@ features:
   - icon: 🧜‍♀️
     title: Gráficos Mermaid
     details: De código para visual. Fluxogramas, diagramas de sequência e gráficos de Gantt renderizados instantaneamente.
-  - icon: 🏷️
-    title: Sinc. Título da Aba
-    details: Saiba num relance. Sincronize automaticamente o título da aba do navegador com o seu chat.
   - icon: 🔀
     title: Bifurcação de Conversa (Experimental)
     details: Pensamento divergente. Bifurque a conversa em qualquer nó para explorar diferentes possibilidades.

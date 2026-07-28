@@ -7,16 +7,19 @@ export interface ForkPlan {
   nextForkIndex: number;
 }
 
+export type TurnIdResolver = (turnId: string) => string | null;
+
 export function resolveForkPlan(
   conversationId: string,
   turnId: string,
   conversationNodes: ForkNode[],
   groups: Record<string, ForkNode[]>,
   createForkGroupId: () => string,
+  resolveTurnId: TurnIdResolver = (candidate) => normalizeTurnId(candidate),
 ): ForkPlan {
-  const normalizedTurnId = normalizeTurnId(turnId);
+  const normalizedTurnId = resolveTurnId(turnId);
   const sameTurnNodes = conversationNodes.filter(
-    (node) => normalizeTurnId(node.turnId) === normalizedTurnId,
+    (node) => normalizedTurnId !== null && resolveTurnId(node.turnId) === normalizedTurnId,
   );
 
   if (sameTurnNodes.length === 0) {
@@ -41,7 +44,7 @@ export function resolveForkPlan(
 
   const sourceNode = bestGroupNodes.find(
     (node) =>
-      node.conversationId === conversationId && normalizeTurnId(node.turnId) === normalizedTurnId,
+      node.conversationId === conversationId && resolveTurnId(node.turnId) === normalizedTurnId,
   );
   const maxForkIndex = bestGroupNodes.reduce((max, node) => Math.max(max, node.forkIndex), 0);
 

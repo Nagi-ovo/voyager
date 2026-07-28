@@ -4,6 +4,9 @@ const DEFAULT_OFFSCREEN_LEFT = '-100000px';
 const DEFAULT_SANITIZE_SELECTOR = 'img, video, iframe, canvas, svg image';
 const DEFAULT_RENDER_WIDTH = 720;
 const MATH_RENDER_SELECTOR = '.katex, .math-inline, .math-block, [data-math]';
+const MERMAID_FOREIGN_OBJECT_SELECTOR = '.gv-export-mermaid svg foreignObject';
+const MERMAID_FOREIGN_OBJECT_STYLE_PROPERTIES = ['color', 'fill'] as const;
+const WEBKIT_TEXT_FILL_COLOR_PROPERTY = '-webkit-text-fill-color';
 const FONT_FACE_RULE_TYPE = 5;
 const WOFF2_SOURCE_RE = /url\((["']?)([^"')]+)\1\)\s*format\((["']?)woff2\3\)/i;
 
@@ -191,6 +194,22 @@ function inlineKatexSvgStyles(root: HTMLElement): void {
   });
 }
 
+function inlineMermaidForeignObjectStyles(root: HTMLElement): void {
+  root
+    .querySelectorAll<SVGForeignObjectElement>(MERMAID_FOREIGN_OBJECT_SELECTOR)
+    .forEach((foreignObject) => {
+      foreignObject.querySelectorAll<HTMLElement>('*').forEach((element) => {
+        const computedStyle = getComputedStyle(element);
+        MERMAID_FOREIGN_OBJECT_STYLE_PROPERTIES.forEach((property) => {
+          const value = computedStyle.getPropertyValue(property);
+          if (value) setStyle(element, property, value);
+        });
+        const color = computedStyle.getPropertyValue('color');
+        if (color) setStyle(element, WEBKIT_TEXT_FILL_COLOR_PROPERTY, color);
+      });
+    });
+}
+
 function hasMathContent(target: HTMLElement): boolean {
   return target.matches(MATH_RENDER_SELECTOR) || !!target.querySelector(MATH_RENDER_SELECTOR);
 }
@@ -302,6 +321,7 @@ async function buildKatexFontEmbedCss(target: HTMLElement): Promise<string> {
 }
 
 export type RenderElementToImageBlobOptions = {
+  pixelRatio?: number;
   maxAttempts?: number;
   retryDelayMs?: number;
   shouldRetry?: (error: unknown) => boolean;
@@ -325,15 +345,16 @@ export function isImageResourceRenderError(error: unknown): boolean {
   );
 }
 
-async function renderTargetToBlob(target: HTMLElement): Promise<Blob> {
+async function renderTargetToBlob(target: HTMLElement, pixelRatio: number): Promise<Blob> {
   stripXmlIllegalChars(target);
   inlineKatexLayoutStyles(target);
   inlineKatexSvgStyles(target);
+  inlineMermaidForeignObjectStyles(target);
   const containsMath = hasMathContent(target);
   const { toBlob } = await import('html-to-image');
   const blob = await toBlob(target, {
     cacheBust: true,
-    pixelRatio: 1.2,
+    pixelRatio,
     backgroundColor: '#ffffff',
     skipFonts: !containsMath,
     fontEmbedCSS: containsMath ? await buildKatexFontEmbedCss(target) : undefined,
@@ -378,7 +399,11 @@ function resolveRenderableWidth(target: HTMLElement): number {
   return DEFAULT_RENDER_WIDTH;
 }
 
-async function renderUsingSanitizedClone(target: HTMLElement, selector: string): Promise<Blob> {
+async function renderUsingSanitizedClone(
+  target: HTMLElement,
+  selector: string,
+  pixelRatio: number,
+): Promise<Blob> {
   const container = document.createElement('div');
   container.style.position = 'fixed';
   container.style.left = DEFAULT_OFFSCREEN_LEFT;
@@ -397,7 +422,7 @@ async function renderUsingSanitizedClone(target: HTMLElement, selector: string):
   document.body.appendChild(container);
 
   try {
-    return await renderTargetToBlob(renderRoot);
+    return await renderTargetToBlob(renderRoot, pixelRatio);
   } finally {
     container.remove();
   }
@@ -411,6 +436,7 @@ export async function renderElementToImageBlob(
   target: HTMLElement,
   options: RenderElementToImageBlobOptions = {},
 ): Promise<Blob> {
+  const pixelRatio = Math.max(1, options.pixelRatio ?? 1.2);
   const maxAttempts = Math.max(1, options.maxAttempts ?? 1);
   const retryDelayMs = Math.max(0, options.retryDelayMs ?? 0);
   const shouldRetry = options.shouldRetry ?? (() => false);
@@ -418,7 +444,7 @@ export async function renderElementToImageBlob(
   let primaryError: unknown;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      return await renderTargetToBlob(target);
+      return await renderTargetToBlob(target, pixelRatio);
     } catch (error) {
       primaryError = error;
       const canRetry = attempt < maxAttempts && shouldRetry(error);
@@ -441,5 +467,6 @@ export async function renderElementToImageBlob(
   return await renderUsingSanitizedClone(
     target,
     options.sanitizeSelector ?? DEFAULT_SANITIZE_SELECTOR,
+    pixelRatio,
   );
 }
