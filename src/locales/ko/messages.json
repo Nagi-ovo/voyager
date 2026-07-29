@@ -703,6 +703,26 @@
     "message": "대화 내보내기",
     "description": "Export dialog title"
   },
+  "export_speaker_names": {
+    "message": "화자 이름",
+    "description": "Heading for speaker label fields in the export dialog"
+  },
+  "export_speaker_user_label": {
+    "message": "사용자 라벨",
+    "description": "Label for the human speaker name field"
+  },
+  "export_speaker_ai_label": {
+    "message": "AI 라벨",
+    "description": "Label for the AI speaker name field"
+  },
+  "export_speaker_user_default": {
+    "message": "사용자",
+    "description": "Default human speaker label in conversation exports"
+  },
+  "export_speaker_assistant_default": {
+    "message": "어시스턴트",
+    "description": "Default AI speaker label in conversation exports"
+  },
   "export_dialog_select": {
     "message": "내보내기 형식 선택:",
     "description": "Export format selection label"

@@ -92,6 +92,32 @@ describe('ImageExportService', () => {
     expect(global.URL.createObjectURL).not.toHaveBeenCalled();
   });
 
+  it('renders custom speaker labels as escaped text', async () => {
+    let renderedTarget: HTMLElement | null = null;
+    (toBlob as unknown as ReturnType<typeof vi.fn>).mockImplementation(
+      async (node: HTMLElement) => {
+        renderedTarget = node;
+        return new Blob(['x'], { type: 'image/png' });
+      },
+    );
+
+    await ImageExportService.renderConversationBlob(mockTurns, mockMetadata, {
+      speakerLabels: {
+        user: '<img src=x onerror=alert(1)>',
+        assistant: 'Nova & Co.',
+      },
+    });
+
+    const target = renderedTarget as HTMLElement | null;
+    expect(target).not.toBeNull();
+    const labels = Array.from(target?.querySelectorAll('.gv-image-export-label') ?? []);
+    expect(labels.map((label) => label.textContent)).toEqual([
+      '<img src=x onerror=alert(1)>',
+      'Nova & Co.',
+    ]);
+    expect(target?.querySelector('.gv-image-export-label img')).toBeNull();
+  });
+
   it('renders uploaded file placeholders in image exports', async () => {
     let renderedAttachmentText = '';
     let renderedStyles = '';

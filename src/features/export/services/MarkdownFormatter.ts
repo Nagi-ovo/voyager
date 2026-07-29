@@ -3,7 +3,12 @@
  * Converts conversation to clean, standard Markdown format
  * Following the "paper book" philosophy - content over design
  */
-import type { ChatTurn, ConversationMetadata, MarkdownFormatOptions } from '../types/export';
+import {
+  type ChatTurn,
+  type ConversationMetadata,
+  DEFAULT_EXPORT_SPEAKER_LABELS,
+  type MarkdownFormatOptions,
+} from '../types/export';
 import { DOMContentExtractor } from './DOMContentExtractor';
 
 /**
@@ -126,6 +131,7 @@ export class MarkdownFormatter {
    */
   private static formatTurn(turn: ChatTurn, index: number, options: MarkdownFormatOptions): string {
     const lines: string[] = [];
+    const speakerLabels = options.speakerLabels ?? DEFAULT_EXPORT_SPEAKER_LABELS;
     const promptHeadingContent = options.usePromptAsTurnHeading
       ? this.formatPromptHeading(turn)
       : { hasMedia: false, text: '' };
@@ -142,7 +148,7 @@ export class MarkdownFormatter {
 
     if (!turn.omitEmptySections) {
       if (!omitUserSection) {
-        lines.push('### 👤 User');
+        lines.push(`### 👤 ${this.escapeMarkdownLabel(speakerLabels.user)}`);
         lines.push('');
 
         if (turn.userElement) {
@@ -159,7 +165,7 @@ export class MarkdownFormatter {
         lines.push('');
       }
 
-      lines.push('### 🤖 Assistant');
+      lines.push(`### 🤖 ${this.escapeMarkdownLabel(speakerLabels.assistant)}`);
       lines.push('');
 
       if (turn.assistantElement) {
@@ -178,7 +184,7 @@ export class MarkdownFormatter {
     const userFallback = this.formatContent(turn.user);
     const hasUser = !!turn.userElement || !!userFallback;
     if (hasUser && !omitUserSection) {
-      lines.push('### 👤 User');
+      lines.push(`### 👤 ${this.escapeMarkdownLabel(speakerLabels.user)}`);
       lines.push('');
 
       if (turn.userElement) {
@@ -199,7 +205,7 @@ export class MarkdownFormatter {
     const assistantFallback = this.formatContent(turn.assistant);
     const hasAssistant = !!turn.assistantElement || !!assistantFallback;
     if (hasAssistant) {
-      lines.push('### 🤖 Assistant');
+      lines.push(`### 🤖 ${this.escapeMarkdownLabel(speakerLabels.assistant)}`);
       lines.push('');
 
       if (turn.assistantElement) {
@@ -314,6 +320,11 @@ export class MarkdownFormatter {
   private static escapeMarkdown(text: string): string {
     // Escape special characters that could break Markdown
     return text.replace(/([\\`*_{}[\]()#+\-.!])/g, '\\$1');
+  }
+
+  private static escapeMarkdownLabel(text: string): string {
+    const escapedHtml = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return this.escapeMarkdown(escapedHtml);
   }
 
   /**

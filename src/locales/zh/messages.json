@@ -703,6 +703,26 @@
     "message": "导出对话",
     "description": "导出对话框标题"
   },
+  "export_speaker_names": {
+    "message": "说话者名称",
+    "description": "导出对话框中说话者标签字段的标题"
+  },
+  "export_speaker_user_label": {
+    "message": "用户标签",
+    "description": "用户说话者名称字段的标签"
+  },
+  "export_speaker_ai_label": {
+    "message": "AI 标签",
+    "description": "AI 说话者名称字段的标签"
+  },
+  "export_speaker_user_default": {
+    "message": "用户",
+    "description": "对话导出中的默认用户标签"
+  },
+  "export_speaker_assistant_default": {
+    "message": "助手",
+    "description": "对话导出中的默认 AI 标签"
+  },
   "export_dialog_select": {
     "message": "选择导出格式：",
     "description": "导出格式选择标签"

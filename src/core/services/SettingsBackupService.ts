@@ -119,6 +119,7 @@ export const BACKUPABLE_SYNC_SETTINGS_DEFAULTS = {
   [StorageKeys.GV_VISUAL_EFFECT]: 'off',
   [StorageKeys.FORK_ENABLED]: false,
   [StorageKeys.EXPORT_IMAGE_WIDTH]: 620,
+  [StorageKeys.EXPORT_SPEAKER_LABELS]: {},
   [StorageKeys.PERSISTENT_EXPORT_TOOLBAR_ENABLED]: true,
   [StorageKeys.GV_AISTUDIO_ENABLED]: true,
   [StorageKeys.GV_SHOW_MESSAGE_TIMESTAMPS]: false,

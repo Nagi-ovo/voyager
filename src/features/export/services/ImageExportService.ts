@@ -11,7 +11,9 @@ import { isEventLikeImageRenderError } from '../types/errors';
 import {
   type ChatTurn,
   type ConversationMetadata,
+  DEFAULT_EXPORT_SPEAKER_LABELS,
   DEFAULT_IMAGE_EXPORT_WIDTH,
+  type ExportSpeakerLabels,
 } from '../types/export';
 import { DOMContentExtractor } from './DOMContentExtractor';
 import { renderElementToImageBlob } from './ImageRenderService';
@@ -35,7 +37,12 @@ export class ImageExportService {
   static async export(
     turns: ChatTurn[],
     metadata: ConversationMetadata,
-    options: { filename: string; fontSize?: number; imageWidth?: number },
+    options: {
+      filename: string;
+      fontSize?: number;
+      imageWidth?: number;
+      speakerLabels?: ExportSpeakerLabels;
+    },
   ): Promise<void> {
     const filename = options.filename.toLowerCase().endsWith('.png')
       ? options.filename
@@ -60,13 +67,18 @@ export class ImageExportService {
   static async renderConversationBlob(
     turns: ChatTurn[],
     metadata: ConversationMetadata,
-    options: { fontSize?: number; imageWidth?: number },
+    options: {
+      fontSize?: number;
+      imageWidth?: number;
+      speakerLabels?: ExportSpeakerLabels;
+    },
   ): Promise<Blob> {
     const container = this.createRenderContainer(
       turns,
       metadata,
       options.fontSize,
       options.imageWidth,
+      options.speakerLabels,
     );
     return await this.renderContainerToBlob(container);
   }
@@ -85,6 +97,7 @@ export class ImageExportService {
     metadata: ConversationMetadata,
     fontSize?: number,
     imageWidth?: number,
+    speakerLabels: ExportSpeakerLabels = DEFAULT_EXPORT_SPEAKER_LABELS,
   ): HTMLElement {
     const outer = document.createElement('div');
     outer.className = 'gv-image-export-container';
@@ -128,11 +141,11 @@ export class ImageExportService {
           <article class="gv-image-export-turn">
             <div class="gv-image-export-turn-header">Turn ${turnIndex}${starred}</div>
             <section class="gv-image-export-block">
-              <div class="gv-image-export-label">User</div>
+              <div class="gv-image-export-label">${this.escapeHTML(speakerLabels.user)}</div>
               <div class="gv-image-export-content">${userHtml || '<em>No content</em>'}</div>
             </section>
             <section class="gv-image-export-block">
-              <div class="gv-image-export-label">Assistant</div>
+              <div class="gv-image-export-label">${this.escapeHTML(speakerLabels.assistant)}</div>
               <div class="gv-image-export-content">${assistantHtml || '<em>No content</em>'}</div>
             </section>
           </article>
@@ -149,7 +162,7 @@ export class ImageExportService {
               hasUser
                 ? `
             <section class="gv-image-export-block">
-              <div class="gv-image-export-label">User</div>
+              <div class="gv-image-export-label">${this.escapeHTML(speakerLabels.user)}</div>
               <div class="gv-image-export-content">${userHtml || '<em>No content</em>'}</div>
             </section>
             `
@@ -159,7 +172,7 @@ export class ImageExportService {
               hasAssistant
                 ? `
             <section class="gv-image-export-block">
-              <div class="gv-image-export-label">Assistant</div>
+              <div class="gv-image-export-label">${this.escapeHTML(speakerLabels.assistant)}</div>
               <div class="gv-image-export-content">${assistantHtml || '<em>No content</em>'}</div>
             </section>
             `

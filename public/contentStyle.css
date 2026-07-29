@@ -8054,6 +8054,108 @@ body.gv-rtl .gv-export-prompt-heading-switch[aria-checked='true'] .gv-coach-knob
   transform: translateX(-18px);
 }
 
+.gv-export-speakers-section {
+  margin-bottom: 16px;
+  padding: 16px;
+  border: 1px solid #dadce0;
+  border-radius: 8px;
+  background: #f8f9fa;
+}
+
+.gv-export-speakers-title {
+  margin-bottom: 12px;
+  color: #202124;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.gv-export-speakers-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.gv-export-speaker-field {
+  min-width: 0;
+}
+
+.gv-export-speaker-label {
+  display: block;
+  margin-bottom: 8px;
+  color: #5f6368;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.gv-export-speaker-input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid #bdc1c6;
+  border-radius: 6px;
+  outline: none;
+  background: #fff;
+  color: #202124;
+  font: inherit;
+  font-size: 14px;
+}
+
+.gv-export-speaker-input:focus-visible {
+  border-color: #1a73e8;
+  box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.2);
+}
+
+html.dark .gv-export-speakers-section,
+.theme-host.dark-theme ~ .gv-export-dialog-overlay .gv-export-speakers-section,
+[data-theme='dark'] .gv-export-speakers-section,
+[data-color-scheme='dark'] .gv-export-speakers-section,
+html.dark-theme .gv-export-speakers-section,
+body.dark-theme .gv-export-speakers-section,
+body[data-theme='dark'] .gv-export-speakers-section,
+body[data-color-scheme='dark'] .gv-export-speakers-section {
+  border-color: #3c4043;
+  background: #2d2e30;
+}
+
+html.dark .gv-export-speakers-title,
+html.dark .gv-export-speaker-label,
+.theme-host.dark-theme ~ .gv-export-dialog-overlay .gv-export-speakers-title,
+.theme-host.dark-theme ~ .gv-export-dialog-overlay .gv-export-speaker-label,
+[data-theme='dark'] .gv-export-speakers-title,
+[data-theme='dark'] .gv-export-speaker-label,
+[data-color-scheme='dark'] .gv-export-speakers-title,
+[data-color-scheme='dark'] .gv-export-speaker-label,
+html.dark-theme .gv-export-speakers-title,
+html.dark-theme .gv-export-speaker-label,
+body.dark-theme .gv-export-speakers-title,
+body.dark-theme .gv-export-speaker-label,
+body[data-theme='dark'] .gv-export-speakers-title,
+body[data-theme='dark'] .gv-export-speaker-label,
+body[data-color-scheme='dark'] .gv-export-speakers-title,
+body[data-color-scheme='dark'] .gv-export-speaker-label {
+  color: #e8eaed;
+}
+
+html.dark .gv-export-speaker-input,
+.theme-host.dark-theme ~ .gv-export-dialog-overlay .gv-export-speaker-input,
+[data-theme='dark'] .gv-export-speaker-input,
+[data-color-scheme='dark'] .gv-export-speaker-input,
+html.dark-theme .gv-export-speaker-input,
+body.dark-theme .gv-export-speaker-input,
+body[data-theme='dark'] .gv-export-speaker-input,
+body[data-color-scheme='dark'] .gv-export-speaker-input {
+  border-color: #5f6368;
+  background: #202124;
+  color: #e8eaed;
+}
+
+@media (max-width: 520px) {
+  .gv-export-speakers-fields {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Font size control section in export dialog */
 .gv-export-fontsize-section {
   margin-bottom: 20px;

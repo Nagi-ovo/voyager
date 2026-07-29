@@ -422,6 +422,7 @@ function handleSaveReport(dict: Dictionaries, lang: AppLanguage): void {
       },
       onCancel: () => {},
       initialImageWidth,
+      speakerLabelsEnabled: false,
       translations: {
         title: t('deepResearchSaveReport'),
         selectFormat: t('export_dialog_select'),

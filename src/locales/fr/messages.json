@@ -703,6 +703,26 @@
     "message": "Exporter la discussion",
     "description": "Export dialog title"
   },
+  "export_speaker_names": {
+    "message": "Noms des intervenants",
+    "description": "Heading for speaker label fields in the export dialog"
+  },
+  "export_speaker_user_label": {
+    "message": "Libellé utilisateur",
+    "description": "Label for the human speaker name field"
+  },
+  "export_speaker_ai_label": {
+    "message": "Libellé IA",
+    "description": "Label for the AI speaker name field"
+  },
+  "export_speaker_user_default": {
+    "message": "Utilisateur",
+    "description": "Default human speaker label in conversation exports"
+  },
+  "export_speaker_assistant_default": {
+    "message": "Assistant",
+    "description": "Default AI speaker label in conversation exports"
+  },
   "export_dialog_select": {
     "message": "Format d'export :",
     "description": "Export format selection label"

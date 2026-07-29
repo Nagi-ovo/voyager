@@ -703,6 +703,26 @@
     "message": "تصدير المحادثة",
     "description": "Export dialog title"
   },
+  "export_speaker_names": {
+    "message": "أسماء المتحدثين",
+    "description": "Heading for speaker label fields in the export dialog"
+  },
+  "export_speaker_user_label": {
+    "message": "تسمية المستخدم",
+    "description": "Label for the human speaker name field"
+  },
+  "export_speaker_ai_label": {
+    "message": "تسمية الذكاء الاصطناعي",
+    "description": "Label for the AI speaker name field"
+  },
+  "export_speaker_user_default": {
+    "message": "المستخدم",
+    "description": "Default human speaker label in conversation exports"
+  },
+  "export_speaker_assistant_default": {
+    "message": "المساعد",
+    "description": "Default AI speaker label in conversation exports"
+  },
   "export_dialog_select": {
     "message": "اختر تنسيق التصدير:",
     "description": "Export format selection label"

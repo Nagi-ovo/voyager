@@ -237,4 +237,228 @@ describe('ExportDialog', () => {
     ) as HTMLElement | null;
     expect(section?.style.display).toBe('none');
   });
+
+  it('restores saved speaker labels with accessible field labels', () => {
+    const dialog = new ExportDialog();
+    dialog.show({
+      onExport: () => {},
+      onCancel: () => {},
+      initialSpeakerLabels: { user: 'Erik', assistant: 'Nova' },
+      speakerNames: {
+        title: 'Speaker names',
+        userLabel: 'User label',
+        assistantLabel: 'AI label',
+        userDefault: 'User',
+        assistantDefault: 'Assistant',
+      },
+      translations: {
+        title: 'Export',
+        selectFormat: 'Select format',
+        warning: '',
+        safariCmdpHint: 'Safari tip',
+        safariMarkdownHint: 'Safari markdown tip',
+        cancel: 'Cancel',
+        export: 'Export',
+        fontSizeLabel: 'Font Size',
+        fontSizePreview: 'The quick brown fox jumps over the lazy dog.',
+        imageWidthLabel: 'Image Width',
+        imageWidthNarrow: 'Narrow',
+        imageWidthMedium: 'Medium',
+        imageWidthWide: 'Wide',
+        promptHeadingLabel: 'Use prompts as turn headings',
+        promptHeadingHint: 'Put each prompt in its turn heading.',
+        formatDescriptions: {
+          json: 'JSON format',
+          markdown: 'Markdown format',
+          pdf: 'PDF format',
+          image: 'Image format',
+        },
+      },
+    });
+
+    const userInput = document.querySelector('#gv-export-speaker-user') as HTMLInputElement | null;
+    const assistantInput = document.querySelector(
+      '#gv-export-speaker-assistant',
+    ) as HTMLInputElement | null;
+    expect(userInput?.value).toBe('Erik');
+    expect(assistantInput?.value).toBe('Nova');
+    expect(document.querySelector('label[for="gv-export-speaker-user"]')?.textContent).toBe(
+      'User label',
+    );
+    expect(document.querySelector('label[for="gv-export-speaker-assistant"]')?.textContent).toBe(
+      'AI label',
+    );
+  });
+
+  it('hides labels for JSON without clearing values and restores them for human-readable formats', () => {
+    const onExport = vi.fn();
+    const dialog = new ExportDialog();
+    dialog.show({
+      onExport,
+      onCancel: () => {},
+      showPromptHeadingOption: true,
+      speakerNames: {
+        title: 'Speaker names',
+        userLabel: 'User label',
+        assistantLabel: 'AI label',
+        userDefault: 'User',
+        assistantDefault: 'Assistant',
+      },
+      translations: {
+        title: 'Export',
+        selectFormat: 'Select format',
+        warning: '',
+        safariCmdpHint: 'Safari tip',
+        safariMarkdownHint: 'Safari markdown tip',
+        cancel: 'Cancel',
+        export: 'Export',
+        fontSizeLabel: 'Font Size',
+        fontSizePreview: 'The quick brown fox jumps over the lazy dog.',
+        imageWidthLabel: 'Image Width',
+        imageWidthNarrow: 'Narrow',
+        imageWidthMedium: 'Medium',
+        imageWidthWide: 'Wide',
+        promptHeadingLabel: 'Use prompts as turn headings',
+        promptHeadingHint: 'Put each prompt in its turn heading.',
+        formatDescriptions: {
+          json: 'JSON format',
+          markdown: 'Markdown format',
+          pdf: 'PDF format',
+          image: 'Image format',
+        },
+      },
+    });
+
+    const section = document.querySelector('.gv-export-speakers-section') as HTMLElement | null;
+    const userInput = document.querySelector('#gv-export-speaker-user') as HTMLInputElement | null;
+    const assistantInput = document.querySelector(
+      '#gv-export-speaker-assistant',
+    ) as HTMLInputElement | null;
+    if (userInput) userInput.value = 'Erik';
+    userInput?.dispatchEvent(new Event('input', { bubbles: true }));
+    if (assistantInput) assistantInput.value = 'Nova';
+    assistantInput?.dispatchEvent(new Event('input', { bubbles: true }));
+
+    const jsonRadio = document.querySelector(
+      'input[name="export-format"][value="json"]',
+    ) as HTMLInputElement | null;
+    if (jsonRadio) jsonRadio.checked = true;
+    jsonRadio?.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(section?.style.display).toBe('none');
+
+    const markdownRadio = document.querySelector(
+      'input[name="export-format"][value="markdown"]',
+    ) as HTMLInputElement | null;
+    if (markdownRadio) markdownRadio.checked = true;
+    markdownRadio?.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(section?.style.display).toBe('block');
+    expect(userInput?.value).toBe('Erik');
+    expect(assistantInput?.value).toBe('Nova');
+
+    (
+      document.querySelector(
+        '.gv-export-prompt-heading-section [role="switch"]',
+      ) as HTMLButtonElement | null
+    )?.click();
+    (document.querySelector('.gv-export-dialog-btn-primary') as HTMLButtonElement | null)?.click();
+    expect(onExport).toHaveBeenCalledWith('markdown', undefined, undefined, true, {
+      user: 'Erik',
+      assistant: 'Nova',
+    });
+  });
+
+  it('resolves blank values to localized defaults on export', () => {
+    const onExport = vi.fn();
+    const dialog = new ExportDialog();
+    dialog.show({
+      onExport,
+      onCancel: () => {},
+      speakerNames: {
+        title: 'Speaker names',
+        userLabel: 'User label',
+        assistantLabel: 'AI label',
+        userDefault: 'Utilisateur',
+        assistantDefault: 'Assistant IA',
+      },
+      translations: {
+        title: 'Export',
+        selectFormat: 'Select format',
+        warning: '',
+        safariCmdpHint: 'Safari tip',
+        safariMarkdownHint: 'Safari markdown tip',
+        cancel: 'Cancel',
+        export: 'Export',
+        fontSizeLabel: 'Font Size',
+        fontSizePreview: 'Preview',
+        imageWidthLabel: 'Image Width',
+        imageWidthNarrow: 'Narrow',
+        imageWidthMedium: 'Medium',
+        imageWidthWide: 'Wide',
+        promptHeadingLabel: 'Use prompts as turn headings',
+        promptHeadingHint: 'Put each prompt in its turn heading.',
+        formatDescriptions: {
+          json: 'JSON format',
+          markdown: 'Markdown format',
+          pdf: 'PDF format',
+          image: 'Image format',
+        },
+      },
+    });
+
+    const userInput = document.querySelector('#gv-export-speaker-user') as HTMLInputElement | null;
+    const assistantInput = document.querySelector(
+      '#gv-export-speaker-assistant',
+    ) as HTMLInputElement | null;
+    if (userInput) userInput.value = '';
+    userInput?.dispatchEvent(new Event('input', { bubbles: true }));
+    if (assistantInput) assistantInput.value = '   ';
+    assistantInput?.dispatchEvent(new Event('input', { bubbles: true }));
+
+    (document.querySelector('.gv-export-dialog-btn-primary') as HTMLButtonElement | null)?.click();
+    expect(onExport).toHaveBeenCalledWith('markdown', undefined, undefined, false, {
+      user: 'Utilisateur',
+      assistant: 'Assistant IA',
+    });
+  });
+
+  it('does not render speaker controls for standalone document exports', () => {
+    const dialog = new ExportDialog();
+    dialog.show({
+      onExport: () => {},
+      onCancel: () => {},
+      speakerLabelsEnabled: false,
+      speakerNames: {
+        title: 'Speaker names',
+        userLabel: 'User label',
+        assistantLabel: 'AI label',
+        userDefault: 'User',
+        assistantDefault: 'Assistant',
+      },
+      translations: {
+        title: 'Save Report',
+        selectFormat: 'Select format',
+        warning: '',
+        safariCmdpHint: 'Safari tip',
+        safariMarkdownHint: 'Safari markdown tip',
+        cancel: 'Cancel',
+        export: 'Export',
+        fontSizeLabel: 'Font Size',
+        fontSizePreview: 'Preview',
+        imageWidthLabel: 'Image Width',
+        imageWidthNarrow: 'Narrow',
+        imageWidthMedium: 'Medium',
+        imageWidthWide: 'Wide',
+        promptHeadingLabel: 'Use prompts as turn headings',
+        promptHeadingHint: 'Put each prompt in its turn heading.',
+        formatDescriptions: {
+          json: 'JSON format',
+          markdown: 'Markdown format',
+          pdf: 'PDF format',
+          image: 'Image format',
+        },
+      },
+    });
+
+    expect(document.querySelector('.gv-export-speakers-section')).toBeNull();
+  });
 });

@@ -182,6 +182,56 @@ describe('MarkdownFormatter', () => {
       // Should escape special characters in title but not in content
       expect(markdown).toBeTruthy();
     });
+
+    it('uses custom speaker labels without escaping conversation content', () => {
+      const markdown = MarkdownFormatter.format(mockTurns, mockMetadata, {
+        speakerLabels: {
+          user: 'Erik',
+          assistant: 'Nova',
+        },
+      });
+
+      expect(markdown).toContain('### 👤 Erik');
+      expect(markdown).toContain('### 🤖 Nova');
+      expect(markdown).toContain('Of course! TypeScript is a superset of JavaScript...');
+    });
+
+    it('escapes Markdown-special characters in speaker labels only', () => {
+      const markdown = MarkdownFormatter.format(
+        [
+          {
+            user: '**content stays formatted**',
+            assistant: '`code stays formatted`',
+            starred: false,
+          },
+        ],
+        mockMetadata,
+        {
+          speakerLabels: {
+            user: '# **[User](url)** `root` \\',
+            assistant: '[Assistant](url)',
+          },
+        },
+      );
+
+      expect(markdown).toContain('### 👤 \\# \\*\\*\\[User\\]\\(url\\)\\*\\* \\`root\\` \\\\');
+      expect(markdown).toContain('### 🤖 \\[Assistant\\]\\(url\\)');
+      expect(markdown).toContain('**content stays formatted**');
+      expect(markdown).toContain('`code stays formatted`');
+    });
+
+    it('neutralizes raw HTML in speaker labels', () => {
+      const markdown = MarkdownFormatter.format(mockTurns, mockMetadata, {
+        speakerLabels: {
+          user: '<img src=x onerror="alert(1)">',
+          assistant: 'R&D > Support',
+        },
+      });
+
+      expect(markdown).toContain('### 👤 &lt;img src=x onerror="alert\\(1\\)"&gt;');
+      expect(markdown).toContain('### 🤖 R&amp;D &gt; Support');
+      expect(markdown).not.toContain('<img src=x');
+    });
   });
 
   describe('generateFilename', () => {

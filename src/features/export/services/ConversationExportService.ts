@@ -6,6 +6,7 @@
 import { fetchImageViaExtensionRuntime } from '@/core/utils/runtimeImageFetch';
 
 import { IMAGE_RENDER_EVENT_ERROR_CODE, isEventLikeImageRenderError } from '../types/errors';
+import { DEFAULT_EXPORT_SPEAKER_LABELS } from '../types/export';
 import type {
   ChatTurn,
   ConversationMetadata,
@@ -43,18 +44,23 @@ export class ConversationExportService {
         return await this.exportDocument(turns, metadata, options);
       }
 
-      switch (options.format) {
+      const conversationOptions: ExportOptions = {
+        ...options,
+        speakerLabels: options.speakerLabels ?? DEFAULT_EXPORT_SPEAKER_LABELS,
+      };
+
+      switch (conversationOptions.format) {
         case 'json':
-          return this.exportJSON(turns, metadata, options);
+          return this.exportJSON(turns, metadata, conversationOptions);
 
         case 'markdown':
-          return await this.exportMarkdown(turns, metadata, options);
+          return await this.exportMarkdown(turns, metadata, conversationOptions);
 
         case 'pdf':
-          return await this.exportPDF(turns, metadata, options);
+          return await this.exportPDF(turns, metadata, conversationOptions);
 
         case 'image':
-          return await this.exportImage(turns, metadata, options);
+          return await this.exportImage(turns, metadata, conversationOptions);
 
         default:
           return {
@@ -183,6 +189,7 @@ export class ConversationExportService {
     // First create a clean markdown (no inlining)
     let markdown = MarkdownFormatter.format(turns, metadata, {
       usePromptAsTurnHeading: options.usePromptAsTurnHeading,
+      speakerLabels: options.speakerLabels,
     });
 
     // Strip image source attribution lines if user opted out
@@ -203,7 +210,10 @@ export class ConversationExportService {
     metadata: ConversationMetadata,
     options: ExportOptions,
   ): Promise<ExportResult> {
-    await PDFPrintService.export(turns, metadata, { fontSize: options.fontSize });
+    await PDFPrintService.export(turns, metadata, {
+      fontSize: options.fontSize,
+      speakerLabels: options.speakerLabels,
+    });
 
     // Note: We can't get the actual filename from print dialog
     // User chooses filename in Save as PDF dialog
@@ -227,6 +237,7 @@ export class ConversationExportService {
       filename,
       fontSize: options.fontSize,
       imageWidth: options.imageWidth,
+      speakerLabels: options.speakerLabels,
     });
     return { success: true, format: 'image' as ExportFormat, filename };
   }

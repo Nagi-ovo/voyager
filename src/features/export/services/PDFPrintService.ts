@@ -5,7 +5,12 @@
  */
 import { isSafari } from '@/core/utils/browser';
 
-import type { ChatTurn, ConversationMetadata } from '../types/export';
+import {
+  type ChatTurn,
+  type ConversationMetadata,
+  DEFAULT_EXPORT_SPEAKER_LABELS,
+  type ExportSpeakerLabels,
+} from '../types/export';
 import { DOMContentExtractor } from './DOMContentExtractor';
 import { buildKatexExportStyles } from './katexExportStyles';
 import { buildMermaidExportStyles } from './mermaidExportStyles';
@@ -39,9 +44,9 @@ export class PDFPrintService {
   static async export(
     turns: ChatTurn[],
     metadata: ConversationMetadata,
-    options?: { fontSize?: number },
+    options?: { fontSize?: number; speakerLabels?: ExportSpeakerLabels },
   ): Promise<void> {
-    await this.exportInternal(turns, metadata, false, options?.fontSize);
+    await this.exportInternal(turns, metadata, false, options?.fontSize, options?.speakerLabels);
   }
 
   static async exportDocument(content: PrintableDocumentContent): Promise<void> {
@@ -74,6 +79,7 @@ export class PDFPrintService {
     metadata: ConversationMetadata,
     preferMetadataTitle: boolean,
     fontSize?: number,
+    speakerLabels: ExportSpeakerLabels = DEFAULT_EXPORT_SPEAKER_LABELS,
   ): Promise<void> {
     // Ensure we don't leave a previous export container around (e.g. if a prior export failed)
     this.cleanup();
@@ -81,7 +87,12 @@ export class PDFPrintService {
     const safari = isSafari();
 
     // Create print container
-    const container = this.createPrintContainer(turns, metadata, preferMetadataTitle);
+    const container = this.createPrintContainer(
+      turns,
+      metadata,
+      preferMetadataTitle,
+      speakerLabels,
+    );
     if (safari) {
       isolateMermaidSvgImages(container);
     } else {
@@ -190,6 +201,7 @@ export class PDFPrintService {
     turns: ChatTurn[],
     metadata: ConversationMetadata,
     preferMetadataTitle: boolean,
+    speakerLabels: ExportSpeakerLabels,
   ): HTMLElement {
     const container = document.createElement('div');
     container.id = this.PRINT_CONTAINER_ID;
@@ -199,7 +211,7 @@ export class PDFPrintService {
     container.innerHTML = `
       <div class="gv-print-document">
         ${this.renderHeader(metadata, preferMetadataTitle)}
-        ${this.renderContent(turns)}
+        ${this.renderContent(turns, speakerLabels)}
         ${this.renderFooter(metadata)}
       </div>
     `;
@@ -528,10 +540,10 @@ export class PDFPrintService {
   /**
    * Render conversation content
    */
-  private static renderContent(turns: ChatTurn[]): string {
+  private static renderContent(turns: ChatTurn[], speakerLabels: ExportSpeakerLabels): string {
     return `
       <div class="gv-print-content">
-        ${turns.map((turn, index) => this.renderTurn(turn, index + 1)).join('\n')}
+        ${turns.map((turn, index) => this.renderTurn(turn, index + 1, speakerLabels)).join('\n')}
       </div>
     `;
   }
@@ -539,7 +551,11 @@ export class PDFPrintService {
   /**
    * Render a single turn
    */
-  private static renderTurn(turn: ChatTurn, index: number): string {
+  private static renderTurn(
+    turn: ChatTurn,
+    index: number,
+    speakerLabels: ExportSpeakerLabels,
+  ): string {
     const starredClass = turn.starred ? 'gv-print-turn-starred' : '';
 
     const userContent = turn.userElement
@@ -560,12 +576,12 @@ export class PDFPrintService {
         </div>
 
         <div class="gv-print-turn-user">
-          <div class="gv-print-turn-label">👤 User</div>
+          <div class="gv-print-turn-label">👤 ${this.escapeHTML(speakerLabels.user)}</div>
           <div class="gv-print-turn-text">${userContent}</div>
         </div>
 
         <div class="gv-print-turn-assistant">
-          <div class="gv-print-turn-label">🤖 Assistant</div>
+          <div class="gv-print-turn-label">🤖 ${this.escapeHTML(speakerLabels.assistant)}</div>
           <div class="gv-print-turn-text">${assistantContent}</div>
         </div>
       </div>
@@ -586,7 +602,7 @@ export class PDFPrintService {
           hasUser
             ? `
         <div class="gv-print-turn-user">
-          <div class="gv-print-turn-label">👤 User</div>
+          <div class="gv-print-turn-label">👤 ${this.escapeHTML(speakerLabels.user)}</div>
           <div class="gv-print-turn-text">${userContent}</div>
         </div>
         `
@@ -597,7 +613,7 @@ export class PDFPrintService {
           hasAssistant
             ? `
           <div class="gv-print-turn-assistant">
-            <div class="gv-print-turn-label">🤖 Assistant</div>
+            <div class="gv-print-turn-label">🤖 ${this.escapeHTML(speakerLabels.assistant)}</div>
             <div class="gv-print-turn-text">${assistantContent}</div>
           </div>
         `

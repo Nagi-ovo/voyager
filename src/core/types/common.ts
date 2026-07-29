@@ -250,6 +250,7 @@ export const StorageKeys = {
 
   // Export
   EXPORT_IMAGE_WIDTH: 'gvExportImageWidth',
+  EXPORT_SPEAKER_LABELS: 'gvExportSpeakerLabels',
   // Fallback top-right export toolbar shown when Gemini's logo (the normal
   // inline injection point) is absent. Defaults to true. When false, the
   // toolbar is suppressed even if the logo is missing — users keep the menu

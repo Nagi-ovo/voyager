@@ -46,6 +46,33 @@ describe('PDFPrintService', () => {
     expect(document.getElementById('gv-pdf-print-container')).toBeNull();
   });
 
+  it('renders custom speaker labels as escaped text', async () => {
+    window.print = vi.fn();
+
+    await PDFPrintService.export(
+      [{ user: 'u', assistant: 'a', starred: false }],
+      {
+        url: 'https://gemini.google.com/app/x',
+        exportedAt: new Date().toISOString(),
+        count: 1,
+        title: 'Safe labels',
+      },
+      {
+        speakerLabels: {
+          user: '<img src=x onerror=alert(1)>',
+          assistant: 'Nova & Co.',
+        },
+      },
+    );
+
+    const labels = Array.from(document.querySelectorAll('.gv-print-turn-label'));
+    expect(labels.map((label) => label.textContent)).toEqual([
+      '👤 <img src=x onerror=alert(1)>',
+      '🤖 Nova & Co.',
+    ]);
+    expect(document.querySelector('.gv-print-turn-label img')).toBeNull();
+  });
+
   it('injects print rules scoped by pdf printing class with white page reset', async () => {
     window.print = vi.fn();
 

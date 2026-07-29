@@ -703,6 +703,26 @@
     "message": "Exportar Conversa",
     "description": "Export dialog title"
   },
+  "export_speaker_names": {
+    "message": "Nomes dos participantes",
+    "description": "Heading for speaker label fields in the export dialog"
+  },
+  "export_speaker_user_label": {
+    "message": "Rótulo do usuário",
+    "description": "Label for the human speaker name field"
+  },
+  "export_speaker_ai_label": {
+    "message": "Rótulo da IA",
+    "description": "Label for the AI speaker name field"
+  },
+  "export_speaker_user_default": {
+    "message": "Usuário",
+    "description": "Default human speaker label in conversation exports"
+  },
+  "export_speaker_assistant_default": {
+    "message": "Assistente",
+    "description": "Default AI speaker label in conversation exports"
+  },
   "export_dialog_select": {
     "message": "Escolha o formato de exportação:",
     "description": "Export format selection label"

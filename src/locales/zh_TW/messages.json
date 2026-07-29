@@ -663,6 +663,26 @@
     "message": "匯出對話",
     "description": "匯出對話框標題"
   },
+  "export_speaker_names": {
+    "message": "說話者名稱",
+    "description": "匯出對話框中說話者標籤欄位的標題"
+  },
+  "export_speaker_user_label": {
+    "message": "使用者標籤",
+    "description": "使用者說話者名稱欄位的標籤"
+  },
+  "export_speaker_ai_label": {
+    "message": "AI 標籤",
+    "description": "AI 說話者名稱欄位的標籤"
+  },
+  "export_speaker_user_default": {
+    "message": "使用者",
+    "description": "對話匯出中的預設使用者標籤"
+  },
+  "export_speaker_assistant_default": {
+    "message": "助理",
+    "description": "對話匯出中的預設 AI 標籤"
+  },
   "export_dialog_select": {
     "message": "選擇匯出格式：",
     "description": "匯出格式選擇標籤"

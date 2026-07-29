@@ -703,6 +703,26 @@
     "message": "会話のエクスポート",
     "description": "Export dialog title"
   },
+  "export_speaker_names": {
+    "message": "話者名",
+    "description": "エクスポートダイアログの話者ラベル欄の見出し"
+  },
+  "export_speaker_user_label": {
+    "message": "ユーザーラベル",
+    "description": "ユーザー話者名欄のラベル"
+  },
+  "export_speaker_ai_label": {
+    "message": "AIラベル",
+    "description": "AI話者名欄のラベル"
+  },
+  "export_speaker_user_default": {
+    "message": "ユーザー",
+    "description": "会話エクスポートのデフォルトユーザーラベル"
+  },
+  "export_speaker_assistant_default": {
+    "message": "アシスタント",
+    "description": "会話エクスポートのデフォルトAIラベル"
+  },
   "export_dialog_select": {
     "message": "エクスポート形式を選択：",
     "description": "Export format selection label"

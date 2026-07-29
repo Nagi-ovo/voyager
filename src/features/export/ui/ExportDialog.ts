@@ -8,11 +8,13 @@ import { ConversationExportService } from '../services/ConversationExportService
 import {
   DEFAULT_IMAGE_EXPORT_WIDTH,
   type ExportFormat,
+  type ExportSpeakerLabels,
   IMAGE_EXPORT_WIDTH_MEDIUM,
   IMAGE_EXPORT_WIDTH_NARROW,
   IMAGE_EXPORT_WIDTH_WIDE,
   type ImageExportWidth,
   normalizeImageExportWidth,
+  resolveExportSpeakerLabels,
 } from '../types/export';
 
 export interface ExportDialogOptions {
@@ -21,10 +23,20 @@ export interface ExportDialogOptions {
     fontSize?: number,
     imageWidth?: number,
     usePromptAsTurnHeading?: boolean,
+    speakerLabels?: ExportSpeakerLabels,
   ) => void;
   onCancel: () => void;
   initialImageWidth?: ImageExportWidth;
   showPromptHeadingOption?: boolean;
+  initialSpeakerLabels?: ExportSpeakerLabels;
+  speakerLabelsEnabled?: boolean;
+  speakerNames?: {
+    title: string;
+    userLabel: string;
+    assistantLabel: string;
+    userDefault: string;
+    assistantDefault: string;
+  };
   translations: {
     title: string;
     selectFormat: string;
@@ -62,6 +74,7 @@ export class ExportDialog {
   private fontSize: number = PDF_DEFAULT_FONT_SIZE;
   private imageWidth: ImageExportWidth = DEFAULT_IMAGE_EXPORT_WIDTH;
   private usePromptAsTurnHeading = false;
+  private speakerLabels: ExportSpeakerLabels | null = null;
 
   /**
    * Show export dialog
@@ -69,6 +82,15 @@ export class ExportDialog {
   show(options: ExportDialogOptions): void {
     this.imageWidth = normalizeImageExportWidth(options.initialImageWidth);
     this.usePromptAsTurnHeading = false;
+    if (options.speakerNames && options.speakerLabelsEnabled !== false) {
+      const defaults = {
+        user: options.speakerNames.userDefault,
+        assistant: options.speakerNames.assistantDefault,
+      };
+      this.speakerLabels = resolveExportSpeakerLabels(options.initialSpeakerLabels, defaults);
+    } else {
+      this.speakerLabels = null;
+    }
     this.overlay = this.createDialog(options);
     document.body.appendChild(this.overlay);
 
@@ -133,6 +155,7 @@ export class ExportDialog {
 
     // Prompt heading section (visible only for chat Markdown exports)
     const promptHeadingSection = this.createPromptHeadingSection(options);
+    const speakerNamesSection = this.createSpeakerNamesSection(options);
 
     // Buttons
     const buttons = document.createElement('div');
@@ -155,12 +178,28 @@ export class ExportDialog {
       const isPdf = this.selectedFormat === ('pdf' as ExportFormat);
       const isImage = this.selectedFormat === ('image' as ExportFormat);
       const isMarkdown = this.selectedFormat === ('markdown' as ExportFormat);
-      options.onExport(
-        this.selectedFormat,
-        isPdf || isImage ? this.fontSize : undefined,
-        isImage ? this.imageWidth : undefined,
-        isMarkdown ? this.usePromptAsTurnHeading : undefined,
-      );
+      const fontSize = isPdf || isImage ? this.fontSize : undefined;
+      const imageWidth = isImage ? this.imageWidth : undefined;
+      const usePromptAsTurnHeading = isMarkdown ? this.usePromptAsTurnHeading : undefined;
+      if (
+        this.selectedFormat !== ('json' as ExportFormat) &&
+        this.speakerLabels &&
+        options.speakerNames
+      ) {
+        const defaults = {
+          user: options.speakerNames.userDefault,
+          assistant: options.speakerNames.assistantDefault,
+        };
+        options.onExport(
+          this.selectedFormat,
+          fontSize,
+          imageWidth,
+          usePromptAsTurnHeading,
+          resolveExportSpeakerLabels(this.speakerLabels, defaults),
+        );
+      } else {
+        options.onExport(this.selectedFormat, fontSize, imageWidth, usePromptAsTurnHeading);
+      }
       this.hide();
     });
 
@@ -178,6 +217,9 @@ export class ExportDialog {
     }
     dialog.appendChild(formatsList);
     dialog.appendChild(promptHeadingSection);
+    if (speakerNamesSection) {
+      dialog.appendChild(speakerNamesSection);
+    }
     dialog.appendChild(fontSizeSection);
     dialog.appendChild(imageWidthSection);
     dialog.appendChild(buttons);
@@ -202,6 +244,63 @@ export class ExportDialog {
     document.addEventListener('keydown', handleEscape);
 
     return overlay;
+  }
+
+  private createSpeakerNamesSection(options: ExportDialogOptions): HTMLElement | null {
+    if (!options.speakerNames || options.speakerLabelsEnabled === false || !this.speakerLabels) {
+      return null;
+    }
+
+    const section = document.createElement('div');
+    section.className = 'gv-export-speakers-section';
+
+    const title = document.createElement('div');
+    title.className = 'gv-export-speakers-title';
+    title.textContent = options.speakerNames.title;
+
+    const fields = document.createElement('div');
+    fields.className = 'gv-export-speakers-fields';
+
+    const createField = (
+      id: string,
+      labelText: string,
+      key: keyof ExportSpeakerLabels,
+    ): HTMLElement => {
+      const field = document.createElement('div');
+      field.className = 'gv-export-speaker-field';
+
+      const label = document.createElement('label');
+      label.className = 'gv-export-speaker-label';
+      label.htmlFor = id;
+      label.textContent = labelText;
+
+      const input = document.createElement('input');
+      input.id = id;
+      input.type = 'text';
+      input.className = 'gv-export-speaker-input';
+      input.autocomplete = 'off';
+      input.value = this.speakerLabels?.[key] ?? '';
+      input.addEventListener('input', () => {
+        if (this.speakerLabels) {
+          this.speakerLabels[key] = input.value;
+        }
+      });
+
+      field.appendChild(label);
+      field.appendChild(input);
+      return field;
+    };
+
+    fields.appendChild(
+      createField('gv-export-speaker-user', options.speakerNames.userLabel, 'user'),
+    );
+    fields.appendChild(
+      createField('gv-export-speaker-assistant', options.speakerNames.assistantLabel, 'assistant'),
+    );
+
+    section.appendChild(title);
+    section.appendChild(fields);
+    return section;
   }
 
   /**
@@ -440,6 +539,9 @@ export class ExportDialog {
     const promptHeadingSection = this.overlay.querySelector(
       '.gv-export-prompt-heading-section',
     ) as HTMLElement | null;
+    const speakerNamesSection = this.overlay.querySelector(
+      '.gv-export-speakers-section',
+    ) as HTMLElement | null;
 
     if (!fontSizeSection || !imageWidthSection || !promptHeadingSection) return;
 
@@ -451,6 +553,10 @@ export class ExportDialog {
     imageWidthSection.style.display = isImage ? 'block' : 'none';
     promptHeadingSection.style.display =
       isMarkdown && promptHeadingSection.dataset.enabled === 'true' ? 'flex' : 'none';
+    if (speakerNamesSection) {
+      speakerNamesSection.style.display =
+        this.selectedFormat === ('json' as ExportFormat) ? 'none' : 'block';
+    }
 
     if (isPdf || isImage) {
       const slider = fontSizeSection.querySelector(

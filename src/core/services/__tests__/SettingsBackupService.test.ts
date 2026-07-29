@@ -30,6 +30,7 @@ describe('SettingsBackupService', () => {
         [StorageKeys.COACHMARKS_SEEN]: [],
         [StorageKeys.EXPORT_IMAGE_WIDTH]: 620,
         [StorageKeys.SLASH_PROMPT_ENABLED]: true,
+        [StorageKeys.EXPORT_SPEAKER_LABELS]: {},
       }),
     );
     expect(BACKUPABLE_SYNC_SETTINGS_DEFAULTS).not.toHaveProperty(StorageKeys.PLUGINS_STATE);

@@ -118,6 +118,21 @@ describe('ConversationExportService', () => {
       expect(markdown).not.toContain('### 👤 User');
     });
 
+    it('passes custom speaker labels to Markdown formatting', async () => {
+      const formatSpy = vi.spyOn(MarkdownFormatter, 'format');
+      const speakerLabels = { user: 'Erik', assistant: 'Nova' };
+
+      await ConversationExportService.export(mockTurns, mockMetadata, {
+        format: ExportFormat.MARKDOWN,
+        speakerLabels,
+      });
+
+      expect(formatSpy).toHaveBeenCalledWith(mockTurns, mockMetadata, {
+        usePromptAsTurnHeading: undefined,
+        speakerLabels,
+      });
+    });
+
     it('should export as PDF', async () => {
       const result = await ConversationExportService.export(mockTurns, mockMetadata, {
         format: ExportFormat.PDF,
@@ -139,6 +154,22 @@ describe('ConversationExportService', () => {
       expect((global.window as Window & { print: () => void }).print).toHaveBeenCalled();
     });
 
+    it('passes custom speaker labels to PDF export', async () => {
+      const exportSpy = vi.spyOn(PDFPrintService, 'export').mockResolvedValue(undefined);
+      const speakerLabels = { user: 'Erik', assistant: 'Nova' };
+
+      await ConversationExportService.export(mockTurns, mockMetadata, {
+        format: ExportFormat.PDF,
+        fontSize: 14,
+        speakerLabels,
+      });
+
+      expect(exportSpy).toHaveBeenCalledWith(mockTurns, mockMetadata, {
+        fontSize: 14,
+        speakerLabels,
+      });
+    });
+
     it('should export as Image', async () => {
       (toBlob as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
         new Blob(['x'], { type: 'image/png' }),
@@ -151,6 +182,25 @@ describe('ConversationExportService', () => {
       expect(result.success).toBe(true);
       expect(result.format).toBe('image');
       expect(result.filename).toBe('Premier-League-Fantasy.png');
+    });
+
+    it('passes custom speaker labels to image export', async () => {
+      const exportSpy = vi.spyOn(ImageExportService, 'export').mockResolvedValue(undefined);
+      const speakerLabels = { user: 'Erik', assistant: 'Nova' };
+
+      await ConversationExportService.export(mockTurns, mockMetadata, {
+        format: ExportFormat.IMAGE,
+        fontSize: 22,
+        imageWidth: 960,
+        speakerLabels,
+      });
+
+      expect(exportSpy).toHaveBeenCalledWith(mockTurns, mockMetadata, {
+        filename: 'Premier-League-Fantasy.png',
+        fontSize: 22,
+        imageWidth: 960,
+        speakerLabels,
+      });
     });
 
     it('should export report markdown without turn wrappers in document layout', async () => {
@@ -257,6 +307,7 @@ describe('ConversationExportService', () => {
         format: ExportFormat.PDF,
         layout: 'document' as ExportLayout,
         fontSize: 15,
+        speakerLabels: { user: 'Erik', assistant: 'Nova' },
       });
 
       expect(result.success).toBe(true);
@@ -285,6 +336,7 @@ describe('ConversationExportService', () => {
         layout: 'document' as ExportLayout,
         fontSize: 24,
         imageWidth: 1360,
+        speakerLabels: { user: 'Erik', assistant: 'Nova' },
       });
 
       expect(result.success).toBe(true);
@@ -420,6 +472,28 @@ describe('ConversationExportService', () => {
       expect(items[0].assistant).toBe('Plain text assistant');
 
       expect(items[0].userElement).toBeUndefined();
+    });
+
+    it('keeps JSON roles and object shape unchanged when speaker labels are provided', async () => {
+      const downloadSpy = vi.spyOn(
+        ConversationExportService as unknown as { downloadJSON: (...args: unknown[]) => unknown },
+        'downloadJSON',
+      );
+
+      await ConversationExportService.export(mockTurns, mockMetadata, {
+        format: ExportFormat.JSON,
+        speakerLabels: { user: 'Erik', assistant: 'Nova' },
+      });
+
+      const payload = downloadSpy.mock.calls[0][0] as {
+        items: Array<Record<string, unknown>>;
+      };
+      expect(payload.items[0]).toEqual({
+        user: 'Test question',
+        assistant: 'Test answer',
+        starred: false,
+      });
+      expect(payload.items[0]).not.toHaveProperty('speakerLabels');
     });
 
     it('includes structured attachment metadata without serializing DOM elements', async () => {

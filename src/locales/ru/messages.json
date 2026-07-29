@@ -703,6 +703,26 @@
     "message": "Экспорт разговора",
     "description": "Export dialog title"
   },
+  "export_speaker_names": {
+    "message": "Имена участников",
+    "description": "Heading for speaker label fields in the export dialog"
+  },
+  "export_speaker_user_label": {
+    "message": "Метка пользователя",
+    "description": "Label for the human speaker name field"
+  },
+  "export_speaker_ai_label": {
+    "message": "Метка ИИ",
+    "description": "Label for the AI speaker name field"
+  },
+  "export_speaker_user_default": {
+    "message": "Пользователь",
+    "description": "Default human speaker label in conversation exports"
+  },
+  "export_speaker_assistant_default": {
+    "message": "Ассистент",
+    "description": "Default AI speaker label in conversation exports"
+  },
   "export_dialog_select": {
     "message": "Выберите формат экспорта:",
     "description": "Export format selection label"
