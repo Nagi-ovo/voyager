@@ -522,6 +522,7 @@ export function stopWatermarkRemover(): void {
   for (const timeout of pendingDebounceTimeouts) clearTimeout(timeout);
   pendingDebounceTimeouts.clear();
   clearPreviewImageState();
+  clearActiveDownloadSequence();
 
   // Tell the MAIN-world fetch interceptor the feature is off, so it stops
   // intercepting and doesn't wait on bridge responses that will never come.
@@ -567,6 +568,26 @@ type DownloadToastSequence = {
 };
 
 let activeSequence: DownloadToastSequence | null = null;
+
+function clearActiveDownloadSequence(): void {
+  if (!activeSequence) return;
+
+  if (activeSequence.processingTimer) {
+    clearTimeout(activeSequence.processingTimer);
+  }
+
+  if (statusToastManager) {
+    for (const toastId of [
+      activeSequence.downloadToastId,
+      activeSequence.warningToastId,
+      activeSequence.processingToastId,
+    ]) {
+      if (toastId) statusToastManager.removeToast(toastId);
+    }
+  }
+
+  activeSequence = null;
+}
 
 const getStatusToastManager = (): StatusToastManager => {
   if (!statusToastManager) {

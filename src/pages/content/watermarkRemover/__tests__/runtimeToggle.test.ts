@@ -148,6 +148,31 @@ describe('watermarkRemover runtime toggle', () => {
     expect(engineCreate).toHaveBeenCalledTimes(1);
   });
 
+  it('clears delayed download feedback when the runtime stops', async () => {
+    vi.useFakeTimers();
+    try {
+      engineCreate.mockResolvedValue(createEngine());
+      runtime = await import('../index');
+      const button = document.createElement('button');
+      document.body.appendChild(button);
+
+      settings.gvWatermarkDownloadEnabled = true;
+      await runtime.startWatermarkRemover();
+      button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+      expect(document.querySelectorAll('.gv-status-toast')).toHaveLength(1);
+
+      settings.gvWatermarkDownloadEnabled = false;
+      await runtime.restartWatermarkRemover();
+
+      expect(document.querySelectorAll('.gv-status-toast')).toHaveLength(0);
+      await vi.advanceTimersByTimeAsync(35_000);
+      expect(document.querySelectorAll('.gv-status-toast')).toHaveLength(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('prevents a stale async start from restoring an older enabled mode', async () => {
     let resolveEngine: (engine: ReturnType<typeof createEngine>) => void = () => undefined;
     engineCreate.mockReturnValue(
