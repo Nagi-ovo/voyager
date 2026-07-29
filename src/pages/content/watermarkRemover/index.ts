@@ -27,6 +27,8 @@ import { WatermarkEngine } from './watermarkEngine';
 let engine: WatermarkEngine | null = null;
 let enginePromise: Promise<WatermarkEngine> | null = null;
 const processingQueue = new Set<HTMLImageElement>();
+let lifecycleGeneration = 0;
+let downloadRemovalEnabled = false;
 
 // Observers are kept at module scope so they can be disconnected on teardown
 // and so re-running startWatermarkRemover() can't stack duplicate observers.
@@ -195,8 +197,9 @@ async function processImage(imgElement: HTMLImageElement): Promise<void> {
 
     console.log('[Gemini Voyager] Watermark removed from preview image');
 
-    // Add indicator to download button
-    addDownloadIndicator(imgElement);
+    if (downloadRemovalEnabled) {
+      addDownloadIndicator(imgElement);
+    }
   } catch (error) {
     console.warn('[Gemini Voyager] Failed to process image for watermark removal:', error);
     imgElement.dataset.watermarkProcessed = 'failed';
@@ -212,9 +215,11 @@ const processAllImages = (): void => {
   const images = findGeminiImages();
   images.forEach(processImage);
 
-  // Always re-run the indicator pass so blob-src previews and late-loading
-  // native buttons still pick up the 🍌 badge (idempotent).
-  decorateDownloadButtons();
+  if (downloadRemovalEnabled) {
+    // Re-run the indicator pass so blob-src previews and late-loading native
+    // buttons still pick up the 🍌 badge (idempotent).
+    decorateDownloadButtons();
+  }
 };
 
 /**
@@ -375,6 +380,8 @@ async function processImageRequest(
  * Start the watermark remover
  */
 export async function startWatermarkRemover(): Promise<void> {
+  const generation = ++lifecycleGeneration;
+
   try {
     // Initialize bridge element first (so it exists when fetch interceptor loads)
     getBridgeElement();
@@ -384,6 +391,9 @@ export async function startWatermarkRemover(): Promise<void> {
     const { download: downloadEnabled, preview: previewEnabled } = resolveWatermarkSettings(
       result ?? null,
     );
+    if (generation !== lifecycleGeneration) return;
+
+    downloadRemovalEnabled = downloadEnabled;
     notifyFetchInterceptor(downloadEnabled);
 
     if (!downloadEnabled && !previewEnabled) {
@@ -391,16 +401,15 @@ export async function startWatermarkRemover(): Promise<void> {
       return;
     }
 
-    // Setup status listener for UI feedback ASAP (avoid missing early signals).
-    // Both paths benefit from the toast/status pipeline when downloads happen.
-    setupStatusListener();
-    setupDownloadButtonTracking();
-
     console.log(
       `[Gemini Voyager] Initializing watermark remover (download=${downloadEnabled}, preview=${previewEnabled})`,
     );
 
     if (downloadEnabled) {
+      // Setup download feedback and intent tracking only for the download path.
+      setupStatusListener();
+      setupDownloadButtonTracking();
+
       // Install the bridge observer BEFORE awaiting engine init so requests
       // that arrive during the asset-loading window (typically 100ms-2s, and
       // larger after a hard navigation like an account switch) are not lost.
@@ -408,8 +417,12 @@ export async function startWatermarkRemover(): Promise<void> {
       setupFetchInterceptorBridge();
     }
 
-    enginePromise = WatermarkEngine.create();
-    engine = await enginePromise;
+    if (!enginePromise) {
+      enginePromise = WatermarkEngine.create();
+    }
+    const initializedEngine = engine ?? (await enginePromise);
+    if (generation !== lifecycleGeneration) return;
+    engine = initializedEngine;
 
     if (previewEnabled) {
       // Heavy path: replace each image's src with a watermark-stripped blob.
@@ -426,11 +439,23 @@ export async function startWatermarkRemover(): Promise<void> {
 
     console.log('[Gemini Voyager] Watermark remover ready');
   } catch (error) {
+    if (!engine) enginePromise = null;
+    if (generation !== lifecycleGeneration) return;
     if (isExtensionContextInvalidatedError(error)) {
       return;
     }
     console.error('[Gemini Voyager] Watermark remover initialization failed:', error);
   }
+}
+
+/**
+ * Re-read storage and apply the latest watermark mode to the current page.
+ * The generation guard in startWatermarkRemover makes rapid restarts
+ * latest-wins even while the engine is still loading.
+ */
+export async function restartWatermarkRemover(): Promise<void> {
+  stopWatermarkRemover();
+  await startWatermarkRemover();
 }
 
 /**
@@ -441,6 +466,9 @@ export async function startWatermarkRemover(): Promise<void> {
  * for SPA teardown/restart without leaving the interceptor thinking it's enabled.
  */
 export function stopWatermarkRemover(): void {
+  lifecycleGeneration += 1;
+  downloadRemovalEnabled = false;
+
   for (const observer of [previewObserver, indicatorObserver, bridgeObserver, statusObserver]) {
     observer?.disconnect();
   }
@@ -458,7 +486,12 @@ export function stopWatermarkRemover(): void {
   const existingBridge = document.getElementById(GV_BRIDGE_ID);
   if (existingBridge) {
     existingBridge.dataset.enabled = 'false';
+    existingBridge.removeAttribute('data-download-intent-expires-at');
   }
+
+  document
+    .querySelectorAll<HTMLElement>('.nanobanana-indicator')
+    .forEach((indicator) => indicator.remove());
 
   // Remove the global download-button tracking listeners.
   if (downloadCaptureHandler) {

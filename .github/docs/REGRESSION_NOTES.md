@@ -95,6 +95,40 @@ Commit:
 
 `fix(watermark): distinguish dark restoration from clipping damage`
 
+## Watermark toggles must reconfigure already-open Gemini tabs
+
+Symptom:
+
+Changing either watermark-removal toggle in the popup had no effect in an
+already-open Gemini tab until the page was refreshed.
+
+Root cause:
+
+The content runtime read both settings only during startup. Background
+registration kept future documents in sync, but dynamically registering
+`fetchInterceptor.js` did not install it into a document that was already open
+when download removal changed from disabled to enabled.
+
+Fix:
+
+Route watermark storage changes through the existing content-script storage
+listener, fully stop and restart the watermark runtime, reuse its initialized
+engine, and reject stale async starts with a lifecycle generation. When
+download removal is enabled, also inject the guarded MAIN-world interceptor
+once into matching open tabs; disabling keeps installed wrappers in immediate
+pass-through mode through the DOM bridge.
+
+Regression test:
+
+`src/pages/content/watermarkRemover/__tests__/runtimeToggle.test.ts` verifies
+bidirectional runtime changes, engine reuse, stale-start rejection, and content
+entry wiring. `src/pages/background/__tests__/watermarkOpenTabs.test.ts`
+verifies targeted MAIN-world injection and closed-tab failure handling.
+
+Commit:
+
+`fix(watermark): apply toggles to open Gemini tabs`
+
 ## Mermaid must honor Gemini explicit light theme
 
 Symptom:

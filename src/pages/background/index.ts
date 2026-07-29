@@ -76,6 +76,7 @@ import type { TranslationKey } from '@/utils/translations';
 
 import { resolveOptionalHighlightSetting } from './highlightOptionalSetting';
 import { isHandledBackgroundRuntimeMessage } from './runtimeMessageRouting';
+import { injectWatermarkInterceptorIntoOpenTabs } from './watermarkOpenTabs';
 
 const CUSTOM_CONTENT_SCRIPT_ID = 'gv-custom-content-script';
 const PLUGIN_CONTENT_SCRIPT_ID = 'gv-plugin-content-script';
@@ -617,7 +618,7 @@ function filterForkNodesByRouteScope(
  * Register the fetch interceptor script into MAIN world
  * This allows intercepting fetch calls made by the page itself
  */
-async function registerFetchInterceptor(): Promise<void> {
+async function doRegisterFetchInterceptor(injectOpenTabs: boolean): Promise<void> {
   if (!chrome.scripting?.registerContentScripts) return;
 
   // Safari ships the interceptor as a static MAIN-world content script. A
@@ -661,9 +662,24 @@ async function registerFetchInterceptor(): Promise<void> {
       },
     ]);
     console.log('[Background] Fetch interceptor registered for MAIN world');
+    if (injectOpenTabs) {
+      await injectWatermarkInterceptorIntoOpenTabs(GEMINI_FETCH_INTERCEPTOR_MATCHES);
+    }
   } catch (error) {
     console.error('[Background] Failed to register fetch interceptor:', error);
   }
+}
+
+// Serialize startup and storage-triggered syncs so rapid toggle changes cannot
+// leave an older registration result as the final state.
+let fetchInterceptorRegistrationQueue: Promise<void> = Promise.resolve();
+
+function registerFetchInterceptor(injectOpenTabs = false): Promise<void> {
+  const next = fetchInterceptorRegistrationQueue.then(() =>
+    doRegisterFetchInterceptor(injectOpenTabs),
+  );
+  fetchInterceptorRegistrationQueue = next.catch(() => {});
+  return next;
 }
 
 async function unregisterResponseCompleteObserver(): Promise<void> {
@@ -1236,7 +1252,7 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   // (Only the download flag actually affects registration, but we also watch
   // the legacy key so a one-time migration write triggers re-registration.)
   if (WATERMARK_STORAGE_KEYS.some((key) => Object.prototype.hasOwnProperty.call(changes, key))) {
-    void registerFetchInterceptor();
+    void registerFetchInterceptor(true);
   }
 
   if (
