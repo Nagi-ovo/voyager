@@ -124,6 +124,7 @@ let remoteAnnouncementsCleanup: (() => void) | null = null;
 let storageQuotaWarningCleanup: (() => void) | null = null;
 let accountContextBridgeCleanup: (() => void) | null = null;
 let codeBlockCollapseCleanup: (() => void) | null = null;
+let watermarkRemoverStarted = false;
 
 async function isForkFeatureEnabled(): Promise<boolean> {
   try {
@@ -321,7 +322,8 @@ async function initializeFeatures(): Promise<void> {
       await delay(LIGHT_FEATURE_INIT_DELAY);
 
       // Independent content helpers can initialize in the same idle slice.
-      startWatermarkRemover();
+      watermarkRemoverStarted = true;
+      void startWatermarkRemover();
       startDeepResearchExport();
       startContextSync();
       startGemsHider();
@@ -537,6 +539,7 @@ function handleVisibilityChange(): void {
       areaName: string,
     ) => {
       if (
+        watermarkRemoverStarted &&
         areaName === 'sync' &&
         WATERMARK_STORAGE_KEYS.some((key) => Object.prototype.hasOwnProperty.call(changes, key))
       ) {

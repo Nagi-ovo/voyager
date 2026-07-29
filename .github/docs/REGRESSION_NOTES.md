@@ -112,21 +112,21 @@ when download removal changed from disabled to enabled.
 Fix:
 
 Route watermark storage changes through the existing content-script storage
-listener, fully stop and restart the watermark runtime, reuse its initialized
-engine, and reject stale async starts and in-flight preview writes with a
-lifecycle generation. If a restart leaves preview removal enabled, retry stale
-preview work after releasing its queue slot. When download removal is enabled,
-also inject the guarded MAIN-world interceptor once into matching open tabs;
-disabling keeps installed wrappers in immediate pass-through mode through the
-DOM bridge.
+listener only after normal Gemini startup has activated the watermark runtime,
+fully stop and restart the runtime, reuse its initialized engine, and reject
+stale async starts and in-flight preview writes with a lifecycle generation. If
+a restart leaves preview removal enabled, retry stale preview work after
+releasing its queue slot. When download removal is enabled, also inject the
+guarded MAIN-world interceptor once into matching open tabs; disabling keeps
+installed wrappers in immediate pass-through mode through the DOM bridge.
 
 Regression test:
 
 `src/pages/content/watermarkRemover/__tests__/runtimeToggle.test.ts` verifies
 bidirectional runtime changes, engine reuse, stale-start and stale-preview
-rejection, latest-lifecycle preview retry, and content entry wiring.
-`src/pages/background/__tests__/watermarkOpenTabs.test.ts` verifies targeted
-MAIN-world injection and closed-tab failure handling.
+rejection, latest-lifecycle preview retry, and startup-gated content entry
+wiring. `src/pages/background/__tests__/watermarkOpenTabs.test.ts` verifies
+targeted MAIN-world injection and closed-tab failure handling.
 
 Commit:
 

@@ -234,6 +234,11 @@ describe('watermarkRemover runtime toggle', () => {
     );
 
     expect(contentEntry).toContain('WATERMARK_STORAGE_KEYS.some');
-    expect(contentEntry).toContain('void restartWatermarkRemover();');
+    expect(contentEntry).toMatch(
+      /watermarkRemoverStarted = true;\s+void startWatermarkRemover\(\);/,
+    );
+    expect(contentEntry).toMatch(
+      /watermarkRemoverStarted &&\s+areaName === 'sync'[\s\S]*?void restartWatermarkRemover\(\);/,
+    );
   });
 });
