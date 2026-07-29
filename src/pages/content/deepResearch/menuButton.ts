@@ -494,15 +494,17 @@ export function isDeepResearchReportMenuPanel(menuPanel: HTMLElement): boolean {
   const menuContent = menuPanel.querySelector('.mat-mdc-menu-content');
   if (!(menuContent instanceof HTMLElement)) return false;
 
-  const hasShareContainer = Boolean(
-    menuContent.querySelector('[data-test-id="share-button-tooltip-container"]'),
+  const hasReportShareActions = Boolean(
+    menuContent.querySelector('[data-test-id="share-button-tooltip-container"]') ||
+      menuContent.querySelector('[data-test-id="share-drive-button"]') ||
+      menuContent.querySelector('[data-test-id="share-classroom-button"]'),
   );
   const hasReportExportActions = Boolean(
     menuContent.querySelector('[data-test-id="export-to-docs-button"]') ||
       menuContent.querySelector('[data-test-id="copy-button"]'),
   );
 
-  return hasShareContainer && hasReportExportActions;
+  return hasReportShareActions && hasReportExportActions;
 }
 
 /**

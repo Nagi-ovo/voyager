@@ -52,7 +52,9 @@ function createNativeMenuButton({
   return button;
 }
 
-function createDeepResearchReportMenuPanel(): HTMLElement {
+function createDeepResearchReportMenuPanel(
+  shareMarker = 'share-button-tooltip-container',
+): HTMLElement {
   const panel = document.createElement('div');
   panel.className = 'mat-mdc-menu-panel';
   panel.setAttribute('role', 'menu');
@@ -61,7 +63,7 @@ function createDeepResearchReportMenuPanel(): HTMLElement {
   content.className = 'mat-mdc-menu-content';
 
   const shareContainer = document.createElement('div');
-  shareContainer.setAttribute('data-test-id', 'share-button-tooltip-container');
+  shareContainer.setAttribute('data-test-id', shareMarker);
   const shareButtonWrapper = document.createElement('share-button');
   const shareButton = createNativeMenuButton({
     testId: 'share-button',
@@ -131,6 +133,63 @@ describe('applyDeepResearchDownloadButtonI18n', () => {
     panel.appendChild(content);
 
     expect(isDeepResearchReportMenuPanel(panel)).toBe(true);
+  });
+
+  it.each([
+    ['share-drive-button', 'export-to-docs-button'],
+    ['share-classroom-button', 'copy-button'],
+  ])('identifies report menu with %s and %s', (shareTestId, exportTestId) => {
+    const panel = document.createElement('div');
+    panel.className = 'mat-mdc-menu-panel';
+    panel.setAttribute('role', 'menu');
+
+    const content = document.createElement('div');
+    content.className = 'mat-mdc-menu-content';
+
+    for (const testId of [shareTestId, exportTestId]) {
+      const action = document.createElement('button');
+      action.setAttribute('data-test-id', testId);
+      content.appendChild(action);
+    }
+
+    panel.appendChild(content);
+
+    expect(isDeepResearchReportMenuPanel(panel)).toBe(true);
+  });
+
+  it('rejects report share actions without an export action', () => {
+    const panel = document.createElement('div');
+    panel.className = 'mat-mdc-menu-panel';
+    panel.setAttribute('role', 'menu');
+
+    const content = document.createElement('div');
+    content.className = 'mat-mdc-menu-content';
+
+    const shareAction = document.createElement('button');
+    shareAction.setAttribute('data-test-id', 'share-drive-button');
+    content.appendChild(shareAction);
+    panel.appendChild(content);
+
+    expect(isDeepResearchReportMenuPanel(panel)).toBe(false);
+  });
+
+  it('rejects generic export menu without deep research share actions', () => {
+    const panel = document.createElement('div');
+    panel.className = 'mat-mdc-menu-panel';
+    panel.setAttribute('role', 'menu');
+
+    const content = document.createElement('div');
+    content.className = 'mat-mdc-menu-content';
+
+    for (const testId of ['export-to-docs-button', 'copy-button']) {
+      const action = document.createElement('button');
+      action.setAttribute('data-test-id', testId);
+      content.appendChild(action);
+    }
+
+    panel.appendChild(content);
+
+    expect(isDeepResearchReportMenuPanel(panel)).toBe(false);
   });
 
   it('rejects sidebar conversation menu panel for deep research injection', () => {
@@ -281,6 +340,32 @@ describe('applyDeepResearchDownloadButtonI18n', () => {
     expect(downloadText?.className).toBe(templateText?.className);
     expect(saveReportText?.className).toBe(templateText?.className);
     expect(saveReport?.textContent?.toLowerCase()).not.toContain('description');
+  });
+
+  it('injects both export actions into a report menu with direct share actions', async () => {
+    const w = window as unknown as {
+      chrome?: {
+        storage?: {
+          sync?: {
+            get: (key: string, cb: (result: Record<string, unknown>) => void) => void;
+          };
+        };
+      };
+    };
+    w.chrome = {
+      storage: {
+        sync: {
+          get: (_key, cb) => cb({}),
+        },
+      },
+    };
+
+    const panel = createDeepResearchReportMenuPanel('share-drive-button');
+
+    await injectDownloadButton(panel);
+
+    expect(panel.querySelector('.gv-deep-research-download')).toBeTruthy();
+    expect(panel.querySelector('.gv-deep-research-save-report')).toBeTruthy();
   });
 
   it('renders and removes deep research export progress overlay', () => {
