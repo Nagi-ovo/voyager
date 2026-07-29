@@ -110,6 +110,24 @@ const findGeminiImages = (): HTMLImageElement[] =>
   );
 
 /**
+ * Clear preview bookkeeping without restoring the current image source.
+ * Gemini can reuse an existing <img> for a later generated image, so stale
+ * processed markers must not prevent the replacement source from being handled
+ * after preview removal is re-enabled.
+ */
+const clearPreviewImageState = (): void => {
+  document
+    .querySelectorAll<HTMLImageElement>(
+      'img[data-watermark-processed], img[data-watermark-original-src]',
+    )
+    .forEach((img) => {
+      delete img.dataset.watermarkProcessed;
+      delete img.dataset.watermarkOriginalSrc;
+      delete img.dataset.processedUrl;
+    });
+};
+
+/**
  * Replace image URL size parameter to get full resolution
  */
 const replaceWithNormalSize = (src: string): string => {
@@ -503,6 +521,7 @@ export function stopWatermarkRemover(): void {
   statusObserver = null;
   for (const timeout of pendingDebounceTimeouts) clearTimeout(timeout);
   pendingDebounceTimeouts.clear();
+  clearPreviewImageState();
 
   // Tell the MAIN-world fetch interceptor the feature is off, so it stops
   // intercepting and doesn't wait on bridge responses that will never come.

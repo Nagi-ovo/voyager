@@ -227,6 +227,41 @@ describe('watermarkRemover runtime toggle', () => {
     expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
   });
 
+  it('processes a replacement source after preview removal is re-enabled', async () => {
+    const activeEngine = createEngine();
+    engineCreate.mockResolvedValue(activeEngine);
+    runtime = await import('../index');
+    const image = createPreviewImage();
+
+    settings.gvWatermarkPreviewEnabled = true;
+    await runtime.startWatermarkRemover();
+    await vi.waitFor(() => expect(image.dataset.watermarkProcessed).toBe('true'));
+
+    const processedSrc = image.src;
+    expect(image.dataset.watermarkOriginalSrc).toBe(
+      'https://lh3.googleusercontent.com/generated=s1024',
+    );
+    expect(image.dataset.processedUrl).toBe('blob:processed-preview');
+
+    settings.gvWatermarkPreviewEnabled = false;
+    await runtime.restartWatermarkRemover();
+
+    expect(image.src).toBe(processedSrc);
+    expect(image.dataset.watermarkProcessed).toBeUndefined();
+    expect(image.dataset.watermarkOriginalSrc).toBeUndefined();
+    expect(image.dataset.processedUrl).toBeUndefined();
+
+    image.src = 'https://lh3.googleusercontent.com/replacement=s1024';
+    settings.gvWatermarkPreviewEnabled = true;
+    await runtime.restartWatermarkRemover();
+
+    await vi.waitFor(() => expect(activeEngine.removeWatermarkFromImage).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(image.dataset.watermarkProcessed).toBe('true'));
+    expect(image.dataset.watermarkOriginalSrc).toBe(
+      'https://lh3.googleusercontent.com/replacement=s1024',
+    );
+  });
+
   it('wires sync watermark setting changes to the current-page restart', () => {
     const contentEntry = readFileSync(
       resolve(process.cwd(), 'src/pages/content/index.tsx'),
