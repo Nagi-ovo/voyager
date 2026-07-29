@@ -29,6 +29,7 @@ let enginePromise: Promise<WatermarkEngine> | null = null;
 const processingQueue = new Set<HTMLImageElement>();
 let lifecycleGeneration = 0;
 let downloadRemovalEnabled = false;
+let previewRemovalEnabled = false;
 
 // Observers are kept at module scope so they can be disconnected on teardown
 // and so re-running startWatermarkRemover() can't stack duplicate observers.
@@ -175,6 +176,13 @@ function addDownloadIndicator(imgElement: HTMLImageElement): void {
 async function processImage(imgElement: HTMLImageElement): Promise<void> {
   if (!engine || processingQueue.has(imgElement)) return;
 
+  const generation = lifecycleGeneration;
+  let stale = false;
+  const isStale = (): boolean => {
+    stale = generation !== lifecycleGeneration || !previewRemovalEnabled;
+    return stale;
+  };
+
   processingQueue.add(imgElement);
   imgElement.dataset.watermarkProcessed = 'processing';
 
@@ -183,10 +191,13 @@ async function processImage(imgElement: HTMLImageElement): Promise<void> {
     // Fetch full resolution image via background script (bypasses CORS)
     const normalSizeSrc = replaceWithNormalSize(originalSrc);
     const normalSizeImg = await fetchImageViaBackground(normalSizeSrc);
+    if (isStale()) return;
 
     // Process image to remove watermark
     const processedCanvas = await engine.removeWatermarkFromImage(normalSizeImg);
+    if (isStale()) return;
     const processedBlob = await canvasToBlob(processedCanvas);
+    if (isStale()) return;
 
     // Replace image source with processed blob URL
     const processedUrl = URL.createObjectURL(processedBlob);
@@ -201,10 +212,22 @@ async function processImage(imgElement: HTMLImageElement): Promise<void> {
       addDownloadIndicator(imgElement);
     }
   } catch (error) {
+    if (isStale()) return;
     console.warn('[Gemini Voyager] Failed to process image for watermark removal:', error);
     imgElement.dataset.watermarkProcessed = 'failed';
   } finally {
     processingQueue.delete(imgElement);
+    if (stale) {
+      if (imgElement.dataset.watermarkProcessed === 'processing') {
+        delete imgElement.dataset.watermarkProcessed;
+      }
+      // A full restart can invalidate this task while leaving preview removal
+      // enabled (for example, when only the download toggle changed). Retry
+      // after releasing the queue slot so the latest lifecycle owns the write.
+      if (previewRemovalEnabled && imgElement.isConnected && isValidGeminiImage(imgElement)) {
+        void processImage(imgElement);
+      }
+    }
   }
 }
 
@@ -394,6 +417,7 @@ export async function startWatermarkRemover(): Promise<void> {
     if (generation !== lifecycleGeneration) return;
 
     downloadRemovalEnabled = downloadEnabled;
+    previewRemovalEnabled = previewEnabled;
     notifyFetchInterceptor(downloadEnabled);
 
     if (!downloadEnabled && !previewEnabled) {
@@ -468,6 +492,7 @@ export async function restartWatermarkRemover(): Promise<void> {
 export function stopWatermarkRemover(): void {
   lifecycleGeneration += 1;
   downloadRemovalEnabled = false;
+  previewRemovalEnabled = false;
 
   for (const observer of [previewObserver, indicatorObserver, bridgeObserver, statusObserver]) {
     observer?.disconnect();
