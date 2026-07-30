@@ -1,15 +1,31 @@
 import { toBlob } from 'html-to-image';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { ImageExportService } from '@/features/export/services/ImageExportService';
+import type { ChatTurn, ConversationMetadata } from '@/features/export/types/export';
+
 import {
   copyElementAsImageToClipboard,
   copyImageBlobToClipboard,
   copyImageBlobViaSafariNativePasteboard,
   downloadImageBlob,
+  renderResponseImageBlob,
 } from '../responseImageCopy';
+
+const { storageGetMock } = vi.hoisted(() => ({
+  storageGetMock: vi.fn(),
+}));
 
 vi.mock('html-to-image', () => ({
   toBlob: vi.fn(),
+}));
+
+vi.mock('@/core/services/StorageService', () => ({
+  storageService: {
+    get: storageGetMock,
+    remove: vi.fn(),
+    set: vi.fn(),
+  },
 }));
 
 vi.mock('@/core/utils/safariNativeClipboard', () => ({
@@ -25,8 +41,89 @@ class MockClipboardItem {
 }
 
 describe('responseImageCopy', () => {
+  const responseTurn: ChatTurn[] = [
+    {
+      user: '',
+      assistant: 'Selected reply',
+      starred: false,
+      omitEmptySections: true,
+    },
+  ];
+  const metadata: ConversationMetadata = {
+    url: 'https://gemini.google.com/app/test',
+    exportedAt: '2026-07-30T00:00:00.000Z',
+    count: 1,
+    title: 'Selected reply',
+  };
+  const speakerDefaults = {
+    user: 'User',
+    assistant: 'Assistant',
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
+    storageGetMock.mockResolvedValue({ success: true, data: undefined });
+  });
+
+  it('renders a single reply with saved custom speaker labels', async () => {
+    storageGetMock.mockResolvedValue({
+      success: true,
+      data: { user: 'Erik', assistant: 'Nova' },
+    });
+    let renderedTarget: HTMLElement | null = null;
+    (toBlob as unknown as ReturnType<typeof vi.fn>).mockImplementation(
+      async (node: HTMLElement) => {
+        renderedTarget = node;
+        return new Blob(['img'], { type: 'image/png' });
+      },
+    );
+    const renderSpy = vi.spyOn(ImageExportService, 'renderConversationBlob');
+
+    try {
+      await renderResponseImageBlob(responseTurn, metadata, {
+        imageWidth: 960,
+        speakerDefaults,
+      });
+
+      expect(renderSpy).toHaveBeenCalledWith(responseTurn, metadata, {
+        imageWidth: 960,
+        speakerLabels: { user: 'Erik', assistant: 'Nova' },
+      });
+      const target = renderedTarget as HTMLElement | null;
+      expect(
+        Array.from(target?.querySelectorAll('.gv-image-export-label') ?? []).map(
+          (label) => label.textContent,
+        ),
+      ).toEqual(['Nova']);
+    } finally {
+      renderSpy.mockRestore();
+    }
+  });
+
+  it('renders a single reply with default labels when no override is saved', async () => {
+    const localizedSpeakerDefaults = {
+      user: 'Question',
+      assistant: 'AI response',
+    };
+    let renderedTarget: HTMLElement | null = null;
+    (toBlob as unknown as ReturnType<typeof vi.fn>).mockImplementation(
+      async (node: HTMLElement) => {
+        renderedTarget = node;
+        return new Blob(['img'], { type: 'image/png' });
+      },
+    );
+
+    await renderResponseImageBlob(responseTurn, metadata, {
+      imageWidth: 720,
+      speakerDefaults: localizedSpeakerDefaults,
+    });
+
+    const target = renderedTarget as HTMLElement | null;
+    expect(
+      Array.from(target?.querySelectorAll('.gv-image-export-label') ?? []).map(
+        (label) => label.textContent,
+      ),
+    ).toEqual(['AI response']);
   });
 
   it('writes rendered png blob to clipboard', async () => {

@@ -14,7 +14,6 @@ import {
   getSavedImageExportWidth,
   saveImageExportWidth,
 } from '../../../features/export/services/ImageExportPreferenceService';
-import { ImageExportService } from '../../../features/export/services/ImageExportService';
 import {
   getSavedSpeakerLabelOverrides,
   saveSpeakerLabelOverrides,
@@ -60,6 +59,7 @@ import {
   copyImageBlobToClipboard,
   copyImageBlobViaSafariNativePasteboard,
   downloadImageBlob,
+  renderResponseImageBlob,
 } from './responseImageCopy';
 import { resolveUniqueExportTurnIds } from './selectionIds';
 import { groupSelectedMessagesByTurn, resolveInitialSelectedMessageIds } from './selectionUtils';
@@ -2125,7 +2125,13 @@ async function handleResponseCopyImageClick(
   }
   trigger.dataset.gvCopyImageBusy = '1';
 
-  const texts = getResponseCopyImageTexts(getCurrentLanguage(), dict);
+  const lang = getCurrentLanguage();
+  const texts = getResponseCopyImageTexts(lang, dict);
+  const t = (key: TranslationKey) => dict[lang]?.[key] ?? dict.en?.[key] ?? key;
+  const speakerDefaults: ExportSpeakerLabels = {
+    user: t('export_speaker_user_default'),
+    assistant: t('export_speaker_assistant_default'),
+  };
   const messageId = resolveAssistantMessageIdFromMenuTrigger(trigger);
   let blobForFallback: Blob | null = null;
   try {
@@ -2148,8 +2154,9 @@ async function handleResponseCopyImageClick(
       title: getConversationTitleForExport(),
     };
 
-    const blob = await ImageExportService.renderConversationBlob(turnsForExport, metadata, {
+    const blob = await renderResponseImageBlob(turnsForExport, metadata, {
       imageWidth,
+      speakerDefaults,
     });
     blobForFallback = blob;
     await copyImageBlobToClipboard(blob);

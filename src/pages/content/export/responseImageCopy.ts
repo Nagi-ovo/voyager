@@ -1,5 +1,13 @@
 import { requestSafariNativeImageCopy } from '@/core/utils/safariNativeClipboard';
+import { ImageExportService } from '@/features/export/services/ImageExportService';
 import { renderElementToImageBlob } from '@/features/export/services/ImageRenderService';
+import { getSavedSpeakerLabelOverrides } from '@/features/export/services/SpeakerLabelPreferenceService';
+import {
+  type ChatTurn,
+  type ConversationMetadata,
+  type ExportSpeakerLabels,
+  resolveExportSpeakerLabels,
+} from '@/features/export/types/export';
 
 type ClipboardWriteLike = Pick<Clipboard, 'write'>;
 type ClipboardItemLike = new (items: Record<string, Blob>) => ClipboardItem;
@@ -8,6 +16,25 @@ export type CopyElementAsImageOptions = {
   clipboard?: ClipboardWriteLike | null;
   ClipboardItemCtor?: ClipboardItemLike | null;
 };
+
+export type RenderResponseImageBlobOptions = {
+  imageWidth: number;
+  speakerDefaults: ExportSpeakerLabels;
+};
+
+export async function renderResponseImageBlob(
+  turns: ChatTurn[],
+  metadata: ConversationMetadata,
+  options: RenderResponseImageBlobOptions,
+): Promise<Blob> {
+  const savedOverrides = await getSavedSpeakerLabelOverrides(options.speakerDefaults);
+  const speakerLabels = resolveExportSpeakerLabels(savedOverrides, options.speakerDefaults);
+
+  return await ImageExportService.renderConversationBlob(turns, metadata, {
+    imageWidth: options.imageWidth,
+    speakerLabels,
+  });
+}
 
 function resolveClipboardDependencies(options?: CopyElementAsImageOptions): {
   clipboard: ClipboardWriteLike | null;

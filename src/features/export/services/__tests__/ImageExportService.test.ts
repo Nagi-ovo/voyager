@@ -83,13 +83,25 @@ describe('ImageExportService', () => {
 
   it('renders conversation to blob without downloading', async () => {
     const blob = new Blob(['blob'], { type: 'image/png' });
-    (toBlob as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(blob);
+    let renderedTarget: HTMLElement | null = null;
+    (toBlob as unknown as ReturnType<typeof vi.fn>).mockImplementation(
+      async (node: HTMLElement) => {
+        renderedTarget = node;
+        return blob;
+      },
+    );
 
     const result = await ImageExportService.renderConversationBlob(mockTurns, mockMetadata, {});
 
     expect(result).toBe(blob);
     expect(toBlob).toHaveBeenCalled();
     expect(global.URL.createObjectURL).not.toHaveBeenCalled();
+    const target = renderedTarget as HTMLElement | null;
+    expect(
+      Array.from(target?.querySelectorAll('.gv-image-export-label') ?? []).map(
+        (label) => label.textContent,
+      ),
+    ).toEqual(['User', 'Assistant']);
   });
 
   it('renders custom speaker labels as escaped text', async () => {
