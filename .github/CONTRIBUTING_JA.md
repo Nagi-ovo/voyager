@@ -53,7 +53,7 @@ AI ツールは優れたアシスタントですが、「怠惰な」コピー�
 ### 前提条件
 
 - **Bun 1.3.12**（`packageManager` および CI と統一）
-- **GitHub CLI（`gh`）**：インストール後 `gh auth login` で認証してください。`voyager-contribute` skill は Issue/PR の照会・公開に `gh` を利用します。`gh` がない場合は GitHub の Web UI を使い、その旨を PR に記載してください。
+- **GitHub CLI（`gh`）**（[インストール](https://cli.github.com/)）：インストール後 `gh auth login` で認証してください。その後、`gh auth status` で有効なアカウントが貢献に使うアカウントであることを確認してください。`voyager-contribute` skill は Issue/PR の照会・公開に `gh` を利用します。`gh` がない場合は GitHub の Web UI を使い、その旨を PR に記載してください。
 - 拡張機能を読み込み、実際のフローを確認する対象ブラウザ
 
 ### クイックスタート
