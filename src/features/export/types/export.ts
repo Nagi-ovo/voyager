@@ -71,23 +71,19 @@ export const DEFAULT_EXPORT_SPEAKER_LABELS: Readonly<ExportSpeakerLabels> = {
   assistant: 'Assistant',
 };
 
-function normalizeSpeakerLabel(value: unknown, defaultValue: string): string | undefined {
+function normalizeSpeakerLabel(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
 
   const normalized = value.trim();
-  if (!normalized || normalized === defaultValue) return undefined;
-  return normalized;
+  return normalized || undefined;
 }
 
-export function normalizeSpeakerLabelOverrides(
-  value: unknown,
-  defaults: ExportSpeakerLabels,
-): ExportSpeakerLabelOverrides {
+export function normalizeSpeakerLabelOverrides(value: unknown): ExportSpeakerLabelOverrides {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
 
   const candidate = value as Record<string, unknown>;
-  const user = normalizeSpeakerLabel(candidate.user, defaults.user);
-  const assistant = normalizeSpeakerLabel(candidate.assistant, defaults.assistant);
+  const user = normalizeSpeakerLabel(candidate.user);
+  const assistant = normalizeSpeakerLabel(candidate.assistant);
 
   return {
     ...(user ? { user } : {}),
@@ -99,7 +95,7 @@ export function resolveExportSpeakerLabels(
   value: unknown,
   defaults: ExportSpeakerLabels,
 ): ExportSpeakerLabels {
-  const overrides = normalizeSpeakerLabelOverrides(value, defaults);
+  const overrides = normalizeSpeakerLabelOverrides(value);
   return {
     user: overrides.user ?? defaults.user,
     assistant: overrides.assistant ?? defaults.assistant,

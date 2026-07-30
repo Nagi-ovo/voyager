@@ -8,13 +8,14 @@ import { ConversationExportService } from '../services/ConversationExportService
 import {
   DEFAULT_IMAGE_EXPORT_WIDTH,
   type ExportFormat,
+  type ExportSpeakerLabelOverrides,
   type ExportSpeakerLabels,
   IMAGE_EXPORT_WIDTH_MEDIUM,
   IMAGE_EXPORT_WIDTH_NARROW,
   IMAGE_EXPORT_WIDTH_WIDE,
   type ImageExportWidth,
   normalizeImageExportWidth,
-  resolveExportSpeakerLabels,
+  normalizeSpeakerLabelOverrides,
 } from '../types/export';
 
 export interface ExportDialogOptions {
@@ -24,11 +25,12 @@ export interface ExportDialogOptions {
     imageWidth?: number,
     usePromptAsTurnHeading?: boolean,
     speakerLabels?: ExportSpeakerLabels,
+    speakerLabelOverrides?: ExportSpeakerLabelOverrides,
   ) => void;
   onCancel: () => void;
   initialImageWidth?: ImageExportWidth;
   showPromptHeadingOption?: boolean;
-  initialSpeakerLabels?: ExportSpeakerLabels;
+  initialSpeakerLabelOverrides?: ExportSpeakerLabelOverrides;
   speakerLabelsEnabled?: boolean;
   speakerNames?: {
     title: string;
@@ -74,7 +76,7 @@ export class ExportDialog {
   private fontSize: number = PDF_DEFAULT_FONT_SIZE;
   private imageWidth: ImageExportWidth = DEFAULT_IMAGE_EXPORT_WIDTH;
   private usePromptAsTurnHeading = false;
-  private speakerLabels: ExportSpeakerLabels | null = null;
+  private speakerLabelOverrides: ExportSpeakerLabelOverrides | null = null;
 
   /**
    * Show export dialog
@@ -83,13 +85,11 @@ export class ExportDialog {
     this.imageWidth = normalizeImageExportWidth(options.initialImageWidth);
     this.usePromptAsTurnHeading = false;
     if (options.speakerNames && options.speakerLabelsEnabled !== false) {
-      const defaults = {
-        user: options.speakerNames.userDefault,
-        assistant: options.speakerNames.assistantDefault,
-      };
-      this.speakerLabels = resolveExportSpeakerLabels(options.initialSpeakerLabels, defaults);
+      this.speakerLabelOverrides = normalizeSpeakerLabelOverrides(
+        options.initialSpeakerLabelOverrides,
+      );
     } else {
-      this.speakerLabels = null;
+      this.speakerLabelOverrides = null;
     }
     this.overlay = this.createDialog(options);
     document.body.appendChild(this.overlay);
@@ -183,19 +183,21 @@ export class ExportDialog {
       const usePromptAsTurnHeading = isMarkdown ? this.usePromptAsTurnHeading : undefined;
       if (
         this.selectedFormat !== ('json' as ExportFormat) &&
-        this.speakerLabels &&
+        this.speakerLabelOverrides &&
         options.speakerNames
       ) {
-        const defaults = {
-          user: options.speakerNames.userDefault,
-          assistant: options.speakerNames.assistantDefault,
+        const speakerLabelOverrides = { ...this.speakerLabelOverrides };
+        const speakerLabels: ExportSpeakerLabels = {
+          user: speakerLabelOverrides.user ?? options.speakerNames.userDefault,
+          assistant: speakerLabelOverrides.assistant ?? options.speakerNames.assistantDefault,
         };
         options.onExport(
           this.selectedFormat,
           fontSize,
           imageWidth,
           usePromptAsTurnHeading,
-          resolveExportSpeakerLabels(this.speakerLabels, defaults),
+          speakerLabels,
+          speakerLabelOverrides,
         );
       } else {
         options.onExport(this.selectedFormat, fontSize, imageWidth, usePromptAsTurnHeading);
@@ -247,7 +249,9 @@ export class ExportDialog {
   }
 
   private createSpeakerNamesSection(options: ExportDialogOptions): HTMLElement | null {
-    if (!options.speakerNames || options.speakerLabelsEnabled === false || !this.speakerLabels) {
+    const speakerNames = options.speakerNames;
+    const speakerLabelOverrides = this.speakerLabelOverrides;
+    if (!speakerNames || options.speakerLabelsEnabled === false || !speakerLabelOverrides) {
       return null;
     }
 
@@ -256,7 +260,7 @@ export class ExportDialog {
 
     const title = document.createElement('div');
     title.className = 'gv-export-speakers-title';
-    title.textContent = options.speakerNames.title;
+    title.textContent = speakerNames.title;
 
     const fields = document.createElement('div');
     fields.className = 'gv-export-speakers-fields';
@@ -279,10 +283,15 @@ export class ExportDialog {
       input.type = 'text';
       input.className = 'gv-export-speaker-input';
       input.autocomplete = 'off';
-      input.value = this.speakerLabels?.[key] ?? '';
+      const defaultValue =
+        key === 'user' ? speakerNames.userDefault : speakerNames.assistantDefault;
+      input.value = speakerLabelOverrides[key] ?? defaultValue;
       input.addEventListener('input', () => {
-        if (this.speakerLabels) {
-          this.speakerLabels[key] = input.value;
+        const normalized = input.value.trim();
+        if (!normalized || normalized === defaultValue) {
+          delete speakerLabelOverrides[key];
+        } else {
+          speakerLabelOverrides[key] = normalized;
         }
       });
 
@@ -292,10 +301,10 @@ export class ExportDialog {
     };
 
     fields.appendChild(
-      createField('gv-export-speaker-user', options.speakerNames.userLabel, 'user'),
+      createField('gv-export-speaker-user', speakerNames.userLabel, 'user'),
     );
     fields.appendChild(
-      createField('gv-export-speaker-assistant', options.speakerNames.assistantLabel, 'assistant'),
+      createField('gv-export-speaker-assistant', speakerNames.assistantLabel, 'assistant'),
     );
 
     section.appendChild(title);

@@ -243,7 +243,7 @@ describe('ExportDialog', () => {
     dialog.show({
       onExport: () => {},
       onCancel: () => {},
-      initialSpeakerLabels: { user: 'Erik', assistant: 'Nova' },
+      initialSpeakerLabelOverrides: { user: 'Erik', assistant: 'Nova' },
       speakerNames: {
         title: 'Speaker names',
         userLabel: 'User label',
@@ -287,6 +287,118 @@ describe('ExportDialog', () => {
     );
     expect(document.querySelector('label[for="gv-export-speaker-assistant"]')?.textContent).toBe(
       'AI label',
+    );
+  });
+
+  it('preserves an untouched explicit override that matches the localized default', () => {
+    const onExport = vi.fn();
+    const dialog = new ExportDialog();
+    dialog.show({
+      onExport,
+      onCancel: () => {},
+      initialSpeakerLabelOverrides: { assistant: 'Utilisateur' },
+      speakerNames: {
+        title: 'Speaker names',
+        userLabel: 'User label',
+        assistantLabel: 'AI label',
+        userDefault: 'Utilisateur',
+        assistantDefault: 'Utilisateur',
+      },
+      translations: {
+        title: 'Export',
+        selectFormat: 'Select format',
+        warning: '',
+        safariCmdpHint: 'Safari tip',
+        safariMarkdownHint: 'Safari markdown tip',
+        cancel: 'Cancel',
+        export: 'Export',
+        fontSizeLabel: 'Font Size',
+        fontSizePreview: 'Preview',
+        imageWidthLabel: 'Image Width',
+        imageWidthNarrow: 'Narrow',
+        imageWidthMedium: 'Medium',
+        imageWidthWide: 'Wide',
+        promptHeadingLabel: 'Use prompts as turn headings',
+        promptHeadingHint: 'Put each prompt in its turn heading.',
+        formatDescriptions: {
+          json: 'JSON format',
+          markdown: 'Markdown format',
+          pdf: 'PDF format',
+          image: 'Image format',
+        },
+      },
+    });
+
+    (document.querySelector('.gv-export-dialog-btn-primary') as HTMLButtonElement | null)?.click();
+
+    expect(onExport).toHaveBeenCalledWith(
+      'markdown',
+      undefined,
+      undefined,
+      false,
+      {
+        user: 'Utilisateur',
+        assistant: 'Utilisateur',
+      },
+      { assistant: 'Utilisateur' },
+    );
+  });
+
+  it('clears only the edited explicit override and falls back to its localized default', () => {
+    const onExport = vi.fn();
+    const dialog = new ExportDialog();
+    dialog.show({
+      onExport,
+      onCancel: () => {},
+      initialSpeakerLabelOverrides: { user: 'Erik', assistant: 'Nova' },
+      speakerNames: {
+        title: 'Speaker names',
+        userLabel: 'User label',
+        assistantLabel: 'AI label',
+        userDefault: 'User',
+        assistantDefault: 'Assistant',
+      },
+      translations: {
+        title: 'Export',
+        selectFormat: 'Select format',
+        warning: '',
+        safariCmdpHint: 'Safari tip',
+        safariMarkdownHint: 'Safari markdown tip',
+        cancel: 'Cancel',
+        export: 'Export',
+        fontSizeLabel: 'Font Size',
+        fontSizePreview: 'Preview',
+        imageWidthLabel: 'Image Width',
+        imageWidthNarrow: 'Narrow',
+        imageWidthMedium: 'Medium',
+        imageWidthWide: 'Wide',
+        promptHeadingLabel: 'Use prompts as turn headings',
+        promptHeadingHint: 'Put each prompt in its turn heading.',
+        formatDescriptions: {
+          json: 'JSON format',
+          markdown: 'Markdown format',
+          pdf: 'PDF format',
+          image: 'Image format',
+        },
+      },
+    });
+
+    const userInput = document.querySelector('#gv-export-speaker-user') as HTMLInputElement | null;
+    if (userInput) userInput.value = ' User ';
+    userInput?.dispatchEvent(new Event('input', { bubbles: true }));
+
+    (document.querySelector('.gv-export-dialog-btn-primary') as HTMLButtonElement | null)?.click();
+
+    expect(onExport).toHaveBeenCalledWith(
+      'markdown',
+      undefined,
+      undefined,
+      false,
+      {
+        user: 'User',
+        assistant: 'Nova',
+      },
+      { assistant: 'Nova' },
     );
   });
 
@@ -361,10 +473,20 @@ describe('ExportDialog', () => {
       ) as HTMLButtonElement | null
     )?.click();
     (document.querySelector('.gv-export-dialog-btn-primary') as HTMLButtonElement | null)?.click();
-    expect(onExport).toHaveBeenCalledWith('markdown', undefined, undefined, true, {
-      user: 'Erik',
-      assistant: 'Nova',
-    });
+    expect(onExport).toHaveBeenCalledWith(
+      'markdown',
+      undefined,
+      undefined,
+      true,
+      {
+        user: 'Erik',
+        assistant: 'Nova',
+      },
+      {
+        user: 'Erik',
+        assistant: 'Nova',
+      },
+    );
   });
 
   it('resolves blank values to localized defaults on export', () => {
@@ -415,10 +537,17 @@ describe('ExportDialog', () => {
     assistantInput?.dispatchEvent(new Event('input', { bubbles: true }));
 
     (document.querySelector('.gv-export-dialog-btn-primary') as HTMLButtonElement | null)?.click();
-    expect(onExport).toHaveBeenCalledWith('markdown', undefined, undefined, false, {
-      user: 'Utilisateur',
-      assistant: 'Assistant IA',
-    });
+    expect(onExport).toHaveBeenCalledWith(
+      'markdown',
+      undefined,
+      undefined,
+      false,
+      {
+        user: 'Utilisateur',
+        assistant: 'Assistant IA',
+      },
+      {},
+    );
   });
 
   it('does not render speaker controls for standalone document exports', () => {

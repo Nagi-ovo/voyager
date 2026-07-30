@@ -38,7 +38,10 @@ describe('SpeakerLabelPreferenceService', () => {
 
   it.each([
     [{ user: '', assistant: '   ' }, {}],
-    [{ user: ' User ', assistant: 'Assistant' }, {}],
+    [
+      { user: ' User ', assistant: 'Assistant' },
+      { user: 'User', assistant: 'Assistant' },
+    ],
     [
       { user: ' Erik ', assistant: '  Nova  ' },
       { user: 'Erik', assistant: 'Nova' },
@@ -48,7 +51,7 @@ describe('SpeakerLabelPreferenceService', () => {
     ['invalid', {}],
     [{ user: 42, assistant: ['Nova'] }, {}],
   ])('normalizes stored overrides defensively', (value, expected) => {
-    expect(normalizeSpeakerLabelOverrides(value, defaults)).toEqual(expected);
+    expect(normalizeSpeakerLabelOverrides(value)).toEqual(expected);
   });
 
   it('resolves blank and whitespace-only values to localized defaults', () => {
@@ -61,24 +64,24 @@ describe('SpeakerLabelPreferenceService', () => {
       data: { user: 'Erik', assistant: 42 },
     });
 
-    await expect(getSavedSpeakerLabelOverrides(defaults)).resolves.toEqual({ user: 'Erik' });
+    await expect(getSavedSpeakerLabelOverrides()).resolves.toEqual({ user: 'Erik' });
     expect(getMock).toHaveBeenCalledWith(StorageKeys.EXPORT_SPEAKER_LABELS);
   });
 
   it('falls back safely when reading storage fails or throws', async () => {
     getMock.mockResolvedValueOnce({ success: false, error: new Error('read failed') });
-    await expect(getSavedSpeakerLabelOverrides(defaults)).resolves.toEqual({});
+    await expect(getSavedSpeakerLabelOverrides()).resolves.toEqual({});
 
     getMock.mockRejectedValueOnce(new Error('context invalidated'));
-    await expect(getSavedSpeakerLabelOverrides(defaults)).resolves.toEqual({});
+    await expect(getSavedSpeakerLabelOverrides()).resolves.toEqual({});
   });
 
   it('stores only normalized custom overrides', async () => {
     setMock.mockResolvedValue({ success: true, data: undefined });
 
-    await expect(
-      saveSpeakerLabelOverrides({ user: ' Erik ', assistant: 'Nova' }, defaults),
-    ).resolves.toBe(true);
+    await expect(saveSpeakerLabelOverrides({ user: ' Erik ', assistant: 'Nova' })).resolves.toBe(
+      true,
+    );
 
     expect(setMock).toHaveBeenCalledWith(StorageKeys.EXPORT_SPEAKER_LABELS, {
       user: 'Erik',
@@ -86,12 +89,51 @@ describe('SpeakerLabelPreferenceService', () => {
     });
   });
 
-  it('removes saved overrides when both fields return to defaults', async () => {
+  it('preserves an explicit override through a locale-default collision', async () => {
+    const englishDefaults: ExportSpeakerLabels = {
+      user: 'User',
+      assistant: 'Assistant',
+    };
+    const frenchDefaults: ExportSpeakerLabels = {
+      user: 'Utilisateur',
+      assistant: 'Utilisateur',
+    };
+    let storedValue: unknown;
+
+    getMock.mockImplementation(async () => ({ success: true, data: storedValue }));
+    setMock.mockImplementation(async (_key: string, value: unknown) => {
+      storedValue = value;
+      return { success: true, data: undefined };
+    });
+    removeMock.mockImplementation(async () => {
+      storedValue = undefined;
+      return { success: true, data: undefined };
+    });
+
+    await expect(saveSpeakerLabelOverrides({ assistant: 'Utilisateur' })).resolves.toBe(true);
+
+    const frenchOverrides = await getSavedSpeakerLabelOverrides();
+    expect(frenchOverrides).toEqual({ assistant: 'Utilisateur' });
+    expect(resolveExportSpeakerLabels(frenchOverrides, frenchDefaults)).toEqual({
+      user: 'Utilisateur',
+      assistant: 'Utilisateur',
+    });
+
+    await expect(saveSpeakerLabelOverrides(frenchOverrides)).resolves.toBe(true);
+    expect(removeMock).not.toHaveBeenCalled();
+
+    const restoredEnglishOverrides = await getSavedSpeakerLabelOverrides();
+    expect(restoredEnglishOverrides).toEqual({ assistant: 'Utilisateur' });
+    expect(resolveExportSpeakerLabels(restoredEnglishOverrides, englishDefaults)).toEqual({
+      user: 'User',
+      assistant: 'Utilisateur',
+    });
+  });
+
+  it('removes saved overrides when both explicit fields are cleared', async () => {
     removeMock.mockResolvedValue({ success: true, data: undefined });
 
-    await expect(
-      saveSpeakerLabelOverrides({ user: ' ', assistant: 'Assistant' }, defaults),
-    ).resolves.toBe(true);
+    await expect(saveSpeakerLabelOverrides({ user: ' ', assistant: '' })).resolves.toBe(true);
 
     expect(removeMock).toHaveBeenCalledWith(StorageKeys.EXPORT_SPEAKER_LABELS);
     expect(setMock).not.toHaveBeenCalled();
@@ -100,20 +142,20 @@ describe('SpeakerLabelPreferenceService', () => {
   it('reports failed writes without throwing', async () => {
     setMock.mockResolvedValue({ success: false, error: new Error('write failed') });
 
-    await expect(
-      saveSpeakerLabelOverrides({ user: 'Erik', assistant: 'Nova' }, defaults),
-    ).resolves.toBe(false);
+    await expect(saveSpeakerLabelOverrides({ user: 'Erik', assistant: 'Nova' })).resolves.toBe(
+      false,
+    );
   });
 
   it('reports failed removals without throwing', async () => {
     removeMock.mockResolvedValue({ success: false, error: new Error('remove failed') });
 
-    await expect(saveSpeakerLabelOverrides({}, defaults)).resolves.toBe(false);
+    await expect(saveSpeakerLabelOverrides({})).resolves.toBe(false);
   });
 
   it('contains thrown storage failures and keeps export callers unblocked', async () => {
     setMock.mockRejectedValue(new Error('context invalidated'));
 
-    await expect(saveSpeakerLabelOverrides({ user: 'Erik' }, defaults)).resolves.toBe(false);
+    await expect(saveSpeakerLabelOverrides({ user: 'Erik' })).resolves.toBe(false);
   });
 });

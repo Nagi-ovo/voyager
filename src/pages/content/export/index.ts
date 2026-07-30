@@ -22,7 +22,6 @@ import {
   DEFAULT_IMAGE_EXPORT_WIDTH,
   type ExportFormat,
   type ExportSpeakerLabels,
-  resolveExportSpeakerLabels,
 } from '../../../features/export/types/export';
 import type {
   CanvasDoc,
@@ -2678,26 +2677,29 @@ async function showExportDialog(
   };
   const [initialImageWidth, savedSpeakerLabelOverrides] = await Promise.all([
     getSavedImageExportWidth(),
-    getSavedSpeakerLabelOverrides(speakerDefaults),
+    getSavedSpeakerLabelOverrides(),
   ]);
-  const initialSpeakerLabels = resolveExportSpeakerLabels(
-    savedSpeakerLabelOverrides,
-    speakerDefaults,
-  );
 
   // We defer collection until after the export sequence (scrolling/refresh checks)
 
   const dialog = new ExportDialog();
 
   dialog.show({
-    onExport: async (format, fontSize, imageWidth, usePromptAsTurnHeading, speakerLabels) => {
+    onExport: async (
+      format,
+      fontSize,
+      imageWidth,
+      usePromptAsTurnHeading,
+      speakerLabels,
+      speakerLabelOverrides,
+    ) => {
       try {
         await ensureGeneratedUiScreenshotPermission();
         if (format === 'image') {
           await saveImageExportWidth(imageWidth);
         }
-        if (speakerLabels) {
-          await saveSpeakerLabelOverrides(speakerLabels, speakerDefaults);
+        if (speakerLabelOverrides) {
+          await saveSpeakerLabelOverrides(speakerLabelOverrides);
         }
         await executeExportSequenceWithProgress(
           format,
@@ -2720,7 +2722,7 @@ async function showExportDialog(
     },
     initialImageWidth,
     showPromptHeadingOption: true,
-    initialSpeakerLabels,
+    initialSpeakerLabelOverrides: savedSpeakerLabelOverrides,
     speakerNames: {
       title: t('export_speaker_names'),
       userLabel: t('export_speaker_user_label'),

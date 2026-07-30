@@ -27,7 +27,7 @@ export async function renderResponseImageBlob(
   metadata: ConversationMetadata,
   options: RenderResponseImageBlobOptions,
 ): Promise<Blob> {
-  const savedOverrides = await getSavedSpeakerLabelOverrides(options.speakerDefaults);
+  const savedOverrides = await getSavedSpeakerLabelOverrides();
   const speakerLabels = resolveExportSpeakerLabels(savedOverrides, options.speakerDefaults);
 
   return await ImageExportService.renderConversationBlob(turns, metadata, {
