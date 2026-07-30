@@ -300,9 +300,7 @@ export class ExportDialog {
       return field;
     };
 
-    fields.appendChild(
-      createField('gv-export-speaker-user', speakerNames.userLabel, 'user'),
-    );
+    fields.appendChild(createField('gv-export-speaker-user', speakerNames.userLabel, 'user'));
     fields.appendChild(
       createField('gv-export-speaker-assistant', speakerNames.assistantLabel, 'assistant'),
     );
