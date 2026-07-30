@@ -90,6 +90,7 @@ import {
   IconQwen,
 } from './components/WebsiteLogos';
 import WidthSlider from './components/WidthSlider';
+import { usePopupScrollRestoration } from './hooks/usePopupScrollRestoration';
 import { type SettingsSearchItem, getSettingsSearchMatches } from './utils/settingsSearch';
 
 /**
@@ -2396,6 +2397,12 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
 
   const visibleSections = sectionOrder.filter(isSectionVisible);
   const hasSettingsSearch = settingsSearchQuery.trim().length > 0;
+  usePopupScrollRestoration({
+    hasSettingsSearch,
+    isPluginSite,
+    showStarredHistory,
+    showStorageManager,
+  });
   const settingsSearchMatches = useMemo(
     () => getSettingsSearchMatches(POPUP_SETTINGS_SEARCH_ITEMS, settingsSearchQuery),
     [settingsSearchQuery],

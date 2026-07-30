@@ -269,6 +269,8 @@ export const StorageKeys = {
 
   // Popup section order
   GV_POPUP_SECTION_ORDER: 'gvPopupSectionOrder',
+  // Device-local vertical position for the popup's full main settings view.
+  GV_POPUP_SCROLL_TOP: 'gvPopupScrollTop',
 
   // Context sync
   CONTEXT_SYNC_ENABLED: 'contextSyncEnabled',

@@ -356,6 +356,11 @@ export const NON_SETTINGS_BACKUP_POLICIES = {
     reason:
       'Gemini response-id aliases are bounded, device-local, and rebuilt from conversation history.',
   },
+  [StorageKeys.GV_POPUP_SCROLL_TOP]: {
+    storage: 'local',
+    disposition: 'device-local',
+    reason: 'Popup scroll position is specific to this device and viewport.',
+  },
   [StorageKeys.FOLDER_PROJECT_PENDING_FOLDER_ID]: {
     storage: 'local',
     disposition: 'transient',

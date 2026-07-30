@@ -38,6 +38,17 @@ describe('SettingsBackupService', () => {
     );
   });
 
+  it('keeps popup scroll position device-local and outside settings backup', () => {
+    const popupScrollKey = 'gvPopupScrollTop';
+
+    expect(BACKUPABLE_SYNC_SETTINGS_DEFAULTS).not.toHaveProperty(popupScrollKey);
+    expect(NON_SETTINGS_BACKUP_POLICIES).toHaveProperty(popupScrollKey, {
+      storage: 'local',
+      disposition: 'device-local',
+      reason: 'Popup scroll position is specific to this device and viewport.',
+    });
+  });
+
   it('exports only backupable sync settings with defaults applied', async () => {
     const storageArea = {
       get: vi.fn().mockResolvedValue({
