@@ -353,7 +353,7 @@ AI tools can be helpful, but copy-paste PRs without clear intent, focused scope,
 ### Prerequisites
 
 - **Bun 1.3.12** (matching `packageManager` and CI)
-- **GitHub CLI (`gh`)**: install it and authenticate with `gh auth login`; the `voyager-contribute` skill relies on it for Issue/PR state and publishing. Without `gh`, use the GitHub web UI instead and note that in the PR.
+- **GitHub CLI (`gh`)** ([installation](https://cli.github.com/)): install it and authenticate with `gh auth login`, then run `gh auth status` to confirm the active account is the one you intend to contribute as; the `voyager-contribute` skill relies on it for Issue/PR state and publishing. Without `gh`, use the GitHub web UI instead and note that in the PR.
 - The affected browsers for loading the extension and exercising the real workflow
 
 ### Quick Start
