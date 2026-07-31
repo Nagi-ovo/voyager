@@ -53,7 +53,7 @@ Aunque las herramientas de IA son grandes asistentes, las contribuciones de "cop
 ### Requisitos Previos
 
 - **Bun 1.3.12** (coincide con `packageManager` y CI)
-- **GitHub CLI (`gh`)**: instálalo y autentícate con `gh auth login`; la skill `voyager-contribute` lo usa para consultar y publicar Issues/PRs. Sin `gh`, usa la interfaz web de GitHub e indícalo en la PR.
+- **GitHub CLI (`gh`)** ([instalación](https://cli.github.com/)): instálalo y autentícate con `gh auth login`, luego ejecuta `gh auth status` para confirmar que la cuenta activa es la que quieres usar para contribuir; la skill `voyager-contribute` lo usa para consultar y publicar Issues/PRs. Sin `gh`, usa la interfaz web de GitHub e indícalo en la PR.
 - Los navegadores afectados para cargar la extensión y probar el flujo real
 
 ### Inicio Rápido
