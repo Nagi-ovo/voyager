@@ -16,6 +16,7 @@
   /** Timeout for watermark processing in milliseconds */
   const WATERMARK_PROCESSING_TIMEOUT_MS = 30000;
   const DOWNLOAD_INTENT_ATTRIBUTE = 'data-download-intent-expires-at';
+  const DOWNLOAD_INTENT_TOKEN_ATTRIBUTE = 'data-download-intent-token';
   const NOTEBOOK_PATH_PATTERN = /^\/(?:u\/\d+\/)?notebooks?(?:\/|$)/;
 
   const isNotebookRoute = () => NOTEBOOK_PATH_PATTERN.test(window.location.pathname);
@@ -109,12 +110,13 @@
   /**
    * Update status on the bridge for the content script to pick up (and show Toasts)
    */
-  const updateStatus = (status, details = {}) => {
+  const updateStatus = (status, intentToken, details = {}) => {
     const bridge = getBridgeElement();
     if (bridge) {
       bridge.dataset.status = JSON.stringify({
         type: status, // 'START', 'PROGRESS', 'SUCCESS', 'ERROR', 'WARNING'
         timestamp: Date.now(),
+        intentToken,
         ...details,
       });
     }
@@ -137,8 +139,10 @@
   const consumeDownloadIntent = () => {
     const bridge = getBridgeElement();
     const expiresAt = Number(bridge.dataset.downloadIntentExpiresAt || 0);
+    const intentToken = bridge.dataset.downloadIntentToken || `legacy:${expiresAt}`;
     bridge.removeAttribute(DOWNLOAD_INTENT_ATTRIBUTE);
-    return Number.isFinite(expiresAt) && expiresAt >= Date.now();
+    bridge.removeAttribute(DOWNLOAD_INTENT_TOKEN_ATTRIBUTE);
+    return Number.isFinite(expiresAt) && expiresAt >= Date.now() ? intentToken : null;
   };
 
   // Store original fetch
@@ -168,8 +172,8 @@
 
     // Check if this is a Gemini download request (specifically rd-gg-dl for downloads)
     if (url && typeof url === 'string' && GEMINI_DOWNLOAD_PATTERN.test(url)) {
-      const shouldProcessDownload = isWatermarkRemoverEnabled() && consumeDownloadIntent();
-      if (!shouldProcessDownload) {
+      const downloadIntentToken = isWatermarkRemoverEnabled() ? consumeDownloadIntent() : null;
+      if (!downloadIntentToken) {
         return originalFetch.apply(this, args);
       }
 
@@ -206,27 +210,29 @@
         try {
           // Check content length first (via HEAD request) to show appropriate message
           // But we'll just show "downloading" first and update if large
-          updateStatus('DOWNLOADING');
+          updateStatus('DOWNLOADING', downloadIntentToken);
 
           // Fetch the original size image
           response = await originalFetch.apply(this, args);
 
           if (!response.ok) {
-            updateStatus('ERROR', { message: `HTTP Error: ${response.status}` });
+            updateStatus('ERROR', downloadIntentToken, {
+              message: `HTTP Error: ${response.status}`,
+            });
             return response;
           }
 
           // Check content length for large files (5MB) - update status
           const contentLength = response.headers.get('content-length');
           if (contentLength && parseInt(contentLength, 10) > 5 * 1024 * 1024) {
-            updateStatus('DOWNLOADING_LARGE');
+            updateStatus('DOWNLOADING_LARGE', downloadIntentToken);
           }
 
           // Clone response to read blob
           blob = await response.blob();
 
           // Step 2: Processing
-          updateStatus('PROCESSING');
+          updateStatus('PROCESSING', downloadIntentToken);
 
           // Send blob to content script for watermark removal via DOM bridge
           const processedBlob = await new Promise((resolve, reject) => {
@@ -272,7 +278,7 @@
             }, WATERMARK_PROCESSING_TIMEOUT_MS);
           });
 
-          updateStatus('SUCCESS');
+          updateStatus('SUCCESS', downloadIntentToken);
 
           // Return processed response
           return new Response(processedBlob, {
@@ -282,7 +288,9 @@
           });
         } catch (error) {
           console.warn('[Gemini Voyager] Watermark processing failed, using original:', error);
-          updateStatus('ERROR', { message: error.message || 'Unknown error' });
+          updateStatus('ERROR', downloadIntentToken, {
+            message: error.message || 'Unknown error',
+          });
           // Return the original blob if available, otherwise fall through to originalFetch
           if (blob && response) {
             return new Response(blob, {

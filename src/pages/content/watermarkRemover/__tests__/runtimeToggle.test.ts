@@ -95,6 +95,9 @@ describe('watermarkRemover runtime toggle', () => {
       },
     );
     vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:processed-preview');
+    vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue(
+      'data:image/png;base64,cHJvY2Vzc2Vk',
+    );
     vi.mocked(chrome.storage.sync.get).mockImplementation(async () => ({ ...settings }));
   });
 
@@ -166,11 +169,63 @@ describe('watermarkRemover runtime toggle', () => {
       await runtime.restartWatermarkRemover();
 
       expect(document.querySelectorAll('.gv-status-toast')).toHaveLength(0);
+      const bridge = document.getElementById('gv-watermark-bridge') as HTMLElement | null;
+      expect(bridge?.dataset.downloadIntentExpiresAt).toBeUndefined();
+      expect(bridge?.dataset.downloadIntentToken).toBeUndefined();
       await vi.advanceTimersByTimeAsync(35_000);
       expect(document.querySelectorAll('.gv-status-toast')).toHaveLength(0);
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('preserves an active download while only preview removal changes', async () => {
+    engineCreate.mockResolvedValue(createEngine());
+    runtime = await import('../index');
+    const button = document.createElement('button');
+    document.body.appendChild(button);
+
+    settings.gvWatermarkDownloadEnabled = true;
+    await runtime.startWatermarkRemover();
+    button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    const bridge = document.getElementById('gv-watermark-bridge') as HTMLElement;
+    const intentExpiresAt = bridge.dataset.downloadIntentExpiresAt;
+    const intentToken = bridge.dataset.downloadIntentToken;
+    expect(intentExpiresAt).toBeDefined();
+    expect(intentToken).toBeDefined();
+    expect(document.querySelectorAll('.gv-status-toast')).toHaveLength(1);
+
+    let resolveSettings: (value: Record<string, unknown>) => void = () => undefined;
+    vi.mocked(chrome.storage.sync.get).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveSettings = resolve;
+        }),
+    );
+    settings.gvWatermarkPreviewEnabled = true;
+    const restart = runtime.restartWatermarkRemover();
+
+    // The download bridge must remain live while the preview reconfiguration
+    // waits for storage; otherwise a request written in this window times out.
+    bridge.dataset.request = JSON.stringify({
+      requestId: 'request-during-preview-restart',
+      base64: 'data:image/png;base64,b3JpZ2luYWw=',
+    });
+    await vi.waitFor(() =>
+      expect(JSON.parse(bridge.dataset.response ?? '{}')).toMatchObject({
+        requestId: 'request-during-preview-restart',
+        base64: 'data:image/png;base64,cHJvY2Vzc2Vk',
+      }),
+    );
+
+    resolveSettings({ ...settings });
+    await restart;
+
+    expect(bridge.dataset.enabled).toBe('true');
+    expect(bridge.dataset.downloadIntentExpiresAt).toBe(intentExpiresAt);
+    expect(bridge.dataset.downloadIntentToken).toBe(intentToken);
+    expect(document.querySelectorAll('.gv-status-toast')).toHaveLength(1);
   });
 
   it('prevents a stale async start from restoring an older enabled mode', async () => {

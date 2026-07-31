@@ -128,6 +128,7 @@ describe('fetchInterceptor (MAIN world script)', () => {
   it('uses the watermark pipeline for a recent user download intent', async () => {
     const bridge = createEnabledBridge();
     bridge.dataset.downloadIntentExpiresAt = String(Date.now() + 1000);
+    bridge.dataset.downloadIntentToken = 'intent-1';
     installInterceptor();
 
     const responsePromise = window.fetch(GEMINI_DOWNLOAD_URL);
@@ -150,7 +151,10 @@ describe('fetchInterceptor (MAIN world script)', () => {
       'https://lh3.googleusercontent.com/rd-gg-dl/example=s0',
     );
     expect(bridge.dataset.downloadIntentExpiresAt).toBeUndefined();
-    expect(bridge.dataset.status).toContain('"type":"SUCCESS"');
+    expect(JSON.parse(bridge.dataset.status ?? '{}')).toMatchObject({
+      type: 'SUCCESS',
+      intentToken: 'intent-1',
+    });
   });
 
   it('uses the watermark pipeline for rd-gg/ URLs (without -dl suffix)', async () => {

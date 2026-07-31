@@ -418,9 +418,12 @@ async function processImageRequest(
 }
 
 /**
- * Start the watermark remover
+ * Read the latest settings and configure the watermark runtime.
+ * Reconfiguration tears down preview work every time, but keeps an unchanged
+ * download runtime alive so an in-flight native download cannot lose its
+ * bridge request, intent, or feedback sequence.
  */
-export async function startWatermarkRemover(): Promise<void> {
+async function configureWatermarkRemover(reconfigure: boolean): Promise<void> {
   const generation = ++lifecycleGeneration;
 
   try {
@@ -433,6 +436,10 @@ export async function startWatermarkRemover(): Promise<void> {
       result ?? null,
     );
     if (generation !== lifecycleGeneration) return;
+
+    if (reconfigure) {
+      teardownWatermarkRemover(downloadRemovalEnabled && downloadEnabled);
+    }
 
     downloadRemovalEnabled = downloadEnabled;
     previewRemovalEnabled = previewEnabled;
@@ -491,37 +498,46 @@ export async function startWatermarkRemover(): Promise<void> {
 }
 
 /**
- * Re-read storage and apply the latest watermark mode to the current page.
- * The generation guard in startWatermarkRemover makes rapid restarts
- * latest-wins even while the engine is still loading.
+ * Start the watermark remover.
  */
-export async function restartWatermarkRemover(): Promise<void> {
-  stopWatermarkRemover();
-  await startWatermarkRemover();
+export function startWatermarkRemover(): Promise<void> {
+  return configureWatermarkRemover(false);
 }
 
 /**
- * Fully tear down the watermark remover. Safe to call when nothing was started.
- * Wired into the content-script beforeunload teardown so the two document.body
- * subtree observers don't outlive the page; also written to be a complete stop
- * (observers + MAIN-world interceptor + document listeners) so it can be reused
- * for SPA teardown/restart without leaving the interceptor thinking it's enabled.
+ * Re-read storage and apply the latest watermark mode to the current page.
+ * The shared generation guard makes rapid restarts
+ * latest-wins even while the engine is still loading.
  */
-export function stopWatermarkRemover(): void {
-  lifecycleGeneration += 1;
-  downloadRemovalEnabled = false;
+export async function restartWatermarkRemover(): Promise<void> {
+  await configureWatermarkRemover(true);
+}
+
+/**
+ * Tear down preview work and, unless it is unchanged and still enabled, the
+ * download runtime. Keeping download state is what makes preview-only toggles
+ * safe while a native download is already in progress.
+ */
+function teardownWatermarkRemover(preserveDownloadRuntime: boolean): void {
+  const keepDownloadRuntime = preserveDownloadRuntime && downloadRemovalEnabled;
   previewRemovalEnabled = false;
 
-  for (const observer of [previewObserver, indicatorObserver, bridgeObserver, statusObserver]) {
+  for (const observer of [previewObserver, indicatorObserver]) {
     observer?.disconnect();
   }
   previewObserver = null;
   indicatorObserver = null;
-  bridgeObserver = null;
-  statusObserver = null;
   for (const timeout of pendingDebounceTimeouts) clearTimeout(timeout);
   pendingDebounceTimeouts.clear();
   clearPreviewImageState();
+
+  if (keepDownloadRuntime) return;
+
+  downloadRemovalEnabled = false;
+  bridgeObserver?.disconnect();
+  statusObserver?.disconnect();
+  bridgeObserver = null;
+  statusObserver = null;
   clearActiveDownloadSequence();
 
   // Tell the MAIN-world fetch interceptor the feature is off, so it stops
@@ -532,6 +548,7 @@ export function stopWatermarkRemover(): void {
   if (existingBridge) {
     existingBridge.dataset.enabled = 'false';
     existingBridge.removeAttribute('data-download-intent-expires-at');
+    existingBridge.removeAttribute('data-download-intent-token');
   }
 
   document
@@ -545,6 +562,16 @@ export function stopWatermarkRemover(): void {
     downloadCaptureHandler = null;
   }
   downloadTrackingReady = false;
+}
+
+/**
+ * Fully tear down the watermark remover. Safe to call when nothing was started.
+ * Wired into the content-script beforeunload teardown so document observers,
+ * the MAIN-world bridge, and global listeners cannot outlive the page.
+ */
+export function stopWatermarkRemover(): void {
+  lifecycleGeneration += 1;
+  teardownWatermarkRemover(false);
 }
 
 let statusToastManager: StatusToastManager | null = null;
@@ -561,6 +588,7 @@ const DOWNLOAD_INTENT_TTL_MS = 60000;
 
 type DownloadToastSequence = {
   id: number;
+  token: string;
   downloadToastId: string | null;
   warningToastId: string | null;
   processingToastId: string | null;
@@ -601,16 +629,18 @@ const t = (key: TranslationKey, fallback: string): string => {
   return value === key ? fallback : value;
 };
 
-function markDownloadIntent(): void {
+function markDownloadIntent(token: string): void {
   const bridge = getBridgeElement();
   bridge.dataset.downloadIntentExpiresAt = String(Date.now() + DOWNLOAD_INTENT_TTL_MS);
+  bridge.dataset.downloadIntentToken = token;
 }
 
 function showImmediateDownloadToast(button: HTMLButtonElement): void {
-  markDownloadIntent();
-
   const now = Date.now();
-  if (now - lastImmediateToastAt < 300) return;
+  if (now - lastImmediateToastAt < 300 && activeSequence) {
+    markDownloadIntent(activeSequence.token);
+    return;
+  }
   lastImmediateToastAt = now;
 
   const manager = getStatusToastManager();
@@ -624,6 +654,8 @@ function showImmediateDownloadToast(button: HTMLButtonElement): void {
   }
 
   const sequenceId = ++sequenceCounter;
+  const token = `gv_download_${now}_${sequenceId}`;
+  markDownloadIntent(token);
   const downloadToastId = manager.addToast(downloadMessage, 'info', {
     pending: true,
     autoDismissMs: 3000,
@@ -645,6 +677,7 @@ function showImmediateDownloadToast(button: HTMLButtonElement): void {
 
   activeSequence = {
     id: sequenceId,
+    token,
     downloadToastId,
     warningToastId: null,
     processingToastId: null,
@@ -722,8 +755,9 @@ function setupStatusListener(): void {
     if (!statusData) return;
 
     try {
-      const { type, message } = JSON.parse(statusData);
+      const { type, message, intentToken } = JSON.parse(statusData);
       bridge.removeAttribute('data-status');
+      if (!activeSequence || intentToken !== activeSequence.token) return;
 
       switch (type) {
         case 'DOWNLOADING':
