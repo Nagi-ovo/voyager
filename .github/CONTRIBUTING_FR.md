@@ -53,7 +53,7 @@ Bien que les outils d'IA soient d'excellents assistants, les contributions "pare
 ### Prérequis
 
 - **Bun 1.3.12** (aligné sur `packageManager` et la CI)
-- **GitHub CLI (`gh`)** : installez-le et authentifiez-vous avec `gh auth login` ; la skill `voyager-contribute` s'en sert pour consulter et publier les Issues/PRs. Sans `gh`, utilisez l'interface web GitHub et signalez-le dans la PR.
+- **GitHub CLI (`gh`)** ([installation](https://cli.github.com/)) : installez-le et authentifiez-vous avec `gh auth login`, puis exécutez `gh auth status` pour vérifier que le compte actif est bien celui avec lequel vous souhaitez contribuer; la skill `voyager-contribute` s'en sert pour consulter et publier les Issues/PRs. Sans `gh`, utilisez l'interface web GitHub et signalez-le dans la PR.
 - Les navigateurs concernés pour charger l'extension et tester le parcours réel
 
 ### Démarrage Rapide
