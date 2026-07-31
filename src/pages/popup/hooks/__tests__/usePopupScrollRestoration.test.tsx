@@ -26,6 +26,7 @@ vi.mock('webextension-polyfill', () => ({
 }));
 
 const MAIN_VIEW: PopupScrollViewState = {
+  activeTabContextLoaded: true,
   hasSettingsSearch: false,
   isPluginSite: false,
   showStarredHistory: false,
@@ -133,6 +134,9 @@ describe('usePopupScrollRestoration', () => {
 
   it('tracks only the full main settings view', () => {
     expect(shouldTrackPopupSettingsScroll(MAIN_VIEW)).toBe(true);
+    expect(shouldTrackPopupSettingsScroll({ ...MAIN_VIEW, activeTabContextLoaded: false })).toBe(
+      false,
+    );
     expect(shouldTrackPopupSettingsScroll({ ...MAIN_VIEW, hasSettingsSearch: true })).toBe(false);
     expect(shouldTrackPopupSettingsScroll({ ...MAIN_VIEW, showStorageManager: true })).toBe(false);
     expect(shouldTrackPopupSettingsScroll({ ...MAIN_VIEW, showStarredHistory: true })).toBe(false);
@@ -246,15 +250,19 @@ describe('usePopupScrollRestoration', () => {
     expect(container.scrollTop).toBe(1400);
   });
 
-  it('persists the final clamp when the stored target stays outside the settled layout', async () => {
+  it('keeps retrying an oversized target when layout growth happens after two seconds', async () => {
     storageGet.mockResolvedValue({ [StorageKeys.GV_POPUP_SCROLL_TOP]: 5000 });
 
     await renderState(MAIN_VIEW);
     storageSet.mockClear();
-    act(() => vi.advanceTimersByTime(2000));
+    act(() => vi.advanceTimersByTime(5000));
 
-    expect(storageSet).toHaveBeenCalledOnce();
-    expect(storageSet).toHaveBeenCalledWith({ [StorageKeys.GV_POPUP_SCROLL_TOP]: 1400 });
+    expect(storageSet).not.toHaveBeenCalled();
+
+    Object.defineProperty(container, 'scrollHeight', { configurable: true, value: 5600 });
+    act(() => resizeObserverCallback?.([], {} as ResizeObserver));
+
+    expect(container.scrollTop).toBe(5000);
   });
 
   it('falls back to the top when local storage cannot be read', async () => {
@@ -361,10 +369,11 @@ describe('usePopupScrollRestoration', () => {
       container.dispatchEvent(new Event('scroll'));
     });
     await renderState({ ...MAIN_VIEW, hasSettingsSearch: true });
+    expect(container.scrollTop).toBe(0);
     storageSet.mockClear();
 
     act(() => {
-      container.scrollTop = 0;
+      container.scrollTop = 100;
       container.dispatchEvent(new Event('scroll'));
       vi.advanceTimersByTime(150);
     });
@@ -372,6 +381,47 @@ describe('usePopupScrollRestoration', () => {
 
     await renderState(MAIN_VIEW);
     expect(container.scrollTop).toBe(620);
+  });
+
+  it('waits for active tab context and opens plugin views at the top', async () => {
+    storageGet.mockResolvedValue({ [StorageKeys.GV_POPUP_SCROLL_TOP]: 420 });
+    container.scrollTop = 300;
+
+    await renderState({ ...MAIN_VIEW, activeTabContextLoaded: false });
+    expect(container.scrollTop).toBe(0);
+
+    container.scrollTop = 300;
+    await renderState({ ...MAIN_VIEW, isPluginSite: true });
+    expect(container.scrollTop).toBe(0);
+
+    await renderState(MAIN_VIEW);
+    expect(container.scrollTop).toBe(420);
+  });
+
+  it('does not overwrite scrolling that happens before local storage finishes loading', async () => {
+    let resolveStorageGet: ((value: Record<string, number>) => void) | undefined;
+    storageGet.mockReturnValue(
+      new Promise<Record<string, number>>((resolve) => {
+        resolveStorageGet = resolve;
+      }),
+    );
+
+    await renderState(MAIN_VIEW);
+    act(() => {
+      container.scrollTop = 300;
+      container.dispatchEvent(new Event('scroll'));
+    });
+
+    await act(async () => {
+      resolveStorageGet?.({ [StorageKeys.GV_POPUP_SCROLL_TOP]: 900 });
+      await Promise.resolve();
+    });
+    flushAnimationFrame();
+
+    expect(container.scrollTop).toBe(300);
+    storageSet.mockClear();
+    act(() => window.dispatchEvent(new Event('pagehide')));
+    expect(storageSet).toHaveBeenCalledWith({ [StorageKeys.GV_POPUP_SCROLL_TOP]: 300 });
   });
 
   it('ignores a layout clamp while a temporary view commits', async () => {

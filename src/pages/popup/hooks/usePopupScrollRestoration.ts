@@ -6,9 +6,9 @@ import { StorageKeys } from '@/core/types/common';
 
 const POPUP_ROOT_ID = '__root';
 const SCROLL_WRITE_DEBOUNCE_MS = 150;
-const RESTORE_LAYOUT_WINDOW_MS = 2000;
 
 export interface PopupScrollViewState {
+  activeTabContextLoaded: boolean;
   hasSettingsSearch: boolean;
   isPluginSite: boolean;
   showStarredHistory: boolean;
@@ -26,6 +26,7 @@ export function clampPopupScrollTop(value: unknown, maxScrollTop: number): numbe
 
 export function shouldTrackPopupSettingsScroll(state: PopupScrollViewState): boolean {
   return (
+    state.activeTabContextLoaded &&
     !state.hasSettingsSearch &&
     !state.isPluginSite &&
     !state.showStarredHistory &&
@@ -38,6 +39,7 @@ export function usePopupScrollRestoration(state: PopupScrollViewState): void {
   const positionRef = useRef(0);
   const restorationTargetRef = useRef<number | null>(null);
   const persistedPositionRef = useRef<number | null>(null);
+  const userScrolledBeforeLoadRef = useRef(false);
   const writeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [loaded, setLoaded] = useState(false);
 
@@ -71,8 +73,10 @@ export function usePopupScrollRestoration(state: PopupScrollViewState): void {
     let cancelled = false;
     const finishAtTop = (): void => {
       if (cancelled) return;
-      positionRef.current = 0;
-      restorationTargetRef.current = 0;
+      if (!userScrolledBeforeLoadRef.current) {
+        positionRef.current = 0;
+        restorationTargetRef.current = 0;
+      }
       persistedPositionRef.current = 0;
       setLoaded(true);
     };
@@ -83,8 +87,10 @@ export function usePopupScrollRestoration(state: PopupScrollViewState): void {
         .then((result) => {
           if (cancelled) return;
           const position = normalizePopupScrollTop(result[StorageKeys.GV_POPUP_SCROLL_TOP]);
-          positionRef.current = position;
-          restorationTargetRef.current = position;
+          if (!userScrolledBeforeLoadRef.current) {
+            positionRef.current = position;
+            restorationTargetRef.current = position;
+          }
           persistedPositionRef.current = position;
           setLoaded(true);
         })
@@ -99,6 +105,33 @@ export function usePopupScrollRestoration(state: PopupScrollViewState): void {
   }, []);
 
   useLayoutEffect(() => {
+    const container = document.getElementById(POPUP_ROOT_ID);
+    if (!container) return;
+
+    if (!active) {
+      container.scrollTop = 0;
+      return;
+    }
+    if (loaded) return;
+
+    const onScrollBeforeLoad = (): void => {
+      userScrolledBeforeLoadRef.current = true;
+      restorationTargetRef.current = null;
+      positionRef.current = normalizePopupScrollTop(container.scrollTop);
+    };
+    container.addEventListener('scroll', onScrollBeforeLoad, { passive: true });
+    return () => container.removeEventListener('scroll', onScrollBeforeLoad);
+  }, [
+    active,
+    loaded,
+    state.activeTabContextLoaded,
+    state.hasSettingsSearch,
+    state.isPluginSite,
+    state.showStarredHistory,
+    state.showStorageManager,
+  ]);
+
+  useLayoutEffect(() => {
     if (!loaded || !active) return;
     const container = document.getElementById(POPUP_ROOT_ID);
     if (!container) return;
@@ -108,7 +141,6 @@ export function usePopupScrollRestoration(state: PopupScrollViewState): void {
     container.style.setProperty('overflow-anchor', 'none');
 
     let resizeObserver: ResizeObserver | null = null;
-    let restoreTimer: ReturnType<typeof setTimeout> | null = null;
     let restoreFrame: number | null = null;
     let awaitingInitialLayout = true;
     let lastAppliedScrollTop: number | null = null;
@@ -116,26 +148,20 @@ export function usePopupScrollRestoration(state: PopupScrollViewState): void {
     const stopLayoutObservation = (): void => {
       resizeObserver?.disconnect();
       resizeObserver = null;
-      if (restoreTimer) {
-        clearTimeout(restoreTimer);
-        restoreTimer = null;
-      }
       if (restoreFrame !== null) {
         cancelAnimationFrame(restoreFrame);
         restoreFrame = null;
       }
     };
-    const finishRestoring = (finalPosition?: number): void => {
+    const finishRestoring = (): void => {
       stopLayoutObservation();
       restorationTargetRef.current = null;
-      if (finalPosition !== undefined) positionRef.current = finalPosition;
     };
-    const applyRestorationTarget = (target: number): number => {
+    const applyRestorationTarget = (target: number): void => {
       const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
       const restoredPosition = clampPopupScrollTop(target, maxScrollTop);
       lastAppliedScrollTop = restoredPosition;
       container.scrollTop = restoredPosition;
-      return restoredPosition;
     };
 
     const restorationTarget = restorationTargetRef.current ?? positionRef.current;
@@ -147,12 +173,6 @@ export function usePopupScrollRestoration(state: PopupScrollViewState): void {
         applyRestorationTarget(restorationTarget);
       });
       resizeObserver.observe(container.firstElementChild ?? container);
-      restoreTimer = setTimeout(() => {
-        if (restorationTargetRef.current !== restorationTarget) return;
-        const finalPosition = applyRestorationTarget(restorationTarget);
-        finishRestoring(finalPosition);
-        persistPosition();
-      }, RESTORE_LAYOUT_WINDOW_MS);
     }
 
     // Firefox can apply a queued layout clamp after scrollTop appears restored.
@@ -160,10 +180,7 @@ export function usePopupScrollRestoration(state: PopupScrollViewState): void {
       restoreFrame = null;
       if (restorationTargetRef.current !== restorationTarget) return;
       awaitingInitialLayout = false;
-      const confirmedPosition = applyRestorationTarget(restorationTarget);
-      if (!resizeObserver) {
-        finishRestoring(confirmedPosition);
-      }
+      applyRestorationTarget(restorationTarget);
     });
 
     const onScroll = (): void => {
