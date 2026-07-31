@@ -174,9 +174,12 @@ function applyWidth(widthPercent: number) {
       overflow-x: auto !important;
     }
 
+    /* Exclude the header logo pill wrapper: it also contains a sparkle img, and
+       widening it stretches chat-app-side-nav-menu-button into a transparent
+       hit box that blocks the header buttons (#875) */
     model-response:has(> .deferred-response-indicator),
-    .response-container:has(img[src*="sparkle"]), 
-    main > div:has(img[src*="sparkle"]) {
+    .response-container:has(img[src*="sparkle"]),
+    main > div:has(img[src*="sparkle"]):not(:has(chat-app-side-nav-menu-button)) {
       max-width: ${widthValue} !important;
       width: min(100%, ${widthValue}) !important;
       margin-left: auto !important;

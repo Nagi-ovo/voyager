@@ -1091,3 +1091,40 @@ Regression test:
 
 Commit:
 `fix(timeline): use stable Gemini turn identities`
+
+## The chat width sparkle rule also matches the Gemini logo pill
+
+Symptom:
+With Voyager loaded and the sidebar open at >=1024px, Gemini's own header
+buttons (close sidebar, Upgrade, temporary chat, more) became hard or impossible
+to click. Narrowing the conversation-width slider changed how many buttons were
+affected, which made the bug look like a sidebar-width problem.
+
+Root cause:
+`chatWidth` clamps loading indicators with `main > div:has(img[src*="sparkle"])`
+(added for #110). Gemini's header logo wrapper `main > div.side-nav-menu-button`
+also contains a sparkle SVG, so it matched too and was stretched to
+`round(percent% x screen.availWidth)`. The wrapper itself is
+`pointer-events: none`, but its child `chat-app-side-nav-menu-button` is
+`pointer-events: auto` and inherits the stretched box, turning a 101px pill into
+a transparent hit box across the header. That is why the blast radius tracked
+the slider: the phantom width equals the computed pixel value, so low
+percentages only covered the close-sidebar button while 100% swallowed the whole
+header. Measuring the phantom box while only `sidebarWidth` is suspected is a
+dead end — the box is real but `pointer-events: none`, so it looks harmless.
+
+Fix:
+Exclude the logo wrapper from that one rule with
+`:not(:has(chat-app-side-nav-menu-button))`. Genuine sparkle content wrappers
+still get clamped, so #110 does not regress. Do not clamp the host's width or
+geometry instead: the host is `static` and in-flow, so touching its box
+perturbs header layout.
+
+Regression test:
+`src/pages/content/chatWidth/__tests__/chatWidth.test.ts`
+Live-page verification: toggling only that selector moves the host between 101px
+(hit-stack top `mat-icon` / `span.dynamic-upsell-label`) and the slider's pixel
+value (hit-stack top `chat-app-side-nav-menu-button`) at 30/50/70/100%.
+
+Commit:
+`fix(chatwidth): stop the sparkle rule from stretching the Gemini logo pill`

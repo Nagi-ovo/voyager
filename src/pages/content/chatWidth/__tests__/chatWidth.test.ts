@@ -119,4 +119,36 @@ describe('chatWidth', () => {
     expect(styleText).toContain(`max-width: ${expectedPx}px !important`);
     expect(styleText).toContain(`width: min(100%, ${expectedPx}px) !important`);
   });
+
+  it('excludes the header logo pill wrapper from the sparkle width rule (#875)', async () => {
+    const { startChatWidthAdjuster } = await import('../index');
+    startChatWidthAdjuster();
+
+    const styleText = getInjectedStyle().textContent ?? '';
+    // Read the selector back out of the injected CSS so this test fails if the
+    // shipped rule changes, instead of only checking a hardcoded copy of it
+    const sparkleSelector = styleText.match(/main > div:has\(img\[src\*="sparkle"\]\)[^{]*/)?.[0];
+    expect(sparkleSelector).toBeDefined();
+    expect(sparkleSelector?.trim()).toBe(
+      'main > div:has(img[src*="sparkle"]):not(:has(chat-app-side-nav-menu-button))',
+    );
+
+    // Behavioral check on the shipped selector: it must match sparkle content
+    // wrappers but never the Gemini logo pill wrapper, whose stretched
+    // transparent hit box blocked the header buttons (#875)
+    document.body.innerHTML = `
+      <main>
+        <div class="side-nav-menu-button">
+          <chat-app-side-nav-menu-button>
+            <img src="https://www.gstatic.com/lamda/images/gemini_sparkle_aurora.svg" />
+          </chat-app-side-nav-menu-button>
+        </div>
+        <div class="loading-wrapper">
+          <img src="https://www.gstatic.com/lamda/images/gemini_sparkle_loading.svg" />
+        </div>
+      </main>
+    `;
+    const matches = [...document.querySelectorAll(sparkleSelector as string)];
+    expect(matches.map((el) => el.className)).toEqual(['loading-wrapper']);
+  });
 });
