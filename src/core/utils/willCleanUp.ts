@@ -26,7 +26,13 @@ export class WillCleanUp {
    * Call all functions registered by `it` functions, and clear their references.
    */
   execute(): void {
-    this.cleanUps.forEach((it) => it());
+    this.cleanUps.forEach((it) => {
+      try {
+        it();
+      } catch (e) {
+        console.error(`[Gemini Voyager] cleanup error: ${e}`);
+      }
+    });
     this.cleanUps = [];
   }
 }

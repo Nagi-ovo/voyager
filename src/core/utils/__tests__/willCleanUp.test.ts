@@ -48,4 +48,20 @@ describe('willCleanUp tests module', () => {
 
     expect(willCleanUp.list()).toEqual([]);
   });
+
+  it('can safely handle cleanup functions that throws an error', () => {
+    const function1 = () => {
+      throw Error();
+    };
+    const function2 = vi.fn();
+
+    willCleanUp.it(function1);
+    willCleanUp.it(function2);
+
+    willCleanUp.execute();
+
+    expect(function2).toHaveBeenCalled();
+    expect(function2).toHaveBeenCalledTimes(1);
+    expect(willCleanUp.list()).toEqual([]);
+  });
 });
