@@ -461,8 +461,6 @@ function handleVisibilityChange(): void {
 
 // Main initialization logic
 (function () {
-  console.log("This is Andy's change in 2026/8/1");
-
   try {
     if (!hasValidExtensionContext()) return;
 
