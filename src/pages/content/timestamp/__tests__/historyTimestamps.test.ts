@@ -167,7 +167,9 @@ describe('HistoryTimestampStore', () => {
         timestampMs: 1_783_370_737_262,
       },
     ]);
+    expect(store.getLatestTurnTimestamp(NATIVE_ID)).toBe(1_783_370_737_262);
     expect(store.getTurns('unknown')).toBeNull();
+    expect(store.getLatestTurnTimestamp('unknown')).toBeNull();
   });
 
   it('merges later captures and dedupes repeats without re-notifying', () => {

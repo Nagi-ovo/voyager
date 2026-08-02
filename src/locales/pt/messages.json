@@ -107,6 +107,10 @@
     "message": "Exportar",
     "description": "Export button"
   },
+  "pm_export_format": {
+    "message": "Formato de exportação",
+    "description": "Saved Library export format menu button"
+  },
   "pm_prompt_placeholder": {
     "message": "Texto do prompt",
     "description": "Prompt textarea placeholder"
@@ -279,6 +283,10 @@
     "message": "Gestor de prompts",
     "description": "Button label for returning from the starred library to Prompt Manager"
   },
+  "pm_open_prompt_manager": {
+    "message": "Abrir o gestor de prompts",
+    "description": "Saved Library footer button for returning to Prompt Manager"
+  },
   "pm_starred_library": {
     "message": "Biblioteca salva",
     "description": "Prompt Manager starred messages library title and entry button"
@@ -354,6 +362,28 @@
   "folder_title": {
     "message": "Pastas",
     "description": "Folder section title"
+  },
+  "folder_activity_turn_on": {
+    "message": "Ativar vista de atividade",
+    "description": "Ativar a vista de atividade"
+  },
+  "folder_activity_turn_off": {
+    "message": "Desativar vista de atividade",
+    "description": "Desativar a vista de atividade"
+  },
+  "folder_activity_priority": {
+    "message": "Prioridade",
+    "description": "Conversas ativas nas últimas três horas"
+  },
+  "folder_activity_today": { "message": "Hoje", "description": "Conversas ativas hoje" },
+  "folder_activity_yesterday": { "message": "Ontem", "description": "Conversas ativas ontem" },
+  "folder_activity_empty": {
+    "message": "Ainda não há conversas nas pastas",
+    "description": "Estado vazio da atividade"
+  },
+  "folder_activity_top_level": {
+    "message": "Nível superior",
+    "description": "Conversa fora de uma pasta nomeada"
   },
   "folder_create": {
     "message": "Criar pasta",
@@ -556,7 +586,7 @@
     "description": "Notion-compatible format with $$ delimiters"
   },
   "folder_filter_current_user": {
-    "message": "Isolamento de conta",
+    "message": "Mostrar apenas a conta atual",
     "description": "Show only conversations from the current Google account"
   },
   "folder_export": {
@@ -1985,8 +2015,12 @@
     "description": "Edge Add-ons store rating CTA button text"
   },
   "changelog_badge_mode": {
-    "message": "Notificar com um selo NEW no botão flutuante em vez desta janela",
+    "message": "Avisar sobre atualizações com um selo NEW",
     "description": "Changelog notification mode toggle label"
+  },
+  "changelog_badge_mode_hint": {
+    "message": "Quando uma nova versão for lançada, mostra NEW no botão flutuante em vez de abrir automaticamente o histórico de alterações.",
+    "description": "Changelog notification mode toggle hint"
   },
   "forkConversation": {
     "message": "Fork",

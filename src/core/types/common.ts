@@ -160,6 +160,9 @@ export const StorageKeys = {
   NOTEBOOKS_HIDDEN: 'gvNotebooksHidden',
   FOLDERS_HIDDEN: 'gvFoldersHidden',
   FOLDERS_COLLAPSED: 'gvFoldersCollapsed',
+  // Device-local projection for the Gemini folder panel. `folders` preserves
+  // the tree; `activity` groups filed conversations by their latest real turn.
+  FOLDERS_VIEW_MODE: 'gvFoldersViewMode',
   // How many recent gems to show as an expandable section in the sidebar.
   // 0 disables the feature entirely (no section injected); 1-10 shows that
   // many items. Cached gem list lives in `GV_GEMS_LIST_CACHE`.

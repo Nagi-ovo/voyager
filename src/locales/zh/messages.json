@@ -107,6 +107,10 @@
     "message": "导出",
     "description": "导出按钮"
   },
+  "pm_export_format": {
+    "message": "导出格式",
+    "description": "打开收藏库导出格式菜单的按钮"
+  },
   "pm_prompt_placeholder": {
     "message": "Prompt 文本",
     "description": "Prompt 输入占位符"
@@ -279,6 +283,10 @@
     "message": "提示词管理器",
     "description": "Button label for returning from the starred library to Prompt Manager"
   },
+  "pm_open_prompt_manager": {
+    "message": "打开提示词管理器",
+    "description": "从收藏库返回提示词管理器的底部按钮"
+  },
   "pm_starred_library": {
     "message": "收藏库",
     "description": "Prompt Manager starred messages library title and entry button"
@@ -355,6 +363,19 @@
     "message": "文件夹",
     "description": "文件夹区域标题"
   },
+  "folder_activity_turn_on": {
+    "message": "开启动态视图",
+    "description": "开启注意力优先的动态视图"
+  },
+  "folder_activity_turn_off": {
+    "message": "关闭动态视图",
+    "description": "关闭注意力优先的动态视图"
+  },
+  "folder_activity_priority": { "message": "优先", "description": "最近三小时内活跃的对话" },
+  "folder_activity_today": { "message": "今天", "description": "今天有对话的分组" },
+  "folder_activity_yesterday": { "message": "昨天", "description": "昨天有对话的分组" },
+  "folder_activity_empty": { "message": "文件夹中还没有对话", "description": "动态视图空状态" },
+  "folder_activity_top_level": { "message": "顶层", "description": "未放入具名文件夹的对话" },
   "folder_create": {
     "message": "创建文件夹",
     "description": "创建文件夹按钮提示"
@@ -556,7 +577,7 @@
     "description": "Notion 兼容格式，使用 $$ 分隔符"
   },
   "folder_filter_current_user": {
-    "message": "账号隔离模式",
+    "message": "仅显示当前账号",
     "description": "Show only conversations from the current Google account"
   },
   "folder_export": {
@@ -1983,8 +2004,12 @@
     "description": "Edge Add-ons store rating CTA button text"
   },
   "changelog_badge_mode": {
-    "message": "通过悬浮球上的 NEW 标记提醒，而非弹出此窗口",
+    "message": "使用 NEW 标记提醒更新",
     "description": "Changelog notification mode toggle label"
+  },
+  "changelog_badge_mode_hint": {
+    "message": "新版本发布时，只在悬浮球上显示 NEW 标记，不自动打开更新日志。",
+    "description": "Changelog notification mode toggle hint"
   },
   "forkConversation": {
     "message": "分叉",

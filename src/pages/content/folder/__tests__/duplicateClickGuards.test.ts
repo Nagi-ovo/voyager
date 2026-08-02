@@ -210,6 +210,47 @@ describe('folder duplicate click guards', () => {
     });
   });
 
+  it('controls the existing sidebar width setting from folder settings', async () => {
+    vi.mocked(browser.storage.sync.get).mockImplementation(async (defaults) => ({
+      ...(defaults as Record<string, unknown>),
+      [StorageKeys.SIDEBAR_WIDTH]: 26,
+      [StorageKeys.SIDEBAR_WIDTH_ENABLED]: true,
+    }));
+
+    manager = new FolderManager();
+    const typedManager = manager as unknown as TestableManager;
+    typedManager.showFolderSettingsMenu(
+      new MouseEvent('click', { bubbles: true, clientX: 24, clientY: 16 }),
+    );
+    await Promise.resolve();
+
+    const toggle = document.querySelector<HTMLButtonElement>('.gv-folder-width-switch');
+    const slider = document.querySelector<HTMLInputElement>('.gv-folder-width-slider');
+    const value = document.querySelector<HTMLOutputElement>('.gv-folder-width-value');
+
+    await vi.waitFor(() => expect(toggle?.getAttribute('aria-checked')).toBe('true'));
+    expect(slider?.disabled).toBe(false);
+    expect(slider?.value).toBe('312');
+    expect(value?.textContent).toBe('312px');
+
+    if (!slider || !toggle) throw new Error('Sidebar width controls were not rendered');
+    slider.value = '360';
+    slider.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(value?.textContent).toBe('360px');
+
+    slider.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(browser.storage.sync.set).toHaveBeenCalledWith({
+      [StorageKeys.SIDEBAR_WIDTH]: 360,
+    });
+
+    toggle.click();
+    expect(toggle.getAttribute('aria-checked')).toBe('false');
+    expect(slider.disabled).toBe(true);
+    expect(browser.storage.sync.set).toHaveBeenCalledWith({
+      [StorageKeys.SIDEBAR_WIDTH_ENABLED]: false,
+    });
+  });
+
   it('removes stale menu listeners when toggling closed before reopening', () => {
     manager = new FolderManager();
     const typedManager = manager as unknown as TestableManager;

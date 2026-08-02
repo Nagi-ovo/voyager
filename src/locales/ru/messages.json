@@ -107,6 +107,10 @@
     "message": "Экспорт",
     "description": "Export button"
   },
+  "pm_export_format": {
+    "message": "Формат экспорта",
+    "description": "Saved Library export format menu button"
+  },
   "pm_prompt_placeholder": {
     "message": "Текст промпта",
     "description": "Prompt textarea placeholder"
@@ -279,6 +283,10 @@
     "message": "Менеджер промптов",
     "description": "Button label for returning from the starred library to Prompt Manager"
   },
+  "pm_open_prompt_manager": {
+    "message": "Открыть менеджер промптов",
+    "description": "Saved Library footer button for returning to Prompt Manager"
+  },
   "pm_starred_library": {
     "message": "Библиотека сохранённого",
     "description": "Prompt Manager starred messages library title and entry button"
@@ -354,6 +362,28 @@
   "folder_title": {
     "message": "Папки",
     "description": "Folder section title"
+  },
+  "folder_activity_turn_on": {
+    "message": "Включить режим активности",
+    "description": "Включить режим активности"
+  },
+  "folder_activity_turn_off": {
+    "message": "Выключить режим активности",
+    "description": "Выключить режим активности"
+  },
+  "folder_activity_priority": {
+    "message": "Приоритет",
+    "description": "Разговоры, активные за последние три часа"
+  },
+  "folder_activity_today": { "message": "Сегодня", "description": "Активные сегодня разговоры" },
+  "folder_activity_yesterday": { "message": "Вчера", "description": "Активные вчера разговоры" },
+  "folder_activity_empty": {
+    "message": "В папках пока нет разговоров",
+    "description": "Пустое состояние активности"
+  },
+  "folder_activity_top_level": {
+    "message": "Верхний уровень",
+    "description": "Разговор вне именованной папки"
   },
   "folder_create": {
     "message": "Создать папку",
@@ -556,7 +586,7 @@
     "description": "Notion-compatible format with $$ delimiters"
   },
   "folder_filter_current_user": {
-    "message": "Изоляция аккаунтов",
+    "message": "Показывать только текущий аккаунт",
     "description": "Show only conversations from the current Google account"
   },
   "folder_export": {
@@ -1985,8 +2015,12 @@
     "description": "Edge Add-ons store rating CTA button text"
   },
   "changelog_badge_mode": {
-    "message": "Уведомлять значком NEW на плавающей кнопке вместо этого окна",
+    "message": "Сообщать об обновлениях значком NEW",
     "description": "Changelog notification mode toggle label"
+  },
+  "changelog_badge_mode_hint": {
+    "message": "При выходе новой версии показывает NEW на плавающей кнопке вместо автоматического открытия списка изменений.",
+    "description": "Changelog notification mode toggle hint"
   },
   "forkConversation": {
     "message": "Fork",

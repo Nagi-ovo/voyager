@@ -270,6 +270,18 @@ export class HistoryTimestampStore {
     return Array.from(turns.values());
   }
 
+  /** Latest real server-side turn time available for one conversation. */
+  getLatestTurnTimestamp(nativeConversationId: string): number | null {
+    const turns = this.getTurns(nativeConversationId);
+    if (!turns) return null;
+
+    let latest = -Infinity;
+    turns.forEach(({ timestampMs }) => {
+      if (timestampMs > latest) latest = timestampMs;
+    });
+    return Number.isFinite(latest) ? latest : null;
+  }
+
   /** Monotonic version of the parsed inputs for one native conversation. */
   getRevision(nativeConversationId: string): number {
     return this.cidRevisions.get(`c_${nativeConversationId}`) ?? 0;

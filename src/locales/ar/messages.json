@@ -107,6 +107,10 @@
     "message": "تصدير",
     "description": "Export button"
   },
+  "pm_export_format": {
+    "message": "تنسيق التصدير",
+    "description": "Saved Library export format menu button"
+  },
   "pm_prompt_placeholder": {
     "message": "نص المطالبة",
     "description": "Prompt textarea placeholder"
@@ -279,6 +283,10 @@
     "message": "مدير المطالبات",
     "description": "Button label for returning from the starred library to Prompt Manager"
   },
+  "pm_open_prompt_manager": {
+    "message": "فتح مدير المطالبات",
+    "description": "Saved Library footer button for returning to Prompt Manager"
+  },
   "pm_starred_library": {
     "message": "مكتبة العناصر المحفوظة",
     "description": "Prompt Manager starred messages library title and entry button"
@@ -354,6 +362,22 @@
   "folder_title": {
     "message": "المجلدات",
     "description": "Folder section title"
+  },
+  "folder_activity_turn_on": { "message": "تشغيل عرض النشاط", "description": "تشغيل عرض النشاط" },
+  "folder_activity_turn_off": { "message": "إيقاف عرض النشاط", "description": "إيقاف عرض النشاط" },
+  "folder_activity_priority": {
+    "message": "الأولوية",
+    "description": "المحادثات النشطة خلال الساعات الثلاث الماضية"
+  },
+  "folder_activity_today": { "message": "اليوم", "description": "المحادثات النشطة اليوم" },
+  "folder_activity_yesterday": { "message": "أمس", "description": "المحادثات النشطة أمس" },
+  "folder_activity_empty": {
+    "message": "لا توجد محادثات في المجلدات بعد",
+    "description": "حالة عرض النشاط الفارغة"
+  },
+  "folder_activity_top_level": {
+    "message": "المستوى الأعلى",
+    "description": "محادثة خارج مجلد مسمى"
   },
   "folder_create": {
     "message": "إنشاء مجلد",
@@ -556,7 +580,7 @@
     "description": "Notion-compatible format with $$ delimiters"
   },
   "folder_filter_current_user": {
-    "message": "عزل الحساب",
+    "message": "عرض الحساب الحالي فقط",
     "description": "Show only conversations from the current Google account"
   },
   "folder_export": {
@@ -1985,8 +2009,12 @@
     "description": "Edge Add-ons store rating CTA button text"
   },
   "changelog_badge_mode": {
-    "message": "الإشعار عبر شارة NEW على الزر العائم بدلاً من هذه النافذة",
+    "message": "التنبيه بالتحديثات عبر شارة NEW",
     "description": "Changelog notification mode toggle label"
+  },
+  "changelog_badge_mode_hint": {
+    "message": "عند إصدار نسخة جديدة، تظهر شارة NEW على الزر العائم بدلاً من فتح سجل التغييرات تلقائياً.",
+    "description": "Changelog notification mode toggle hint"
   },
   "forkConversation": {
     "message": "Fork",

@@ -68,6 +68,20 @@ describe('settings search', () => {
     expect(matches.has('promptManager:slashPromptEnabled')).toBe(true);
   });
 
+  it('finds the changelog badge preference through update wording', () => {
+    const matches = getSettingsSearchMatches(
+      [
+        {
+          id: 'general:changelogBadgeMode',
+          keys: ['changelog_badge_mode', 'changelog_badge_mode_hint'],
+        },
+      ],
+      '更新日志',
+    );
+
+    expect(matches.has('general:changelogBadgeMode')).toBe(true);
+  });
+
   it('does not match unrelated words', () => {
     const matches = getSettingsSearchMatches(
       [{ id: 'general', keys: ['responseCompleteNotification'] }],

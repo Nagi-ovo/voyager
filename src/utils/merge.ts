@@ -18,6 +18,7 @@ type MergeableFolder = {
 type MergeableConversationReference = {
   readonly conversationId: string;
   starred?: boolean;
+  lastTurnAt?: number;
 };
 
 type MergeableFolderData<
@@ -113,6 +114,7 @@ export function mergeFolderData<
         ...existing,
         ...conversation,
         starred: conversation.starred ?? existing.starred,
+        lastTurnAt: Math.max(existing.lastTurnAt ?? 0, conversation.lastTurnAt ?? 0) || undefined,
       } as TConversation);
     });
   };

@@ -112,6 +112,7 @@ export default defineConfig({
             text: '核心功能',
             items: [
               { text: '文件夹', link: '/guide/folders' },
+              { text: 'Activity 注意力视图', link: '/guide/activity-view' },
               { text: '灵感库', link: '/guide/prompts' },
               { text: '云同步', link: '/guide/cloud-sync' },
               { text: '公式复制', link: '/guide/formula-copy' },
@@ -186,6 +187,7 @@ export default defineConfig({
             text: '核心功能',
             items: [
               { text: '資料夾', link: '/zh_TW/guide/folders' },
+              { text: 'Activity 注意力檢視', link: '/zh_TW/guide/activity-view' },
               { text: '提示詞庫', link: '/zh_TW/guide/prompts' },
               { text: '雲同步', link: '/zh_TW/guide/cloud-sync' },
               { text: '公式複製', link: '/zh_TW/guide/formula-copy' },
@@ -260,6 +262,7 @@ export default defineConfig({
             text: 'Core Features',
             items: [
               { text: 'Folder Organization', link: '/en/guide/folders' },
+              { text: 'Activity View', link: '/en/guide/activity-view' },
               { text: 'Prompt Library', link: '/en/guide/prompts' },
               { text: 'Cloud Sync', link: '/en/guide/cloud-sync' },
               { text: 'Formula Copy', link: '/en/guide/formula-copy' },
@@ -334,6 +337,7 @@ export default defineConfig({
             text: 'コア機能',
             items: [
               { text: 'フォルダ管理', link: '/ja/guide/folders' },
+              { text: 'Activityビュー', link: '/ja/guide/activity-view' },
               { text: 'プロンプト', link: '/ja/guide/prompts' },
               { text: 'クラウド同期', link: '/ja/guide/cloud-sync' },
               { text: '数식コピー', link: '/ja/guide/formula-copy' },
@@ -408,6 +412,7 @@ export default defineConfig({
             text: '핵심 기능',
             items: [
               { text: '폴더 관리', link: '/ko/guide/folders' },
+              { text: 'Activity 보기', link: '/ko/guide/activity-view' },
               { text: '프롬프트 라이브러리', link: '/ko/guide/prompts' },
               { text: '클라우드 동기화', link: '/ko/guide/cloud-sync' },
               { text: '수식 복사', link: '/ko/guide/formula-copy' },
@@ -482,6 +487,7 @@ export default defineConfig({
             text: 'Fonctionnalités principales',
             items: [
               { text: 'Dossiers', link: '/fr/guide/folders' },
+              { text: 'Vue Activity', link: '/fr/guide/activity-view' },
               { text: 'Bibliothèque de Prompts', link: '/fr/guide/prompts' },
               { text: 'Synchronisation Cloud', link: '/fr/guide/cloud-sync' },
               { text: 'Copie de Formules', link: '/fr/guide/formula-copy' },
@@ -556,6 +562,7 @@ export default defineConfig({
             text: 'Funciones principales',
             items: [
               { text: 'Carpetas', link: '/es/guide/folders' },
+              { text: 'Vista Activity', link: '/es/guide/activity-view' },
               { text: 'Biblioteca de Prompts', link: '/es/guide/prompts' },
               { text: 'Sincronización en la Nube', link: '/es/guide/cloud-sync' },
               { text: 'Copia de Fórmulas', link: '/es/guide/formula-copy' },
@@ -636,6 +643,7 @@ export default defineConfig({
             text: 'Funcionalidades principais',
             items: [
               { text: 'Pastas', link: '/pt/guide/folders' },
+              { text: 'Vista Activity', link: '/pt/guide/activity-view' },
               { text: 'Biblioteca de Prompts', link: '/pt/guide/prompts' },
               { text: 'Sincronização na Nuvem', link: '/pt/guide/cloud-sync' },
               { text: 'Cópia de Fórmulas', link: '/pt/guide/formula-copy' },
@@ -711,6 +719,7 @@ export default defineConfig({
             text: 'الميزات الأساسية',
             items: [
               { text: 'المجلدات', link: '/ar/guide/folders' },
+              { text: 'عرض Activity', link: '/ar/guide/activity-view' },
               { text: 'مكتبة المطالبات', link: '/ar/guide/prompts' },
               { text: 'مزامنة السحابية', link: '/ar/guide/cloud-sync' },
               { text: 'نسخ الصيغ', link: '/ar/guide/formula-copy' },
@@ -785,6 +794,7 @@ export default defineConfig({
             text: 'Основные функции',
             items: [
               { text: 'Папки', link: '/ru/guide/folders' },
+              { text: 'Режим Activity', link: '/ru/guide/activity-view' },
               { text: 'Библиотека промптов', link: '/ru/guide/prompts' },
               { text: 'Облачная синхронизация', link: '/ru/guide/cloud-sync' },
               { text: 'Копирование формул', link: '/ru/guide/formula-copy' },

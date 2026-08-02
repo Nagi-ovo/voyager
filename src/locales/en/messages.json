@@ -107,6 +107,10 @@
     "message": "Export",
     "description": "Export button"
   },
+  "pm_export_format": {
+    "message": "Export format",
+    "description": "Button that opens the Saved Library export format menu"
+  },
   "pm_prompt_placeholder": {
     "message": "Prompt text",
     "description": "Prompt textarea placeholder"
@@ -279,6 +283,10 @@
     "message": "Prompt Manager",
     "description": "Button label for returning from the starred library to Prompt Manager"
   },
+  "pm_open_prompt_manager": {
+    "message": "Open Prompt Manager",
+    "description": "Saved Library footer button for returning to Prompt Manager"
+  },
   "pm_starred_library": {
     "message": "Saved Library",
     "description": "Prompt Manager saved stars and highlights library title and entry button"
@@ -354,6 +362,31 @@
   "folder_title": {
     "message": "Folders",
     "description": "Folder section title"
+  },
+  "folder_activity_turn_on": {
+    "message": "Turn on Activity view",
+    "description": "Enable the attention-first Activity view"
+  },
+  "folder_activity_turn_off": {
+    "message": "Turn off Activity view",
+    "description": "Disable the attention-first Activity view"
+  },
+  "folder_activity_priority": {
+    "message": "Priority",
+    "description": "Conversations active in the last three hours"
+  },
+  "folder_activity_today": { "message": "Today", "description": "Conversations active today" },
+  "folder_activity_yesterday": {
+    "message": "Yesterday",
+    "description": "Conversations active yesterday"
+  },
+  "folder_activity_empty": {
+    "message": "No conversations in folders yet",
+    "description": "Activity view empty state"
+  },
+  "folder_activity_top_level": {
+    "message": "Top level",
+    "description": "Conversation outside a named folder"
   },
   "folder_create": {
     "message": "Create folder",
@@ -556,7 +589,7 @@
     "description": "Notion-compatible format with $$ delimiters"
   },
   "folder_filter_current_user": {
-    "message": "Account Isolation",
+    "message": "Show current account only",
     "description": "Show only conversations from the current Google account"
   },
   "folder_export": {
@@ -1985,8 +2018,12 @@
     "description": "Edge Add-ons store rating CTA button text"
   },
   "changelog_badge_mode": {
-    "message": "Notify via badge on the floating button instead of this popup",
+    "message": "Use a NEW badge for updates",
     "description": "Changelog notification mode toggle label"
+  },
+  "changelog_badge_mode_hint": {
+    "message": "When a new version is released, show NEW on the floating button instead of opening the changelog automatically.",
+    "description": "Changelog notification mode toggle hint"
   },
   "forkConversation": {
     "message": "Fork",

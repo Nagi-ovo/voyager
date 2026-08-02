@@ -253,13 +253,18 @@ export const NON_SETTINGS_BACKUP_POLICIES = {
   },
   [StorageKeys.FOLDERS_HIDDEN]: {
     storage: 'local',
-    disposition: 'device-local',
-    reason: 'Sidebar visibility is a per-device layout preference.',
+    disposition: 'deprecated',
+    reason: 'Folder hiding was replaced by the built-in collapse and Activity controls.',
   },
   [StorageKeys.FOLDERS_COLLAPSED]: {
     storage: 'local',
     disposition: 'device-local',
     reason: 'Expanded folder UI state is intentionally local.',
+  },
+  [StorageKeys.FOLDERS_VIEW_MODE]: {
+    storage: 'local',
+    disposition: 'device-local',
+    reason: 'The folder tree or Activity projection is a per-device layout preference.',
   },
   [StorageKeys.GV_GEMS_LIST_CACHE]: {
     storage: 'local',

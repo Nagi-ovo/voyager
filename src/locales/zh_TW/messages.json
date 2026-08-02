@@ -107,6 +107,10 @@
     "message": "匯出",
     "description": "匯出按鈕"
   },
+  "pm_export_format": {
+    "message": "匯出格式",
+    "description": "開啟收藏庫匯出格式選單的按鈕"
+  },
   "pm_prompt_placeholder": {
     "message": "Prompt 文字",
     "description": "Prompt 輸入佔位符"
@@ -279,6 +283,10 @@
     "message": "提示詞管理器",
     "description": "Button label for returning from the starred library to Prompt Manager"
   },
+  "pm_open_prompt_manager": {
+    "message": "開啟提示詞管理器",
+    "description": "從收藏庫返回提示詞管理器的底部按鈕"
+  },
   "pm_starred_library": {
     "message": "收藏庫",
     "description": "Prompt Manager starred messages library title and entry button"
@@ -355,6 +363,19 @@
     "message": "資料夾",
     "description": "資料夾區域標題"
   },
+  "folder_activity_turn_on": {
+    "message": "開啟動態檢視",
+    "description": "開啟注意力優先的動態檢視"
+  },
+  "folder_activity_turn_off": {
+    "message": "關閉動態檢視",
+    "description": "關閉注意力優先的動態檢視"
+  },
+  "folder_activity_priority": { "message": "優先", "description": "最近三小時內活躍的對話" },
+  "folder_activity_today": { "message": "今天", "description": "今天有對話的分組" },
+  "folder_activity_yesterday": { "message": "昨天", "description": "昨天有對話的分組" },
+  "folder_activity_empty": { "message": "資料夾中還沒有對話", "description": "動態檢視空狀態" },
+  "folder_activity_top_level": { "message": "頂層", "description": "未放入具名資料夾的對話" },
   "folder_create": {
     "message": "建立資料夾",
     "description": "建立資料夾按鈕提示"
@@ -516,7 +537,7 @@
     "description": "Notion 相容格式，使用 $$ 分隔符"
   },
   "folder_filter_current_user": {
-    "message": "帳號隔離模式",
+    "message": "僅顯示目前帳號",
     "description": "Show only conversations from the current Google account"
   },
   "folder_export": {
@@ -1983,8 +2004,12 @@
     "description": "Edge Add-ons store rating CTA button text"
   },
   "changelog_badge_mode": {
-    "message": "透過懸浮球上的 NEW 標記提醒，而非彈出此視窗",
+    "message": "使用 NEW 標記提醒更新",
     "description": "Changelog notification mode toggle label"
+  },
+  "changelog_badge_mode_hint": {
+    "message": "新版本發布時，只在懸浮按鈕上顯示 NEW 標記，不自動開啟更新日誌。",
+    "description": "Changelog notification mode toggle hint"
   },
   "forkConversation": {
     "message": "Fork",

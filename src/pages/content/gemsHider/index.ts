@@ -1,5 +1,5 @@
 /**
- * Sidebar section hider for Gems, Notebooks, and Voyager Folders.
+ * Sidebar section hider for legacy Gemini Gems.
  *
  * Gemini keeps shipping new sidebar section shells for project-like content.
  * This module keeps the same hide/show affordance across those variants while
@@ -23,7 +23,7 @@ const PROCESSED_ATTR = 'data-gv-sidebar-section-hider';
 const SECTION_ID_ATTR = 'data-gv-sidebar-section-id';
 const ARROW_ICON_SELECTOR = '[data-test-id="arrow-icon"]';
 
-type SectionId = 'gems' | 'notebooks' | 'folders';
+type SectionId = 'gems';
 type TranslationKey = Parameters<typeof getTranslationSync>[0];
 
 interface HidableSectionConfig {
@@ -39,9 +39,7 @@ interface HidableSectionConfig {
   /**
    * Where the hide-toggle button gets mounted.
    *
-   * `'inline'` (default) inserts a real `<button>` into the toggle host element
-   * — used for folders, where the host is `.gv-folder-header-actions` (a plain
-   * div) so nested buttons are legal.
+   * `'inline'` (default) inserts a real `<button>` into the toggle host element.
    *
    * `'absolute'` mounts a `<span role="button">` directly on the section
    * element and positions it via CSS in the top-right corner. Used for Gemini's
@@ -71,17 +69,6 @@ const SECTION_CONFIGS: readonly HidableSectionConfig[] = [
   // hiding the whole Notebooks section. The StorageKeys.NOTEBOOKS_HIDDEN key
   // is preserved so any pre-existing hidden state simply stops applying — the
   // section will naturally render again.
-  {
-    id: 'folders',
-    containerSelector: '.gv-folder-container:not(.gv-aistudio):not(.gv-multi-select-floating-host)',
-    requiredDescendantSelector: '.gv-folder-header',
-    storageKey: StorageKeys.FOLDERS_HIDDEN,
-    hideTranslationKey: 'foldersHide',
-    showTranslationKey: 'foldersShow',
-    hideFallback: 'Hide Folders',
-    showFallback: 'Show Folders',
-    toggleHostSelector: '.gv-folder-header-actions',
-  },
 ] as const;
 
 let initialized = false;
@@ -302,7 +289,7 @@ function getSectionText(section: HidableSectionConfig, kind: 'hide' | 'show'): s
 /**
  * Build the hide-toggle element.
  *
- * Inline mode returns a real `<button>` (current behavior for folders).
+ * Inline mode returns a real `<button>`.
  *
  * Absolute mode returns a `<span role="button">` so the toggle can live inside
  * an element that is itself a `<button>` (Gemini's `.expandable-section-header`)

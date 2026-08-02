@@ -58,7 +58,7 @@ Click the folder icon to customize its color. Choose from 7 default colors or us
 
 #### Account Isolation
 
-Click the "person" icon in the header to instantly filter out chats from other Google accounts. Keep your workspace clean when using multiple accounts.
+The person icon temporarily shows chats from the current Google account only and is off by default. Hard Isolation in Folder options goes further by separating folder and cloud-sync data per account. When Hard Isolation is on, the person filter is redundant and is hidden automatically.
 
 <img src="/assets/current-user-only.png" alt="Account Isolation" style="border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); margin-top: 10px; max-width: 600px;"/>
 

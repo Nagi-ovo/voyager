@@ -107,6 +107,10 @@
     "message": "エクスポート",
     "description": "Export button"
   },
+  "pm_export_format": {
+    "message": "エクスポート形式",
+    "description": "Saved Library export format menu button"
+  },
   "pm_prompt_placeholder": {
     "message": "プロンプトのテキスト",
     "description": "Prompt textarea placeholder"
@@ -279,6 +283,10 @@
     "message": "プロンプトマネージャー",
     "description": "Button label for returning from the starred library to Prompt Manager"
   },
+  "pm_open_prompt_manager": {
+    "message": "プロンプト管理を開く",
+    "description": "Saved Library footer button for returning to Prompt Manager"
+  },
   "pm_starred_library": {
     "message": "保存済みライブラリ",
     "description": "Prompt Manager starred messages library title and entry button"
@@ -354,6 +362,25 @@
   "folder_title": {
     "message": "フォルダ",
     "description": "Folder section title"
+  },
+  "folder_activity_turn_on": {
+    "message": "アクティビティ表示をオン",
+    "description": "アクティビティ表示を有効にする"
+  },
+  "folder_activity_turn_off": {
+    "message": "アクティビティ表示をオフ",
+    "description": "アクティビティ表示を無効にする"
+  },
+  "folder_activity_priority": { "message": "優先", "description": "直近3時間にアクティブな会話" },
+  "folder_activity_today": { "message": "今日", "description": "今日の会話" },
+  "folder_activity_yesterday": { "message": "昨日", "description": "昨日の会話" },
+  "folder_activity_empty": {
+    "message": "フォルダ内に会話はまだありません",
+    "description": "アクティビティ表示の空状態"
+  },
+  "folder_activity_top_level": {
+    "message": "トップレベル",
+    "description": "名前付きフォルダ外の会話"
   },
   "folder_create": {
     "message": "フォルダを作成",
@@ -556,7 +583,7 @@
     "description": "Notion-compatible format with $$ delimiters"
   },
   "folder_filter_current_user": {
-    "message": "アカウント隔離",
+    "message": "現在のアカウントのみ表示",
     "description": "Show only conversations from the current Google account"
   },
   "folder_export": {
@@ -1985,8 +2012,12 @@
     "description": "Edge Add-ons store rating CTA button text"
   },
   "changelog_badge_mode": {
-    "message": "このポップアップの代わりに、フローティングボタンの NEW バッジで通知する",
+    "message": "NEWバッジで更新を通知",
     "description": "Changelog notification mode toggle label"
+  },
+  "changelog_badge_mode_hint": {
+    "message": "新しいバージョンが公開されたとき、変更履歴を自動で開かず、フローティングボタンにNEWバッジを表示します。",
+    "description": "Changelog notification mode toggle hint"
   },
   "forkConversation": {
     "message": "Fork",

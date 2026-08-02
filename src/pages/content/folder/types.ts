@@ -17,6 +17,7 @@ export interface ConversationReference {
   url: string; // The conversation URL
   addedAt: number; // When it was added to the folder
   lastOpenedAt?: number; // Timestamp when the conversation was last opened
+  lastTurnAt?: number; // Latest known real conversation turn time, never a view/open time
   updatedAt?: number; // Timestamp when the reference was last updated (e.g., renamed)
   isGem?: boolean; // Whether this is a Gem conversation
   gemId?: string; // Gem identifier if applicable

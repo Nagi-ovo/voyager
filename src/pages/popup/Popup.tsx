@@ -473,6 +473,12 @@ const POPUP_SETTINGS_SEARCH_ITEMS = [
   ]),
   popupSearchTarget(
     'general',
+    'changelogBadgeMode',
+    ['changelog_badge_mode', 'changelog_badge_mode_hint', 'changelog_title'],
+    ['update release changelog new badge 更新 版本 更新日志 提醒'],
+  ),
+  popupSearchTarget(
+    'general',
     'usageStatusToggle',
     ['usageStatusToggle', 'usageStatusToggleHint'],
     ['usage quota limit 用量 限额'],
@@ -4396,6 +4402,28 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
               )}
               {renderSetting(
                 'general',
+                'changelogBadgeMode',
+                <div className="group flex items-center justify-between">
+                  <div className="flex-1">
+                    <Label
+                      htmlFor="changelog-notify-badge"
+                      className="group-hover:text-primary cursor-pointer text-sm font-medium transition-colors"
+                    >
+                      {t('changelog_badge_mode')}
+                    </Label>
+                    <p className="text-muted-foreground mt-1 text-xs">
+                      {t('changelog_badge_mode_hint')}
+                    </p>
+                  </div>
+                  <Switch
+                    id="changelog-notify-badge"
+                    checked={changelogBadgeMode}
+                    onChange={(e) => handleChangelogBadgeModeChange(e.target.checked)}
+                  />
+                </div>,
+              )}
+              {renderSetting(
+                'general',
                 'usageStatusToggle',
                 <div className="group flex items-center justify-between">
                   <div className="flex-1">
@@ -4637,20 +4665,6 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
           </svg>
           <span>{t('starProject')}</span>
         </a>
-
-        <div className="group border-border/40 flex items-center justify-between gap-3 border-t pt-3">
-          <Label
-            htmlFor="changelog-notify-badge"
-            className="text-muted-foreground group-hover:text-foreground/80 cursor-pointer text-xs leading-snug transition-colors"
-          >
-            {t('changelog_badge_mode')}
-          </Label>
-          <Switch
-            id="changelog-notify-badge"
-            checked={changelogBadgeMode}
-            onChange={(e) => handleChangelogBadgeModeChange(e.target.checked)}
-          />
-        </div>
       </div>
     </div>
   );
