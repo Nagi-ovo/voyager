@@ -959,3 +959,35 @@ Regression test:
 
 Commit:
 `fix(timeline): use stable Gemini turn identities`
+
+## Compact timeline preview hover gap closes panel
+
+Symptom:
+
+In compact timeline mode, moving the pointer from the rail to the preview panel
+could close the panel before the pointer reached it, making history items hard to
+click.
+
+Root cause:
+
+The rail and panel each owned separate hover enter/leave handlers, but the panel
+is positioned with a 12px visual gap from the rail. A slow pointer crossing that
+non-hit-tested gap could outlive the compact close delay before panel mouseenter
+canceled it.
+
+Fix:
+
+Add a transparent fixed hover bridge over the actual rail-to-panel gap while the
+compact preview is open. Treat the bridge as part of the interaction area for
+hover and outside-click handling, and hide it when compact mode closes or turns
+off.
+
+Regression test:
+
+`src/pages/content/timeline/__tests__/TimelinePreviewPanel.test.ts`
+(`keeps the panel open while the pointer pauses in the compact hover gap`,
+`treats the compact hover bridge as part of the preview interaction area`).
+
+Commit:
+
+TBD

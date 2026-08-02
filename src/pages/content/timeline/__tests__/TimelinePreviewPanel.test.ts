@@ -163,6 +163,46 @@ describe('TimelinePreviewPanel', () => {
       }
     });
 
+    it('keeps the panel open while the pointer pauses in the compact hover gap', () => {
+      vi.useFakeTimers();
+      try {
+        vi.spyOn(anchor, 'getBoundingClientRect').mockReturnValue(new DOMRect(900, 100, 24, 600));
+        const panelEl = document.querySelector('.timeline-preview-panel') as HTMLElement;
+        Object.defineProperty(panelEl, 'offsetHeight', { value: 240, configurable: true });
+
+        panel.setCompactMode(true);
+        anchor.dispatchEvent(new MouseEvent('mouseenter'));
+        anchor.dispatchEvent(new MouseEvent('mouseleave'));
+
+        const bridge = document.querySelector('.gv-timeline-preview-hover-bridge') as HTMLElement;
+        expect(bridge.classList.contains('gv-timeline-preview-hover-bridge-visible')).toBe(true);
+        expect(bridge.style.left).toBe('888px');
+        expect(bridge.style.width).toBe('12px');
+
+        bridge.dispatchEvent(new MouseEvent('mouseenter'));
+        vi.advanceTimersByTime(400);
+        expect(panel.isOpen).toBe(true);
+
+        bridge.dispatchEvent(new MouseEvent('mouseleave'));
+        vi.advanceTimersByTime(160);
+        expect(panel.isOpen).toBe(false);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('treats the compact hover bridge as part of the preview interaction area', () => {
+      vi.spyOn(anchor, 'getBoundingClientRect').mockReturnValue(new DOMRect(900, 100, 24, 600));
+      panel.setCompactMode(true);
+      anchor.dispatchEvent(new MouseEvent('mouseenter'));
+      expect(panel.isOpen).toBe(true);
+
+      const bridge = document.querySelector('.gv-timeline-preview-hover-bridge') as HTMLElement;
+      bridge.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+
+      expect(panel.isOpen).toBe(true);
+    });
+
     it('toggles the panel when the rail is clicked', () => {
       panel.setCompactMode(true);
 
