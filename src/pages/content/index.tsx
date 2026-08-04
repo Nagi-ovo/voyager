@@ -357,7 +357,7 @@ async function initializeFeatures(): Promise<void> {
       await delay(LIGHT_FEATURE_INIT_DELAY);
 
       if (await isForkFeatureEnabled()) {
-        forkCleanup = startFork();
+        forkCleanup = cleanupManager.registerCleanupFunctionAndReturnIt(startFork());
       }
 
       // Introduce new feature coachmarks once the changelog is out of the way;
@@ -563,7 +563,7 @@ function handleVisibilityChange(): void {
       const enabled = isForkFeatureEnabledValue(forkSetting.newValue);
       if (enabled) {
         if (!forkCleanup) {
-          forkCleanup = startFork();
+          forkCleanup = cleanupManager.registerCleanupFunctionAndReturnIt(startFork());
         }
       } else if (forkCleanup) {
         forkCleanup();
@@ -656,10 +656,6 @@ function handleVisibilityChange(): void {
     window.addEventListener('beforeunload', () => {
       try {
         cleanupManager.executeCleanups();
-        if (forkCleanup) {
-          forkCleanup();
-          forkCleanup = null;
-        }
       } catch (e) {
         if (isExtensionContextInvalidatedError(e)) {
           return;
