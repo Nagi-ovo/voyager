@@ -12,6 +12,7 @@ import type {
   ConversationMetadata,
   ChatTurn as ExportChatTurn,
   ExportFormat,
+  ExportHandler,
 } from '@/features/export/types/export';
 import { ExportDialog } from '@/features/export/ui/ExportDialog';
 import { resolveExportErrorMessage } from '@/features/export/ui/ExportErrorMessage';
@@ -20,6 +21,7 @@ import { type AppLanguage, normalizeLanguage } from '@/utils/language';
 import { extractMessageDictionary } from '@/utils/localeMessages';
 import type { TranslationKey } from '@/utils/translations';
 
+import { resolveExportAdapter } from '../export/adapter/platformAdapters';
 import {
   createMenuItemFromNativeTemplate,
   updateMenuItemTemplateLabel,
@@ -28,6 +30,16 @@ import { downloadMarkdown } from './download';
 import { extractThinkingPanels } from './extractor';
 import { formatToMarkdown } from './formatter';
 import { extractDeepResearchReportTitle, findDeepResearchReportRoot } from './reportExtractor';
+
+// Deep Research is a Gemini-only surface; reuse the Gemini export adapter's
+// formula extraction so PDF/Markdown/Image export can render $$ formulas.
+const geminiExportAdapter = resolveExportAdapter();
+const deepResearchExportHandler: ExportHandler = {
+  extractUserImage: geminiExportAdapter.extractUserImage,
+  extractAssistantImage: geminiExportAdapter.extractAssistantImage,
+  extractFormula: geminiExportAdapter.extractFormula,
+  extractCodeBlock: geminiExportAdapter.extractCodeBlock,
+};
 
 type Dictionaries = Record<AppLanguage, Record<string, string>>;
 const DOWNLOAD_BUTTON_CLASS = 'gv-deep-research-download';
@@ -399,13 +411,18 @@ function handleSaveReport(dict: Dictionaries, lang: AppLanguage): void {
             await saveImageExportWidth(imageWidth);
           }
           const filename = buildReportFilename(format, reportTitle);
-          const resultPromise = ConversationExportService.export(turns, metadata, {
-            format,
-            filename,
-            layout: 'document',
-            fontSize,
-            imageWidth,
-          });
+          const resultPromise = ConversationExportService.export(
+            turns,
+            metadata,
+            {
+              format,
+              filename,
+              layout: 'document',
+              fontSize,
+              imageWidth,
+            },
+            deepResearchExportHandler,
+          );
           const minVisiblePromise = new Promise((resolve) => setTimeout(resolve, 420));
           const [result] = await Promise.all([resultPromise, minVisiblePromise]);
           if (!result.success) {

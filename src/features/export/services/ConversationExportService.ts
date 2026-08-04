@@ -10,6 +10,7 @@ import type {
   ChatTurn,
   ConversationMetadata,
   ExportFormat,
+  ExportHandler,
   ExportLayout,
   ExportOptions,
   ExportResult,
@@ -36,25 +37,26 @@ export class ConversationExportService {
     turns: ChatTurn[],
     metadata: ConversationMetadata,
     options: ExportOptions,
+    exportHandler?: ExportHandler,
   ): Promise<ExportResult> {
     try {
       const layout: ExportLayout = options.layout ?? 'conversation';
       if (layout === 'document') {
-        return await this.exportDocument(turns, metadata, options);
+        return await this.exportDocument(turns, metadata, options, exportHandler);
       }
 
       switch (options.format) {
         case 'json':
-          return this.exportJSON(turns, metadata, options);
+          return this.exportJSON(turns, metadata, options, exportHandler);
 
         case 'markdown':
-          return await this.exportMarkdown(turns, metadata, options);
+          return await this.exportMarkdown(turns, metadata, options, exportHandler);
 
         case 'pdf':
-          return await this.exportPDF(turns, metadata, options);
+          return await this.exportPDF(turns, metadata, options, exportHandler);
 
         case 'image':
-          return await this.exportImage(turns, metadata, options);
+          return await this.exportImage(turns, metadata, options, exportHandler);
 
         default:
           return {
@@ -92,8 +94,9 @@ export class ConversationExportService {
     turns: ChatTurn[],
     metadata: ConversationMetadata,
     options: ExportOptions,
+    exportHandler?: ExportHandler,
   ): Promise<ExportResult> {
-    const content = this.extractDocumentContent(turns);
+    const content = this.extractDocumentContent(turns, exportHandler);
 
     switch (options.format) {
       case 'json':
@@ -122,6 +125,7 @@ export class ConversationExportService {
     turns: ChatTurn[],
     metadata: ConversationMetadata,
     options: ExportOptions,
+    exportHandler?: ExportHandler,
   ): ExportResult {
     // Process turns to extract Markdown-formatted content from DOM elements
     const processedItems = turns.map((turn) => {
@@ -129,22 +133,25 @@ export class ConversationExportService {
       let assistantContent = turn.assistant;
       let attachments = turn.attachments ?? [];
 
-      // Extract rich content with Markdown formatting from DOM elements if available
-      if (turn.userElement) {
-        const extracted = DOMContentExtractor.extractUserContent(
-          turn.userElement,
-          turn.imageSelectors,
-        );
+      // ChatGPT snapshots rich content while its virtual-list item is mounted.
+      // Prefer that stable snapshot over a later DOM read, which may be empty.
+      if (turn.userContent) {
+        userContent = turn.userContent.text || userContent;
+        attachments = turn.userContent.attachments;
+      } else if (turn.userElement) {
+        const extracted = DOMContentExtractor.extractUserContent(turn.userElement, exportHandler);
         if (extracted.text) {
           userContent = extracted.text;
         }
         attachments = extracted.attachments;
       }
 
-      if (turn.assistantElement) {
+      if (turn.assistantContent) {
+        assistantContent = turn.assistantContent.text || assistantContent;
+      } else if (turn.assistantElement) {
         const extracted = DOMContentExtractor.extractAssistantContent(
           turn.assistantElement,
-          turn.imageSelectors,
+          exportHandler,
         );
         if (extracted.text) {
           assistantContent = extracted.text;
@@ -186,9 +193,10 @@ export class ConversationExportService {
     turns: ChatTurn[],
     metadata: ConversationMetadata,
     options: ExportOptions,
+    exportHandler?: ExportHandler,
   ): Promise<ExportResult> {
     // First create a clean markdown (no inlining)
-    let markdown = MarkdownFormatter.format(turns, metadata);
+    let markdown = MarkdownFormatter.format(turns, metadata, exportHandler);
 
     // Strip image source attribution lines if user opted out
     if (options.includeImageSource === false) {
@@ -208,8 +216,9 @@ export class ConversationExportService {
     turns: ChatTurn[],
     metadata: ConversationMetadata,
     options: ExportOptions,
+    exportHandler?: ExportHandler,
   ): Promise<ExportResult> {
-    await PDFPrintService.export(turns, metadata, { fontSize: options.fontSize });
+    await PDFPrintService.export(turns, metadata, { fontSize: options.fontSize }, exportHandler);
 
     // Note: We can't get the actual filename from print dialog
     // User chooses filename in Save as PDF dialog
@@ -227,14 +236,20 @@ export class ConversationExportService {
     turns: ChatTurn[],
     metadata: ConversationMetadata,
     options: ExportOptions,
+    exportHandler?: ExportHandler,
   ): Promise<ExportResult> {
     const filename =
       options.filename || this.generateFilename('png', metadata.title, metadata.platform);
-    await ImageExportService.export(turns, metadata, {
-      filename,
-      fontSize: options.fontSize,
-      imageWidth: options.imageWidth,
-    });
+    await ImageExportService.export(
+      turns,
+      metadata,
+      {
+        filename,
+        fontSize: options.fontSize,
+        imageWidth: options.imageWidth,
+      },
+      exportHandler,
+    );
     return { success: true, format: 'image' as ExportFormat, filename };
   }
 
@@ -336,7 +351,10 @@ export class ConversationExportService {
     };
   }
 
-  private static extractDocumentContent(turns: ChatTurn[]): { markdown: string; html: string } {
+  private static extractDocumentContent(
+    turns: ChatTurn[],
+    exportHandler?: ExportHandler,
+  ): { markdown: string; html: string } {
     const turn =
       turns.find((item) => item.assistantElement || item.assistant.trim()) ||
       turns.find((item) => item.userElement || item.user.trim());
@@ -348,7 +366,7 @@ export class ConversationExportService {
     if (turn.assistantElement) {
       const extracted = DOMContentExtractor.extractAssistantContent(
         turn.assistantElement,
-        turn.imageSelectors,
+        exportHandler,
       );
       return {
         markdown: extracted.text || turn.assistant,
@@ -357,10 +375,7 @@ export class ConversationExportService {
     }
 
     if (turn.userElement) {
-      const extracted = DOMContentExtractor.extractUserContent(
-        turn.userElement,
-        turn.imageSelectors,
-      );
+      const extracted = DOMContentExtractor.extractUserContent(turn.userElement, exportHandler);
       return {
         markdown: extracted.text || turn.user,
         html: extracted.html || this.formatPlainTextAsHtml(extracted.text || turn.user),

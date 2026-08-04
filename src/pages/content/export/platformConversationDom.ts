@@ -4,8 +4,8 @@
  * Uses the adapter's `getConversationRootCandidates()` to find the scroll
  * container, falling back to `document.body`.
  */
+import type { ExportPlatformAdapter } from './adapter/platformAdapters';
 import { filterOutDeepResearchImmersiveNodes, resolveConversationRoot } from './conversationDom';
-import type { ExportPlatformAdapter } from './platformAdapters';
 
 /**
  * Resolve the conversation root element for the current platform.
@@ -19,14 +19,16 @@ export function resolveConversationRootForPlatform(
   doc: Document = document,
 ): HTMLElement {
   // Gemini: use existing heuristic (checks for visible user turns in each candidate)
-  if (adapter.site.id === 'gemini' || adapter.site.id === 'aistudio') {
-    return resolveConversationRoot({ userSelectors, doc });
-  }
+  switch (adapter.site.id) {
+    case 'gemini':
+    case 'aistudio':
+      return resolveConversationRoot({ userSelectors, doc });
 
-  // Claude / ChatGPT / others: walk candidates, first match wins
-  for (const selector of adapter.getConversationRootCandidates()) {
-    const el = doc.querySelector(selector) as HTMLElement | null;
-    if (el) return el;
+    default:
+      for (const selector of adapter.getConversationRootCandidates()) {
+        const el = doc.querySelector(selector) as HTMLElement | null;
+        if (el) return el;
+      }
   }
 
   return doc.body as HTMLElement;

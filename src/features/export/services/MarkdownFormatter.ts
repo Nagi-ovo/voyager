@@ -3,7 +3,7 @@
  * Converts conversation to clean, standard Markdown format
  * Following the "paper book" philosophy - content over design
  */
-import type { ChatTurn, ConversationMetadata } from '../types/export';
+import type { ChatTurn, ConversationMetadata, ExportHandler } from '../types/export';
 import { DOMContentExtractor } from './DOMContentExtractor';
 
 /**
@@ -73,7 +73,11 @@ export class MarkdownFormatter {
   /**
    * Format conversation as Markdown
    */
-  static format(turns: ChatTurn[], metadata: ConversationMetadata): string {
+  static format(
+    turns: ChatTurn[],
+    metadata: ConversationMetadata,
+    exportHandler?: ExportHandler,
+  ): string {
     const sections: string[] = [];
 
     // Header with metadata
@@ -86,7 +90,7 @@ export class MarkdownFormatter {
 
     // Conversation turns
     turns.forEach((turn, index) => {
-      sections.push(this.formatTurn(turn, index + 1));
+      sections.push(this.formatTurn(turn, index + 1, exportHandler));
       sections.push(''); // Empty line between turns
     });
 
@@ -121,7 +125,7 @@ export class MarkdownFormatter {
   /**
    * Format a single conversation turn
    */
-  private static formatTurn(turn: ChatTurn, index: number): string {
+  private static formatTurn(turn: ChatTurn, index: number, exportHandler?: ExportHandler): string {
     const lines: string[] = [];
 
     lines.push(`## Turn ${index}${turn.starred ? ' ⭐' : ''}`);
@@ -131,11 +135,14 @@ export class MarkdownFormatter {
       lines.push('### 👤 User');
       lines.push('');
 
-      if (turn.userElement) {
-        const extracted = DOMContentExtractor.extractUserContent(
-          turn.userElement,
-          turn.imageSelectors,
-        );
+      if (turn.userContent) {
+        if (turn.userContent.hasImages) {
+          lines.push('*[This turn includes uploaded images]*');
+          lines.push('');
+        }
+        lines.push(turn.userContent.text || '_No content_');
+      } else if (turn.userElement) {
+        const extracted = DOMContentExtractor.extractUserContent(turn.userElement, exportHandler);
         if (extracted.hasImages) {
           lines.push('*[This turn includes uploaded images]*');
           lines.push('');
@@ -149,12 +156,14 @@ export class MarkdownFormatter {
       lines.push('### 🤖 Assistant');
       lines.push('');
 
-      if (turn.assistantElement) {
+      const fallback = this.formatContent(turn.assistant);
+      if (turn.assistantContent) {
+        lines.push(turn.assistantContent.text || fallback || '_No content_');
+      } else if (turn.assistantElement) {
         const extracted = DOMContentExtractor.extractAssistantContent(
           turn.assistantElement,
-          turn.imageSelectors,
+          exportHandler,
         );
-        const fallback = this.formatContent(turn.assistant);
         lines.push(extracted.text || fallback || '_No content_');
       } else {
         lines.push(this.formatContent(turn.assistant) || '_No content_');
@@ -166,16 +175,19 @@ export class MarkdownFormatter {
     let hasAnySection = false;
 
     const userFallback = this.formatContent(turn.user);
-    const hasUser = !!turn.userElement || !!userFallback;
+    const hasUser = !!turn.userContent || !!turn.userElement || !!userFallback;
     if (hasUser) {
       lines.push('### 👤 User');
       lines.push('');
 
-      if (turn.userElement) {
-        const extracted = DOMContentExtractor.extractUserContent(
-          turn.userElement,
-          turn.imageSelectors,
-        );
+      if (turn.userContent) {
+        if (turn.userContent.hasImages) {
+          lines.push('*[This turn includes uploaded images]*');
+          lines.push('');
+        }
+        lines.push(turn.userContent.text || userFallback || '_No content_');
+      } else if (turn.userElement) {
+        const extracted = DOMContentExtractor.extractUserContent(turn.userElement, exportHandler);
         if (extracted.hasImages) {
           lines.push('*[This turn includes uploaded images]*');
           lines.push('');
@@ -190,15 +202,17 @@ export class MarkdownFormatter {
     }
 
     const assistantFallback = this.formatContent(turn.assistant);
-    const hasAssistant = !!turn.assistantElement || !!assistantFallback;
+    const hasAssistant = !!turn.assistantContent || !!turn.assistantElement || !!assistantFallback;
     if (hasAssistant) {
       lines.push('### 🤖 Assistant');
       lines.push('');
 
-      if (turn.assistantElement) {
+      if (turn.assistantContent) {
+        lines.push(turn.assistantContent.text || assistantFallback || '_No content_');
+      } else if (turn.assistantElement) {
         const extracted = DOMContentExtractor.extractAssistantContent(
           turn.assistantElement,
-          turn.imageSelectors,
+          exportHandler,
         );
         lines.push(extracted.text || assistantFallback || '_No content_');
       } else {

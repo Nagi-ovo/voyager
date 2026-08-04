@@ -12,6 +12,7 @@ import {
   type ChatTurn,
   type ConversationMetadata,
   DEFAULT_IMAGE_EXPORT_WIDTH,
+  type ExportHandler,
 } from '../types/export';
 import { DOMContentExtractor } from './DOMContentExtractor';
 import { renderElementToImageBlob } from './ImageRenderService';
@@ -34,12 +35,13 @@ export class ImageExportService {
     turns: ChatTurn[],
     metadata: ConversationMetadata,
     options: { filename: string; fontSize?: number; imageWidth?: number },
+    exportHandler?: ExportHandler,
   ): Promise<void> {
     const filename = options.filename.toLowerCase().endsWith('.png')
       ? options.filename
       : `${options.filename}.png`;
 
-    const blob = await this.renderConversationBlob(turns, metadata, options);
+    const blob = await this.renderConversationBlob(turns, metadata, options, exportHandler);
     this.downloadBlob(blob, filename);
   }
 
@@ -59,12 +61,14 @@ export class ImageExportService {
     turns: ChatTurn[],
     metadata: ConversationMetadata,
     options: { fontSize?: number; imageWidth?: number },
+    exportHandler?: ExportHandler,
   ): Promise<Blob> {
     const container = this.createRenderContainer(
       turns,
       metadata,
       options.fontSize,
       options.imageWidth,
+      exportHandler,
     );
     return await this.renderContainerToBlob(container);
   }
@@ -83,6 +87,7 @@ export class ImageExportService {
     metadata: ConversationMetadata,
     fontSize?: number,
     imageWidth?: number,
+    exportHandler?: ExportHandler,
   ): HTMLElement {
     const outer = document.createElement('div');
     outer.className = 'gv-image-export-container';
@@ -114,13 +119,18 @@ export class ImageExportService {
       .map((turn, idx) => {
         const turnIndex = idx + 1;
         const starred = turn.starred ? ' ⭐' : '';
-        const userHtml = turn.userElement
-          ? DOMContentExtractor.extractUserContent(turn.userElement, turn.imageSelectors).html
-          : this.formatPlainTextAsHtml(turn.user);
-        const assistantHtml = turn.assistantElement
-          ? DOMContentExtractor.extractAssistantContent(turn.assistantElement, turn.imageSelectors)
-              .html
-          : this.formatPlainTextAsHtml(turn.assistant);
+        // Prefer content captured while a virtualized ChatGPT turn was mounted.
+        // Reading its element after later scrolls can otherwise yield an empty shell.
+        const userHtml =
+          turn.userContent?.html ??
+          (turn.userElement
+            ? DOMContentExtractor.extractUserContent(turn.userElement, exportHandler).html
+            : this.formatPlainTextAsHtml(turn.user));
+        const assistantHtml =
+          turn.assistantContent?.html ??
+          (turn.assistantElement
+            ? DOMContentExtractor.extractAssistantContent(turn.assistantElement, exportHandler).html
+            : this.formatPlainTextAsHtml(turn.assistant));
 
         if (!turn.omitEmptySections) {
           return `
@@ -138,8 +148,9 @@ export class ImageExportService {
         `;
         }
 
-        const hasUser = !!turn.userElement || !!turn.user.trim();
-        const hasAssistant = !!turn.assistantElement || !!turn.assistant.trim();
+        const hasUser = !!turn.userContent || !!turn.userElement || !!turn.user.trim();
+        const hasAssistant =
+          !!turn.assistantContent || !!turn.assistantElement || !!turn.assistant.trim();
 
         return `
           <article class="gv-image-export-turn">

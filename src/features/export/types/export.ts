@@ -2,6 +2,7 @@
  * Export feature type definitions
  * Supports multiple export formats with extensible architecture
  */
+import type { ExtractedContent } from '@/features/export/services/DOMContentExtractor';
 
 /**
  * Canvas document content extracted from immersive-editor
@@ -34,8 +35,10 @@ export interface ChatTurn {
   // Optional DOM elements for rich content extraction
   userElement?: HTMLElement;
   assistantElement?: HTMLElement;
-  /** Platform-specific image selectors from ExportPlatformAdapter.getImageSelectors(). */
-  imageSelectors?: string[];
+
+  // 预先固化的内容（针对激进的虚拟加载）
+  userContent?: ExtractedContent;
+  assistantContent?: ExtractedContent;
 }
 
 /**
@@ -58,6 +61,37 @@ export enum ExportFormat {
   MARKDOWN = 'markdown',
   PDF = 'pdf',
   IMAGE = 'image',
+}
+
+/**
+ * Extract all kinds of content from a DOM element
+ */
+export interface ExportHandler {
+  extractUserImage: (element: HTMLElement) => NodeListOf<HTMLImageElement>;
+  extractAssistantImage: (
+    child: Element,
+    htmlParts: string[],
+    textParts: string[],
+    flags: Pick<ExtractedContent, 'hasImages' | 'hasFormulas' | 'hasTables' | 'hasCode'>,
+    tagName?: string,
+    DEBUG?: boolean,
+    processedImageSrcs?: ReadonlySet<string>,
+  ) => boolean | undefined;
+  extractFormula: (
+    child: Element,
+    flags: Pick<ExtractedContent, 'hasImages' | 'hasFormulas' | 'hasTables' | 'hasCode'>,
+    htmlParts: string[],
+    textParts: string[],
+    DEBUG: boolean,
+  ) => boolean | undefined;
+  extractCodeBlock: (
+    child: Element,
+    htmlParts: string[],
+    textParts: string[],
+    flags: Pick<ExtractedContent, 'hasImages' | 'hasFormulas' | 'hasTables' | 'hasCode'>,
+    tagName?: string,
+    DEBUG?: boolean,
+  ) => boolean | undefined;
 }
 
 export type ExportLayout = 'conversation' | 'document';

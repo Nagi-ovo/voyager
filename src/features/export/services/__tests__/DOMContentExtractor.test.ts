@@ -3,7 +3,45 @@
  */
 import { describe, expect, it } from 'vitest';
 
+import type { ExportHandler } from '../../types/export';
 import { DOMContentExtractor } from '../DOMContentExtractor';
+
+const exportHandler: ExportHandler = {
+  extractUserImage: (element) =>
+    element.querySelectorAll<HTMLImageElement>('user-query-file-preview img, .preview-image'),
+  extractAssistantImage: (
+    child,
+    htmlParts,
+    textParts,
+    flags,
+    tagName,
+    _debug,
+    processedImageSrcs,
+  ) => {
+    if (
+      child.querySelector(
+        '.attachment-container.youtube img.thumbnail, youtube-block img.thumbnail, single-video img.thumbnail',
+      )
+    ) {
+      return DOMContentExtractor.processYouTubeCovers(child, htmlParts, textParts, flags);
+    }
+    if (tagName !== 'img') return undefined;
+
+    const image = child as HTMLImageElement;
+    const src = image.src || image.getAttribute('src') || '';
+    if (src && src !== 'about:blank' && !processedImageSrcs?.has(src)) {
+      const alt = image.getAttribute('alt')?.trim() || 'Image';
+      flags.hasImages = true;
+      htmlParts.push(
+        `<img src="${DOMContentExtractor.escapeHtmlAttribute(src)}" alt="${DOMContentExtractor.escapeHtmlAttribute(alt)}" />`,
+      );
+      textParts.push(`\n![${alt.replace(/\]/g, '\\]')}](${src})\n`);
+    }
+    return true;
+  },
+  extractFormula: () => undefined,
+  extractCodeBlock: () => undefined,
+};
 
 describe('DOMContentExtractor', () => {
   it('exports non-image user uploads as filename placeholders', () => {
@@ -22,7 +60,7 @@ describe('DOMContentExtractor', () => {
       <p class="query-text-line">Please review this file</p>
     `;
 
-    const extracted = DOMContentExtractor.extractUserContent(user);
+    const extracted = DOMContentExtractor.extractUserContent(user, exportHandler);
 
     expect(extracted.attachments).toEqual([{ name: 'Agent notes & review.pdf', type: 'pdf' }]);
     expect(extracted.text).toContain('📎 Agent notes & review.pdf');
@@ -30,6 +68,32 @@ describe('DOMContentExtractor', () => {
     expect(extracted.html).toContain('class="gv-export-attachment"');
     expect(extracted.html).toContain('Agent notes &amp; review.pdf');
     expect(extracted.hasImages).toBe(false);
+  });
+
+  it('exports ChatGPT file tiles as filename placeholders without duplicating tile text', () => {
+    const user = document.createElement('div');
+    user.innerHTML = `
+      <div class="flex gap-2 flex-wrap">
+        <div role="group" aria-label="spring理解.md">
+          <div data-default-action="true">
+            <button type="button" aria-label="spring理解.md"></button>
+          </div>
+          <div class="pointer-events-none">
+            <div class="truncate font-semibold">spring理解.md</div>
+            <div class="truncate text-token-text-secondary">文件</div>
+          </div>
+        </div>
+      </div>
+      <div>请解释这个文件。</div>
+    `;
+
+    const extracted = DOMContentExtractor.extractUserContent(user, exportHandler);
+
+    expect(extracted.attachments).toEqual([{ name: 'spring理解.md', type: 'md' }]);
+    expect(extracted.text).toContain('📎 spring理解.md');
+    expect(extracted.text).toContain('请解释这个文件。');
+    expect(extracted.text).not.toContain('spring理解.md\n文件');
+    expect(extracted.html).toContain('class="gv-export-attachment"');
   });
 
   it('does not duplicate image uploads as file placeholders', () => {
@@ -43,7 +107,7 @@ describe('DOMContentExtractor', () => {
       </user-query-file-preview>
     `;
 
-    const extracted = DOMContentExtractor.extractUserContent(user);
+    const extracted = DOMContentExtractor.extractUserContent(user, exportHandler);
 
     expect(extracted.hasImages).toBe(true);
     expect(extracted.attachments).toEqual([]);
@@ -73,7 +137,7 @@ describe('DOMContentExtractor', () => {
       </message-content>
     `;
 
-    const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+    const extracted = DOMContentExtractor.extractAssistantContent(assistant, exportHandler);
 
     expect(extracted.text).toContain('Hello');
     expect(extracted.text).toContain('World');
@@ -104,7 +168,7 @@ describe('DOMContentExtractor', () => {
       </message-content>
     `;
 
-    const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+    const extracted = DOMContentExtractor.extractAssistantContent(assistant, exportHandler);
 
     expect(extracted.text).toContain('Item 1');
     expect(extracted.text).toContain('Item 2');
@@ -148,7 +212,7 @@ describe('DOMContentExtractor', () => {
       </message-content>
     `;
 
-    const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+    const extracted = DOMContentExtractor.extractAssistantContent(assistant, exportHandler);
 
     expect(extracted.hasFormulas).toBe(true);
     expect(extracted.text).toContain('$\\sqrt{ab} = \\sqrt{a}$');
@@ -169,7 +233,7 @@ describe('DOMContentExtractor', () => {
       </message-content>
     `;
 
-    const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+    const extracted = DOMContentExtractor.extractAssistantContent(assistant, exportHandler);
 
     expect(extracted.hasImages).toBe(true);
     expect(extracted.text).toContain('Hello');
@@ -190,7 +254,7 @@ describe('DOMContentExtractor', () => {
       </message-content>
     `;
 
-    const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+    const extracted = DOMContentExtractor.extractAssistantContent(assistant, exportHandler);
 
     expect(extracted.text).not.toContain('about:blank');
     expect(extracted.html).not.toContain('about:blank');
@@ -214,7 +278,7 @@ describe('DOMContentExtractor', () => {
     generated.setAttribute('src', 'https://example.com/a"b.png');
     generated.setAttribute('alt', 'A "quoted" image');
 
-    const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+    const extracted = DOMContentExtractor.extractAssistantContent(assistant, exportHandler);
 
     expect(extracted.html).toContain('src="https://example.com/a%22b.png"');
     expect(extracted.html).toContain('alt="A &quot;quoted&quot; image"');
@@ -253,7 +317,7 @@ describe('DOMContentExtractor', () => {
       const assistant = document.createElement('div');
       assistant.innerHTML = youtubeCard;
 
-      const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+      const extracted = DOMContentExtractor.extractAssistantContent(assistant, exportHandler);
 
       expect(extracted.hasImages).toBe(true);
       expect(extracted.text).toContain('Here is a relevant clip.');
@@ -266,7 +330,7 @@ describe('DOMContentExtractor', () => {
       const assistant = document.createElement('div');
       assistant.innerHTML = youtubeCard;
 
-      const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+      const extracted = DOMContentExtractor.extractAssistantContent(assistant, exportHandler);
 
       expect(extracted.html).toMatch(
         /<a href="https:\/\/www\.youtube\.com\/watch\?v=ttkd0t5qTD4"><img src="https:\/\/i\.ytimg\.com\/vi\/ttkd0t5qTD4\/hqdefault\.jpg" alt="Sample Video" \/><\/a>/,
@@ -277,7 +341,7 @@ describe('DOMContentExtractor', () => {
       const assistant = document.createElement('div');
       assistant.innerHTML = youtubeCard;
 
-      const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+      const extracted = DOMContentExtractor.extractAssistantContent(assistant, exportHandler);
 
       expect(extracted.text.split('hqdefault.jpg').length - 1).toBe(1);
     });
@@ -299,7 +363,7 @@ describe('DOMContentExtractor', () => {
         </message-content>
       `;
 
-      const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+      const extracted = DOMContentExtractor.extractAssistantContent(assistant, exportHandler);
 
       // Falls back to a stable hqdefault cover built from the embed id.
       expect(extracted.text).toContain(
@@ -323,7 +387,7 @@ describe('DOMContentExtractor', () => {
         </message-content>
       `;
 
-      const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+      const extracted = DOMContentExtractor.extractAssistantContent(assistant, exportHandler);
 
       expect(extracted.text).toContain('Here is my canvas doc:');
       expect(extracted.text).toContain('### 📄 Canvas Document: Doc Title');
@@ -351,7 +415,7 @@ describe('DOMContentExtractor', () => {
         </message-content>
       `;
 
-      const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+      const extracted = DOMContentExtractor.extractAssistantContent(assistant, exportHandler);
 
       expect(extracted.hasImages).toBe(true);
       expect(extracted.text).toContain(
