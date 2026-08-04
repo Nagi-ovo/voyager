@@ -23,6 +23,7 @@ export interface ConversationReference {
   url: string;
   addedAt: number;
   lastOpenedAt?: number; // Timestamp when the conversation was last opened
+  lastTurnAt?: number; // Latest known real conversation turn time, never a view/open time
   updatedAt?: number; // Timestamp when the reference was last updated (e.g., renamed)
   isGem?: boolean;
   gemId?: string;

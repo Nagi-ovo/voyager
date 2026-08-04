@@ -614,6 +614,7 @@ function handleNavigation(manager: FolderManager, prevPath: string, newPath: str
       window.location.href,
       isGem,
       gemId,
+      Date.now(),
     );
     selectedFolderId = null;
     selectedFolderName = null;

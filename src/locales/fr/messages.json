@@ -19,6 +19,10 @@
     "message": "Compact",
     "description": "Style d’index compact de la chronologie"
   },
+  "timelineStyleRuler": {
+    "message": "Graduations",
+    "description": "Style gradué de la chronologie"
+  },
   "timelineCompactOpenPreview": {
     "message": "Ouvrir l’aperçu de la chronologie",
     "description": "Libellé accessible pour la chronologie compacte"
@@ -106,6 +110,10 @@
   "pm_export": {
     "message": "Exporter",
     "description": "Export button"
+  },
+  "pm_export_format": {
+    "message": "Format d’export",
+    "description": "Saved Library export format menu button"
   },
   "pm_prompt_placeholder": {
     "message": "Texte du prompt",
@@ -279,6 +287,10 @@
     "message": "Gestionnaire de prompts",
     "description": "Button label for returning from the starred library to Prompt Manager"
   },
+  "pm_open_prompt_manager": {
+    "message": "Ouvrir le gestionnaire de prompts",
+    "description": "Saved Library footer button for returning to Prompt Manager"
+  },
   "pm_starred_library": {
     "message": "Bibliothèque enregistrée",
     "description": "Prompt Manager starred messages library title and entry button"
@@ -354,6 +366,31 @@
   "folder_title": {
     "message": "Dossiers",
     "description": "Folder section title"
+  },
+  "folder_activity_turn_on": {
+    "message": "Activer la vue Activité",
+    "description": "Activer la vue Activité"
+  },
+  "folder_activity_turn_off": {
+    "message": "Désactiver la vue Activité",
+    "description": "Désactiver la vue Activité"
+  },
+  "folder_activity_priority": {
+    "message": "Priorité",
+    "description": "Conversations actives au cours des trois dernières heures"
+  },
+  "folder_activity_today": {
+    "message": "Aujourd’hui",
+    "description": "Conversations actives aujourd’hui"
+  },
+  "folder_activity_yesterday": { "message": "Hier", "description": "Conversations actives hier" },
+  "folder_activity_empty": {
+    "message": "Aucune conversation dans les dossiers",
+    "description": "État vide de la vue Activité"
+  },
+  "folder_activity_top_level": {
+    "message": "Niveau supérieur",
+    "description": "Conversation hors d’un dossier nommé"
   },
   "folder_create": {
     "message": "Créer un dossier",
@@ -556,7 +593,7 @@
     "description": "Notion-compatible format with $$ delimiters"
   },
   "folder_filter_current_user": {
-    "message": "Isolation de compte",
+    "message": "Afficher uniquement le compte actuel",
     "description": "Show only conversations from the current Google account"
   },
   "folder_export": {
@@ -1630,6 +1667,10 @@
     "message": "Échec",
     "description": "Status prefix when download fails"
   },
+  "googleImageCorrupted": {
+    "message": "L’image originale renvoyée par Google est endommagée (ce n’est pas dû à Voyager) ; le fichier téléchargé peut être flou ou incomplet.",
+    "description": "Avertissement affiché lorsque l’image téléchargée par Google ne correspond pas à l’aperçu"
+  },
   "gemsHide": {
     "message": "Masquer les Gems",
     "description": "Info-bulle pour masquer la section de la liste des Gems"
@@ -1987,8 +2028,12 @@
     "description": "Edge Add-ons store rating CTA button text"
   },
   "changelog_badge_mode": {
-    "message": "Notifier via un badge NEW sur le bouton flottant au lieu de cette fenêtre",
+    "message": "Signaler les mises à jour avec un badge NEW",
     "description": "Changelog notification mode toggle label"
+  },
+  "changelog_badge_mode_hint": {
+    "message": "Lorsqu’une nouvelle version est publiée, affiche NEW sur le bouton flottant au lieu d’ouvrir automatiquement le journal des modifications.",
+    "description": "Changelog notification mode toggle hint"
   },
   "forkConversation": {
     "message": "Fork",
@@ -2393,6 +2438,30 @@
   "conversationSortCoachmarkBody": {
     "message": "Le tri manuel conserve l’ordre défini par glisser-déposer. Récemment ouvertes replace en haut les conversations consultées. Changez de mode à tout moment dans les paramètres des dossiers.",
     "description": "Coachmark body explaining manual and recently opened conversation sorting"
+  },
+  "timelineRulerCoachmarkTitle": {
+    "message": "Nouveau : chronologie graduée",
+    "description": "Coachmark title introducing the ruler timeline style"
+  },
+  "timelineRulerCoachmarkBody": {
+    "message": "Un signal compact suit votre position de lecture. Survolez un repère pour prévisualiser immédiatement la question et la réponse.",
+    "description": "Coachmark body text introducing the ruler timeline style"
+  },
+  "timelineRulerCoachmarkToggle": {
+    "message": "Utiliser la chronologie graduée",
+    "description": "Inline toggle label in the ruler-timeline coachmark"
+  },
+  "folderActivityCoachmarkTitle": {
+    "message": "Nouveau : vue Activité",
+    "description": "Coachmark title introducing the folder Activity view"
+  },
+  "folderActivityCoachmarkBody": {
+    "message": "Concentrez-vous sur les conversations en cours : Priorité, aujourd’hui et jours récents, sans les déplacer de leurs dossiers.",
+    "description": "Coachmark body text introducing the folder Activity view"
+  },
+  "folderActivityCoachmarkToggle": {
+    "message": "Utiliser la vue Activité",
+    "description": "Inline toggle label in the folder-Activity coachmark"
   },
   "timelineCoachmarkTitle": {
     "message": "Nouveau : chronologie compacte",

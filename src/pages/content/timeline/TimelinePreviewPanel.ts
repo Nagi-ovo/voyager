@@ -23,6 +23,7 @@ export class TimelinePreviewPanel {
   private _isOpen = false;
   private _isPinned = false;
   private _isCompactMode = false;
+  private floatingToggleSuppressed = false;
   private markers: ReadonlyArray<PreviewMarkerData> = [];
   private filteredMarkers: ReadonlyArray<PreviewMarkerData> = [];
   private activeTurnId: string | null = null;
@@ -112,11 +113,14 @@ export class TimelinePreviewPanel {
   }
 
   setCompactMode(compact: boolean): void {
-    if (this._isCompactMode === compact) return;
+    const changed = this._isCompactMode !== compact;
     this._isCompactMode = compact;
     this.cancelCompactClose();
     this.toggleBtn?.classList.toggle('timeline-preview-toggle-compact', compact);
     this.panelEl?.classList.toggle('timeline-preview-panel-compact', compact);
+    this.syncFloatingToggleVisibility();
+
+    if (!changed) return;
 
     if (compact) {
       this.anchorElement.tabIndex = 0;
@@ -133,6 +137,12 @@ export class TimelinePreviewPanel {
       this.anchorElement.removeAttribute('aria-expanded');
       if (this._isOpen && !this._isPinned) this.close();
     }
+  }
+
+  /** Hide the auxiliary list button when the timeline style is already a compact visual trigger. */
+  setFloatingToggleSuppressed(suppressed: boolean): void {
+    this.floatingToggleSuppressed = suppressed;
+    this.syncFloatingToggleVisibility();
   }
 
   toggle(): void {
@@ -291,6 +301,7 @@ export class TimelinePreviewPanel {
       this.toggle();
     });
     document.body.appendChild(this.toggleBtn);
+    this.syncFloatingToggleVisibility();
 
     // Panel
     this.panelEl = document.createElement('div');
@@ -316,6 +327,11 @@ export class TimelinePreviewPanel {
     this.panelEl.appendChild(this.listEl);
 
     document.body.appendChild(this.panelEl);
+  }
+
+  private syncFloatingToggleVisibility(): void {
+    if (!this.toggleBtn) return;
+    this.toggleBtn.hidden = this._isCompactMode || this.floatingToggleSuppressed;
   }
 
   private setupEventListeners(): void {

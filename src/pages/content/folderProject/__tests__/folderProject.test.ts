@@ -744,6 +744,7 @@ describe('follow-up injection regression', () => {
       expect.any(String),
       false,
       undefined,
+      expect.any(Number),
     );
   });
 
@@ -993,6 +994,7 @@ describe('follow-up injection regression', () => {
       expect.any(String),
       false,
       undefined,
+      expect.any(Number),
     );
   });
 });

@@ -414,9 +414,9 @@ function createChangelogModal(
   actionRow.appendChild(iconGroup);
   actionRow.appendChild(gotItBtn);
 
-  // The changelog notification-mode toggle now lives at the bottom of the
-  // extension popup (StorageKeys.CHANGELOG_NOTIFY_MODE), so it no longer renders
-  // inside this modal.
+  // The changelog notification-mode toggle lives in General Options in the
+  // extension settings (StorageKeys.CHANGELOG_NOTIFY_MODE), so it no longer
+  // renders inside this modal.
 
   followArea.appendChild(followText);
   followArea.appendChild(socialRow);

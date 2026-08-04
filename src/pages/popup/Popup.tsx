@@ -13,7 +13,7 @@ import {
   type DiagnosticPluginInput,
   diagnosticPluginSourceFromId,
 } from '@/core/services/DiagnosticsExportService';
-import { StorageKeys, type TimelineStyle } from '@/core/types/common';
+import { StorageKeys, type TimelineStyle, isTimelineStyle } from '@/core/types/common';
 import type { ConversationReference, Folder } from '@/core/types/folder';
 import {
   getModifierKey,
@@ -91,7 +91,11 @@ import {
 } from './components/WebsiteLogos';
 import WidthSlider from './components/WidthSlider';
 import { usePopupScrollRestoration } from './hooks/usePopupScrollRestoration';
-import { type SettingsSearchItem, getSettingsSearchMatches } from './utils/settingsSearch';
+import {
+  type SettingsSearchItem,
+  getSettingsSearchMatches,
+  normalizePersistedSettingsSearchQuery,
+} from './utils/settingsSearch';
 
 /**
  * Inline Material Symbols glyph, so the prompt cloud-sync buttons match the
@@ -228,6 +232,7 @@ const POPUP_SETTINGS_SEARCH_ITEMS = [
   popupSearchTarget('timeline', 'timelineStyle', [
     'timelineStyle',
     'timelineStyleDots',
+    'timelineStyleRuler',
     'timelineStyleCompact',
   ]),
   popupSearchTarget('timeline', 'scrollMode', ['scrollMode', 'flow', 'jump']),
@@ -471,6 +476,12 @@ const POPUP_SETTINGS_SEARCH_ITEMS = [
     'remoteAnnouncementNotificationHint',
     'remoteAnnouncementSystemPermissionCta',
   ]),
+  popupSearchTarget(
+    'general',
+    'changelogBadgeMode',
+    ['changelog_badge_mode', 'changelog_badge_mode_hint', 'changelog_title'],
+    ['update release changelog new badge 更新 版本 更新日志 提醒'],
+  ),
   popupSearchTarget(
     'general',
     'usageStatusToggle',
@@ -1053,6 +1064,34 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
   >('idle');
   const [sectionOrder, setSectionOrder] = useState<PopupSectionId[]>([...DEFAULT_SECTION_ORDER]);
   const [settingsSearchQuery, setSettingsSearchQuery] = useState<string>('');
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void browser.storage.local
+      .get({ [StorageKeys.GV_POPUP_SETTINGS_SEARCH_QUERY]: '' })
+      .then((result) => {
+        if (!cancelled) {
+          setSettingsSearchQuery(
+            normalizePersistedSettingsSearchQuery(
+              result[StorageKeys.GV_POPUP_SETTINGS_SEARCH_QUERY],
+            ),
+          );
+        }
+      })
+      .catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const updateSettingsSearchQuery = useCallback((query: string) => {
+    setSettingsSearchQuery(query);
+    void browser.storage.local
+      .set({ [StorageKeys.GV_POPUP_SETTINGS_SEARCH_QUERY]: query })
+      .catch(() => undefined);
+  }, []);
 
   const isAIStudio = activeAccountPlatform === 'aistudio';
   const currentPlatformLabel = isAIStudio ? t('platformAIStudio') : t('platformGemini');
@@ -1947,7 +1986,7 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
           const m = res?.geminiTimelineScrollMode as ScrollMode;
           if (m === 'jump' || m === 'flow') setMode(m);
           const storedTimelineStyle = res?.[StorageKeys.TIMELINE_STYLE];
-          if (storedTimelineStyle === 'dots' || storedTimelineStyle === 'compact') {
+          if (isTimelineStyle(storedTimelineStyle)) {
             setTimelineStyle(storedTimelineStyle);
           }
           const format = res?.gvFormulaCopyFormat as
@@ -2643,7 +2682,7 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
             <input
               type="search"
               value={settingsSearchQuery}
-              onChange={(e) => setSettingsSearchQuery(e.target.value)}
+              onChange={(event) => updateSettingsSearchQuery(event.target.value)}
               placeholder={t('popupSettingsSearchPlaceholder')}
               aria-label={t('popupSettingsSearchPlaceholder')}
               className="bg-card border-border focus:ring-primary/40 w-full rounded-lg border py-2 pr-9 pl-9 text-sm shadow-sm transition-all outline-none focus:ring-2"
@@ -2651,7 +2690,7 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
             {settingsSearchQuery && (
               <button
                 type="button"
-                onClick={() => setSettingsSearchQuery('')}
+                onClick={() => updateSettingsSearchQuery('')}
                 className="text-muted-foreground hover:text-foreground absolute top-1/2 right-2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md transition-colors"
                 aria-label={t('popupSettingsSearchClear')}
                 title={t('popupSettingsSearchClear')}
@@ -2827,13 +2866,20 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
             <CardContent className="space-y-4 p-0">
               <div hidden={!shouldShowSetting('timeline', 'timelineStyle')}>
                 <Label className="mb-2 block text-sm font-medium">{t('timelineStyle')}</Label>
-                <div className="bg-secondary/60 relative grid grid-cols-2 gap-1 rounded-xl p-1">
+                <div className="bg-secondary/60 relative grid grid-cols-3 gap-1 rounded-xl p-1">
                   <div
-                    className="bg-primary pointer-events-none absolute top-1 bottom-1 w-[calc(50%-4px)] rounded-lg shadow-sm transition-all duration-300 ease-out"
-                    style={{ left: timelineStyle === 'dots' ? '4px' : 'calc(50% + 2px)' }}
+                    className="bg-primary pointer-events-none absolute top-1 bottom-1 w-[calc(33.333%-4px)] rounded-lg shadow-sm transition-all duration-300 ease-out"
+                    style={{
+                      left:
+                        timelineStyle === 'dots'
+                          ? '4px'
+                          : timelineStyle === 'ruler'
+                            ? 'calc(33.333% + 2px)'
+                            : '66.666%',
+                    }}
                   />
                   <button
-                    className={`relative z-10 rounded-lg px-3 py-2 text-sm font-bold transition-all duration-200 ${
+                    className={`relative z-10 rounded-lg px-2 py-2 text-sm font-bold transition-all duration-200 ${
                       timelineStyle === 'dots'
                         ? 'text-primary-foreground'
                         : 'text-muted-foreground hover:text-foreground'
@@ -2846,7 +2892,20 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
                     {t('timelineStyleDots')}
                   </button>
                   <button
-                    className={`relative z-10 rounded-lg px-3 py-2 text-sm font-bold transition-all duration-200 ${
+                    className={`relative z-10 rounded-lg px-2 py-2 text-sm font-bold transition-all duration-200 ${
+                      timelineStyle === 'ruler'
+                        ? 'text-primary-foreground'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                    onClick={() => {
+                      setTimelineStyle('ruler');
+                      apply({ timelineStyle: 'ruler' });
+                    }}
+                  >
+                    {t('timelineStyleRuler')}
+                  </button>
+                  <button
+                    className={`relative z-10 rounded-lg px-2 py-2 text-sm font-bold transition-all duration-200 ${
                       timelineStyle === 'compact'
                         ? 'text-primary-foreground'
                         : 'text-muted-foreground hover:text-foreground'
@@ -4396,6 +4455,28 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
               )}
               {renderSetting(
                 'general',
+                'changelogBadgeMode',
+                <div className="group flex items-center justify-between">
+                  <div className="flex-1">
+                    <Label
+                      htmlFor="changelog-notify-badge"
+                      className="group-hover:text-primary cursor-pointer text-sm font-medium transition-colors"
+                    >
+                      {t('changelog_badge_mode')}
+                    </Label>
+                    <p className="text-muted-foreground mt-1 text-xs">
+                      {t('changelog_badge_mode_hint')}
+                    </p>
+                  </div>
+                  <Switch
+                    id="changelog-notify-badge"
+                    checked={changelogBadgeMode}
+                    onChange={(e) => handleChangelogBadgeModeChange(e.target.checked)}
+                  />
+                </div>,
+              )}
+              {renderSetting(
+                'general',
                 'usageStatusToggle',
                 <div className="group flex items-center justify-between">
                   <div className="flex-1">
@@ -4637,20 +4718,6 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
           </svg>
           <span>{t('starProject')}</span>
         </a>
-
-        <div className="group border-border/40 flex items-center justify-between gap-3 border-t pt-3">
-          <Label
-            htmlFor="changelog-notify-badge"
-            className="text-muted-foreground group-hover:text-foreground/80 cursor-pointer text-xs leading-snug transition-colors"
-          >
-            {t('changelog_badge_mode')}
-          </Label>
-          <Switch
-            id="changelog-notify-badge"
-            checked={changelogBadgeMode}
-            onChange={(e) => handleChangelogBadgeModeChange(e.target.checked)}
-          />
-        </div>
       </div>
     </div>
   );

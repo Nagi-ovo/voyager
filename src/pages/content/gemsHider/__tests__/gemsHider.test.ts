@@ -20,8 +20,6 @@ vi.mock('@/utils/i18n', () => ({
       gemsShow: 'Show Gems',
       notebooksHide: 'Hide Notebooks',
       notebooksShow: 'Show Notebooks',
-      foldersHide: 'Hide Folders',
-      foldersShow: 'Show Folders',
       sidebarCollapseNudgeTitle: 'Collapsed sections are still here',
       sidebarCollapseNudgeBody:
         'A slim bar stays in the sidebar. Click it anytime to expand this section again.',
@@ -132,29 +130,6 @@ describe('gemsHider', () => {
     return container;
   }
 
-  function createFolderSection(): HTMLElement {
-    const host = document.createElement('div');
-    const container = document.createElement('div');
-    container.className = 'gv-folder-container';
-
-    const header = document.createElement('div');
-    header.className = 'gv-folder-header';
-
-    const actions = document.createElement('div');
-    actions.className = 'gv-folder-header-actions';
-    header.appendChild(actions);
-    container.appendChild(header);
-
-    const list = document.createElement('div');
-    list.className = 'gv-folder-list';
-    container.appendChild(list);
-
-    host.appendChild(container);
-    document.body.appendChild(host);
-
-    return container;
-  }
-
   async function startFeature(): Promise<void> {
     const { startGemsHider } = await import('../index');
     cleanup = startGemsHider();
@@ -193,30 +168,20 @@ describe('gemsHider', () => {
     ).toBeNull();
   });
 
-  it('collapses the folder section and shows the shared first-use nudge', async () => {
-    const folders = createFolderSection();
+  it('leaves Voyager Folders to its built-in collapse and Activity controls', async () => {
+    document.body.innerHTML = `
+      <div class="gv-folder-container">
+        <div class="gv-folder-header"><div class="gv-folder-header-actions"></div></div>
+        <div class="gv-folder-list"></div>
+      </div>
+    `;
 
     await startFeature();
 
-    const folderToggle = folders.querySelector<HTMLButtonElement>('.gv-sidebar-section-toggle-btn');
-    const folderPeekBar = document.querySelector<HTMLDivElement>(
-      '[data-gv-sidebar-section-id="folders"].gv-sidebar-section-peek-bar',
-    );
-
-    expect(folderToggle?.getAttribute('title')).toBe('Hide Folders');
-    expect(folderPeekBar?.getAttribute('title')).toBe('Show Folders');
-    expect(folderPeekBar?.getAttribute('data-tooltip')).toBe('Show Folders');
-
-    folderToggle?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-    await flushAsyncWork();
-
-    expect(localState[StorageKeys.FOLDERS_HIDDEN]).toBe(true);
-    expect(localState[StorageKeys.SIDEBAR_COLLAPSE_NUDGE_SHOWN]).toBe(true);
-    expect(folders.classList.contains('gv-sidebar-section-hidden')).toBe(true);
-    expect(folderPeekBar?.classList.contains('gv-visible')).toBe(true);
-    expect(document.querySelector('.gv-sidebar-collapse-nudge')?.textContent).toContain(
-      'A slim bar stays in the sidebar.',
-    );
+    expect(
+      document.querySelector('.gv-folder-container .gv-sidebar-section-toggle-btn'),
+    ).toBeNull();
+    expect(document.querySelector('[data-gv-sidebar-section-id="folders"]')).toBeNull();
   });
 
   it('processes all sections added across one debounce window', async () => {
@@ -226,7 +191,7 @@ describe('gemsHider', () => {
     await flushAsyncWork();
     await vi.advanceTimersByTimeAsync(50);
 
-    const folders = createFolderSection();
+    const secondGems = createLegacyGemsSection();
     await flushAsyncWork();
     await vi.advanceTimersByTimeAsync(100);
     await flushAsyncWork();
@@ -234,8 +199,8 @@ describe('gemsHider', () => {
     expect(gems.querySelector('.gv-sidebar-section-toggle-btn')?.getAttribute('title')).toBe(
       'Hide Gems',
     );
-    expect(folders.querySelector('.gv-sidebar-section-toggle-btn')?.getAttribute('title')).toBe(
-      'Hide Folders',
+    expect(secondGems.querySelector('.gv-sidebar-section-toggle-btn')?.getAttribute('title')).toBe(
+      'Hide Gems',
     );
   });
 
@@ -255,15 +220,15 @@ describe('gemsHider', () => {
       },
     );
 
-    const folders = createFolderSection();
+    const gems = createLegacyGemsSection();
     await startFeature();
 
-    folders
+    gems
       .querySelector<HTMLButtonElement>('.gv-sidebar-section-toggle-btn')
       ?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
     await flushAsyncWork();
 
-    expect(localStorage.getItem(StorageKeys.FOLDERS_HIDDEN)).toBe('true');
+    expect(localStorage.getItem(StorageKeys.GEMS_HIDDEN)).toBe('true');
     warn.mockRestore();
   });
 });

@@ -19,6 +19,10 @@
     "message": "Компактный",
     "description": "Компактный стиль индекса временной шкалы"
   },
+  "timelineStyleRuler": {
+    "message": "Шкала",
+    "description": "Стиль делений временной шкалы"
+  },
   "timelineCompactOpenPreview": {
     "message": "Открыть обзор временной шкалы",
     "description": "Метка доступности компактной временной шкалы"
@@ -106,6 +110,10 @@
   "pm_export": {
     "message": "Экспорт",
     "description": "Export button"
+  },
+  "pm_export_format": {
+    "message": "Формат экспорта",
+    "description": "Saved Library export format menu button"
   },
   "pm_prompt_placeholder": {
     "message": "Текст промпта",
@@ -279,6 +287,10 @@
     "message": "Менеджер промптов",
     "description": "Button label for returning from the starred library to Prompt Manager"
   },
+  "pm_open_prompt_manager": {
+    "message": "Открыть менеджер промптов",
+    "description": "Saved Library footer button for returning to Prompt Manager"
+  },
   "pm_starred_library": {
     "message": "Библиотека сохранённого",
     "description": "Prompt Manager starred messages library title and entry button"
@@ -354,6 +366,28 @@
   "folder_title": {
     "message": "Папки",
     "description": "Folder section title"
+  },
+  "folder_activity_turn_on": {
+    "message": "Включить режим активности",
+    "description": "Включить режим активности"
+  },
+  "folder_activity_turn_off": {
+    "message": "Выключить режим активности",
+    "description": "Выключить режим активности"
+  },
+  "folder_activity_priority": {
+    "message": "Приоритет",
+    "description": "Разговоры, активные за последние три часа"
+  },
+  "folder_activity_today": { "message": "Сегодня", "description": "Активные сегодня разговоры" },
+  "folder_activity_yesterday": { "message": "Вчера", "description": "Активные вчера разговоры" },
+  "folder_activity_empty": {
+    "message": "В папках пока нет разговоров",
+    "description": "Пустое состояние активности"
+  },
+  "folder_activity_top_level": {
+    "message": "Верхний уровень",
+    "description": "Разговор вне именованной папки"
   },
   "folder_create": {
     "message": "Создать папку",
@@ -556,7 +590,7 @@
     "description": "Notion-compatible format with $$ delimiters"
   },
   "folder_filter_current_user": {
-    "message": "Изоляция аккаунтов",
+    "message": "Показывать только текущий аккаунт",
     "description": "Show only conversations from the current Google account"
   },
   "folder_export": {
@@ -1628,6 +1662,10 @@
     "message": "Ошибка",
     "description": "Status prefix when download fails"
   },
+  "googleImageCorrupted": {
+    "message": "Исходное изображение, полученное от Google, повреждено (это не вызвано Voyager); скачанный файл может быть размытым или неполным.",
+    "description": "Предупреждение, если загруженное изображение Google не соответствует предпросмотру"
+  },
   "gemsHide": {
     "message": "Скрыть Gems",
     "description": "Подсказка для скрытия раздела списка Gems"
@@ -1985,8 +2023,12 @@
     "description": "Edge Add-ons store rating CTA button text"
   },
   "changelog_badge_mode": {
-    "message": "Уведомлять значком NEW на плавающей кнопке вместо этого окна",
+    "message": "Сообщать об обновлениях значком NEW",
     "description": "Changelog notification mode toggle label"
+  },
+  "changelog_badge_mode_hint": {
+    "message": "При выходе новой версии показывает NEW на плавающей кнопке вместо автоматического открытия списка изменений.",
+    "description": "Changelog notification mode toggle hint"
   },
   "forkConversation": {
     "message": "Fork",
@@ -2391,6 +2433,30 @@
   "conversationSortCoachmarkBody": {
     "message": "Ручная сортировка сохраняет порядок, заданный перетаскиванием. Недавно открытые беседы возвращаются наверх. Режим можно сменить в любой момент в настройках папок.",
     "description": "Coachmark body explaining manual and recently opened conversation sorting"
+  },
+  "timelineRulerCoachmarkTitle": {
+    "message": "Новое: шкала времени",
+    "description": "Coachmark title introducing the ruler timeline style"
+  },
+  "timelineRulerCoachmarkBody": {
+    "message": "Компактный индикатор следует за позицией чтения. Наведите на отметку, чтобы сразу увидеть вопрос и ответ.",
+    "description": "Coachmark body text introducing the ruler timeline style"
+  },
+  "timelineRulerCoachmarkToggle": {
+    "message": "Использовать шкалу времени",
+    "description": "Inline toggle label in the ruler-timeline coachmark"
+  },
+  "folderActivityCoachmarkTitle": {
+    "message": "Новое: представление «Активность»",
+    "description": "Coachmark title introducing the folder Activity view"
+  },
+  "folderActivityCoachmarkBody": {
+    "message": "Сосредоточьтесь на текущих беседах: приоритетных, сегодняшних и недавних — без перемещения из папок.",
+    "description": "Coachmark body text introducing the folder Activity view"
+  },
+  "folderActivityCoachmarkToggle": {
+    "message": "Использовать представление «Активность»",
+    "description": "Inline toggle label in the folder-Activity coachmark"
   },
   "timelineCoachmarkTitle": {
     "message": "Новое: компактная шкала времени",

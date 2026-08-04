@@ -124,6 +124,21 @@ describe('TimelinePreviewPanel', () => {
       expect(anchor.getAttribute('aria-label')).toBe('Open timeline preview');
       expect(panelEl?.classList.contains('timeline-preview-panel-compact')).toBe(true);
       expect(toggle?.classList.contains('timeline-preview-toggle-compact')).toBe(true);
+      expect((toggle as HTMLButtonElement | null)?.hidden).toBe(true);
+
+      panel.setCompactMode(false);
+      expect((toggle as HTMLButtonElement | null)?.hidden).toBe(false);
+    });
+
+    it('hides the floating toggle for a dense ruler without enabling compact panel behavior', () => {
+      const toggle = document.querySelector('.timeline-preview-toggle') as HTMLButtonElement;
+
+      panel.setFloatingToggleSuppressed(true);
+      expect(toggle.hidden).toBe(true);
+      expect(anchor.hasAttribute('role')).toBe(false);
+
+      panel.setFloatingToggleSuppressed(false);
+      expect(toggle.hidden).toBe(false);
     });
 
     it('opens on rail hover and closes after leaving the rail and panel', () => {

@@ -8,6 +8,19 @@ import 'katex/dist/katex.min.css';
 import type { marked as MarkedFn } from 'marked';
 import browser from 'webextension-polyfill';
 
+import { createChevronDownIcon, createStarIcon } from '@/core/icons/folderIcons';
+import {
+  createArrowLeftIcon,
+  createBracesIcon,
+  createDownloadIcon,
+  createFileTextIcon,
+  createLayoutGridIcon,
+  createListIcon,
+  createLockIcon,
+  createLockOpenIcon,
+  createMoonIcon,
+  createSunIcon,
+} from '@/core/icons/promptManagerIcons';
 import {
   accountIsolationService,
   detectAccountContextFromDocument,
@@ -741,6 +754,7 @@ export async function startPromptManager(): Promise<{ destroy: () => void }> {
       currentPMTheme = theme;
       panel.setAttribute('data-gv-theme', theme);
       themeToggle.classList.toggle('gv-pm-theme-dark', theme === 'dark');
+      themeToggle.replaceChildren(theme === 'dark' ? createMoonIcon(11) : createSunIcon(11));
       themeToggle.title = theme === 'dark' ? i18n.t('pm_theme_light') : i18n.t('pm_theme_dark');
       themeToggle.setAttribute('aria-label', themeToggle.title);
     }
@@ -828,8 +842,9 @@ export async function startPromptManager(): Promise<{ destroy: () => void }> {
       });
 
     const lockBtn = createEl('button', 'gv-pm-lock');
+    lockBtn.setAttribute('type', 'button');
     lockBtn.setAttribute('aria-pressed', 'false');
-    lockBtn.setAttribute('data-icon', '🔓');
+    lockBtn.appendChild(createLockOpenIcon(15));
     lockBtn.title = i18n.t('pm_lock');
 
     const addBtn = createEl('button', 'gv-pm-add');
@@ -837,7 +852,7 @@ export async function startPromptManager(): Promise<{ destroy: () => void }> {
 
     const viewModeBtn = createEl('button', 'gv-pm-view-mode');
     viewModeBtn.setAttribute('type', 'button');
-    // Title, aria-label, and data-icon are set in applyViewModeUI() below.
+    // Icon, title, and aria-label are set in applyViewModeUI() below.
 
     controls.appendChild(langSel);
     controls.appendChild(addBtn);
@@ -874,25 +889,6 @@ export async function startPromptManager(): Promise<{ destroy: () => void }> {
     }
     savedToolbar.appendChild(savedFilterGroup);
 
-    const savedActions = createEl('div', 'gv-pm-saved-actions');
-    const exportJsonBtn = createEl('button', 'gv-pm-saved-action');
-    exportJsonBtn.type = 'button';
-    exportJsonBtn.textContent = 'JSON';
-    const exportMarkdownBtn = createEl('button', 'gv-pm-saved-action');
-    exportMarkdownBtn.type = 'button';
-    exportMarkdownBtn.textContent = 'Markdown';
-    const importHighlightsBtn = createEl('button', 'gv-pm-saved-action');
-    importHighlightsBtn.type = 'button';
-    const importHighlightsInput = createEl('input') as HTMLInputElement;
-    importHighlightsInput.type = 'file';
-    importHighlightsInput.accept = 'application/json,.json';
-    importHighlightsInput.className = 'gv-pm-saved-import-input';
-    savedActions.appendChild(exportJsonBtn);
-    savedActions.appendChild(exportMarkdownBtn);
-    savedActions.appendChild(importHighlightsBtn);
-    savedActions.appendChild(importHighlightsInput);
-    savedToolbar.appendChild(savedActions);
-
     const tagsWrapOuter = createEl('div', 'gv-pm-tags-wrap');
     const tagsWrap = createEl('div', 'gv-pm-tags');
     const tagsScrollHint = createEl('div', 'gv-pm-tags-scroll-hint');
@@ -905,13 +901,49 @@ export async function startPromptManager(): Promise<{ destroy: () => void }> {
 
     const footer = createEl('div', 'gv-pm-footer');
     // Primary view switch: the previous local backup slot now opens the
-    // starred library, and flips back to Prompt Manager inside that view.
+    // Saved Library. Its return action lives in the dedicated saved footer.
     const backupBtn = createEl('button', 'gv-pm-backup-btn');
     backupBtn.setAttribute('type', 'button');
 
     // Primary actions container
     const primaryActions = createEl('div', 'gv-pm-footer-actions');
     primaryActions.appendChild(backupBtn);
+
+    // Saved Library keeps its two top-level actions in the footer. Export
+    // formats are disclosed only after the user asks to export.
+    const savedFooterActions = createEl('div', 'gv-pm-saved-footer-actions gv-hidden');
+    const promptManagerBtn = createEl(
+      'button',
+      'gv-pm-saved-footer-button gv-pm-saved-footer-primary',
+    );
+    promptManagerBtn.setAttribute('type', 'button');
+    const promptManagerLabel = createEl('span', 'gv-pm-saved-footer-label');
+    promptManagerBtn.append(createArrowLeftIcon(15), promptManagerLabel);
+
+    const savedExportWrap = createEl('div', 'gv-pm-saved-export-wrap');
+    const savedExportTrigger = createEl(
+      'button',
+      'gv-pm-saved-footer-button gv-pm-saved-export-trigger',
+    );
+    savedExportTrigger.setAttribute('type', 'button');
+    savedExportTrigger.setAttribute('aria-haspopup', 'menu');
+    savedExportTrigger.setAttribute('aria-expanded', 'false');
+    const savedExportLabel = createEl('span', 'gv-pm-saved-footer-label');
+    savedExportTrigger.append(createDownloadIcon(15), savedExportLabel, createChevronDownIcon(14));
+
+    const savedExportMenu = createEl('div', 'gv-pm-saved-export-menu gv-hidden');
+    savedExportMenu.setAttribute('role', 'menu');
+    const exportJsonBtn = createEl('button', 'gv-pm-saved-export-option');
+    exportJsonBtn.setAttribute('type', 'button');
+    exportJsonBtn.setAttribute('role', 'menuitem');
+    exportJsonBtn.append(createBracesIcon(15), document.createTextNode('JSON'));
+    const exportMarkdownBtn = createEl('button', 'gv-pm-saved-export-option');
+    exportMarkdownBtn.setAttribute('type', 'button');
+    exportMarkdownBtn.setAttribute('role', 'menuitem');
+    exportMarkdownBtn.append(createFileTextIcon(15), document.createTextNode('Markdown'));
+    savedExportMenu.append(exportJsonBtn, exportMarkdownBtn);
+    savedExportWrap.append(savedExportTrigger, savedExportMenu);
+    savedFooterActions.append(promptManagerBtn, savedExportWrap);
 
     // Secondary actions container
     const secondaryActions = createEl('div', 'gv-pm-footer-secondary');
@@ -930,6 +962,7 @@ export async function startPromptManager(): Promise<{ destroy: () => void }> {
     secondaryActions.appendChild(supportLink);
 
     footer.appendChild(primaryActions);
+    footer.appendChild(savedFooterActions);
     footer.appendChild(secondaryActions);
 
     const addForm = elFromHTML(
@@ -994,6 +1027,7 @@ export async function startPromptManager(): Promise<{ destroy: () => void }> {
     let savedFilter: SavedLibraryFilter = 'all';
     let starredLoading = false;
     let starredLoadError = false;
+    let savedExportMenuOpen = false;
 
     function setNotice(text: string, kind: 'ok' | 'err' = 'ok') {
       notice.textContent = text || '';
@@ -1175,7 +1209,7 @@ export async function startPromptManager(): Promise<{ destroy: () => void }> {
       panel.setAttribute('data-gv-view', viewMode);
       const isCompact = viewMode === 'compact';
       viewModeBtn.classList.toggle('gv-pm-view-mode-compact', isCompact);
-      viewModeBtn.setAttribute('data-icon', isCompact ? '▦' : '≡');
+      viewModeBtn.replaceChildren(isCompact ? createLayoutGridIcon(15) : createListIcon(15));
       // Tooltip describes the action the click will perform, not the current state.
       const nextTip = isCompact
         ? i18n.t('pm_view_comfortable') || 'Switch to comfortable view'
@@ -1252,19 +1286,34 @@ export async function startPromptManager(): Promise<{ destroy: () => void }> {
       exportJsonBtn.setAttribute('aria-label', exportJsonBtn.title);
       exportMarkdownBtn.title = `${i18n.t('pm_export')} Markdown`;
       exportMarkdownBtn.setAttribute('aria-label', exportMarkdownBtn.title);
-      importHighlightsBtn.textContent = i18n.t('pm_import');
-      importHighlightsBtn.title = i18n.t('pm_import');
-      importHighlightsBtn.setAttribute('aria-label', i18n.t('pm_import'));
+      promptManagerLabel.textContent = i18n.t('pm_open_prompt_manager');
+      promptManagerBtn.title = i18n.t('pm_open_prompt_manager');
+      promptManagerBtn.setAttribute('aria-label', promptManagerBtn.title);
+      savedExportLabel.textContent = i18n.t('pm_export_format');
+      savedExportTrigger.title = i18n.t('pm_export_format');
+      savedExportTrigger.setAttribute('aria-label', savedExportTrigger.title);
+      savedExportMenu.setAttribute('aria-label', i18n.t('pm_export_format'));
+    }
+
+    function setSavedExportMenuOpen(nextOpen: boolean, focusFirst = false): void {
+      savedExportMenuOpen = nextOpen && panelView === 'starred';
+      savedExportMenu.classList.toggle('gv-hidden', !savedExportMenuOpen);
+      savedExportTrigger.setAttribute('aria-expanded', savedExportMenuOpen ? 'true' : 'false');
+      savedExportWrap.classList.toggle('gv-pm-saved-export-open', savedExportMenuOpen);
+      if (savedExportMenuOpen && focusFirst) {
+        exportJsonBtn.focus();
+      }
     }
 
     function applyPanelViewUI(): void {
       const isStarredView = panelView === 'starred';
       panel.setAttribute('data-gv-panel-view', panelView);
       titleText.textContent = isStarredView ? i18n.t('pm_starred_library') : 'Voyager';
-      backupBtn.textContent = isStarredView
-        ? '💬 ' + i18n.t('pm_prompt_manager')
-        : '★ ' + i18n.t('pm_starred_library');
-      backupBtn.title = isStarredView ? i18n.t('pm_prompt_manager') : i18n.t('pm_starred_library');
+      backupBtn.replaceChildren(
+        createStarIcon(15),
+        document.createTextNode(i18n.t('pm_starred_library')),
+      );
+      backupBtn.title = i18n.t('pm_starred_library');
       backupBtn.setAttribute('aria-label', backupBtn.title);
       searchInput.placeholder = isStarredView
         ? i18n.t('savedLibrarySearchPlaceholder')
@@ -1273,7 +1322,10 @@ export async function startPromptManager(): Promise<{ destroy: () => void }> {
       viewModeBtn.classList.toggle('gv-hidden', isStarredView);
       tagsWrapOuter.classList.toggle('gv-hidden', isStarredView);
       savedToolbar.classList.toggle('gv-hidden', !isStarredView);
+      primaryActions.classList.toggle('gv-hidden', isStarredView);
+      savedFooterActions.classList.toggle('gv-hidden', !isStarredView);
       secondaryActions.classList.toggle('gv-hidden', isStarredView);
+      if (!isStarredView) setSavedExportMenuOpen(false);
       if (isStarredView) {
         addForm.classList.add('gv-hidden');
         editingId = null;
@@ -1337,32 +1389,6 @@ export async function startPromptManager(): Promise<{ destroy: () => void }> {
       } catch (error) {
         logger.warn('[PromptManager] Failed to export highlights', { error: String(error) });
         setNotice(i18n.t('promptExportError'), 'err');
-      }
-    }
-
-    async function importHighlights(file: File): Promise<void> {
-      try {
-        const response = (await browser.runtime.sendMessage({
-          type: 'gv.highlight.import',
-          payload: { data: await file.text(), scope: await resolveCurrentHighlightScope() },
-        })) as
-          | {
-              ok?: boolean;
-              stats?: { imported: number; updated: number; duplicates: number };
-              error?: string;
-            }
-          | undefined;
-        if (!response?.ok || !response.stats) {
-          throw new Error(response?.error || 'Highlight import failed');
-        }
-        await loadStarredMessages();
-        const changed = response.stats.imported + response.stats.updated;
-        setNotice(i18n.t('highlightImportSuccess').replace('{count}', String(changed)), 'ok');
-      } catch (error) {
-        logger.warn('[PromptManager] Failed to import highlights', { error: String(error) });
-        setNotice(i18n.t('promptImportError'), 'err');
-      } finally {
-        importHighlightsInput.value = '';
       }
     }
 
@@ -1431,7 +1457,7 @@ export async function startPromptManager(): Promise<{ destroy: () => void }> {
         });
 
         const icon = createEl('span', 'gv-pm-starred-icon');
-        icon.textContent = item.kind === 'starred' ? '★' : '';
+        if (item.kind === 'starred') icon.appendChild(createStarIcon(16, true));
         icon.classList.toggle('gv-pm-highlight-icon', item.kind === 'highlight');
         if (item.kind === 'highlight') {
           icon.setAttribute('data-highlight-color', item.color || 'yellow');
@@ -1888,15 +1914,16 @@ export async function startPromptManager(): Promise<{ destroy: () => void }> {
     function closePanel(): void {
       open = false;
       panel.classList.add('gv-hidden');
+      setSavedExportMenuOpen(false);
       hideTooltip();
     }
 
     function applyLockUI(): void {
       lockBtn.classList.toggle('active', locked);
       lockBtn.setAttribute('aria-pressed', locked ? 'true' : 'false');
-      // When locked, show 🔒; when unlocked, show 🔓.
-      lockBtn.setAttribute('data-icon', locked ? '🔒' : '🔓');
+      lockBtn.replaceChildren(locked ? createLockIcon(15) : createLockOpenIcon(15));
       lockBtn.title = locked ? i18n.t('pm_unlock') || 'Unlock' : i18n.t('pm_lock') || 'Lock';
+      lockBtn.setAttribute('aria-label', lockBtn.title);
       panel.classList.toggle('gv-locked', locked);
     }
 
@@ -2040,6 +2067,9 @@ export async function startPromptManager(): Promise<{ destroy: () => void }> {
       if (!open) return;
       const target = ev.target as HTMLElement | null;
       if (!target) return;
+      if (savedExportMenuOpen && !target.closest('.gv-pm-saved-export-wrap')) {
+        setSavedExportMenuOpen(false);
+      }
       if (target.closest(`#${ID.panel}`)) return;
       if (target.closest(`#${ID.trigger}`)) return;
       if (target.closest('.gv-pm-confirm')) return;
@@ -2055,7 +2085,13 @@ export async function startPromptManager(): Promise<{ destroy: () => void }> {
     // Close on Escape
     const onWindowKeyDown = (ev: KeyboardEvent) => {
       if (!open) return;
-      if (ev.key === 'Escape') closePanel();
+      if (ev.key !== 'Escape') return;
+      if (savedExportMenuOpen) {
+        setSavedExportMenuOpen(false);
+        savedExportTrigger.focus();
+        return;
+      }
+      closePanel();
     };
     window.addEventListener('keydown', onWindowKeyDown, { passive: true });
 
@@ -2361,14 +2397,28 @@ export async function startPromptManager(): Promise<{ destroy: () => void }> {
     });
 
     backupBtn.addEventListener('click', () => {
-      switchPanelView(panelView === 'starred' ? 'prompts' : 'starred');
+      switchPanelView('starred');
     });
-    exportJsonBtn.addEventListener('click', () => void exportHighlights('json'));
-    exportMarkdownBtn.addEventListener('click', () => void exportHighlights('markdown'));
-    importHighlightsBtn.addEventListener('click', () => importHighlightsInput.click());
-    importHighlightsInput.addEventListener('change', () => {
-      const file = importHighlightsInput.files?.[0];
-      if (file) void importHighlights(file);
+    promptManagerBtn.addEventListener('click', () => switchPanelView('prompts'));
+    savedExportTrigger.addEventListener('click', (event) => {
+      const nextOpen = !savedExportMenuOpen;
+      setSavedExportMenuOpen(nextOpen, nextOpen && event.detail === 0);
+    });
+    savedExportMenu.addEventListener('keydown', (event) => {
+      if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+      event.preventDefault();
+      const options = [exportJsonBtn, exportMarkdownBtn];
+      const currentIndex = options.indexOf(document.activeElement as HTMLButtonElement);
+      const direction = event.key === 'ArrowDown' ? 1 : -1;
+      options[(currentIndex + direction + options.length) % options.length].focus();
+    });
+    exportJsonBtn.addEventListener('click', () => {
+      setSavedExportMenuOpen(false);
+      void exportHighlights('json');
+    });
+    exportMarkdownBtn.addEventListener('click', () => {
+      setSavedExportMenuOpen(false);
+      void exportHighlights('markdown');
     });
 
     // Initialize

@@ -22,6 +22,7 @@ import {
   getWatermarkSignalStrength,
   hasReliableWatermarkSignal,
   hasResidualWatermarkEdges,
+  hasSafeSupportedReliabilityTransition,
   measureSevereUndershootRatio,
   measureWatermarkSignal,
 } from './watermarkDetector';
@@ -345,10 +346,17 @@ export function removeWatermarkFromAnchorOptions(
   const trustedSignal = measureWatermarkSignal(imageData, trustedOption.alphaMap, trustedPosition);
 
   if (hasReliableWatermarkSignal(trustedSignal)) {
-    // Keep the established trusted path unchanged. Gemini can stack multiple
-    // transparent marks after iterative edits, so this path may remove more
-    // than one layer and retains its existing safety rollback.
-    removeWatermarkWithResidualCheck(imageData, trustedOption.alphaMap, trustedPosition);
+    // Gemini can stack multiple transparent marks after iterative edits, so
+    // trusted candidates retain the iterative safety rollback. Only the exact
+    // full-size V2 preset may use its narrower first-pass transition evidence.
+    const allowSupportedReliabilityTransition =
+      trustedOption.config.logoSize === 96 && trustedOption.config.alphaVariant === '20260520';
+    removeWatermarkWithResidualCheck(
+      imageData,
+      trustedOption.alphaMap,
+      trustedPosition,
+      allowSupportedReliabilityTransition,
+    );
     return;
   }
 
@@ -513,6 +521,7 @@ export function removeWatermarkWithResidualCheck(
   imageData: ImageData,
   alphaMap: Float32Array,
   position: WatermarkPosition,
+  allowSupportedReliabilityTransition = false,
 ): number {
   let passes = 0;
   let currentSignal = measureWatermarkSignal(imageData, alphaMap, position);
@@ -536,7 +545,11 @@ export function removeWatermarkWithResidualCheck(
       currentSignal,
       severeUndershootRatio,
     );
-    if (!assessment.safe) {
+    const supportedReliabilityTransition =
+      allowSupportedReliabilityTransition &&
+      passes === 0 &&
+      hasSafeSupportedReliabilityTransition(assessment);
+    if (!assessment.safe && !supportedReliabilityTransition) {
       restoreWatermarkRegion(imageData, position, previousRegion);
       break;
     }

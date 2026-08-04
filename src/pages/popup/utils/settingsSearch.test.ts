@@ -1,8 +1,18 @@
 import { describe, expect, it } from 'vitest';
 
-import { getSettingsSearchMatches, matchesFuzzySearch } from './settingsSearch';
+import {
+  getSettingsSearchMatches,
+  matchesFuzzySearch,
+  normalizePersistedSettingsSearchQuery,
+} from './settingsSearch';
 
 describe('settings search', () => {
+  it('restores only the last persisted query string', () => {
+    expect(normalizePersistedSettingsSearchQuery('timeline')).toBe('timeline');
+    expect(normalizePersistedSettingsSearchQuery(['timeline'])).toBe('');
+    expect(normalizePersistedSettingsSearchQuery(undefined)).toBe('');
+  });
+
   it('matches section text across bundled languages', () => {
     const matches = getSettingsSearchMatches(
       [{ id: 'general', keys: ['responseCompleteNotification'] }],
@@ -66,6 +76,20 @@ describe('settings search', () => {
     );
 
     expect(matches.has('promptManager:slashPromptEnabled')).toBe(true);
+  });
+
+  it('finds the changelog badge preference through update wording', () => {
+    const matches = getSettingsSearchMatches(
+      [
+        {
+          id: 'general:changelogBadgeMode',
+          keys: ['changelog_badge_mode', 'changelog_badge_mode_hint'],
+        },
+      ],
+      '更新日志',
+    );
+
+    expect(matches.has('general:changelogBadgeMode')).toBe(true);
   });
 
   it('does not match unrelated words', () => {

@@ -208,4 +208,93 @@ describe('TimelineManager navigation refresh', () => {
     expect(internal.navigationQueue).toHaveLength(0);
     expect(internal.smoothScrollTo).not.toHaveBeenCalled();
   });
+
+  it('rebinds a connected stale scroll viewport before shortcut navigation', async () => {
+    const main = document.createElement('main');
+    const staleScrollContainer = document.createElement('div');
+    staleScrollContainer.style.overflowY = 'auto';
+    const currentScrollContainer = document.createElement('div');
+    currentScrollContainer.style.overflowY = 'scroll';
+    const a = document.createElement('div');
+    a.className = 'user';
+    a.textContent = 'A';
+    const b = document.createElement('div');
+    b.className = 'user';
+    b.textContent = 'B';
+    currentScrollContainer.append(a, b);
+    staleScrollContainer.appendChild(currentScrollContainer);
+    main.appendChild(staleScrollContainer);
+    document.body.appendChild(main);
+
+    const timelineBar = document.createElement('div');
+    const trackContent = document.createElement('div');
+    timelineBar.appendChild(trackContent);
+    document.body.appendChild(timelineBar);
+
+    const manager = new TimelineManager();
+    const internal = manager as unknown as {
+      conversationContainer: HTMLElement | null;
+      scrollContainer: HTMLElement | null;
+      userTurnSelector: string;
+      ui: { timelineBar: HTMLElement | null; trackContent: HTMLElement | null };
+      scrollMode: 'flow' | 'jump';
+      activeTurnId: string | null;
+      markers: Array<{
+        id: string;
+        element: HTMLElement;
+        summary: string;
+        n: number;
+        baseN: number;
+        dotElement: null;
+        starred: boolean;
+      }>;
+      navigateToPreviousNode: () => Promise<void>;
+      smoothScrollTo: (target: HTMLElement, duration: number) => void;
+      updateTimelineGeometry: () => void;
+      updateIntersectionObserverTargetsFromMarkers: () => void;
+      syncTimelineTrackToMain: () => void;
+      updateVirtualRangeAndRender: () => void;
+      updateActiveDotUI: () => void;
+      scheduleScrollSync: () => void;
+    };
+    internal.conversationContainer = main;
+    internal.scrollContainer = staleScrollContainer;
+    internal.userTurnSelector = '.user';
+    internal.ui.timelineBar = timelineBar;
+    internal.ui.trackContent = trackContent;
+    internal.scrollMode = 'jump';
+    internal.activeTurnId = 'm1';
+    internal.markers = [
+      {
+        id: 'm0',
+        element: a,
+        summary: 'A',
+        n: 0,
+        baseN: 0,
+        dotElement: null,
+        starred: false,
+      },
+      {
+        id: 'm1',
+        element: b,
+        summary: 'B',
+        n: 1,
+        baseN: 1,
+        dotElement: null,
+        starred: false,
+      },
+    ];
+    internal.updateTimelineGeometry = vi.fn();
+    internal.updateIntersectionObserverTargetsFromMarkers = vi.fn();
+    internal.syncTimelineTrackToMain = vi.fn();
+    internal.updateVirtualRangeAndRender = vi.fn();
+    internal.updateActiveDotUI = vi.fn();
+    internal.scheduleScrollSync = vi.fn();
+    internal.smoothScrollTo = vi.fn();
+
+    await internal.navigateToPreviousNode();
+
+    expect(internal.scrollContainer).toBe(currentScrollContainer);
+    expect(internal.smoothScrollTo).toHaveBeenCalledWith(a, 0);
+  });
 });

@@ -37,6 +37,7 @@ import { startDraftSave } from './draftSave/index';
 import { startEdgeFinalVersionNotice } from './edgeFinalVersionNotice';
 import { startEditInputWidthAdjuster } from './editInputWidth/index';
 import { startExportButton } from './export/index';
+import { folderActivityCoachmarkStep } from './folder/activityCoachmark';
 import { startAIStudioFolderManager } from './folder/aistudio';
 import { conversationSortCoachmarkStep } from './folder/conversationSortCoachmark';
 import { folderSearchCoachmarkStep } from './folder/folderSearchCoachmark';
@@ -66,7 +67,7 @@ import { startSidebarAutoHide } from './sidebarAutoHide';
 import { startSidebarWidthAdjuster } from './sidebarWidth';
 import { startStorageQuotaWarningToast } from './storageQuotaWarning';
 import { startTimeline } from './timeline/index';
-import { timelineStyleCoachmarkStep } from './timeline/timelineStyleCoachmark';
+import { rulerTimelineCoachmarkStep } from './timeline/rulerTimelineCoachmark';
 import { startUsageStatus } from './usageStatus/index';
 import { usageCoachmarkStep } from './usageStatus/usageCoachmark';
 import { startUserLatex } from './userLatex/index';
@@ -133,7 +134,8 @@ function showOnboardingCoachmarksWhenChangelogIsIdle(): void {
 
   onboardingCoachmarkSequenceRunning = true;
   void runCoachmarkSequence([
-    timelineStyleCoachmarkStep,
+    rulerTimelineCoachmarkStep,
+    folderActivityCoachmarkStep,
     usageCoachmarkStep,
     folderSearchCoachmarkStep,
     conversationSortCoachmarkStep,

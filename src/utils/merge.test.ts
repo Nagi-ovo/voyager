@@ -229,6 +229,25 @@ describe('mergeFolderData', () => {
       expect(result.folderContents.f1[0].starred).toBe(false);
     });
 
+    it('keeps the newest real turn time regardless of which reference wins metadata', () => {
+      const localConvo = createConvo('c1', 'Local Title', 1000, { lastTurnAt: 4_000 });
+      const cloudConvo = createConvo('c1', 'Cloud Title', 1000, { lastTurnAt: 9_000 });
+
+      const local = createFolderData([createFolder('f1', 'Folder', 1000)], {
+        f1: [localConvo],
+      });
+      const cloud = createFolderData([createFolder('f1', 'Folder', 1000)], {
+        f1: [cloudConvo],
+      });
+
+      const result = mergeFolderData(local, cloud);
+
+      expect(result.folderContents.f1[0]).toMatchObject({
+        title: 'Cloud Title',
+        lastTurnAt: 9_000,
+      });
+    });
+
     it('should keep local-only conversations', () => {
       const localConvo = createConvo('c1', 'Local Only', 1000);
 

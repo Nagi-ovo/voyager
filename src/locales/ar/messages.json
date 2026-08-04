@@ -19,6 +19,10 @@
     "message": "مضغوط",
     "description": "نمط فهرس الخط الزمني المضغوط"
   },
+  "timelineStyleRuler": {
+    "message": "تدريج",
+    "description": "نمط علامات تدريج الخط الزمني"
+  },
   "timelineCompactOpenPreview": {
     "message": "فتح معاينة الخط الزمني",
     "description": "تسمية إمكانية الوصول للخط الزمني المضغوط"
@@ -106,6 +110,10 @@
   "pm_export": {
     "message": "تصدير",
     "description": "Export button"
+  },
+  "pm_export_format": {
+    "message": "تنسيق التصدير",
+    "description": "Saved Library export format menu button"
   },
   "pm_prompt_placeholder": {
     "message": "نص المطالبة",
@@ -279,6 +287,10 @@
     "message": "مدير المطالبات",
     "description": "Button label for returning from the starred library to Prompt Manager"
   },
+  "pm_open_prompt_manager": {
+    "message": "فتح مدير المطالبات",
+    "description": "Saved Library footer button for returning to Prompt Manager"
+  },
   "pm_starred_library": {
     "message": "مكتبة العناصر المحفوظة",
     "description": "Prompt Manager starred messages library title and entry button"
@@ -354,6 +366,22 @@
   "folder_title": {
     "message": "المجلدات",
     "description": "Folder section title"
+  },
+  "folder_activity_turn_on": { "message": "تشغيل عرض النشاط", "description": "تشغيل عرض النشاط" },
+  "folder_activity_turn_off": { "message": "إيقاف عرض النشاط", "description": "إيقاف عرض النشاط" },
+  "folder_activity_priority": {
+    "message": "الأولوية",
+    "description": "المحادثات النشطة خلال الساعات الثلاث الماضية"
+  },
+  "folder_activity_today": { "message": "اليوم", "description": "المحادثات النشطة اليوم" },
+  "folder_activity_yesterday": { "message": "أمس", "description": "المحادثات النشطة أمس" },
+  "folder_activity_empty": {
+    "message": "لا توجد محادثات في المجلدات بعد",
+    "description": "حالة عرض النشاط الفارغة"
+  },
+  "folder_activity_top_level": {
+    "message": "المستوى الأعلى",
+    "description": "محادثة خارج مجلد مسمى"
   },
   "folder_create": {
     "message": "إنشاء مجلد",
@@ -556,7 +584,7 @@
     "description": "Notion-compatible format with $$ delimiters"
   },
   "folder_filter_current_user": {
-    "message": "عزل الحساب",
+    "message": "عرض الحساب الحالي فقط",
     "description": "Show only conversations from the current Google account"
   },
   "folder_export": {
@@ -1628,6 +1656,10 @@
     "message": "فشل",
     "description": "Status prefix when download fails"
   },
+  "googleImageCorrupted": {
+    "message": "الصورة الأصلية التي أعادتها Google تالفة (ولم يتسبب Voyager في ذلك)؛ قد يكون الملف الذي تم تنزيله ضبابيًا أو ناقصًا.",
+    "description": "تحذير يظهر عندما لا تطابق صورة Google التي تم تنزيلها المعاينة"
+  },
   "gemsHide": {
     "message": "إخفاء Gems",
     "description": "تلميح لإخفاء قسم قائمة Gems"
@@ -1985,8 +2017,12 @@
     "description": "Edge Add-ons store rating CTA button text"
   },
   "changelog_badge_mode": {
-    "message": "الإشعار عبر شارة NEW على الزر العائم بدلاً من هذه النافذة",
+    "message": "التنبيه بالتحديثات عبر شارة NEW",
     "description": "Changelog notification mode toggle label"
+  },
+  "changelog_badge_mode_hint": {
+    "message": "عند إصدار نسخة جديدة، تظهر شارة NEW على الزر العائم بدلاً من فتح سجل التغييرات تلقائياً.",
+    "description": "Changelog notification mode toggle hint"
   },
   "forkConversation": {
     "message": "Fork",
@@ -2391,6 +2427,30 @@
   "conversationSortCoachmarkBody": {
     "message": "يحافظ الترتيب اليدوي على التنظيم الذي تحدده بالسحب والإفلات. ويعيد خيار المفتوحة مؤخرًا المحادثات التي تزورها إلى الأعلى. يمكنك التبديل في أي وقت من إعدادات المجلدات.",
     "description": "Coachmark body explaining manual and recently opened conversation sorting"
+  },
+  "timelineRulerCoachmarkTitle": {
+    "message": "جديد: المخطط الزمني المدرّج",
+    "description": "Coachmark title introducing the ruler timeline style"
+  },
+  "timelineRulerCoachmarkBody": {
+    "message": "تتبع مجموعة إشارات مدمجة موضع قراءتك. مرّر المؤشر فوق أي علامة لمعاينة السؤال والرد فورًا.",
+    "description": "Coachmark body text introducing the ruler timeline style"
+  },
+  "timelineRulerCoachmarkToggle": {
+    "message": "استخدام المخطط الزمني المدرّج",
+    "description": "Inline toggle label in the ruler-timeline coachmark"
+  },
+  "folderActivityCoachmarkTitle": {
+    "message": "جديد: عرض النشاط",
+    "description": "Coachmark title introducing the folder Activity view"
+  },
+  "folderActivityCoachmarkBody": {
+    "message": "ركّز على المحادثات الجارية: ذات الأولوية واليوم والأيام الأخيرة، من دون نقلها من مجلداتها.",
+    "description": "Coachmark body text introducing the folder Activity view"
+  },
+  "folderActivityCoachmarkToggle": {
+    "message": "استخدام عرض النشاط",
+    "description": "Inline toggle label in the folder-Activity coachmark"
   },
   "timelineCoachmarkTitle": {
     "message": "جديد: مخطط زمني مضغوط",

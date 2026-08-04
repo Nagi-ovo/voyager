@@ -28,4 +28,30 @@ describe('prompt manager footer actions', () => {
     expect(code).toContain("renderSupportLinkLabel(supportLink, i18n.t('sponsorMe'))");
     expect(code).not.toContain("supportLink.textContent = i18n.t('sponsorMe')");
   });
+
+  it('keeps Saved Library filtering at the top and moves its two actions to the footer', () => {
+    const code = readPromptManagerCode();
+    const savedFooterBlock =
+      code.match(
+        /const savedFooterActions = createEl\('div', 'gv-pm-saved-footer-actions gv-hidden'\);[\s\S]*?footer\.appendChild\(savedFooterActions\);/,
+      )?.[0] ?? '';
+
+    expect(savedFooterBlock).toContain(
+      'savedFooterActions.append(promptManagerBtn, savedExportWrap);',
+    );
+    expect(savedFooterBlock).toContain('savedExportMenu.append(exportJsonBtn, exportMarkdownBtn);');
+    expect(savedFooterBlock).toContain("savedExportTrigger.setAttribute('aria-haspopup', 'menu')");
+    expect(code).not.toContain('importHighlightsBtn');
+    expect(code).not.toContain('importHighlightsInput');
+  });
+
+  it('uses Lucide icons for Prompt Manager controls instead of emoji glyphs', () => {
+    const code = readPromptManagerCode();
+
+    expect(code).toContain('createArrowLeftIcon(15)');
+    expect(code).toContain('createDownloadIcon(15)');
+    expect(code).toContain('createLockOpenIcon(15)');
+    expect(code).toContain('createStarIcon(16, true)');
+    expect(code).not.toMatch(/[💬★🔒🔓]/u);
+  });
 });

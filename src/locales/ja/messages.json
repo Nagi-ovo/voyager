@@ -19,6 +19,10 @@
     "message": "コンパクト",
     "description": "コンパクトなタイムライン索引表示"
   },
+  "timelineStyleRuler": {
+    "message": "目盛り",
+    "description": "タイムラインの目盛り表示"
+  },
   "timelineCompactOpenPreview": {
     "message": "タイムラインプレビューを開く",
     "description": "コンパクトタイムラインのアクセシビリティラベル"
@@ -106,6 +110,10 @@
   "pm_export": {
     "message": "エクスポート",
     "description": "Export button"
+  },
+  "pm_export_format": {
+    "message": "エクスポート形式",
+    "description": "Saved Library export format menu button"
   },
   "pm_prompt_placeholder": {
     "message": "プロンプトのテキスト",
@@ -279,6 +287,10 @@
     "message": "プロンプトマネージャー",
     "description": "Button label for returning from the starred library to Prompt Manager"
   },
+  "pm_open_prompt_manager": {
+    "message": "プロンプト管理を開く",
+    "description": "Saved Library footer button for returning to Prompt Manager"
+  },
   "pm_starred_library": {
     "message": "保存済みライブラリ",
     "description": "Prompt Manager starred messages library title and entry button"
@@ -354,6 +366,25 @@
   "folder_title": {
     "message": "フォルダ",
     "description": "Folder section title"
+  },
+  "folder_activity_turn_on": {
+    "message": "アクティビティ表示をオン",
+    "description": "アクティビティ表示を有効にする"
+  },
+  "folder_activity_turn_off": {
+    "message": "アクティビティ表示をオフ",
+    "description": "アクティビティ表示を無効にする"
+  },
+  "folder_activity_priority": { "message": "優先", "description": "直近3時間にアクティブな会話" },
+  "folder_activity_today": { "message": "今日", "description": "今日の会話" },
+  "folder_activity_yesterday": { "message": "昨日", "description": "昨日の会話" },
+  "folder_activity_empty": {
+    "message": "フォルダ内に会話はまだありません",
+    "description": "アクティビティ表示の空状態"
+  },
+  "folder_activity_top_level": {
+    "message": "トップレベル",
+    "description": "名前付きフォルダ外の会話"
   },
   "folder_create": {
     "message": "フォルダを作成",
@@ -556,7 +587,7 @@
     "description": "Notion-compatible format with $$ delimiters"
   },
   "folder_filter_current_user": {
-    "message": "アカウント隔離",
+    "message": "現在のアカウントのみ表示",
     "description": "Show only conversations from the current Google account"
   },
   "folder_export": {
@@ -1628,6 +1659,10 @@
     "message": "失敗",
     "description": "Status prefix when download fails"
   },
+  "googleImageCorrupted": {
+    "message": "Google から返された元画像が破損しています（Voyager が原因ではありません）。ダウンロード画像がぼやけているか、一部欠けている可能性があります",
+    "description": "Google のダウンロード画像がプレビューと一致しない場合の警告"
+  },
   "gemsHide": {
     "message": "Gems を非表示",
     "description": "Gems リストセクションを非表示にするツールチップ"
@@ -1985,8 +2020,12 @@
     "description": "Edge Add-ons store rating CTA button text"
   },
   "changelog_badge_mode": {
-    "message": "このポップアップの代わりに、フローティングボタンの NEW バッジで通知する",
+    "message": "NEWバッジで更新を通知",
     "description": "Changelog notification mode toggle label"
+  },
+  "changelog_badge_mode_hint": {
+    "message": "新しいバージョンが公開されたとき、変更履歴を自動で開かず、フローティングボタンにNEWバッジを表示します。",
+    "description": "Changelog notification mode toggle hint"
   },
   "forkConversation": {
     "message": "Fork",
@@ -2391,6 +2430,30 @@
   "conversationSortCoachmarkBody": {
     "message": "「手動並べ替え」はドラッグ＆ドロップで決めた順序を保持します。「最近開いた順」は、アクセスした会話を上位に移動します。フォルダ設定でいつでも切り替えられます。",
     "description": "Coachmark body explaining manual and recently opened conversation sorting"
+  },
+  "timelineRulerCoachmarkTitle": {
+    "message": "新機能：ルーラータイムライン",
+    "description": "Coachmark title introducing the ruler timeline style"
+  },
+  "timelineRulerCoachmarkBody": {
+    "message": "コンパクトなシグナルが読んでいる位置に合わせて波のように動きます。目盛りに触れると、質問と回答をすぐにプレビューできます。",
+    "description": "Coachmark body text introducing the ruler timeline style"
+  },
+  "timelineRulerCoachmarkToggle": {
+    "message": "ルーラータイムラインを使用",
+    "description": "Inline toggle label in the ruler-timeline coachmark"
+  },
+  "folderActivityCoachmarkTitle": {
+    "message": "新機能：Activity ビュー",
+    "description": "Coachmark title introducing the folder Activity view"
+  },
+  "folderActivityCoachmarkBody": {
+    "message": "進行中の会話を「優先」「今日」「最近の日付」でまとめます。フォルダ内の配置は変わりません。",
+    "description": "Coachmark body text introducing the folder Activity view"
+  },
+  "folderActivityCoachmarkToggle": {
+    "message": "Activity ビューを使用",
+    "description": "Inline toggle label in the folder-Activity coachmark"
   },
   "timelineCoachmarkTitle": {
     "message": "新機能：コンパクトタイムライン",
