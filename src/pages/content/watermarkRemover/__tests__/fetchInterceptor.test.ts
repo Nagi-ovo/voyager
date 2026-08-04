@@ -21,6 +21,14 @@ function createEnabledBridge(): HTMLElement {
   return bridge;
 }
 
+function createDisabledBridge(): HTMLElement {
+  const bridge = document.createElement('div');
+  bridge.id = BRIDGE_ID;
+  bridge.dataset.enabled = 'false';
+  document.documentElement.appendChild(bridge);
+  return bridge;
+}
+
 function createMockFetchResponse(body = 'ok', init: ResponseInit = { status: 200 }): Response {
   const response = new Response(body, init);
   vi.spyOn(response, 'blob').mockResolvedValue(new window.Blob([body]));
@@ -125,6 +133,34 @@ describe('fetchInterceptor (MAIN world script)', () => {
     expect(bridge.dataset.status).toBeUndefined();
   });
 
+  it('keeps native download bytes untouched while requesting a health check when removal is off', async () => {
+    const bridge = createDisabledBridge();
+    bridge.dataset.downloadIntentExpiresAt = String(Date.now() + 1000);
+    bridge.dataset.downloadIntentToken = 'health-check-1';
+    const originalResponse = createMockFetchResponse('google-original', {
+      status: 200,
+      headers: { 'content-type': 'image/png' },
+    });
+    originalFetch.mockResolvedValueOnce(originalResponse);
+    installInterceptor();
+
+    const responsePromise = window.fetch(GEMINI_DOWNLOAD_URL);
+
+    expect(responsePromise).toBe(originalFetch.mock.results[0].value);
+    expect(await responsePromise).toBe(originalResponse);
+    const requestData = JSON.parse(await waitForBridgeRequest(bridge)) as {
+      mode: string;
+      intentToken: string;
+      base64: string;
+    };
+    expect(requestData).toMatchObject({
+      mode: 'inspect',
+      intentToken: 'health-check-1',
+    });
+    expect(requestData.base64).toMatch(/^data:/);
+    expect(originalFetch).toHaveBeenCalledWith(GEMINI_DOWNLOAD_URL);
+  });
+
   it('uses the watermark pipeline for a recent user download intent', async () => {
     const bridge = createEnabledBridge();
     bridge.dataset.downloadIntentExpiresAt = String(Date.now() + 1000);
@@ -154,6 +190,31 @@ describe('fetchInterceptor (MAIN world script)', () => {
     expect(JSON.parse(bridge.dataset.status ?? '{}')).toMatchObject({
       type: 'SUCCESS',
       intentToken: 'intent-1',
+    });
+  });
+
+  it('reports Google corruption when the watermark processor detects a preview mismatch', async () => {
+    const bridge = createEnabledBridge();
+    bridge.dataset.downloadIntentExpiresAt = String(Date.now() + 1000);
+    bridge.dataset.downloadIntentToken = 'corrupt-intent';
+    installInterceptor();
+
+    const responsePromise = window.fetch(GEMINI_DOWNLOAD_URL);
+    const requestData = JSON.parse(await waitForBridgeRequest(bridge)) as {
+      requestId: string;
+      intentToken: string;
+    };
+    expect(requestData.intentToken).toBe('corrupt-intent');
+    bridge.dataset.response = JSON.stringify({
+      requestId: requestData.requestId,
+      base64: 'data:image/png;base64,cHJvY2Vzc2Vk',
+      corrupted: true,
+    });
+
+    await responsePromise;
+    expect(JSON.parse(bridge.dataset.status ?? '{}')).toMatchObject({
+      type: 'GOOGLE_IMAGE_CORRUPTED',
+      intentToken: 'corrupt-intent',
     });
   });
 

@@ -30,6 +30,7 @@ describe('watermarkRemover download toasts', () => {
     document.head.innerHTML = '';
     document.body.innerHTML = '';
     vi.useFakeTimers();
+    vi.mocked(chrome.storage.sync.get).mockImplementation(async () => ({}));
   });
 
   afterEach(() => {
@@ -87,5 +88,32 @@ describe('watermarkRemover download toasts', () => {
     const toasts = [...document.querySelectorAll('.gv-status-toast')];
     expect(toasts.some((toast) => toast.textContent === '正在下载原始图片')).toBe(true);
     expect(toasts.some((toast) => toast.textContent === '正在下载')).toBe(false);
+  });
+
+  it('shows only a Google corruption warning when watermark removal is disabled', async () => {
+    vi.mocked(chrome.storage.sync.get).mockImplementation(async () => ({
+      gvWatermarkDownloadEnabled: false,
+      gvWatermarkPreviewEnabled: false,
+    }));
+    await startWatermarkRemover();
+
+    const button = document.createElement('button');
+    document.body.appendChild(button);
+    button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    expect(document.querySelectorAll('.gv-status-toast')).toHaveLength(0);
+    const bridge = document.getElementById('gv-watermark-bridge') as HTMLElement;
+    bridge.dataset.status = JSON.stringify({
+      type: 'GOOGLE_IMAGE_CORRUPTED',
+      intentToken: bridge.dataset.downloadIntentToken,
+    });
+    await flushMutationObservers();
+
+    const toasts = [...document.querySelectorAll('.gv-status-toast')];
+    expect(toasts).toHaveLength(1);
+    expect(toasts[0].textContent).toBe(
+      'Google 返回的原图已损坏（并非 Voyager 导致）；下载结果可能模糊或内容缺失',
+    );
+    expect(toasts[0].classList.contains('gv-status-toast--warning')).toBe(true);
   });
 });

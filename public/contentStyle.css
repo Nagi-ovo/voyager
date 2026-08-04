@@ -356,6 +356,134 @@ html.dark .timeline-dot:not(.active):not(.starred)::after,
   filter: drop-shadow(0 0 6px var(--timeline-dot-active-color));
 }
 
+/* Ruler timeline style: keep the classic full-height marker positions and
+ * interactions, but render each node as a quiet horizontal tick. */
+.gemini-timeline-bar.gv-timeline-style-ruler::before {
+  opacity: 0;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+}
+
+.gemini-timeline-bar.gv-timeline-style-ruler .timeline-track {
+  overflow: hidden;
+}
+
+.gemini-timeline-bar.gv-timeline-style-ruler .timeline-track-content {
+  height: 100% !important;
+}
+
+.gemini-timeline-bar.gv-timeline-style-ruler .timeline-dot {
+  top: calc(50% + var(--timeline-compact-offset, 0px));
+  height: 8px;
+  --gv-timeline-ruler-scale: 0.29;
+  --gv-timeline-ruler-opacity: 0.42;
+}
+
+.gemini-timeline-bar.gv-timeline-style-ruler .timeline-dot::after {
+  right: 50%;
+  left: auto;
+  width: 24px;
+  height: 2px;
+  border-radius: 9999px;
+  clip-path: none;
+  background-color: var(--timeline-dot-color);
+  box-shadow: none;
+  filter: none;
+  opacity: var(--gv-timeline-ruler-opacity);
+  transform: translateY(-50%) scaleX(var(--gv-timeline-ruler-scale));
+  transform-origin: right center;
+  transition:
+    transform 110ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    background-color 150ms ease,
+    box-shadow 150ms ease,
+    opacity 110ms ease-out;
+}
+
+.gemini-timeline-bar.gv-timeline-style-ruler .timeline-dot[data-level]::before {
+  display: none;
+}
+
+.gemini-timeline-bar.gv-timeline-style-ruler .timeline-dot[data-level='2'] {
+  --gv-timeline-ruler-scale: 0.42;
+}
+
+.gemini-timeline-bar.gv-timeline-style-ruler .timeline-dot[data-level='3'] {
+  --gv-timeline-ruler-scale: 0.54;
+}
+
+.gemini-timeline-bar.gv-timeline-style-ruler .timeline-dot:hover::after {
+  opacity: 0.9;
+  transform: translateY(-50%) scaleX(1);
+}
+
+.gemini-timeline-bar.gv-timeline-style-ruler .timeline-dot:focus-visible::after {
+  box-shadow: 0 0 0 2px var(--timeline-dot-active-color);
+}
+
+.gemini-timeline-bar.gv-timeline-style-ruler .timeline-dot.active::after {
+  background-color: var(--timeline-dot-active-color);
+  box-shadow: none;
+  opacity: 1;
+}
+
+.gemini-timeline-bar.gv-timeline-style-ruler .timeline-dot.starred::after {
+  background-color: var(--timeline-star-color);
+  opacity: 0.9;
+}
+
+.gemini-timeline-bar.gv-timeline-style-ruler .timeline-dot.collapsed::before,
+.gemini-timeline-bar.gv-timeline-style-ruler .timeline-dot.holding::before {
+  display: block;
+  right: 50%;
+  left: auto;
+  width: 25px;
+  height: 7px;
+  border: 1px dashed var(--timeline-dot-active-color);
+  border-radius: 9999px;
+  background: transparent;
+  box-shadow: none;
+  clip-path: none;
+  opacity: 0.55;
+  transform: translateY(-50%);
+}
+
+.gemini-timeline-bar.gv-timeline-style-ruler .timeline-dot.holding::before {
+  border-style: solid;
+  animation: timeline-hold-fade var(--timeline-hold-ms) linear forwards;
+}
+
+.gemini-timeline-bar.gv-timeline-style-ruler.gv-timeline-ruler-inward-right .timeline-dot::after {
+  right: auto;
+  left: 50%;
+  transform: translateY(-50%) scaleX(var(--gv-timeline-ruler-scale));
+  transform-origin: left center;
+}
+
+.gemini-timeline-bar.gv-timeline-style-ruler.gv-timeline-ruler-inward-right
+  .timeline-dot:hover::after {
+  transform: translateY(-50%) scaleX(1);
+}
+
+.gemini-timeline-bar.gv-timeline-style-ruler.gv-timeline-ruler-inward-right
+  .timeline-dot.collapsed::before,
+.gemini-timeline-bar.gv-timeline-style-ruler.gv-timeline-ruler-inward-right
+  .timeline-dot.holding::before {
+  right: auto;
+  left: 50%;
+  transform: translateY(-50%);
+}
+
+.gemini-timeline-bar.gv-timeline-style-ruler .timeline-runner-ring {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gemini-timeline-bar.gv-timeline-style-ruler .timeline-dot::after {
+    transition: none;
+  }
+}
+
 /* Compact timeline style: the rail becomes one hover target and markers are
  * rendered as quiet index ticks. Navigation happens from the preview panel. */
 .gemini-timeline-bar.timeline-style-compact {
@@ -380,8 +508,8 @@ html.dark .timeline-dot:not(.active):not(.starred)::after,
 
 .gemini-timeline-bar.timeline-style-compact .timeline-dot {
   top: calc(50% + var(--timeline-compact-offset, 0px));
-  width: 20px;
-  height: 12px;
+  width: 16px;
+  height: 8px;
   pointer-events: none;
 }
 
@@ -390,19 +518,28 @@ html.dark .timeline-dot:not(.active):not(.starred)::after,
 }
 
 .gemini-timeline-bar.timeline-style-compact .timeline-dot::after {
-  width: 18px;
-  height: 2px;
-  border-radius: 9999px;
+  right: 50%;
+  left: auto;
+  width: 12px;
+  height: 3px;
+  border-radius: 1px;
   clip-path: none;
   background-color: var(--timeline-dot-color);
   box-shadow: none;
   filter: none;
   opacity: 0.72;
-  transform: translate(-50%, -50%);
+  transform: translateY(-50%);
+}
+
+/* Share the ruler's inward edge anchor. On a left-side rail this moves the
+ * compact signal right; dragging the rail across the viewport mirrors it. */
+.gemini-timeline-bar.timeline-style-compact.gv-timeline-ruler-inward-right .timeline-dot::after {
+  right: auto;
+  left: 50%;
 }
 
 .gemini-timeline-bar.timeline-style-compact .timeline-dot.active::after {
-  width: 21px;
+  width: 16px;
   background-color: var(--timeline-dot-active-color);
   opacity: 1;
 }
@@ -450,6 +587,7 @@ html.dark .timeline-dot:not(.active):not(.starred)::after,
   transition:
     width 180ms ease,
     height 180ms ease,
+    transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
     border-radius 180ms ease,
     background-color 180ms ease,
     box-shadow 180ms ease;
@@ -460,13 +598,30 @@ html.dark .timeline-dot:not(.active):not(.starred)::after,
 }
 
 .gv-timeline-style-preview.is-compact span {
-  width: 18px;
-  height: 2px;
-  border-radius: 9999px;
+  width: 12px;
+  height: 3px;
+  border-radius: 1px;
 }
 
 .gv-timeline-style-preview.is-compact span.active {
-  width: 21px;
+  width: 16px;
+  background: var(--timeline-dot-active-color);
+  opacity: 1;
+}
+
+.gv-timeline-style-preview.is-ruler {
+  gap: 8px;
+}
+
+.gv-timeline-style-preview.is-ruler span {
+  width: 24px;
+  height: 2px;
+  border-radius: 9999px;
+  transform: scaleX(var(--gv-coach-ruler-scale, 0.28));
+  transform-origin: right center;
+}
+
+.gv-timeline-style-preview.is-ruler span.active {
   background: var(--timeline-dot-active-color);
   opacity: 1;
 }
@@ -479,6 +634,7 @@ html.dark .timeline-dot:not(.active):not(.starred)::after,
   width: 8px;
   height: 8px;
   border-radius: 50%;
+  transform: none;
 }
 
 .gv-timeline-style-preview.is-dots span.active {
@@ -492,6 +648,10 @@ html.dark .timeline-dot:not(.active):not(.starred)::after,
 body.gv-rtl .gv-timeline-style-preview {
   right: auto;
   left: 15px;
+}
+
+body.gv-rtl .gv-timeline-style-preview.is-ruler span {
+  transform-origin: left center;
 }
 
 /* ===== Timeline Context Menu ===== */
@@ -683,6 +843,41 @@ body.gv-rtl .gv-timeline-style-preview {
   transition: opacity var(--timeline-tooltip-anim-in);
 }
 
+.timeline-tooltip.gv-timeline-ruler-tooltip {
+  --timeline-tooltip-max: 320px;
+  box-sizing: border-box;
+  display: block;
+  max-height: none;
+  padding: 11px 12px 12px;
+  white-space: normal;
+}
+
+.gv-timeline-ruler-prompt {
+  overflow: hidden;
+  color: var(--timeline-tooltip-text);
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  unicode-bidi: plaintext;
+}
+
+.gv-timeline-ruler-response {
+  display: -webkit-box;
+  margin-top: 5px;
+  overflow: hidden;
+  color: var(--timeline-tooltip-text);
+  font-size: 12.5px;
+  font-weight: 400;
+  line-height: 19px;
+  opacity: 0.55;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  unicode-bidi: plaintext;
+}
+
 .timeline-tooltip.visible {
   opacity: 1;
   animation: timeline-tooltip-in var(--timeline-tooltip-anim-in);
@@ -845,7 +1040,8 @@ html.dark .timeline-left-slider::before {
   opacity: 1;
 }
 
-.timeline-preview-toggle.timeline-preview-toggle-compact {
+.timeline-preview-toggle.timeline-preview-toggle-compact,
+.timeline-preview-toggle[hidden] {
   display: none;
 }
 

@@ -15,8 +15,10 @@ type TimelineManagerInternal = {
     width: number,
     height: number,
   ) => void;
+  timelineStyle: 'dots' | 'ruler' | 'compact';
   tooltipShowDelay: number;
   scheduleTooltipForDot: (dot: DotElement) => void;
+  showTooltipForDot: (dot: DotElement) => void;
   cancelPendingTooltipShow: () => void;
 };
 
@@ -86,6 +88,19 @@ describe('TimelineManager tooltip hover intent', () => {
     expect(internal.truncateToThreeLines).toHaveBeenCalledWith('A long conversation preview', 240);
     expect(internal.placeTooltipAt).toHaveBeenCalledWith(dot, 'left', 240, 36);
 
+    manager.destroy();
+  });
+
+  it('shows ruler previews immediately without the node hover-intent delay', () => {
+    const { manager, internal } = setupTooltipManager();
+    const dot = createDot();
+    internal.timelineStyle = 'ruler';
+    internal.showTooltipForDot = vi.fn();
+
+    internal.scheduleTooltipForDot(dot);
+
+    expect(internal.showTooltipForDot).toHaveBeenCalledOnce();
+    expect(internal.showTooltipForDot).toHaveBeenCalledWith(dot);
     manager.destroy();
   });
 });

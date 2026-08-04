@@ -1,8 +1,18 @@
 import { describe, expect, it } from 'vitest';
 
-import { getSettingsSearchMatches, matchesFuzzySearch } from './settingsSearch';
+import {
+  getSettingsSearchMatches,
+  matchesFuzzySearch,
+  normalizePersistedSettingsSearchQuery,
+} from './settingsSearch';
 
 describe('settings search', () => {
+  it('restores only the last persisted query string', () => {
+    expect(normalizePersistedSettingsSearchQuery('timeline')).toBe('timeline');
+    expect(normalizePersistedSettingsSearchQuery(['timeline'])).toBe('');
+    expect(normalizePersistedSettingsSearchQuery(undefined)).toBe('');
+  });
+
   it('matches section text across bundled languages', () => {
     const matches = getSettingsSearchMatches(
       [{ id: 'general', keys: ['responseCompleteNotification'] }],

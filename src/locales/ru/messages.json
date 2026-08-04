@@ -19,6 +19,10 @@
     "message": "Компактный",
     "description": "Компактный стиль индекса временной шкалы"
   },
+  "timelineStyleRuler": {
+    "message": "Шкала",
+    "description": "Стиль делений временной шкалы"
+  },
   "timelineCompactOpenPreview": {
     "message": "Открыть обзор временной шкалы",
     "description": "Метка доступности компактной временной шкалы"
@@ -1658,6 +1662,10 @@
     "message": "Ошибка",
     "description": "Status prefix when download fails"
   },
+  "googleImageCorrupted": {
+    "message": "Исходное изображение, полученное от Google, повреждено (это не вызвано Voyager); скачанный файл может быть размытым или неполным.",
+    "description": "Предупреждение, если загруженное изображение Google не соответствует предпросмотру"
+  },
   "gemsHide": {
     "message": "Скрыть Gems",
     "description": "Подсказка для скрытия раздела списка Gems"
@@ -2425,6 +2433,30 @@
   "conversationSortCoachmarkBody": {
     "message": "Ручная сортировка сохраняет порядок, заданный перетаскиванием. Недавно открытые беседы возвращаются наверх. Режим можно сменить в любой момент в настройках папок.",
     "description": "Coachmark body explaining manual and recently opened conversation sorting"
+  },
+  "timelineRulerCoachmarkTitle": {
+    "message": "Новое: шкала времени",
+    "description": "Coachmark title introducing the ruler timeline style"
+  },
+  "timelineRulerCoachmarkBody": {
+    "message": "Компактный индикатор следует за позицией чтения. Наведите на отметку, чтобы сразу увидеть вопрос и ответ.",
+    "description": "Coachmark body text introducing the ruler timeline style"
+  },
+  "timelineRulerCoachmarkToggle": {
+    "message": "Использовать шкалу времени",
+    "description": "Inline toggle label in the ruler-timeline coachmark"
+  },
+  "folderActivityCoachmarkTitle": {
+    "message": "Новое: представление «Активность»",
+    "description": "Coachmark title introducing the folder Activity view"
+  },
+  "folderActivityCoachmarkBody": {
+    "message": "Сосредоточьтесь на текущих беседах: приоритетных, сегодняшних и недавних — без перемещения из папок.",
+    "description": "Coachmark body text introducing the folder Activity view"
+  },
+  "folderActivityCoachmarkToggle": {
+    "message": "Использовать представление «Активность»",
+    "description": "Inline toggle label in the folder-Activity coachmark"
   },
   "timelineCoachmarkTitle": {
     "message": "Новое: компактная шкала времени",

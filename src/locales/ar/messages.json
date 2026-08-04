@@ -19,6 +19,10 @@
     "message": "مضغوط",
     "description": "نمط فهرس الخط الزمني المضغوط"
   },
+  "timelineStyleRuler": {
+    "message": "تدريج",
+    "description": "نمط علامات تدريج الخط الزمني"
+  },
   "timelineCompactOpenPreview": {
     "message": "فتح معاينة الخط الزمني",
     "description": "تسمية إمكانية الوصول للخط الزمني المضغوط"
@@ -1652,6 +1656,10 @@
     "message": "فشل",
     "description": "Status prefix when download fails"
   },
+  "googleImageCorrupted": {
+    "message": "الصورة الأصلية التي أعادتها Google تالفة (ولم يتسبب Voyager في ذلك)؛ قد يكون الملف الذي تم تنزيله ضبابيًا أو ناقصًا.",
+    "description": "تحذير يظهر عندما لا تطابق صورة Google التي تم تنزيلها المعاينة"
+  },
   "gemsHide": {
     "message": "إخفاء Gems",
     "description": "تلميح لإخفاء قسم قائمة Gems"
@@ -2419,6 +2427,30 @@
   "conversationSortCoachmarkBody": {
     "message": "يحافظ الترتيب اليدوي على التنظيم الذي تحدده بالسحب والإفلات. ويعيد خيار المفتوحة مؤخرًا المحادثات التي تزورها إلى الأعلى. يمكنك التبديل في أي وقت من إعدادات المجلدات.",
     "description": "Coachmark body explaining manual and recently opened conversation sorting"
+  },
+  "timelineRulerCoachmarkTitle": {
+    "message": "جديد: المخطط الزمني المدرّج",
+    "description": "Coachmark title introducing the ruler timeline style"
+  },
+  "timelineRulerCoachmarkBody": {
+    "message": "تتبع مجموعة إشارات مدمجة موضع قراءتك. مرّر المؤشر فوق أي علامة لمعاينة السؤال والرد فورًا.",
+    "description": "Coachmark body text introducing the ruler timeline style"
+  },
+  "timelineRulerCoachmarkToggle": {
+    "message": "استخدام المخطط الزمني المدرّج",
+    "description": "Inline toggle label in the ruler-timeline coachmark"
+  },
+  "folderActivityCoachmarkTitle": {
+    "message": "جديد: عرض النشاط",
+    "description": "Coachmark title introducing the folder Activity view"
+  },
+  "folderActivityCoachmarkBody": {
+    "message": "ركّز على المحادثات الجارية: ذات الأولوية واليوم والأيام الأخيرة، من دون نقلها من مجلداتها.",
+    "description": "Coachmark body text introducing the folder Activity view"
+  },
+  "folderActivityCoachmarkToggle": {
+    "message": "استخدام عرض النشاط",
+    "description": "Inline toggle label in the folder-Activity coachmark"
   },
   "timelineCoachmarkTitle": {
     "message": "جديد: مخطط زمني مضغوط",

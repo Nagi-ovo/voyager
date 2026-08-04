@@ -28,7 +28,12 @@ export type Brand<K, T> = K & { __brand: T };
 export type ConversationId = Brand<string, 'ConversationId'>;
 export type FolderId = Brand<string, 'FolderId'>;
 export type TurnId = Brand<string, 'TurnId'>;
-export type TimelineStyle = 'dots' | 'compact';
+export const TIMELINE_STYLES = ['dots', 'ruler', 'compact'] as const;
+export type TimelineStyle = (typeof TIMELINE_STYLES)[number];
+
+export function isTimelineStyle(value: unknown): value is TimelineStyle {
+  return TIMELINE_STYLES.includes(value as TimelineStyle);
+}
 
 /**
  * Storage keys - centralized for type safety
@@ -275,6 +280,8 @@ export const StorageKeys = {
   GV_POPUP_SECTION_ORDER: 'gvPopupSectionOrder',
   // Device-local vertical position for the popup's full main settings view.
   GV_POPUP_SCROLL_TOP: 'gvPopupScrollTop',
+  // Device-local last query entered in the popup settings search.
+  GV_POPUP_SETTINGS_SEARCH_QUERY: 'gvPopupSettingsSearchQuery',
 
   // Context sync
   CONTEXT_SYNC_ENABLED: 'contextSyncEnabled',

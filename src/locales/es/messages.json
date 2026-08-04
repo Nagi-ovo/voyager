@@ -19,6 +19,10 @@
     "message": "Compacto",
     "description": "Estilo de índice compacto de la cronología"
   },
+  "timelineStyleRuler": {
+    "message": "Escala",
+    "description": "Estilo de marcas de escala de la cronología"
+  },
   "timelineCompactOpenPreview": {
     "message": "Abrir vista previa de la cronología",
     "description": "Etiqueta accesible para la cronología compacta"
@@ -1658,6 +1662,10 @@
     "message": "Error",
     "description": "Status prefix when download fails"
   },
+  "googleImageCorrupted": {
+    "message": "La imagen original devuelta por Google está dañada (no fue causado por Voyager); la descarga puede verse borrosa o incompleta.",
+    "description": "Advertencia cuando la imagen descargada de Google no coincide con la vista previa"
+  },
   "gemsHide": {
     "message": "Ocultar Gems",
     "description": "Tooltip para ocultar la sección de la lista de Gems"
@@ -2425,6 +2433,30 @@
   "conversationSortCoachmarkBody": {
     "message": "El orden manual conserva la organización que defines al arrastrar. Abiertas recientemente devuelve arriba las conversaciones que visitas. Cambia de modo cuando quieras en los ajustes de carpetas.",
     "description": "Coachmark body explaining manual and recently opened conversation sorting"
+  },
+  "timelineRulerCoachmarkTitle": {
+    "message": "Nuevo: cronología graduada",
+    "description": "Coachmark title introducing the ruler timeline style"
+  },
+  "timelineRulerCoachmarkBody": {
+    "message": "Una señal compacta sigue tu posición de lectura. Pasa el cursor por una marca para previsualizar al instante la pregunta y la respuesta.",
+    "description": "Coachmark body text introducing the ruler timeline style"
+  },
+  "timelineRulerCoachmarkToggle": {
+    "message": "Usar cronología graduada",
+    "description": "Inline toggle label in the ruler-timeline coachmark"
+  },
+  "folderActivityCoachmarkTitle": {
+    "message": "Nuevo: vista Actividad",
+    "description": "Coachmark title introducing the folder Activity view"
+  },
+  "folderActivityCoachmarkBody": {
+    "message": "Céntrate en las conversaciones en curso: Prioridad, hoy y días recientes, sin moverlas de sus carpetas.",
+    "description": "Coachmark body text introducing the folder Activity view"
+  },
+  "folderActivityCoachmarkToggle": {
+    "message": "Usar vista Actividad",
+    "description": "Inline toggle label in the folder-Activity coachmark"
   },
   "timelineCoachmarkTitle": {
     "message": "Nuevo: cronología compacta",

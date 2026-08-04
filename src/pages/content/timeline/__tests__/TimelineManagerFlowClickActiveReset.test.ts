@@ -331,9 +331,10 @@ describe('TimelineManager flow click highlight behavior', () => {
     manager.destroy();
   });
 
-  it('skips document scans and computed-style walks for a current connected target', () => {
+  it('skips document scans after validating the connected target scroll container', () => {
     const manager = new TimelineManager();
     const scrollContainer = document.createElement('div');
+    scrollContainer.style.overflowY = 'auto';
     const target = document.createElement('div');
     target.className = 'user';
     scrollContainer.appendChild(target);
@@ -366,7 +367,115 @@ describe('TimelineManager flow click highlight behavior', () => {
 
     expect(internal.shouldRefreshForInteraction(target)).toBe(false);
     expect(querySelectorAll).not.toHaveBeenCalled();
-    expect(getComputedStyle).not.toHaveBeenCalled();
+    expect(getComputedStyle).toHaveBeenCalled();
+
+    manager.destroy();
+  });
+
+  it('refreshes connected markers when Gemini inserts a new scroll viewport', () => {
+    const manager = new TimelineManager();
+    const staleScrollContainer = document.createElement('div');
+    staleScrollContainer.style.overflowY = 'auto';
+    const currentScrollContainer = document.createElement('div');
+    currentScrollContainer.style.overflowY = 'scroll';
+    const target = document.createElement('div');
+    target.className = 'user';
+    currentScrollContainer.appendChild(target);
+    staleScrollContainer.appendChild(currentScrollContainer);
+    document.body.appendChild(staleScrollContainer);
+
+    const internal = manager as unknown as {
+      scrollContainer: HTMLElement | null;
+      conversationContainer: HTMLElement | null;
+      userTurnSelector: string;
+      markers: TimelineMarker[];
+      shouldRefreshForInteraction: (targetElement: HTMLElement | null) => boolean;
+    };
+    internal.scrollContainer = staleScrollContainer;
+    internal.conversationContainer = staleScrollContainer;
+    internal.userTurnSelector = '.user';
+    internal.markers = [
+      {
+        id: 'm0',
+        element: target,
+        summary: 'current',
+        n: 0,
+        baseN: 0,
+        dotElement: null,
+        starred: false,
+      },
+    ];
+
+    expect(target.isConnected).toBe(true);
+    expect(staleScrollContainer.contains(target)).toBe(true);
+    expect(internal.shouldRefreshForInteraction(target)).toBe(true);
+
+    manager.destroy();
+  });
+
+  it('refreshes the scroll viewport before preview-panel navigation', () => {
+    const manager = new TimelineManager();
+    const main = document.createElement('main');
+    const staleScrollContainer = document.createElement('div');
+    staleScrollContainer.style.overflowY = 'auto';
+    const currentScrollContainer = document.createElement('div');
+    currentScrollContainer.style.overflowY = 'scroll';
+    const target = document.createElement('div');
+    target.className = 'user';
+    target.textContent = 'fresh target';
+    currentScrollContainer.appendChild(target);
+    staleScrollContainer.appendChild(currentScrollContainer);
+    main.appendChild(staleScrollContainer);
+    document.body.appendChild(main);
+
+    const internal = manager as unknown as {
+      ui: { timelineBar: HTMLElement | null };
+      scrollContainer: HTMLElement | null;
+      conversationContainer: HTMLElement | null;
+      scrollMode: 'flow' | 'jump';
+      userTurnSelector: string;
+      markers: TimelineMarker[];
+      activeTurnId: string | null;
+      previewPanel: {
+        updateMarkers: (
+          markers: Array<{ id: string; summary: string; index: number; starred: boolean }>,
+        ) => void;
+        open: () => void;
+      } | null;
+      injectTimelineUI: () => void;
+      smoothScrollTo: (targetElement: HTMLElement, duration: number) => void;
+    };
+    internal.scrollContainer = staleScrollContainer;
+    internal.conversationContainer = main;
+    internal.scrollMode = 'jump';
+    internal.userTurnSelector = '.user';
+    internal.activeTurnId = 'm0';
+    internal.markers = [
+      {
+        id: 'm0',
+        element: target,
+        summary: 'fresh target',
+        n: 0,
+        baseN: 0,
+        dotElement: null,
+        starred: false,
+      },
+    ];
+
+    const smoothScrollTo = vi.fn();
+    internal.smoothScrollTo = smoothScrollTo;
+    internal.injectTimelineUI();
+    internal.previewPanel?.updateMarkers([
+      { id: 'm0', summary: 'fresh target', index: 0, starred: false },
+    ]);
+    internal.previewPanel?.open();
+
+    const item = document.querySelector('.timeline-preview-item');
+    expect(item).not.toBeNull();
+    item?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    expect(internal.scrollContainer).toBe(currentScrollContainer);
+    expect(smoothScrollTo).toHaveBeenCalledWith(target, expect.any(Number));
 
     manager.destroy();
   });

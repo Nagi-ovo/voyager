@@ -19,6 +19,10 @@
     "message": "コンパクト",
     "description": "コンパクトなタイムライン索引表示"
   },
+  "timelineStyleRuler": {
+    "message": "目盛り",
+    "description": "タイムラインの目盛り表示"
+  },
   "timelineCompactOpenPreview": {
     "message": "タイムラインプレビューを開く",
     "description": "コンパクトタイムラインのアクセシビリティラベル"
@@ -1655,6 +1659,10 @@
     "message": "失敗",
     "description": "Status prefix when download fails"
   },
+  "googleImageCorrupted": {
+    "message": "Google から返された元画像が破損しています（Voyager が原因ではありません）。ダウンロード画像がぼやけているか、一部欠けている可能性があります",
+    "description": "Google のダウンロード画像がプレビューと一致しない場合の警告"
+  },
   "gemsHide": {
     "message": "Gems を非表示",
     "description": "Gems リストセクションを非表示にするツールチップ"
@@ -2422,6 +2430,30 @@
   "conversationSortCoachmarkBody": {
     "message": "「手動並べ替え」はドラッグ＆ドロップで決めた順序を保持します。「最近開いた順」は、アクセスした会話を上位に移動します。フォルダ設定でいつでも切り替えられます。",
     "description": "Coachmark body explaining manual and recently opened conversation sorting"
+  },
+  "timelineRulerCoachmarkTitle": {
+    "message": "新機能：ルーラータイムライン",
+    "description": "Coachmark title introducing the ruler timeline style"
+  },
+  "timelineRulerCoachmarkBody": {
+    "message": "コンパクトなシグナルが読んでいる位置に合わせて波のように動きます。目盛りに触れると、質問と回答をすぐにプレビューできます。",
+    "description": "Coachmark body text introducing the ruler timeline style"
+  },
+  "timelineRulerCoachmarkToggle": {
+    "message": "ルーラータイムラインを使用",
+    "description": "Inline toggle label in the ruler-timeline coachmark"
+  },
+  "folderActivityCoachmarkTitle": {
+    "message": "新機能：Activity ビュー",
+    "description": "Coachmark title introducing the folder Activity view"
+  },
+  "folderActivityCoachmarkBody": {
+    "message": "進行中の会話を「優先」「今日」「最近の日付」でまとめます。フォルダ内の配置は変わりません。",
+    "description": "Coachmark body text introducing the folder Activity view"
+  },
+  "folderActivityCoachmarkToggle": {
+    "message": "Activity ビューを使用",
+    "description": "Inline toggle label in the folder-Activity coachmark"
   },
   "timelineCoachmarkTitle": {
     "message": "新機能：コンパクトタイムライン",

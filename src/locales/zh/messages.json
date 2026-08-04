@@ -19,6 +19,10 @@
     "message": "紧凑索引",
     "description": "紧凑时间线索引样式"
   },
+  "timelineStyleRuler": {
+    "message": "刻度",
+    "description": "时间线刻度样式"
+  },
   "timelineCompactOpenPreview": {
     "message": "打开时间线预览",
     "description": "紧凑时间线索引的无障碍标签"
@@ -1647,6 +1651,10 @@
     "message": "失败",
     "description": "下载失败时的状态前缀"
   },
+  "googleImageCorrupted": {
+    "message": "Google 返回的原图已损坏（并非 Voyager 导致）；下载结果可能模糊或内容缺失",
+    "description": "Google 下载原图与预览不一致时显示的警告"
+  },
   "gemsHide": {
     "message": "隐藏 Gems",
     "description": "隐藏 Gems 列表区域的提示"
@@ -2414,6 +2422,30 @@
   "conversationSortCoachmarkBody": {
     "message": "“手动排序”会保留你拖拽调整后的顺序；“最近打开”会把刚访问的会话排到前面。可随时在文件夹设置中切换。",
     "description": "Coachmark body explaining manual and recently opened conversation sorting"
+  },
+  "timelineRulerCoachmarkTitle": {
+    "message": "新增：刻度时间轴",
+    "description": "Coachmark title introducing the ruler timeline style"
+  },
+  "timelineRulerCoachmarkBody": {
+    "message": "紧凑的信号簇会跟随阅读位置形成波峰。悬浮任一刻度，即刻预览用户提问与模型回复。",
+    "description": "Coachmark body text introducing the ruler timeline style"
+  },
+  "timelineRulerCoachmarkToggle": {
+    "message": "使用刻度时间轴",
+    "description": "Inline toggle label in the ruler-timeline coachmark"
+  },
+  "folderActivityCoachmarkTitle": {
+    "message": "新增：Activity 注意力视图",
+    "description": "Coachmark title introducing the folder Activity view"
+  },
+  "folderActivityCoachmarkBody": {
+    "message": "按优先、今天和最近几天聚合正在推进的对话，不改变它们原本所在的文件夹。",
+    "description": "Coachmark body text introducing the folder Activity view"
+  },
+  "folderActivityCoachmarkToggle": {
+    "message": "使用 Activity 视图",
+    "description": "Inline toggle label in the folder-Activity coachmark"
   },
   "timelineCoachmarkTitle": {
     "message": "新增：紧凑时间线",

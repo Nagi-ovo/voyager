@@ -19,6 +19,10 @@
     "message": "Compacto",
     "description": "Estilo de índice compacto da linha do tempo"
   },
+  "timelineStyleRuler": {
+    "message": "Régua",
+    "description": "Estilo de marcas de régua da linha do tempo"
+  },
   "timelineCompactOpenPreview": {
     "message": "Abrir prévia da linha do tempo",
     "description": "Rótulo acessível para a linha do tempo compacta"
@@ -1658,6 +1662,10 @@
     "message": "Falha",
     "description": "Status prefix when download fails"
   },
+  "googleImageCorrupted": {
+    "message": "A imagem original retornada pelo Google está corrompida (não causada pelo Voyager); o download pode ficar desfocado ou incompleto.",
+    "description": "Aviso exibido quando a imagem baixada do Google não corresponde à prévia"
+  },
   "gemsHide": {
     "message": "Ocultar Gems",
     "description": "Dica para ocultar a seção da lista de Gems"
@@ -2425,6 +2433,30 @@
   "conversationSortCoachmarkBody": {
     "message": "A ordem manual mantém a organização definida ao arrastar. A opção Abertas recentemente traz para o topo as conversas visitadas. Alterne quando quiser nas configurações de pastas.",
     "description": "Coachmark body explaining manual and recently opened conversation sorting"
+  },
+  "timelineRulerCoachmarkTitle": {
+    "message": "Novo: linha do tempo graduada",
+    "description": "Coachmark title introducing the ruler timeline style"
+  },
+  "timelineRulerCoachmarkBody": {
+    "message": "Um sinal compacto acompanha sua posição de leitura. Passe o cursor por uma marca para visualizar imediatamente a pergunta e a resposta.",
+    "description": "Coachmark body text introducing the ruler timeline style"
+  },
+  "timelineRulerCoachmarkToggle": {
+    "message": "Usar linha do tempo graduada",
+    "description": "Inline toggle label in the ruler-timeline coachmark"
+  },
+  "folderActivityCoachmarkTitle": {
+    "message": "Novo: visualização Atividade",
+    "description": "Coachmark title introducing the folder Activity view"
+  },
+  "folderActivityCoachmarkBody": {
+    "message": "Concentre-se nas conversas em andamento: Prioridade, hoje e dias recentes, sem movê-las de suas pastas.",
+    "description": "Coachmark body text introducing the folder Activity view"
+  },
+  "folderActivityCoachmarkToggle": {
+    "message": "Usar visualização Atividade",
+    "description": "Inline toggle label in the folder-Activity coachmark"
   },
   "timelineCoachmarkTitle": {
     "message": "Novo: linha do tempo compacta",

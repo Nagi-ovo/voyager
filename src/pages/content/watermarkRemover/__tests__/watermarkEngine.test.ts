@@ -6,6 +6,7 @@ import {
   getWatermarkSignalStrength,
   hasAcceptableWatermarkRemovalEvidence,
   hasReliableWatermarkSignal,
+  hasSafeSupportedReliabilityTransition,
   measureSevereUndershootRatio,
   measureWatermarkSignal,
 } from '../watermarkDetector';
@@ -170,6 +171,94 @@ function expectWatermarkAreaNearBase(imageData: ImageData, config: WatermarkConf
 }
 
 describe('watermarkEngine config detection', () => {
+  it('accepts the reported full-size V2 reliability transition without weakening the default gate', () => {
+    const assessment = {
+      safe: false,
+      originalSignal: {
+        spatialScore: 0.4734073451870319,
+        gradientScore: 0.16719655513220463,
+      },
+      candidateSignal: {
+        spatialScore: 0.2961504501826538,
+        gradientScore: 0.05179833173241184,
+      },
+      suppressionGain: 0.17725689500437813,
+      nearBlackIncrease: 0,
+      newlyClippedRatio: 0,
+      severeUndershootRatio: 0,
+    };
+
+    expect(hasSafeSupportedReliabilityTransition(assessment)).toBe(true);
+    expect(assessment.safe).toBe(false);
+  });
+
+  it('accepts a full-size V2 transition whose clean residual correlations cross zero', () => {
+    const assessment = {
+      safe: false,
+      originalSignal: {
+        spatialScore: 0.311225910646644,
+        gradientScore: 0.4521375798106608,
+      },
+      candidateSignal: {
+        spatialScore: -0.15338296468680865,
+        gradientScore: -0.001975710722929467,
+      },
+      suppressionGain: 0.15784294595983536,
+      nearBlackIncrease: 0,
+      newlyClippedRatio: 0,
+      severeUndershootRatio: 0,
+    };
+
+    expect(hasSafeSupportedReliabilityTransition(assessment)).toBe(true);
+    expect(assessment.safe).toBe(false);
+  });
+
+  it.each([
+    {
+      name: 'the input is already below the trusted watermark threshold',
+      changes: {
+        originalSignal: { spatialScore: 0.2961504501826538, gradientScore: 0.05179833173241184 },
+      },
+    },
+    {
+      name: 'gradient evidence does not fall with the spatial transition',
+      changes: {
+        candidateSignal: { spatialScore: 0.2961504501826538, gradientScore: 0.12 },
+      },
+    },
+    {
+      name: 'the trial introduces clipped pixels',
+      changes: { newlyClippedRatio: 0.001 },
+    },
+    {
+      name: 'the trial introduces new black pixels',
+      changes: { nearBlackIncrease: 0.001 },
+    },
+    {
+      name: 'the trial has severe undershoot',
+      changes: { severeUndershootRatio: 0.1 },
+    },
+  ])('rejects the supported transition when $name', ({ changes }) => {
+    const assessment = {
+      safe: false,
+      originalSignal: {
+        spatialScore: 0.4734073451870319,
+        gradientScore: 0.16719655513220463,
+      },
+      candidateSignal: {
+        spatialScore: 0.2961504501826538,
+        gradientScore: 0.05179833173241184,
+      },
+      suppressionGain: 0.17725689500437813,
+      nearBlackIncrease: 0,
+      newlyClippedRatio: 0,
+      severeUndershootRatio: 0,
+      ...changes,
+    };
+
+    expect(hasSafeSupportedReliabilityTransition(assessment)).toBe(false);
+  });
+
   it('accepts a difficult match only when both signals improve and removal stays safe', () => {
     const assessment = assessDifficultWatermarkRemovalCandidate(
       { spatialScore: 0.25, gradientScore: 0.2 },
