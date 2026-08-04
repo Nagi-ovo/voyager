@@ -2685,7 +2685,7 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
               onChange={(event) => updateSettingsSearchQuery(event.target.value)}
               placeholder={t('popupSettingsSearchPlaceholder')}
               aria-label={t('popupSettingsSearchPlaceholder')}
-              className="bg-card border-border focus:ring-primary/40 w-full rounded-lg border py-2 pr-9 pl-9 text-sm shadow-sm transition-all outline-none focus:ring-2"
+              className="bg-card border-border focus:ring-primary/40 w-full rounded-lg border py-2 pr-9 pl-9 text-sm shadow-sm transition-all outline-none focus:ring-2 [&::-webkit-search-cancel-button]:hidden"
             />
             {settingsSearchQuery && (
               <button
