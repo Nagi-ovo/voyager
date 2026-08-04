@@ -631,9 +631,9 @@ function handleVisibilityChange(): void {
           );
         }
       } else if (forkCleanup) {
-        // FIXME: here we need to withdraw cleanups from cleanupManager
         forkCleanup();
         forkCleanup = null;
+        cleanupManager.withdrawCleanupFunctionsByPositionNumber(CleanupPositions.CleanupFork);
       }
     };
 
