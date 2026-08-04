@@ -1,5 +1,6 @@
 import { StorageKeys } from '@/core/types/common';
 import { isHighlightColor, normalizeHighlightColorPalette } from '@/core/types/highlight';
+import { CleanupManager } from '@/core/utils/cleanupManager';
 import { customWebsitesIncludeHost, sanitizeCustomWebsites } from '@/core/utils/customWebsites';
 import {
   hasValidExtensionContext,
@@ -7,7 +8,6 @@ import {
 } from '@/core/utils/extensionContext';
 import { isGeminiEnterpriseEnvironment } from '@/core/utils/gemini';
 import { WATERMARK_STORAGE_KEYS } from '@/core/utils/watermarkSettings';
-import { WillCleanUp } from '@/core/utils/willCleanUp';
 import { startFormulaCopy, stopFormulaCopy } from '@/features/formulaCopy';
 import { startPluginHost } from '@/features/plugins';
 import {
@@ -104,7 +104,7 @@ const LIGHT_FEATURE_INIT_DELAY = 50; // For lightweight features
 const BACKGROUND_TAB_MIN_DELAY = 3000; // Minimum delay for background tabs
 const BACKGROUND_TAB_MAX_DELAY = 8000; // Maximum delay for background tabs (3000 + 5000)
 
-const willCleanUp = new WillCleanUp();
+const cleanupManager = new CleanupManager();
 
 let initialized = false;
 let initializationTimer: number | null = null;
@@ -190,7 +190,7 @@ async function initializeFeatures(): Promise<void> {
     }
 
     const slashPrompt = await startSlashPromptFeature();
-    willCleanUp.it(() => slashPrompt.destroy());
+    cleanupManager.registerCleanupFunction(() => slashPrompt.destroy());
 
     // Yield between features instead of sleeping a fixed amount. On an idle main
     // thread (the common foreground case) requestIdleCallback fires on the next
@@ -216,13 +216,13 @@ async function initializeFeatures(): Promise<void> {
       console.log('[Gemini Voyager] Custom website detected, starting Prompt Manager only');
 
       const pm = await startPromptManager();
-      willCleanUp.it(() => pm.destroy());
+      cleanupManager.registerCleanupFunction(() => pm.destroy());
       return;
     }
 
     console.log('[Gemini Voyager] Not a custom website, checking for Gemini/AI Studio');
 
-    willCleanUp.it(startEdgeFinalVersionNotice());
+    cleanupManager.registerCleanupFunction(startEdgeFinalVersionNotice());
 
     const isEnterprise = isGeminiEnterpriseEnvironment(
       {
@@ -237,7 +237,7 @@ async function initializeFeatures(): Promise<void> {
     if (isEnterprise) {
       console.log('[Gemini Voyager] Gemini Enterprise detected, starting Prompt Manager only');
       const pm = await startPromptManager();
-      willCleanUp.it(() => pm.destroy());
+      cleanupManager.registerCleanupFunction(() => pm.destroy());
       return;
     }
 
@@ -248,7 +248,7 @@ async function initializeFeatures(): Promise<void> {
 
       const folderManager = await startFolderManager();
       if (folderManager) {
-        willCleanUp.it(() => folderManager.destroy());
+        cleanupManager.registerCleanupFunction(() => folderManager.destroy());
         startFolderProject(folderManager);
       }
       await delay(HEAVY_FEATURE_INIT_DELAY);
@@ -269,11 +269,11 @@ async function initializeFeatures(): Promise<void> {
 
       startInputCollapse();
       startInputHaloHider();
-      willCleanUp.it(await startInputVimMode());
+      cleanupManager.registerCleanupFunction(await startInputVimMode());
       await delay(LIGHT_FEATURE_INIT_DELAY);
 
       // Send behavior must be ready before prevent-auto-scroll reads its bridge state.
-      willCleanUp.it(await startSendBehavior('gemini'));
+      cleanupManager.registerCleanupFunction(await startSendBehavior('gemini'));
       startPreventAutoScroll();
       startFormulaCopy();
       await delay(LIGHT_FEATURE_INIT_DELAY);
@@ -297,7 +297,7 @@ async function initializeFeatures(): Promise<void> {
       // Highlight shares Quote Reply's single selection toolbar/listener. Keep
       // the toolbar manager alive when Quote Reply is disabled; only its Quote
       // action is hidden in that case.
-      willCleanUp.it(
+      cleanupManager.registerCleanupFunction(
         startQuoteReply({
           quoteEnabled: quoteReplyResult[StorageKeys.QUOTE_REPLY_ENABLED] !== false,
           highlightEnabled: quoteReplyResult[StorageKeys.HIGHLIGHT_ENABLED] === true,
@@ -317,7 +317,7 @@ async function initializeFeatures(): Promise<void> {
       // Independent content helpers can initialize in the same idle slice.
       watermarkRemoverStarted = true;
       void startWatermarkRemover();
-      willCleanUp.it(() => stopWatermarkRemover());
+      cleanupManager.registerCleanupFunction(() => stopWatermarkRemover());
       startDeepResearchExport();
       startContextSync();
       startGemsHider();
@@ -332,11 +332,14 @@ async function initializeFeatures(): Promise<void> {
         startUsageStatus(),
       ]);
       if (notificationResult.status === 'fulfilled') {
-        willCleanUp.it(notificationResult.value);
+        cleanupManager.registerCleanupFunction(notificationResult.value);
       }
-      if (draftResult.status === 'fulfilled') willCleanUp.it(draftResult.value);
-      if (gemsResult.status === 'fulfilled') willCleanUp.it(gemsResult.value);
-      if (usageResult.status === 'fulfilled') willCleanUp.it(usageResult.value);
+      if (draftResult.status === 'fulfilled')
+        cleanupManager.registerCleanupFunction(draftResult.value);
+      if (gemsResult.status === 'fulfilled')
+        cleanupManager.registerCleanupFunction(gemsResult.value);
+      if (usageResult.status === 'fulfilled')
+        cleanupManager.registerCleanupFunction(usageResult.value);
 
       const failedInitializer = [notificationResult, draftResult, gemsResult, usageResult].find(
         (result): result is PromiseRejectedResult => result.status === 'rejected',
@@ -347,7 +350,7 @@ async function initializeFeatures(): Promise<void> {
       // DOM enhancements install observers/listeners but do not need separate
       // idle waits between each initializer.
       startMarkdownPatcher();
-      willCleanUp.it(startCodeBlockCollapse());
+      cleanupManager.registerCleanupFunction(startCodeBlockCollapse());
       DefaultModelManager.getInstance().init();
       startExportButton();
       void startCanvasExport();
@@ -370,7 +373,7 @@ async function initializeFeatures(): Promise<void> {
       location.hostname === 'aistudio.google.cn'
     ) {
       const pm = await startPromptManager();
-      willCleanUp.it(() => pm.destroy());
+      cleanupManager.registerCleanupFunction(() => pm.destroy());
       await delay(HEAVY_FEATURE_INIT_DELAY);
     }
 
@@ -410,7 +413,7 @@ async function initializeFeatures(): Promise<void> {
       await delay(LIGHT_FEATURE_INIT_DELAY);
 
       // Send behavior (Enter to send)
-      willCleanUp.it(await startSendBehavior('aistudio'));
+      cleanupManager.registerCleanupFunction(await startSendBehavior('aistudio'));
       await delay(LIGHT_FEATURE_INIT_DELAY);
     }
   } catch (e) {
@@ -484,7 +487,7 @@ function handleVisibilityChange(): void {
 
     // Saved Library and cloud sync need the same account identity as highlights.
     // This bridge must exist even when optional Folder Manager code never starts.
-    if (!isPluginSubframe) willCleanUp.it(startAccountContextBridge());
+    if (!isPluginSubframe) cleanupManager.registerCleanupFunction(startAccountContextBridge());
 
     // Plugin ecosystem host. Started up-front on EVERY page the content script is
     // injected into (Gemini / AI Studio, and any site a user enabled a plugin for,
@@ -508,14 +511,14 @@ function handleVisibilityChange(): void {
       updateSettings: updateClaudeTimelineSettings,
       stop: stopClaudeTimeline,
     });
-    willCleanUp.it(startPluginHost());
+    cleanupManager.registerCleanupFunction(startPluginHost());
 
     // Cosmetic: on Claude / ChatGPT, re-skin Voyager's accent to the host
     // platform's brand colour (injects --gv-pm-brand + a gv-platform-themed body
     // class; CSS derives the rest). Applies the adapter's built-in colour at
     // once, then lets an enabled plugin's declared theme override it live. No-op
     // on Gemini / AI Studio.
-    if (!isPluginSubframe) willCleanUp.it(startBrandTheme());
+    if (!isPluginSubframe) cleanupManager.registerCleanupFunction(startBrandTheme());
 
     const onUnhandledRejection = (event: PromiseRejectionEvent) => {
       if (isExtensionContextInvalidatedError(event.reason)) {
@@ -528,9 +531,13 @@ function handleVisibilityChange(): void {
       }
     };
     window.addEventListener('unhandledrejection', onUnhandledRejection);
-    willCleanUp.it(() => window.removeEventListener('unhandledrejection', onUnhandledRejection));
+    cleanupManager.registerCleanupFunction(() =>
+      window.removeEventListener('unhandledrejection', onUnhandledRejection),
+    );
     window.addEventListener('error', onWindowError);
-    willCleanUp.it(() => window.removeEventListener('error', onWindowError));
+    cleanupManager.registerCleanupFunction(() =>
+      window.removeEventListener('error', onWindowError),
+    );
     const onStorageChanged = (
       changes: Record<string, chrome.storage.StorageChange>,
       areaName: string,
@@ -572,7 +579,7 @@ function handleVisibilityChange(): void {
       hostname.includes('aistudio.google.com') ||
       hostname.includes('aistudio.google.cn');
     if (!isPluginSubframe && (isSupportedSite || pluginPlatformId)) {
-      willCleanUp.it(startRemoteAnnouncements());
+      cleanupManager.registerCleanupFunction(startRemoteAnnouncements());
     }
 
     // Initialize KaTeX configuration early to suppress Unicode warnings
@@ -581,7 +588,7 @@ function handleVisibilityChange(): void {
       initKaTeXConfig();
       // Initialize i18n early to ensure translations are available
       initI18n().catch((e) => console.error('[Gemini Voyager] i18n init error:', e));
-      willCleanUp.it(startStorageQuotaWarningToast());
+      cleanupManager.registerCleanupFunction(startStorageQuotaWarningToast());
     }
 
     // If not a known site, check if it's a custom website (async)
@@ -600,7 +607,7 @@ function handleVisibilityChange(): void {
         console.log('[Gemini Voyager] Plugin platform: prompt manager');
         void startPromptManager()
           .then((instance) => {
-            willCleanUp.it(() => instance.destroy());
+            cleanupManager.registerCleanupFunction(() => instance.destroy());
           })
           .catch((error) => {
             console.error('[Gemini Voyager] Prompt Manager init error on plugin platform:', error);
@@ -625,7 +632,9 @@ function handleVisibilityChange(): void {
       return;
     }
     chrome.storage?.onChanged?.addListener(onStorageChanged);
-    willCleanUp.it(() => chrome.storage?.onChanged?.removeListener(onStorageChanged));
+    cleanupManager.registerCleanupFunction(() =>
+      chrome.storage?.onChanged?.removeListener(onStorageChanged),
+    );
 
     const delay = getInitializationDelay();
 
@@ -646,7 +655,7 @@ function handleVisibilityChange(): void {
     // Setup cleanup on page unload to prevent memory leaks
     window.addEventListener('beforeunload', () => {
       try {
-        willCleanUp.execute();
+        cleanupManager.executeCleanups();
         if (forkCleanup) {
           forkCleanup();
           forkCleanup = null;
