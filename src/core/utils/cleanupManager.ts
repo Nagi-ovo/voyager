@@ -31,6 +31,14 @@ export class CleanupManager {
   }
 
   /**
+   * Remove any cleanup functions associated with the given position number.
+   * @param pos Position number for functions which will be removed.
+   */
+  withdrawCleanupFunctionsByPositionNumber(pos: number): void {
+    this.cleanups = this.cleanups.filter((cleanup) => cleanup.pos != pos);
+  }
+
+  /**
    * [debug] return a readonly list containing stored cleanup functions.
    */
   list(): Array<Cleanup> {

@@ -100,4 +100,20 @@ describe('willCleanUp tests module', () => {
     expect(function2).toHaveBeenCalledAfter(function1);
     expect(function3).toHaveBeenCalledAfter(function2);
   });
+
+  it('can withdraw functions by position number', () => {
+    const function1 = vi.fn();
+    const function2 = vi.fn();
+    const function3 = vi.fn();
+
+    cleanupManager.registerCleanupFunction(function3, Sequence.Third);
+    cleanupManager.registerCleanupFunction(function2, Sequence.Second);
+    cleanupManager.registerCleanupFunction(function1, Sequence.First);
+
+    cleanupManager.withdrawCleanupFunctionsByPositionNumber(Sequence.Second);
+
+    expect(cleanupManager.list().some((cleanups) => cleanups.func === function1)).toBe(true);
+    expect(cleanupManager.list().some((cleanups) => cleanups.func === function2)).toBe(false);
+    expect(cleanupManager.list().some((cleanups) => cleanups.func === function3)).toBe(true);
+  });
 });
