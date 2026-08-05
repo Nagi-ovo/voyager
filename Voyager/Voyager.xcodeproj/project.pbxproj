@@ -11,10 +11,6 @@
 		A1B2C3D4E5F60718293A4B5B /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = A1B2C3D4E5F60718293A4B5F /* GoogleSignIn */; };
 		F1A2B3C4D5E60718293A4B5C /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = F1A2B3C4D5E60718293A4B5E /* Sparkle */; };
 		B60723AD2FB752BC00F3A4FD /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = B60723AC2FB752BC00F3A4FD /* AppDelegate.swift */; };
-		B60723B12FB752BC00F3A4FD /* Main.html in Resources */ = {isa = PBXBuildFile; fileRef = B60723AF2FB752BC00F3A4FD /* Main.html */; };
-		B60723B32FB752BC00F3A4FD /* Icon.png in Resources */ = {isa = PBXBuildFile; fileRef = B60723B22FB752BC00F3A4FD /* Icon.png */; };
-		B60723B52FB752BC00F3A4FD /* Style.css in Resources */ = {isa = PBXBuildFile; fileRef = B60723B42FB752BC00F3A4FD /* Style.css */; };
-		B60723B72FB752BC00F3A4FD /* Script.js in Resources */ = {isa = PBXBuildFile; fileRef = B60723B62FB752BC00F3A4FD /* Script.js */; };
 		B60723B92FB752BC00F3A4FD /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B60723B82FB752BC00F3A4FD /* ViewController.swift */; };
 		B60723BC2FB752BC00F3A4FD /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = B60723BA2FB752BC00F3A4FD /* Main.storyboard */; };
 		B60723BE2FB752BD00F3A4FD /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B60723BD2FB752BD00F3A4FD /* Assets.xcassets */; };
@@ -77,10 +73,6 @@
 /* Begin PBXFileReference section */
 		B60723A92FB752BC00F3A4FD /* Voyager.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Voyager.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B60723AC2FB752BC00F3A4FD /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
-		B60723B02FB752BC00F3A4FD /* Base */ = {isa = PBXFileReference; lastKnownFileType = text.html; name = Base; path = Base.lproj/Main.html; sourceTree = "<group>"; };
-		B60723B22FB752BC00F3A4FD /* Icon.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Icon.png; sourceTree = "<group>"; };
-		B60723B42FB752BC00F3A4FD /* Style.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; path = Style.css; sourceTree = "<group>"; };
-		B60723B62FB752BC00F3A4FD /* Script.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = Script.js; sourceTree = "<group>"; };
 		B60723B82FB752BC00F3A4FD /* ViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
 		B60723BB2FB752BC00F3A4FD /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
 		B60723BD2FB752BD00F3A4FD /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -167,20 +159,8 @@
 				B60723BA2FB752BC00F3A4FD /* Main.storyboard */,
 				B60723BD2FB752BD00F3A4FD /* Assets.xcassets */,
 				B60723BF2FB752BD00F3A4FD /* Info.plist */,
-				B60723AE2FB752BC00F3A4FD /* Resources */,
 			);
 			path = App;
-			sourceTree = "<group>";
-		};
-		B60723AE2FB752BC00F3A4FD /* Resources */ = {
-			isa = PBXGroup;
-			children = (
-				B60723AF2FB752BC00F3A4FD /* Main.html */,
-				B60723B22FB752BC00F3A4FD /* Icon.png */,
-				B60723B42FB752BC00F3A4FD /* Style.css */,
-				B60723B62FB752BC00F3A4FD /* Script.js */,
-			);
-			path = Resources;
 			sourceTree = "<group>";
 		};
 		B60723C82FB752BD00F3A4FD /* Extension */ = {
@@ -333,12 +313,8 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				B60723B32FB752BC00F3A4FD /* Icon.png in Resources */,
 				B60723BC2FB752BC00F3A4FD /* Main.storyboard in Resources */,
-				B60723B72FB752BC00F3A4FD /* Script.js in Resources */,
-				B60723B12FB752BC00F3A4FD /* Main.html in Resources */,
 				B60723BE2FB752BD00F3A4FD /* Assets.xcassets in Resources */,
-				B60723B52FB752BC00F3A4FD /* Style.css in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -408,14 +384,6 @@
 /* End PBXTargetDependency section */
 
 /* Begin PBXVariantGroup section */
-		B60723AF2FB752BC00F3A4FD /* Main.html */ = {
-			isa = PBXVariantGroup;
-			children = (
-				B60723B02FB752BC00F3A4FD /* Base */,
-			);
-			name = Main.html;
-			sourceTree = "<group>";
-		};
 		B60723BA2FB752BC00F3A4FD /* Main.storyboard */ = {
 			isa = PBXVariantGroup;
 			children = (
