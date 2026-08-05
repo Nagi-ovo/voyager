@@ -451,14 +451,12 @@ export class DOMContentExtractor {
         continue;
       }
 
-      // todo: 公式
-      // KaTeX block formula (used by ChatGPT, Claude, and other platforms)
-      // Must be checked BEFORE the Gemini-specific math-block handler
-
+      // Extract formula
       if (exportHandler?.extractFormula(child, flags, htmlParts, textParts, this.DEBUG)) {
         continue;
       }
 
+      // Extract code block
       if (
         exportHandler?.extractCodeBlock(child, htmlParts, textParts, flags, tagName, this.DEBUG)
       ) {
@@ -481,6 +479,7 @@ export class DOMContentExtractor {
         continue;
       }
 
+      // Extract assistant image
       if (
         exportHandler?.extractAssistantImage(
           child,

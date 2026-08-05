@@ -200,6 +200,59 @@ export const BUILTIN_PLUGINS: readonly PluginManifest[] = [
     },
   },
   {
+    id: 'voyager.chatgpt-export',
+    name: 'ChatGPT · Conversation Export',
+    version: '1.0.0',
+    description: 'Export the current ChatGPT conversation as Markdown, JSON, PDF, or an image.',
+    i18n: {
+      zh: {
+        name: 'ChatGPT · 对话导出',
+        description: '将当前 ChatGPT 对话导出为 Markdown、JSON、PDF 或图片。',
+      },
+      zh_TW: {
+        name: 'ChatGPT · 對話匯出',
+        description: '將目前 ChatGPT 對話匯出為 Markdown、JSON、PDF 或圖片。',
+      },
+      ja: {
+        name: 'ChatGPT · 会話エクスポート',
+        description:
+          '現在の ChatGPT 会話を Markdown、JSON、PDF、または画像としてエクスポートします。',
+      },
+      ko: {
+        name: 'ChatGPT · 대화 내보내기',
+        description: '현재 ChatGPT 대화를 Markdown, JSON, PDF 또는 이미지로 내보냅니다.',
+      },
+      fr: {
+        name: 'ChatGPT · Export de conversation',
+        description:
+          'Exporte la conversation ChatGPT actuelle au format Markdown, JSON, PDF ou image.',
+      },
+      es: {
+        name: 'ChatGPT · Exportar conversación',
+        description: 'Exporta la conversación actual de ChatGPT como Markdown, JSON, PDF o imagen.',
+      },
+      pt: {
+        name: 'ChatGPT · Exportar conversa',
+        description: 'Exporte a conversa atual do ChatGPT como Markdown, JSON, PDF ou imagem.',
+      },
+      ru: {
+        name: 'ChatGPT · Экспорт диалога',
+        description: 'Экспортирует текущий диалог ChatGPT в Markdown, JSON, PDF или изображение.',
+      },
+      ar: {
+        name: 'ChatGPT · تصدير المحادثة',
+        description: 'يصدّر محادثة ChatGPT الحالية بصيغة Markdown أو JSON أو PDF أو صورة.',
+      },
+    },
+    author: 'voyager-official',
+    category: 'productivity',
+    license: 'GPL-3.0-or-later',
+    engine: '>=1.2.0',
+    tier: 'declarative',
+    matches: ['https://chatgpt.com/*', 'https://chat.openai.com/*'],
+    contributes: {},
+  },
+  {
     id: 'voyager.claude-usage',
     name: 'Claude · Usage Bar',
     version: '1.0.0',

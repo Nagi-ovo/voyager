@@ -38,6 +38,15 @@ describe('BUILTIN_PLUGINS', () => {
     expect(vim?.i18n?.zh?.name).toBe('Vim 输入');
   });
 
+  it('includes the ChatGPT export native function plugin scoped to ChatGPT', () => {
+    const exportPlugin = BUILTIN_PLUGINS.find((m) => m.id === 'voyager.chatgpt-export');
+    expect(exportPlugin).toBeDefined();
+    expect(exportPlugin?.matches).toEqual(['https://chatgpt.com/*', 'https://chat.openai.com/*']);
+    expect(exportPlugin?.contributes.styles ?? []).toEqual([]);
+    expect(exportPlugin?.contributes.domOps ?? []).toEqual([]);
+    expect(exportPlugin?.i18n?.zh?.name).toBe('ChatGPT · 对话导出');
+  });
+
   it('includes the Claude timeline native function plugin', () => {
     const timeline = BUILTIN_PLUGINS.find((m) => m.id === 'voyager.claude-timeline');
     expect(timeline).toBeDefined();

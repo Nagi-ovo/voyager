@@ -9,6 +9,10 @@ import { isGeminiEnterpriseEnvironment } from '@/core/utils/gemini';
 import { startFormulaCopy, stopFormulaCopy } from '@/features/formulaCopy';
 import { startPluginHost } from '@/features/plugins';
 import {
+  startChatGptExportPlugin,
+  stopChatGptExportPlugin,
+} from '@/features/plugins/builtin/chatgptExport/runtime';
+import {
   startClaudeTimeline,
   stopClaudeTimeline,
   updateClaudeTimelineSettings,
@@ -502,6 +506,10 @@ function handleVisibilityChange(): void {
       start: startClaudeUsage,
       stop: stopClaudeUsage,
     });
+    registerNativeHandler('voyager.chatgpt-export', {
+      start: startChatGptExportPlugin,
+      stop: stopChatGptExportPlugin,
+    });
 
     pluginHostCleanup = startPluginHost();
 
@@ -596,10 +604,8 @@ function handleVisibilityChange(): void {
           .catch((error) => {
             console.error('[Gemini Voyager] Prompt Manager init error on plugin platform:', error);
           });
-        // Start conversation export for Claude and ChatGPT
-        if (pluginPlatformId === 'chatgpt') {
-          startExportButton();
-        }
+        // ChatGPT export is driven by PluginHost via the voyager.chatgpt-export
+        // builtin plugin (opt-in), not started unconditionally here.
         // Formula copy here is driven by PluginHost via the voyager.formula-copy
         // builtin plugin (opt-in), not started unconditionally.
         return;

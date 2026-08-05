@@ -40,7 +40,6 @@ import {
 } from './conversationMenuInjection';
 import { resolveExportLogoAnchor } from './exportLogoAnchor';
 import { mountPersistentExportToolbar } from './persistentExportToolbar';
-import { resolveConversationRootForPlatform } from './platformConversationDom';
 import { injectResponseActionCopyImageButtons } from './responseActionImageButton';
 import { showResponseActionCopyImageMenu } from './responseActionImageMenu';
 import {
@@ -84,6 +83,8 @@ const exportAdapter: ExportPlatformAdapter = resolveExportAdapter();
 let conversationMenuObserver: MutationObserver | null = null;
 let responseActionObserver: MutationObserver | null = null;
 let cachedCanvasDocs: CanvasDoc[] | null = null;
+
+let activeExportDialog: ExportDialog | null = null;
 
 /** Remove all injected Canvas export sections from the DOM after export completes */
 function removeCanvasExportSections(): void {
@@ -2434,7 +2435,14 @@ function setupConversationMenuExportObserver({
   );
 }
 
-export async function startExportButton(): Promise<void> {
+/**
+ * Mount the export entry point for the current platform.
+ *
+ * The returned cleanup is intentionally platform-agnostic. Native plugins own
+ * their lifecycle and retain this callback; Gemini's native caller may ignore it
+ * because its content script owns the page lifetime.
+ */
+export async function startExportButton(): Promise<() => void> {
   // Check for pending export immediately
   if (exportAdapter.shouldPreloadHistory()) {
     checkPendingExport();
@@ -2469,17 +2477,15 @@ export async function startExportButton(): Promise<void> {
     };
     try {
       chrome.storage?.onChanged?.addListener(onStorageChange);
-      window.addEventListener(
-        'beforeunload',
-        () => {
-          try {
-            chrome.storage?.onChanged?.removeListener(onStorageChange);
-          } catch {}
-        },
-        { once: true },
-      );
     } catch {}
-    return;
+    return () => {
+      toolbarHandle.remove();
+      try {
+        chrome.storage?.onChanged?.removeListener(onStorageChange);
+      } catch {}
+      activeExportDialog?.hide();
+      activeExportDialog = null;
+    };
   }
 
   // --- Gemini path: logo anchor + menu injection ---
@@ -2581,11 +2587,11 @@ export async function startExportButton(): Promise<void> {
         { once: true },
       );
     } catch {}
-    return;
+    return () => {};
   }
   const btn = ensureDropdownInjected(logo);
-  if (!btn) return;
-  if ((btn as Element & { _gvBound?: boolean })._gvBound) return;
+  if (!btn) return () => {};
+  if ((btn as Element & { _gvBound?: boolean })._gvBound) return () => {};
   (btn as Element & { _gvBound?: boolean })._gvBound = true;
 
   // Swallow events on the button to avoid parent navigation (logo click -> /app)
@@ -2738,6 +2744,16 @@ export async function startExportButton(): Promise<void> {
   window.addEventListener('resize', reinjectExportButtonIfNeeded);
   window.addEventListener('gv-print-cleanup', reinjectExportButtonIfNeeded);
   window.addEventListener('afterprint', reinjectExportButtonIfNeeded);
+
+  return () => {
+    if (reinjectTimer !== null) clearTimeout(reinjectTimer);
+    window.removeEventListener('resize', reinjectExportButtonIfNeeded);
+    window.removeEventListener('gv-print-cleanup', reinjectExportButtonIfNeeded);
+    window.removeEventListener('afterprint', reinjectExportButtonIfNeeded);
+    try {
+      chrome.storage?.onChanged?.removeListener(storageChangeHandler);
+    } catch {}
+  };
 }
 
 async function showExportDialog(
@@ -2753,6 +2769,7 @@ async function showExportDialog(
   // We defer collection until after the export sequence (scrolling/refresh checks)
 
   const dialog = new ExportDialog();
+  activeExportDialog = dialog;
 
   dialog.show({
     onExport: async (format, fontSize, imageWidth) => {
@@ -2776,7 +2793,7 @@ async function showExportDialog(
     },
 
     onCancel: () => {
-      // Dialog closed
+      if (activeExportDialog === dialog) activeExportDialog = null;
     },
     initialImageWidth,
     translations: {
