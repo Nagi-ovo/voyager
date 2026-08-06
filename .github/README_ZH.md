@@ -14,10 +14,10 @@
     <img src="https://img.shields.io/badge/Brave-✓-FB542B?style=flat-square&logo=brave&logoColor=white" alt="Brave">
   </p>
   <p>
-    <img src="../docs/public/badges/github-stars.svg" alt="GitHub Star">
-    <img src="../docs/public/badges/github-forks.svg" alt="GitHub Fork">
-    <img src="../docs/public/badges/github-release.svg" alt="最新版本">
-    <img src="../docs/public/badges/github-downloads.svg" alt="GitHub 下载量">
+    <img src="https://voyager.nagi.fun/badges/github-stars.svg" alt="GitHub Star">
+    <img src="https://voyager.nagi.fun/badges/github-forks.svg" alt="GitHub Fork">
+    <img src="https://voyager.nagi.fun/badges/github-release.svg" alt="最新版本">
+    <img src="https://voyager.nagi.fun/badges/github-downloads.svg" alt="GitHub 下载量">
     <img src="https://img.shields.io/chrome-web-store/users/iifacdnjakkhjjiengaffnegbndgingi?style=flat-square&logo=google-chrome" alt="Chrome 商店用户数">
     <img src="https://img.shields.io/chrome-web-store/rating/iifacdnjakkhjjiengaffnegbndgingi?style=flat-square&logo=google-chrome" alt="Chrome 商店评分">
     <img src="https://img.shields.io/badge/edge%20users-50k%2B-0078D7?style=flat-square&logo=microsoftedge&logoColor=white" alt="Edge 商店用户数">

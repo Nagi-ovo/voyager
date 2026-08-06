@@ -35,14 +35,58 @@ function createMockFetchResponse(body = 'ok', init: ResponseInit = { status: 200
   return response;
 }
 
-async function waitForBridgeRequest(bridge: HTMLElement): Promise<string> {
-  for (let i = 0; i < 20; i += 1) {
-    if (bridge.dataset.request) {
-      return bridge.dataset.request;
-    }
+async function waitForEventLoopTurns(turns: number): Promise<void> {
+  for (let i = 0; i < turns; i += 1) {
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
-  throw new Error('Timed out waiting for bridge request');
+}
+
+function waitForBridgeRequest(bridge: HTMLElement, timeoutMs = 2000): Promise<string> {
+  const existingRequest = bridge.dataset.request;
+  if (existingRequest) {
+    return Promise.resolve(existingRequest);
+  }
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let timeoutId: number | undefined;
+
+    const observer = new MutationObserver(resolveIfPresent);
+
+    function cleanup(): void {
+      observer.disconnect();
+      if (timeoutId !== undefined) {
+        window.clearTimeout(timeoutId);
+      }
+    }
+
+    function resolveIfPresent(): void {
+      if (settled || !bridge.dataset.request) {
+        return;
+      }
+
+      settled = true;
+      const request = bridge.dataset.request;
+      cleanup();
+      resolve(request);
+    }
+
+    observer.observe(bridge, {
+      attributes: true,
+      attributeFilter: ['data-request'],
+    });
+    timeoutId = window.setTimeout(() => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      cleanup();
+      reject(new Error('Timed out waiting for bridge request'));
+    }, timeoutMs);
+
+    resolveIfPresent();
+  });
 }
 
 describe('fetchInterceptor (MAIN world script)', () => {
@@ -141,6 +185,15 @@ describe('fetchInterceptor (MAIN world script)', () => {
       status: 200,
       headers: { 'content-type': 'image/png' },
     });
+    const inspectionResponse = createMockFetchResponse('google-original', {
+      status: 200,
+      headers: { 'content-type': 'image/png' },
+    });
+    vi.mocked(inspectionResponse.blob).mockImplementation(async () => {
+      await waitForEventLoopTurns(30);
+      return new window.Blob(['google-original']);
+    });
+    vi.spyOn(originalResponse, 'clone').mockReturnValue(inspectionResponse);
     originalFetch.mockResolvedValueOnce(originalResponse);
     installInterceptor();
 
