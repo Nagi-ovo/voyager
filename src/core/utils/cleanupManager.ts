@@ -54,6 +54,7 @@ export class CleanupManager {
    */
   executeCleanups(): void {
     let error: unknown = null;
+    let hasError = false;
 
     this.cleanups
       .sort((a, b) => {
@@ -64,11 +65,12 @@ export class CleanupManager {
           it.func();
         } catch (e) {
           error = e;
+          hasError = true;
         }
       });
     this.cleanups = [];
 
-    if (error) throw error;
+    if (hasError) throw error;
   }
 }
 

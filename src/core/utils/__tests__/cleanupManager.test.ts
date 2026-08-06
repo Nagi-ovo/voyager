@@ -86,6 +86,25 @@ describe('willCleanUp tests module', () => {
     expect(cleanupManager.list()).toEqual([]);
   });
 
+  it('can identify cleanup functions that throws falsy error', () => {
+    const function1 = () => {
+      throw undefined;
+    };
+
+    const errorSpy = vi.fn();
+
+    cleanupManager.registerCleanupFunction(function1);
+
+    try {
+      cleanupManager.executeCleanups();
+    } catch (error) {
+      errorSpy(error);
+    }
+
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    expect(errorSpy).toHaveBeenLastCalledWith(undefined);
+  });
+
   it('can call functions in correct sequence', () => {
     const function1 = vi.fn();
     const function2 = vi.fn();
