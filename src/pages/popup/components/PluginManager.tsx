@@ -183,6 +183,10 @@ export interface PluginManagerProps {
   readonly activeUrl?: string;
 }
 
+/**
+ * Render the popup's plugin catalog and manage each plugin's enabled state,
+ * optional host access, platform-specific settings, and refresh lifecycle.
+ */
 export function PluginManager({
   manifests,
   loading = false,
