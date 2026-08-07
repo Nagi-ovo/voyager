@@ -20,6 +20,10 @@ const MAX_RESIDUAL_GRADIENT_SCORE = 0.18;
 const MIN_SUPPRESSION_GAIN = 0.25;
 const MIN_RELIABILITY_TRANSITION_GAIN = 0.2;
 const MIN_RELIABILITY_TRANSITION_RATIO = 0.4;
+const MIN_SUPPORTED_TRANSITION_GAIN = 0.15;
+const MIN_SUPPORTED_TRANSITION_RATIO = 0.35;
+const MIN_SUPPORTED_GRADIENT_SUPPRESSION = 0.1;
+const MIN_SUPPORTED_GRADIENT_SUPPRESSION_RATIO = 0.5;
 const MIN_DIFFICULT_SUPPRESSION = 0.08;
 const NEAR_BLACK_THRESHOLD = 5;
 const MAX_NEAR_BLACK_INCREASE = 0.05;
@@ -221,6 +225,48 @@ export function hasAcceptableWatermarkRemovalEvidence(
     suppressionRatio >= MIN_RELIABILITY_TRANSITION_RATIO;
 
   return residualStillReliable || residualCleared || residualSuppressedBelowReliability;
+}
+
+/**
+ * Accept a narrowly supported reliability transition for the current 96px V2
+ * watermark. The engine enables this only for that exact full-size preset.
+ *
+ * Bright diagonal backgrounds can remain mildly correlated with the watermark
+ * after correct reconstruction, leaving spatial suppression just below the
+ * default gate. Require corroborating gradient suppression and zero new
+ * clipping so this cannot become a general threshold relaxation.
+ */
+export function hasSafeSupportedReliabilityTransition(
+  assessment: WatermarkRemovalAssessment,
+): boolean {
+  const { originalSignal, candidateSignal, suppressionGain } = assessment;
+  if (!hasReliableWatermarkSignal(originalSignal) || hasReliableWatermarkSignal(candidateSignal)) {
+    return false;
+  }
+
+  const inferredOriginalSpatialMagnitude =
+    Math.abs(candidateSignal.spatialScore) + Math.max(0, suppressionGain);
+  const suppressionRatio =
+    inferredOriginalSpatialMagnitude > EPSILON
+      ? Math.max(0, suppressionGain) / inferredOriginalSpatialMagnitude
+      : 0;
+  const residualSpatialMagnitude = Math.abs(candidateSignal.spatialScore);
+  const residualGradientMagnitude = Math.abs(candidateSignal.gradientScore);
+  const gradientSuppression = originalSignal.gradientScore - residualGradientMagnitude;
+  const gradientSuppressionRatio =
+    originalSignal.gradientScore > EPSILON ? gradientSuppression / originalSignal.gradientScore : 0;
+
+  return (
+    residualSpatialMagnitude < DIRECT_MATCH_MIN_SPATIAL_SCORE &&
+    residualGradientMagnitude < DIRECT_MATCH_MIN_GRADIENT_SCORE &&
+    suppressionGain > MIN_SUPPORTED_TRANSITION_GAIN &&
+    suppressionRatio > MIN_SUPPORTED_TRANSITION_RATIO &&
+    gradientSuppression > MIN_SUPPORTED_GRADIENT_SUPPRESSION &&
+    gradientSuppressionRatio > MIN_SUPPORTED_GRADIENT_SUPPRESSION_RATIO &&
+    assessment.nearBlackIncrease === 0 &&
+    assessment.newlyClippedRatio === 0 &&
+    assessment.severeUndershootRatio < MAX_SEVERE_UNDERSHOOT_RATIO
+  );
 }
 
 function hasStrongWatermarkRemovalEvidence(

@@ -41,6 +41,15 @@ jobs:
             docs:
               - 'docs/**'
               - 'CNAME'
+              - 'README.md'
+              - '.github/README_*.md'
+              - '.github/workflows/deploy-docs.yml'
+              - '.github/workflows/sponsors.yml'
+              - 'scripts/generate-sponsors.cjs'
+              - 'scripts/generate-sponsors.test.js'
+              - 'scripts/update-readme-badges.mjs'
+              - 'scripts/update-readme-badges.test.js'
+              - 'sponsorkit/**'
             app:
               - 'src/**'
               - 'public/**'
@@ -61,6 +70,13 @@ jobs:
               - '!src/**'
               - '!public/**'
               - '!Voyager/**'
+              - '!.github/workflows/deploy-docs.yml'
+              - '!.github/workflows/sponsors.yml'
+              - '!scripts/generate-sponsors.cjs'
+              - '!scripts/generate-sponsors.test.js'
+              - '!scripts/update-readme-badges.mjs'
+              - '!scripts/update-readme-badges.test.js'
+              - '!sponsorkit/**'
               - '!**/*.md'
               - '!LICENSE'
               - '!.gitignore'
@@ -190,6 +206,10 @@ jobs:
         with:
           bun-version: '1.3.12'
       - run: bun install --frozen-lockfile
+      - name: Test docs tooling
+        run: |
+          node scripts/update-readme-badges.mjs --self-test
+          bun run test scripts/generate-sponsors.test.js scripts/update-readme-badges.test.js
       - run: bun run docs:build
 
   # ── i18n consistency ──────────────────────────────────────────────────

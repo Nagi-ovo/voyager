@@ -4,6 +4,7 @@ import { PLUGIN_BASE_STYLE_ID, PLUGIN_HIDDEN_CLASS } from '../constants';
 import { type PluginManifest, type SiteAdapter, cssRef, semanticRef } from '../types';
 import { DeclarativeEngine } from './declarativeEngine';
 import { registerNativeHandler } from './nativeHandlers';
+import { PluginScope } from './pluginScope';
 
 function makeManifest(
   contributes: PluginManifest['contributes'],
@@ -79,6 +80,121 @@ describe('DeclarativeEngine', () => {
 
     engine.unmount('test.native');
     expect(stop).toHaveBeenCalledTimes(1);
+  });
+
+  it('runs a scope-based (activate) handler and disposes its scope on unmount', async () => {
+    const disposer = vi.fn();
+    const activate = vi.fn((scope: PluginScope) => {
+      scope.effect(() => disposer, 'test-effect');
+    });
+    registerNativeHandler('test.scoped', { activate });
+    const engine = new DeclarativeEngine({ doc: document });
+    const manifest = makeManifest({}, 'test.scoped');
+
+    engine.mount(manifest, { key: 'v' });
+    expect(activate).toHaveBeenCalledOnce();
+    expect(activate).toHaveBeenCalledWith(expect.any(PluginScope), { key: 'v' });
+
+    engine.unmount('test.scoped');
+    await vi.waitFor(() => expect(disposer).toHaveBeenCalledOnce());
+  });
+
+  it('an activation resolving after unmount still pays its cleanup', async () => {
+    let resolveStart!: (d: () => void) => void;
+    const cleanup = vi.fn();
+    registerNativeHandler('test.scoped-late', {
+      activate: (scope) => {
+        scope.effect(() => new Promise<() => void>((r) => (resolveStart = r)), 'late-start');
+      },
+    });
+    const engine = new DeclarativeEngine({ doc: document });
+
+    engine.mount(makeManifest({}, 'test.scoped-late'));
+    engine.unmount('test.scoped-late');
+    resolveStart(cleanup);
+
+    await vi.waitFor(() => expect(cleanup).toHaveBeenCalledOnce());
+  });
+
+  it('a settings change restarts a scope handler that has no updateSettings', async () => {
+    const disposer = vi.fn();
+    const activate = vi.fn((scope: PluginScope) => {
+      scope.effect(() => disposer, 'restartable');
+    });
+    registerNativeHandler('test.scoped-restart', { activate });
+    const engine = new DeclarativeEngine({ doc: document });
+    const manifest = makeManifest(
+      { settings: { flag: { type: 'boolean', label: 'Flag', default: false } } },
+      'test.scoped-restart',
+    );
+
+    engine.mount(manifest, { flag: false });
+    engine.updateSettings('test.scoped-restart', { flag: true });
+
+    await vi.waitFor(() => expect(activate).toHaveBeenCalledTimes(2));
+    expect(disposer).toHaveBeenCalledOnce();
+    expect(activate).toHaveBeenLastCalledWith(expect.any(PluginScope), { flag: true });
+  });
+
+  it('a scope handler WITH updateSettings gets the update, not a restart', () => {
+    const updateSettings = vi.fn();
+    const activate = vi.fn();
+    registerNativeHandler('test.scoped-update', { activate, updateSettings });
+    const engine = new DeclarativeEngine({ doc: document });
+
+    engine.mount(makeManifest({}, 'test.scoped-update'), { a: 1 });
+    engine.updateSettings('test.scoped-update', { a: 2 });
+
+    expect(activate).toHaveBeenCalledOnce();
+    expect(updateSettings).toHaveBeenCalledWith({ a: 2 });
+  });
+
+  it('an unmount landing inside the restart window suppresses re-activation', async () => {
+    let releaseDisposal!: () => void;
+    const gate = new Promise<void>((r) => (releaseDisposal = r));
+    const activate = vi.fn((scope: PluginScope) => {
+      scope.effect(() => () => gate, 'slow-teardown');
+    });
+    registerNativeHandler('test.scoped-race', { activate });
+    const engine = new DeclarativeEngine({ doc: document });
+
+    engine.mount(makeManifest({}, 'test.scoped-race'));
+    engine.updateSettings('test.scoped-race', { changed: true });
+    engine.unmount('test.scoped-race');
+    releaseDisposal();
+
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(activate).toHaveBeenCalledOnce();
+  });
+
+  it('getScopeLedgers reports live effect labels per scope-based plugin', () => {
+    registerNativeHandler('test.scoped-ledger', {
+      activate: (scope: PluginScope) => {
+        scope.effect(() => () => {}, 'my-effect');
+      },
+    });
+    const engine = new DeclarativeEngine({ doc: document });
+    engine.mount(makeManifest({}, 'test.scoped-ledger'));
+
+    expect(engine.getScopeLedgers()).toEqual({ 'test.scoped-ledger': ['my-effect'] });
+
+    engine.unmount('test.scoped-ledger');
+    expect(engine.getScopeLedgers()).toEqual({});
+  });
+
+  it('a throwing activation rolls back what it already registered', async () => {
+    const registered = vi.fn();
+    registerNativeHandler('test.scoped-throw', {
+      activate: (scope) => {
+        scope.effect(() => registered, 'partial');
+        throw new Error('activation boom');
+      },
+    });
+    const engine = new DeclarativeEngine({ doc: document });
+
+    engine.mount(makeManifest({}, 'test.scoped-throw'));
+    await vi.waitFor(() => expect(registered).toHaveBeenCalledOnce());
   });
 
   it('addClass is reversible', () => {

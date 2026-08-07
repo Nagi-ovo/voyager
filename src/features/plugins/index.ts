@@ -33,17 +33,30 @@ export * from './types';
 
 let host: PluginHost | null = null;
 
+/**
+ * Debug: dump every scope-based plugin's live side-effect ledger. From the
+ * page console (extension context in DevTools):
+ *   document.dispatchEvent(new Event('gv:debug:pluginScopes'))
+ */
+export const PLUGIN_SCOPES_DEBUG_EVENT = 'gv:debug:pluginScopes';
+
+const dumpScopeLedgers = (): void => {
+  logger.info('Plugin scope ledgers', host?.getScopeLedgers() ?? {});
+};
+
 export function startPluginHost(): () => void {
   if (host) return () => {};
   try {
     host = new PluginHost();
     void host.start();
+    document.addEventListener(PLUGIN_SCOPES_DEBUG_EVENT, dumpScopeLedgers);
   } catch (error) {
     if (!isExtensionContextInvalidatedError(error)) {
       logger.error('startPluginHost failed', { error: String(error) });
     }
   }
   return () => {
+    document.removeEventListener(PLUGIN_SCOPES_DEBUG_EVENT, dumpScopeLedgers);
     host?.stop();
     host = null;
   };

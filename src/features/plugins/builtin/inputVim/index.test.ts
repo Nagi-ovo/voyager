@@ -1,6 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
-import { startInputVimPlugin, stopInputVimPlugin } from './index';
+import { PluginScope } from '../../runtime/pluginScope';
+import { activateInputVimPlugin } from './index';
 
 const mocks = vi.hoisted(() => ({
   startInputVimMode: vi.fn(),
@@ -11,33 +12,22 @@ vi.mock('@/pages/content/chatInput/vimMode', () => ({
 }));
 
 describe('input Vim builtin plugin lifecycle', () => {
-  beforeEach(() => {
-    stopInputVimPlugin();
-    vi.clearAllMocks();
-  });
-
-  afterEach(() => {
-    stopInputVimPlugin();
-  });
-
-  it('forces Vim on while the plugin is mounted and cleans up on unmount', async () => {
+  it('forces Vim on while the plugin is mounted and cleans up on scope disposal', async () => {
     const cleanup = vi.fn();
     mocks.startInputVimMode.mockResolvedValue(cleanup);
 
-    startInputVimPlugin();
+    const scope = new PluginScope();
+    activateInputVimPlugin(scope);
 
     expect(mocks.startInputVimMode).toHaveBeenCalledOnce();
     expect(mocks.startInputVimMode).toHaveBeenCalledWith({ forceEnabled: true });
-    await vi.waitFor(() => expect(mocks.startInputVimMode).toHaveResolved());
 
-    stopInputVimPlugin();
+    await scope.dispose();
     expect(cleanup).toHaveBeenCalledOnce();
   });
 
-  it('cleans up a late async start when the plugin was already disabled', async () => {
-    let resolveStart: (cleanup: () => void) => void = () => {
-      throw new Error('Expected deferred Vim start resolver.');
-    };
+  it('cleans up a late async start when the scope was already disposed', async () => {
+    let resolveStart!: (cleanup: () => void) => void;
     const cleanup = vi.fn();
     mocks.startInputVimMode.mockReturnValue(
       new Promise<() => void>((resolve) => {
@@ -45,10 +35,12 @@ describe('input Vim builtin plugin lifecycle', () => {
       }),
     );
 
-    startInputVimPlugin();
-    stopInputVimPlugin();
+    const scope = new PluginScope();
+    activateInputVimPlugin(scope);
+    const disposal = scope.dispose();
     resolveStart(cleanup);
 
-    await vi.waitFor(() => expect(cleanup).toHaveBeenCalledOnce());
+    await disposal;
+    expect(cleanup).toHaveBeenCalledOnce();
   });
 });

@@ -84,6 +84,12 @@ export interface CoachmarkConfig {
   focusOnOpen?: boolean;
   /** Set false to always show (ignores + does not record seen state). */
   once?: boolean;
+  /**
+   * Abort to close the coachmark from outside (e.g. the owning feature is
+   * being torn down). Settles as 'skipped' WITHOUT recording seen state, so
+   * an interrupted guide shows again next time.
+   */
+  signal?: AbortSignal;
 }
 
 const SEEN_KEY = StorageKeys.COACHMARKS_SEEN;
@@ -220,8 +226,9 @@ function positionBubble(bubble: HTMLElement, anchor: HTMLElement, prefer: 'top' 
 export async function showCoachmark(cfg: CoachmarkConfig): Promise<CoachmarkResult> {
   const once = cfg.once !== false;
   const focusOnOpen = cfg.focusOnOpen !== false;
-  if (activeId) return 'skipped';
+  if (activeId || cfg.signal?.aborted) return 'skipped';
   if (once && (await hasSeenCoachmark(cfg.id))) return 'skipped';
+  if (cfg.signal?.aborted) return 'skipped';
 
   // Reveal the preview first so the anchor exists and the eye is drawn to it.
   let revealEl: HTMLElement | null = null;
@@ -326,10 +333,13 @@ export async function showCoachmark(cfg: CoachmarkConfig): Promise<CoachmarkResu
     let settled = false;
     let toggleOn = cfg.toggle?.initial === true;
 
-    const settle = (result: CoachmarkResult, restoreFocus: boolean) => {
+    const onAbort = () => settle('skipped', false, false);
+
+    const settle = (result: CoachmarkResult, restoreFocus: boolean, recordSeen = true) => {
       if (settled) return;
       settled = true;
-      if (once) void markCoachmarkSeen(cfg.id);
+      if (once && recordSeen) void markCoachmarkSeen(cfg.id);
+      cfg.signal?.removeEventListener('abort', onAbort);
       window.removeEventListener('click', onOutside, true);
       window.removeEventListener('keydown', onKey, true);
       window.removeEventListener('resize', onReflow);
@@ -430,6 +440,15 @@ export async function showCoachmark(cfg: CoachmarkConfig): Promise<CoachmarkResu
       });
       footer.appendChild(dismiss);
       bubble.insertBefore(footer, arrow);
+    }
+
+    // External teardown: settle without recording seen state. Re-check the
+    // flag after registering — an abort that landed during the async seen
+    // lookup would otherwise be missed.
+    cfg.signal?.addEventListener('abort', onAbort);
+    if (cfg.signal?.aborted) {
+      onAbort();
+      return;
     }
 
     // Defer outside-click binding a tick so the opening interaction can't close it.

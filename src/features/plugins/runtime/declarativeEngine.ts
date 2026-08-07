@@ -39,6 +39,7 @@ import type {
   SiteAdapter,
 } from '../types';
 import { type NativeHandler, getNativeHandler } from './nativeHandlers';
+import { PluginScope } from './pluginScope';
 
 interface ActivePlugin {
   readonly manifest: PluginManifest;
@@ -47,6 +48,10 @@ interface ActivePlugin {
   settings: PluginSettings;
   /** First-party start/stop bound to a builtin plugin id (see nativeHandlers). */
   nativeHandler?: NativeHandler;
+  /** Side-effect ledger for a scope-based (`activate`) native handler. */
+  scope?: PluginScope;
+  /** Serializes settings-driven scope restarts (dispose → re-activate). */
+  scopeRestart?: Promise<void>;
 }
 
 /**
@@ -92,6 +97,15 @@ export class DeclarativeEngine {
     return this.active.size;
   }
 
+  /** Live side-effect ledger per scope-based plugin — debug/leak inspection. */
+  getScopeLedgers(): Record<string, readonly string[]> {
+    const ledgers: Record<string, readonly string[]> = {};
+    for (const [id, entry] of this.active) {
+      if (entry.scope) ledgers[id] = entry.scope.getEffects();
+    }
+    return ledgers;
+  }
+
   isActive(id: string): boolean {
     return this.active.has(id);
   }
@@ -104,9 +118,15 @@ export class DeclarativeEngine {
     this.active.set(manifest.id, entry);
     this.injectStyles(entry);
     this.applyDomOps(entry);
-    // First-party builtin plugins (e.g. formula copy) run JS via a registered
-    // native handler, in lockstep with the declarative lifecycle.
-    entry.nativeHandler?.start?.(settings);
+    // First-party builtin plugins run JS via a registered native handler, in
+    // lockstep with the declarative lifecycle. Scope-based handlers get a
+    // fresh PluginScope per mount; a failed (sync or async) activation pays
+    // back whatever it already registered instead of leaving a half-mount.
+    if (entry.nativeHandler?.activate) {
+      this.activateScope(entry, settings);
+    } else {
+      entry.nativeHandler?.start?.(settings);
+    }
     this.syncObserver();
     logger.info('Plugin mounted', { id: manifest.id });
   }
@@ -119,14 +139,65 @@ export class DeclarativeEngine {
     if (entry.styleEl) entry.styleEl.textContent = this.renderCss(entry);
     this.releasePlugin(id);
     this.applyDomOps(entry);
-    entry.nativeHandler?.updateSettings?.(settings);
+    const handler = entry.nativeHandler;
+    if (handler?.updateSettings) {
+      handler.updateSettings(settings);
+    } else if (handler?.activate) {
+      // Restart-by-default: with no fine-grained updater, correctness comes
+      // from a full dispose + re-activate under the new settings. Safe by
+      // construction — the scope guarantees complete teardown. Plugins with
+      // expensive state opt out by implementing updateSettings.
+      this.restartScope(entry, settings);
+    }
+  }
+
+  /** Create a fresh scope for a scope-based handler and run its activation.
+   *  A failed (sync or async) activation pays back whatever it registered. */
+  private activateScope(entry: ActivePlugin, settings: PluginSettings): void {
+    const handler = entry.nativeHandler;
+    if (!handler?.activate) return;
+    const scope = new PluginScope();
+    entry.scope = scope;
+    try {
+      const result = handler.activate(scope, settings);
+      if (result instanceof Promise) {
+        result.catch((error) => {
+          logger.error('Plugin activation failed', {
+            id: entry.manifest.id,
+            error: String(error),
+          });
+          void scope.dispose();
+        });
+      }
+    } catch (error) {
+      logger.error('Plugin activation failed', { id: entry.manifest.id, error: String(error) });
+      void scope.dispose();
+    }
+  }
+
+  /** Dispose the current scope, then re-activate under the new settings.
+   *  Serialized per plugin; superseded or unmounted restarts re-activate
+   *  nothing (the settings identity check spots a newer update). */
+  private restartScope(entry: ActivePlugin, settings: PluginSettings): void {
+    const previous = entry.scope;
+    entry.scope = undefined;
+    entry.scopeRestart = (entry.scopeRestart ?? Promise.resolve()).then(async () => {
+      await previous?.dispose();
+      if (this.active.get(entry.manifest.id) !== entry) return;
+      if (entry.settings !== settings) return;
+      this.activateScope(entry, settings);
+    });
   }
 
   unmount(id: string): void {
     const entry = this.active.get(id);
     if (!entry) return;
 
-    entry.nativeHandler?.stop?.();
+    // Scope disposal is async (it awaits in-flight startup and async
+    // disposers) but claim-once: firing it here and moving on is safe — no
+    // effect can double-run or leak, and a remount gets a fresh scope.
+    if (entry.scope) void entry.scope.dispose();
+    else entry.nativeHandler?.stop?.();
     entry.styleEl?.remove();
     this.releasePlugin(id);
 

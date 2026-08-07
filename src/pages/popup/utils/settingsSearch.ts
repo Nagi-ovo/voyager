@@ -6,6 +6,10 @@ export interface SettingsSearchItem<Id extends string> {
   aliases?: readonly string[];
 }
 
+export function normalizePersistedSettingsSearchQuery(value: unknown): string {
+  return typeof value === 'string' ? value : '';
+}
+
 export function normalizeSearchText(value: string): string {
   return value
     .normalize('NFKD')

@@ -95,6 +95,7 @@ describe('watermarkRemover runtime toggle', () => {
       },
     );
     vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:processed-preview');
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
     vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue(
       'data:image/png;base64,cHJvY2Vzc2Vk',
     );

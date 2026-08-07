@@ -3,13 +3,14 @@ import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 
 const owner = 'Nagi-ovo';
-const repo = 'gemini-voyager';
+const repo = 'voyager';
+const badgeColor = '#5f8f55';
 const outDirs = [new URL('../docs/public/badges/', import.meta.url)];
 const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
 
 const headers = {
   Accept: 'application/vnd.github+json',
-  'User-Agent': 'gemini-voyager-readme-badges',
+  'User-Agent': 'voyager-readme-badges',
   'X-GitHub-Api-Version': '2022-11-28',
   ...(token ? { Authorization: `Bearer ${token}` } : {}),
 };
@@ -124,10 +125,10 @@ async function main() {
   }, 0);
 
   const badges = {
-    'github-stars.svg': renderBadge('stars', formatCount(repository.stargazers_count), '#2ea44f'),
-    'github-forks.svg': renderBadge('forks', formatCount(repository.forks_count), '#2ea44f'),
-    'github-release.svg': renderBadge('release', latestRelease?.tag_name || 'none', '#2ea44f'),
-    'github-downloads.svg': renderBadge('downloads', formatCount(downloads), '#2ea44f'),
+    'github-stars.svg': renderBadge('stars', formatCount(repository.stargazers_count), badgeColor),
+    'github-forks.svg': renderBadge('forks', formatCount(repository.forks_count), badgeColor),
+    'github-release.svg': renderBadge('release', latestRelease?.tag_name || 'none', badgeColor),
+    'github-downloads.svg': renderBadge('downloads', formatCount(downloads), badgeColor),
   };
 
   await Promise.all(outDirs.map((outDir) => mkdir(outDir, { recursive: true })));
@@ -145,7 +146,7 @@ function selfTest() {
   assert.equal(formatCount(1200), '1.2k');
   assert.equal(formatCount(12345), '12k');
   assert.equal(formatCount(1234567), '1.2M');
-  assert.match(renderBadge('stars', '1.2k', '#2ea44f'), /aria-label="stars: 1\.2k"/);
+  assert.match(renderBadge('stars', '1.2k', badgeColor), /aria-label="stars: 1\.2k"/);
 }
 
 if (process.argv.includes('--self-test')) {

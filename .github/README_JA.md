@@ -14,10 +14,10 @@
     <img src="https://img.shields.io/badge/Brave-✓-FB542B?style=flat-square&logo=brave&logoColor=white" alt="Brave">
   </p>
   <p>
-    <img src="../docs/public/badges/github-stars.svg" alt="GitHub Star">
-    <img src="../docs/public/badges/github-forks.svg" alt="GitHub Fork">
-    <img src="../docs/public/badges/github-release.svg" alt="最新バージョン">
-    <img src="../docs/public/badges/github-downloads.svg" alt="GitHub ダウンロード数">
+    <img src="https://voyager.nagi.fun/badges/github-stars.svg" alt="GitHub Star">
+    <img src="https://voyager.nagi.fun/badges/github-forks.svg" alt="GitHub Fork">
+    <img src="https://voyager.nagi.fun/badges/github-release.svg" alt="最新バージョン">
+    <img src="https://voyager.nagi.fun/badges/github-downloads.svg" alt="GitHub ダウンロード数">
     <img src="https://img.shields.io/chrome-web-store/users/iifacdnjakkhjjiengaffnegbndgingi?style=flat-square&logo=google-chrome" alt="Chrome ユーザー数">
     <img src="https://img.shields.io/chrome-web-store/rating/iifacdnjakkhjjiengaffnegbndgingi?style=flat-square&logo=google-chrome" alt="Chrome 評価">
     <img src="https://img.shields.io/badge/edge%20users-50k%2B-0078D7?style=flat-square&logo=microsoftedge&logoColor=white" alt="Edge ユーザー数">
@@ -256,6 +256,8 @@ Voyager に貢献してくださったすべてのコントリビューターに
 - **[gemini-watermark-remover](https://github.com/journey-ad/gemini-watermark-remover) / [GeminiWatermarkTool](https://github.com/allenk/GeminiWatermarkTool)** - Image Refinement はこれらのプロジェクトをもとに適応されています。関連する第三者の MIT notice は [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md) に記載しています。
 
 - **[Gemini Helper](https://github.com/urzeye/tampermonkey-scripts)** - デフォルトモデル固定機能の一部のインタラクション設計は Gemini Helper を参考にしており、ソースコード上にも attribution を残しています。
+
+- **[cordis](https://github.com/cordiverse/cordis)** - プラグインランタイムの副作用台帳（`PluginScope`）は、cordis の fiber モデルにおける effect／破棄ライフサイクル設計を参考にしています。
 
 ## 🌍 エコシステム
 

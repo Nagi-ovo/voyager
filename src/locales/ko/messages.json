@@ -19,6 +19,10 @@
     "message": "컴팩트",
     "description": "컴팩트 타임라인 인덱스 스타일"
   },
+  "timelineStyleRuler": {
+    "message": "눈금",
+    "description": "타임라인 눈금 스타일"
+  },
   "timelineCompactOpenPreview": {
     "message": "타임라인 미리보기 열기",
     "description": "컴팩트 타임라인 레일의 접근성 레이블"
@@ -1649,6 +1653,10 @@
     "message": "실패",
     "description": "Status prefix when download fails"
   },
+  "googleImageCorrupted": {
+    "message": "Google에서 반환한 원본 이미지가 손상되었습니다(Voyager로 인한 문제가 아닙니다). 다운로드한 이미지가 흐리거나 일부 내용이 누락될 수 있습니다",
+    "description": "Google 다운로드 이미지가 미리보기와 일치하지 않을 때 표시되는 경고"
+  },
   "gemsHide": {
     "message": "Gem 숨기기",
     "description": "Tooltip for hiding Gems list section"
@@ -2416,6 +2424,30 @@
   "conversationSortCoachmarkBody": {
     "message": "‘수동 정렬’은 드래그하여 정한 순서를 유지합니다. ‘최근에 연 항목’은 방금 방문한 대화를 위로 올립니다. 폴더 설정에서 언제든 전환할 수 있습니다.",
     "description": "Coachmark body explaining manual and recently opened conversation sorting"
+  },
+  "timelineRulerCoachmarkTitle": {
+    "message": "새 기능: 눈금 타임라인",
+    "description": "Coachmark title introducing the ruler timeline style"
+  },
+  "timelineRulerCoachmarkBody": {
+    "message": "컴팩트한 신호 묶음이 읽는 위치를 따라 움직입니다. 눈금에 마우스를 올리면 질문과 답변을 즉시 미리 볼 수 있습니다.",
+    "description": "Coachmark body text introducing the ruler timeline style"
+  },
+  "timelineRulerCoachmarkToggle": {
+    "message": "눈금 타임라인 사용",
+    "description": "Inline toggle label in the ruler-timeline coachmark"
+  },
+  "folderActivityCoachmarkTitle": {
+    "message": "새 기능: Activity 보기",
+    "description": "Coachmark title introducing the folder Activity view"
+  },
+  "folderActivityCoachmarkBody": {
+    "message": "진행 중인 대화를 우선순위, 오늘, 최근 날짜별로 모아 보여 주며 기존 폴더 위치는 바꾸지 않습니다.",
+    "description": "Coachmark body text introducing the folder Activity view"
+  },
+  "folderActivityCoachmarkToggle": {
+    "message": "Activity 보기 사용",
+    "description": "Inline toggle label in the folder-Activity coachmark"
   },
   "timelineCoachmarkTitle": {
     "message": "신규: 컴팩트 타임라인",

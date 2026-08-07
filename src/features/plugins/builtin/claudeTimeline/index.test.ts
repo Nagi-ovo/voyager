@@ -100,8 +100,8 @@ describe('Claude timeline', () => {
     Object.defineProperty(window, 'scrollY', { configurable: true, value: 0 });
   });
 
-  afterEach(() => {
-    stopClaudeTimeline();
+  afterEach(async () => {
+    await stopClaudeTimeline();
     vi.useRealTimers();
   });
 
@@ -627,13 +627,23 @@ describe('Claude timeline', () => {
     queryAll.mockRestore();
   });
 
+  it('rolls back data-gv-claude-turn-id stamps on stop', async () => {
+    addTurn('first prompt');
+    startClaudeTimeline();
+    await flush();
+    expect(document.querySelectorAll('[data-gv-claude-turn-id]').length).toBeGreaterThan(0);
+
+    await stopClaudeTimeline();
+    expect(document.querySelectorAll('[data-gv-claude-turn-id]').length).toBe(0);
+  });
+
   it('removes UI on stop', async () => {
     addTurn('first prompt');
     startClaudeTimeline();
     await flush();
     expect(document.querySelector('.gemini-timeline-bar')).toBeTruthy();
 
-    stopClaudeTimeline();
+    await stopClaudeTimeline();
     expect(document.querySelector('.gemini-timeline-bar')).toBeNull();
     expect(document.querySelector('.timeline-preview-toggle')).toBeNull();
     expect(document.querySelector('#claude-timeline-tooltip')).toBeNull();

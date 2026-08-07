@@ -240,6 +240,47 @@ describe('showCoachmark', () => {
     expect(await hasSeenCoachmark('missing-anchor')).toBe(false);
   });
 
+  it('an aborted signal closes the guide as skipped WITHOUT marking it seen', async () => {
+    const anchor = document.createElement('div');
+    document.body.appendChild(anchor);
+    const controller = new AbortController();
+
+    const pending = showCoachmark({
+      id: 'abortable',
+      anchor: () => anchor,
+      body: 'intro',
+      signal: controller.signal,
+    });
+    await flush();
+    expect(document.querySelector('.gv-coach')).not.toBeNull();
+
+    controller.abort();
+    const result = await pending;
+
+    expect(result).toBe('skipped');
+    expect(await hasSeenCoachmark('abortable')).toBe(false);
+    await new Promise((r) => setTimeout(r, 300));
+    expect(document.querySelector('.gv-coach')).toBeNull();
+  });
+
+  it('an already-aborted signal skips before any DOM is created', async () => {
+    const anchor = document.createElement('div');
+    document.body.appendChild(anchor);
+    const controller = new AbortController();
+    controller.abort();
+
+    const result = await showCoachmark({
+      id: 'pre-aborted',
+      anchor: () => anchor,
+      body: 'intro',
+      signal: controller.signal,
+    });
+
+    expect(result).toBe('skipped');
+    expect(document.querySelector('.gv-coach')).toBeNull();
+    expect(await hasSeenCoachmark('pre-aborted')).toBe(false);
+  });
+
   it('keeps the guide open while switching and confirms the selected state with Done', async () => {
     const anchor = document.createElement('div');
     document.body.appendChild(anchor);

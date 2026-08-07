@@ -1,5 +1,6 @@
 import { StorageKeys, type TimelineStyle } from '@/core/types/common';
 import { hashString } from '@/core/utils/hash';
+import { type Dispose, PluginScope } from '@/features/plugins/runtime/pluginScope';
 import { setPluginSetting } from '@/features/plugins/storage/pluginState';
 import type { PluginSettings } from '@/features/plugins/types';
 import { StarredMessagesService } from '@/pages/content/timeline/StarredMessagesService';
@@ -76,14 +77,14 @@ class ClaudeTimeline {
   private trackContent: HTMLElement | null = null;
   private tooltip: HTMLElement | null = null;
   private previewPanel: TimelinePreviewPanel | null = null;
-  private observer: MutationObserver | null = null;
+  private observing = false;
   private markers: Marker[] = [];
   private markerCenters: number[] = [];
   private conversationId = '';
   private starredByHash = new Map<string, { turnId: string; starredAt: number }>();
-  private refreshTimer: number | null = null;
-  private longPressTimer: number | null = null;
-  private tooltipTimer: number | null = null;
+  private stopRefreshTimer: Dispose | null = null;
+  private stopLongPressTimer: Dispose | null = null;
+  private stopTooltipTimer: Dispose | null = null;
   private longPressDot: Dot | null = null;
   private suppressClickUntil = 0;
   private activeTurnId: string | null = null;
@@ -91,27 +92,40 @@ class ClaudeTimeline {
   private navigationActiveLockUntil = 0;
   private pendingNavigationId: string | null = null;
   private pendingNavigationUntil = 0;
-  private pendingNavigationTimer: number | null = null;
+  private stopPendingNavigationTimer: Dispose | null = null;
+  private stopUserScrollListeners: Dispose[] = [];
   private pendingNavigationLo = 0;
   private pendingNavigationHi = 0;
   private pendingNavigationProbed = false;
   private lastHandledHash: string | null = null;
   private scrollTarget: HTMLElement | Window | null = null;
-  private storageListener:
-    | ((changes: Record<string, chrome.storage.StorageChange>, areaName: string) => void)
-    | null = null;
-  private destroyed = false;
+  private stopScrollListener: Dispose | null = null;
+
+  constructor(private readonly scope: PluginScope) {}
+
+  private get disposed(): boolean {
+    return this.scope.isDisposed;
+  }
 
   async start(settings: PluginSettings = {}): Promise<void> {
     this.updateSettings(settings);
+    // Markers stamp `data-gv-claude-turn-id` onto Claude's own turn nodes;
+    // roll every stamp back when the plugin unmounts.
+    this.scope.effect(
+      () => () =>
+        document
+          .querySelectorAll('[data-gv-claude-turn-id]')
+          .forEach((element) => element.removeAttribute('data-gv-claude-turn-id')),
+      'turn-id-attrs',
+    );
     await initI18n().catch(() => {});
-    if (this.destroyed) return;
+    if (this.disposed) return;
     this.ensureUi();
     await this.refresh();
-    if (this.destroyed) return;
+    if (this.disposed) return;
     this.observe();
-    window.addEventListener('hashchange', this.handleHash);
-    window.addEventListener('resize', this.handleResize);
+    this.scope.on(window, 'hashchange', this.handleHash);
+    this.scope.on(window, 'resize', this.handleResize);
     this.maybeShowStyleCoachmark();
   }
 
@@ -124,57 +138,36 @@ class ClaudeTimeline {
   }
 
   private maybeShowStyleCoachmark(): void {
-    if (this.destroyed || this.timelineStyle === 'compact') return;
+    if (this.disposed || this.timelineStyle === 'compact') return;
     void showTimelineStyleCoachmark({
       id: CLAUDE_TIMELINE_COACHMARK_ID,
       enabled: false,
+      // A disposed scope aborts the signal, closing an in-flight guide.
+      signal: this.scope.signal,
       onStyleChange: async (compact) => {
-        if (this.destroyed) return;
+        if (this.disposed) return;
         this.updateSettings({ [COMPACT_VIEW_SETTING]: compact });
         await setPluginSetting(CLAUDE_TIMELINE_PLUGIN_ID, COMPACT_VIEW_SETTING, compact);
       },
     });
   }
 
-  destroy(): void {
-    this.destroyed = true;
-    if (this.refreshTimer !== null) clearTimeout(this.refreshTimer);
-    if (this.tooltipTimer !== null) clearTimeout(this.tooltipTimer);
-    this.clearPendingNavigation();
-    this.cancelLongPress();
-    this.observer?.disconnect();
-    this.observer = null;
-    this.setScrollTarget(null);
-    window.removeEventListener('hashchange', this.handleHash);
-    window.removeEventListener('resize', this.handleResize);
-    if (this.storageListener && chrome.storage?.onChanged) {
-      chrome.storage.onChanged.removeListener(this.storageListener);
-    }
-    this.storageListener = null;
-    this.previewPanel?.destroy();
-    this.previewPanel = null;
-    this.tooltip?.remove();
-    this.tooltip = null;
-    this.bar?.remove();
-    this.bar = null;
-    this.trackContent = null;
-    this.markers = [];
-  }
-
   private observe(): void {
-    if (!document.body || this.observer) return;
-    this.observer = new MutationObserver((records) => {
+    if (!document.body || this.observing) return;
+    this.observing = true;
+    this.scope.observe(document.body, { childList: true, subtree: true }, (records) => {
       if (!records.some((record) => this.shouldRefreshForMutation(record))) return;
       this.scheduleRefresh();
     });
-    this.observer.observe(document.body, { childList: true, subtree: true });
 
-    if (chrome.storage?.onChanged && !this.storageListener) {
-      this.storageListener = (changes, areaName) => {
-        if (areaName !== 'local' || !changes[StorageKeys.TIMELINE_STARRED_MESSAGES]) return;
-        void this.loadStars(true).then(() => this.applyStarredState());
-      };
-      chrome.storage.onChanged.addListener(this.storageListener);
+    if (chrome.storage?.onChanged) {
+      this.scope.onChromeEvent(
+        chrome.storage.onChanged,
+        (changes: Record<string, chrome.storage.StorageChange>, areaName: string) => {
+          if (areaName !== 'local' || !changes[StorageKeys.TIMELINE_STARRED_MESSAGES]) return;
+          void this.loadStars(true).then(() => this.applyStarredState());
+        },
+      );
     }
   }
 
@@ -234,19 +227,20 @@ class ClaudeTimeline {
       content.className = 'timeline-track-content';
       track.appendChild(content);
       bar.appendChild(track);
-      document.body.appendChild(bar);
+      this.scope.mount(bar, document.body);
     }
     this.bar = bar;
     this.trackContent = bar.querySelector('.timeline-track-content') as HTMLElement | null;
     if (!this.tooltip) {
-      this.tooltip = document.createElement('div');
-      this.tooltip.id = 'claude-timeline-tooltip';
-      this.tooltip.className = 'timeline-tooltip';
-      this.tooltip.setAttribute('aria-hidden', 'true');
+      const tooltip = document.createElement('div');
+      tooltip.id = 'claude-timeline-tooltip';
+      tooltip.className = 'timeline-tooltip';
+      tooltip.setAttribute('aria-hidden', 'true');
       const text = document.createElement('div');
       text.className = 'claude-timeline-tooltip-text';
-      this.tooltip.appendChild(text);
-      document.body.appendChild(this.tooltip);
+      tooltip.appendChild(text);
+      this.scope.mount(tooltip, document.body);
+      this.tooltip = tooltip;
     }
     if (!this.previewPanel) {
       this.previewPanel = new TimelinePreviewPanel(bar);
@@ -255,6 +249,8 @@ class ClaudeTimeline {
         undefined,
         (turnId) => this.toggleStar(turnId),
       );
+      // The panel manages its own timers/listeners/DOM; adopt its destroy().
+      this.scope.child(this.previewPanel, 'preview-panel');
     }
     this.applyTimelineStyle();
   }
@@ -274,19 +270,20 @@ class ClaudeTimeline {
   }
 
   private scheduleRefresh(): void {
-    if (this.refreshTimer !== null) clearTimeout(this.refreshTimer);
-    this.refreshTimer = window.setTimeout(() => {
-      this.refreshTimer = null;
+    if (this.disposed) return;
+    void this.stopRefreshTimer?.();
+    this.stopRefreshTimer = this.scope.timer(() => {
+      this.stopRefreshTimer = null;
       void this.refresh();
     }, REFRESH_DELAY_MS);
   }
 
   private async refresh(): Promise<void> {
-    if (this.destroyed) return;
+    if (this.disposed) return;
     this.ensureUi();
     if (buildClaudeConversationId() !== this.conversationId) this.resetConversationState();
     await this.loadStars();
-    if (this.destroyed) return;
+    if (this.disposed) return;
     const previousIds = this.markers.map((marker) => marker.id);
     const turns = Array.from(document.querySelectorAll<HTMLElement>(USER_MESSAGE_SELECTOR));
     if (turns[0]) this.setScrollTarget(this.getScrollTarget(turns[0]));
@@ -475,10 +472,11 @@ class ClaudeTimeline {
 
   private startLongPress(dot: Dot): void {
     this.cancelLongPress();
+    if (this.disposed) return;
     this.longPressDot = dot;
     dot.classList.add('holding');
-    this.longPressTimer = window.setTimeout(() => {
-      this.longPressTimer = null;
+    this.stopLongPressTimer = this.scope.timer(() => {
+      this.stopLongPressTimer = null;
       this.suppressClickUntil = Date.now() + 350;
       const id = dot.dataset.targetTurnId;
       if (id) void this.toggleStar(id);
@@ -487,8 +485,8 @@ class ClaudeTimeline {
   }
 
   private cancelLongPress(): void {
-    if (this.longPressTimer !== null) clearTimeout(this.longPressTimer);
-    this.longPressTimer = null;
+    void this.stopLongPressTimer?.();
+    this.stopLongPressTimer = null;
     this.longPressDot?.classList.remove('holding');
     this.longPressDot = null;
   }
@@ -556,9 +554,10 @@ class ClaudeTimeline {
   }
 
   private scheduleTooltip(dot: Dot): void {
-    if (this.tooltipTimer !== null) clearTimeout(this.tooltipTimer);
-    this.tooltipTimer = window.setTimeout(() => {
-      this.tooltipTimer = null;
+    if (this.disposed) return;
+    void this.stopTooltipTimer?.();
+    this.stopTooltipTimer = this.scope.timer(() => {
+      this.stopTooltipTimer = null;
       this.showTooltip(dot);
     }, TOOLTIP_DELAY_MS);
   }
@@ -593,8 +592,8 @@ class ClaudeTimeline {
   }
 
   private hideTooltip(): void {
-    if (this.tooltipTimer !== null) clearTimeout(this.tooltipTimer);
-    this.tooltipTimer = null;
+    void this.stopTooltipTimer?.();
+    this.stopTooltipTimer = null;
     this.tooltip?.classList.remove('visible');
     this.tooltip?.setAttribute('aria-hidden', 'true');
   }
@@ -640,9 +639,14 @@ class ClaudeTimeline {
 
   private setScrollTarget(target: HTMLElement | Window | null): void {
     if (this.scrollTarget === target) return;
-    this.scrollTarget?.removeEventListener('scroll', this.updateActiveFromScroll);
+    void this.stopScrollListener?.();
+    this.stopScrollListener = null;
     this.scrollTarget = target;
-    this.scrollTarget?.addEventListener('scroll', this.updateActiveFromScroll, { passive: true });
+    if (target && !this.disposed) {
+      this.stopScrollListener = this.scope.on(target, 'scroll', this.updateActiveFromScroll, {
+        passive: true,
+      });
+    }
   }
 
   private findMarker(turnId: string): Marker | undefined {
@@ -692,20 +696,20 @@ class ClaudeTimeline {
       marker.center + this.getViewportHeight(),
     );
     this.pendingNavigationProbed = false;
-    window.addEventListener('wheel', this.cancelPendingNavigationOnUserScroll, { passive: true });
-    window.addEventListener('touchmove', this.cancelPendingNavigationOnUserScroll, {
-      passive: true,
-    });
+    if (this.disposed) return;
+    this.stopUserScrollListeners = [
+      this.scope.on(window, 'wheel', this.cancelPendingNavigationOnUserScroll, { passive: true }),
+      this.scope.on(window, 'touchmove', this.cancelPendingNavigationOnUserScroll, {
+        passive: true,
+      }),
+    ];
   }
 
   private clearPendingNavigation(): void {
     this.pendingNavigationId = null;
-    if (this.pendingNavigationTimer !== null) {
-      clearTimeout(this.pendingNavigationTimer);
-      this.pendingNavigationTimer = null;
-    }
-    window.removeEventListener('wheel', this.cancelPendingNavigationOnUserScroll);
-    window.removeEventListener('touchmove', this.cancelPendingNavigationOnUserScroll);
+    void this.stopPendingNavigationTimer?.();
+    this.stopPendingNavigationTimer = null;
+    for (const stop of this.stopUserScrollListeners.splice(0)) void stop();
   }
 
   private cancelPendingNavigationOnUserScroll = (): void => {
@@ -719,8 +723,8 @@ class ClaudeTimeline {
    * point. Once the turn's element is back in the DOM, aim precisely.
    */
   private homePendingNavigation = (): void => {
-    this.pendingNavigationTimer = null;
-    if (!this.pendingNavigationId || this.destroyed) return;
+    this.stopPendingNavigationTimer = null;
+    if (!this.pendingNavigationId || this.disposed) return;
     if (Date.now() > this.pendingNavigationUntil) {
       this.clearPendingNavigation();
       return;
@@ -804,8 +808,8 @@ class ClaudeTimeline {
   };
 
   private schedulePendingNavigationHop(): void {
-    if (this.pendingNavigationTimer !== null) return;
-    this.pendingNavigationTimer = window.setTimeout(
+    if (this.stopPendingNavigationTimer !== null || this.disposed) return;
+    this.stopPendingNavigationTimer = this.scope.timer(
       this.homePendingNavigation,
       PENDING_NAVIGATION_HOP_MS,
     );
@@ -950,21 +954,39 @@ class ClaudeTimeline {
 }
 
 let instance: ClaudeTimeline | null = null;
+/** Scope owned by the legacy start/stop wrappers (tests + non-engine callers). */
+let standaloneScope: PluginScope | null = null;
+
+/** Native lifecycle for the voyager.claude-timeline builtin plugin. */
+export function activateClaudeTimeline(scope: PluginScope, settings: PluginSettings = {}): void {
+  const timeline = new ClaudeTimeline(scope);
+  instance = timeline;
+  scope.effect(() => {
+    return () => {
+      if (instance === timeline) instance = null;
+    };
+  }, 'instance');
+  // Startup registers as a pending effect: dispose() barriers on it, and a
+  // mid-startup unmount is handled by the scope instead of a destroyed flag.
+  scope.effect(() => timeline.start(settings).then(() => () => {}), 'claude-timeline-start');
+}
+
+/** Fine-grained settings path — keeps grow-only markers and rail DOM intact. */
+export function updateClaudeTimelineSettings(settings: PluginSettings): void {
+  instance?.updateSettings(settings);
+}
 
 export function startClaudeTimeline(settings: PluginSettings = {}): void {
   if (instance) {
     instance.updateSettings(settings);
     return;
   }
-  instance = new ClaudeTimeline();
-  void instance.start(settings);
+  standaloneScope = new PluginScope();
+  activateClaudeTimeline(standaloneScope, settings);
 }
 
-export function updateClaudeTimelineSettings(settings: PluginSettings): void {
-  instance?.updateSettings(settings);
-}
-
-export function stopClaudeTimeline(): void {
-  instance?.destroy();
-  instance = null;
+export function stopClaudeTimeline(): Promise<void> {
+  const disposal = standaloneScope?.dispose() ?? Promise.resolve();
+  standaloneScope = null;
+  return disposal;
 }

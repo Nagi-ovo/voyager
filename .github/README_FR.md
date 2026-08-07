@@ -14,10 +14,10 @@
     <img src="https://img.shields.io/badge/Brave-✓-FB542B?style=flat-square&logo=brave&logoColor=white" alt="Brave">
   </p>
   <p>
-    <img src="../docs/public/badges/github-stars.svg" alt="GitHub stars">
-    <img src="../docs/public/badges/github-forks.svg" alt="GitHub forks">
-    <img src="../docs/public/badges/github-release.svg" alt="Latest version">
-    <img src="../docs/public/badges/github-downloads.svg" alt="GitHub downloads">
+    <img src="https://voyager.nagi.fun/badges/github-stars.svg" alt="GitHub stars">
+    <img src="https://voyager.nagi.fun/badges/github-forks.svg" alt="GitHub forks">
+    <img src="https://voyager.nagi.fun/badges/github-release.svg" alt="Latest version">
+    <img src="https://voyager.nagi.fun/badges/github-downloads.svg" alt="GitHub downloads">
     <img src="https://img.shields.io/chrome-web-store/users/iifacdnjakkhjjiengaffnegbndgingi?style=flat-square&logo=google-chrome" alt="Chrome Web Store users">
     <img src="https://img.shields.io/chrome-web-store/rating/iifacdnjakkhjjiengaffnegbndgingi?style=flat-square&logo=google-chrome" alt="Chrome Web Store rating">
     <img src="https://img.shields.io/badge/edge%20users-50k%2B-0078D7?style=flat-square&logo=microsoftedge&logoColor=white" alt="Edge Add-ons users">
@@ -235,6 +235,8 @@ Un grand merci à tous les contributeurs pour leurs contributions à Voyager ❤
 - **[gemini-watermark-remover](https://github.com/journey-ad/gemini-watermark-remover) / [GeminiWatermarkTool](https://github.com/allenk/GeminiWatermarkTool)** - Image Refinement est adapté de ces projets. Les mentions MIT tierces conservées figurent dans [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md).
 
 - **[Gemini Helper](https://github.com/urzeye/tampermonkey-scripts)** - La logique de verrouillage du modèle par défaut inclut des idées d’interaction adaptées de Gemini Helper, avec une attribution conservée dans le code source.
+
+- **[cordis](https://github.com/cordiverse/cordis)** - Le registre d'effets du runtime de plugins (`PluginScope`) s'inspire du cycle de vie effet/libération du modèle fiber de cordis.
 
 ## 🌍 Écosystème
 

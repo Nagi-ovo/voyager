@@ -14,10 +14,10 @@
     <img src="https://img.shields.io/badge/Brave-✓-FB542B?style=flat-square&logo=brave&logoColor=white" alt="Brave">
   </p>
   <p>
-    <img src="../docs/public/badges/github-stars.svg" alt="GitHub stars">
-    <img src="../docs/public/badges/github-forks.svg" alt="GitHub forks">
-    <img src="../docs/public/badges/github-release.svg" alt="Latest version">
-    <img src="../docs/public/badges/github-downloads.svg" alt="GitHub downloads">
+    <img src="https://voyager.nagi.fun/badges/github-stars.svg" alt="GitHub stars">
+    <img src="https://voyager.nagi.fun/badges/github-forks.svg" alt="GitHub forks">
+    <img src="https://voyager.nagi.fun/badges/github-release.svg" alt="Latest version">
+    <img src="https://voyager.nagi.fun/badges/github-downloads.svg" alt="GitHub downloads">
     <img src="https://img.shields.io/chrome-web-store/users/iifacdnjakkhjjiengaffnegbndgingi?style=flat-square&logo=google-chrome" alt="Chrome Web Store users">
     <img src="https://img.shields.io/chrome-web-store/rating/iifacdnjakkhjjiengaffnegbndgingi?style=flat-square&logo=google-chrome" alt="Chrome Web Store rating">
     <img src="https://img.shields.io/badge/edge%20users-50k%2B-0078D7?style=flat-square&logo=microsoftedge&logoColor=white" alt="Edge Add-ons users">
@@ -241,6 +241,8 @@ Um agradecimento especial a todos os colaboradores pelas suas contribuições ao
 - **[gemini-watermark-remover](https://github.com/journey-ad/gemini-watermark-remover) / [GeminiWatermarkTool](https://github.com/allenk/GeminiWatermarkTool)** - O Image Refinement foi adaptado destes projetos. Os avisos MIT de terceiros retidos estão em [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md).
 
 - **[Gemini Helper](https://github.com/urzeye/tampermonkey-scripts)** - A lógica de bloqueio do modelo padrão inclui ideias de interação adaptadas do Gemini Helper, com atribuição mantida no código-fonte.
+
+- **[cordis](https://github.com/cordiverse/cordis)** - O livro-razão de efeitos do runtime de plugins (`PluginScope`) baseia seu ciclo de vida de efeitos e descarte no modelo fiber do cordis.
 
 ## 🌍 Ecossistema
 

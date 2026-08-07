@@ -21,20 +21,72 @@ function createEnabledBridge(): HTMLElement {
   return bridge;
 }
 
+function createDisabledBridge(): HTMLElement {
+  const bridge = document.createElement('div');
+  bridge.id = BRIDGE_ID;
+  bridge.dataset.enabled = 'false';
+  document.documentElement.appendChild(bridge);
+  return bridge;
+}
+
 function createMockFetchResponse(body = 'ok', init: ResponseInit = { status: 200 }): Response {
   const response = new Response(body, init);
   vi.spyOn(response, 'blob').mockResolvedValue(new window.Blob([body]));
   return response;
 }
 
-async function waitForBridgeRequest(bridge: HTMLElement): Promise<string> {
-  for (let i = 0; i < 20; i += 1) {
-    if (bridge.dataset.request) {
-      return bridge.dataset.request;
-    }
+async function waitForEventLoopTurns(turns: number): Promise<void> {
+  for (let i = 0; i < turns; i += 1) {
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
-  throw new Error('Timed out waiting for bridge request');
+}
+
+function waitForBridgeRequest(bridge: HTMLElement, timeoutMs = 2000): Promise<string> {
+  const existingRequest = bridge.dataset.request;
+  if (existingRequest) {
+    return Promise.resolve(existingRequest);
+  }
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let timeoutId: number | undefined;
+
+    const observer = new MutationObserver(resolveIfPresent);
+
+    function cleanup(): void {
+      observer.disconnect();
+      if (timeoutId !== undefined) {
+        window.clearTimeout(timeoutId);
+      }
+    }
+
+    function resolveIfPresent(): void {
+      if (settled || !bridge.dataset.request) {
+        return;
+      }
+
+      settled = true;
+      const request = bridge.dataset.request;
+      cleanup();
+      resolve(request);
+    }
+
+    observer.observe(bridge, {
+      attributes: true,
+      attributeFilter: ['data-request'],
+    });
+    timeoutId = window.setTimeout(() => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      cleanup();
+      reject(new Error('Timed out waiting for bridge request'));
+    }, timeoutMs);
+
+    resolveIfPresent();
+  });
 }
 
 describe('fetchInterceptor (MAIN world script)', () => {
@@ -125,6 +177,43 @@ describe('fetchInterceptor (MAIN world script)', () => {
     expect(bridge.dataset.status).toBeUndefined();
   });
 
+  it('keeps native download bytes untouched while requesting a health check when removal is off', async () => {
+    const bridge = createDisabledBridge();
+    bridge.dataset.downloadIntentExpiresAt = String(Date.now() + 1000);
+    bridge.dataset.downloadIntentToken = 'health-check-1';
+    const originalResponse = createMockFetchResponse('google-original', {
+      status: 200,
+      headers: { 'content-type': 'image/png' },
+    });
+    const inspectionResponse = createMockFetchResponse('google-original', {
+      status: 200,
+      headers: { 'content-type': 'image/png' },
+    });
+    vi.mocked(inspectionResponse.blob).mockImplementation(async () => {
+      await waitForEventLoopTurns(30);
+      return new window.Blob(['google-original']);
+    });
+    vi.spyOn(originalResponse, 'clone').mockReturnValue(inspectionResponse);
+    originalFetch.mockResolvedValueOnce(originalResponse);
+    installInterceptor();
+
+    const responsePromise = window.fetch(GEMINI_DOWNLOAD_URL);
+
+    expect(responsePromise).toBe(originalFetch.mock.results[0].value);
+    expect(await responsePromise).toBe(originalResponse);
+    const requestData = JSON.parse(await waitForBridgeRequest(bridge)) as {
+      mode: string;
+      intentToken: string;
+      base64: string;
+    };
+    expect(requestData).toMatchObject({
+      mode: 'inspect',
+      intentToken: 'health-check-1',
+    });
+    expect(requestData.base64).toMatch(/^data:/);
+    expect(originalFetch).toHaveBeenCalledWith(GEMINI_DOWNLOAD_URL);
+  });
+
   it('uses the watermark pipeline for a recent user download intent', async () => {
     const bridge = createEnabledBridge();
     bridge.dataset.downloadIntentExpiresAt = String(Date.now() + 1000);
@@ -154,6 +243,31 @@ describe('fetchInterceptor (MAIN world script)', () => {
     expect(JSON.parse(bridge.dataset.status ?? '{}')).toMatchObject({
       type: 'SUCCESS',
       intentToken: 'intent-1',
+    });
+  });
+
+  it('reports Google corruption when the watermark processor detects a preview mismatch', async () => {
+    const bridge = createEnabledBridge();
+    bridge.dataset.downloadIntentExpiresAt = String(Date.now() + 1000);
+    bridge.dataset.downloadIntentToken = 'corrupt-intent';
+    installInterceptor();
+
+    const responsePromise = window.fetch(GEMINI_DOWNLOAD_URL);
+    const requestData = JSON.parse(await waitForBridgeRequest(bridge)) as {
+      requestId: string;
+      intentToken: string;
+    };
+    expect(requestData.intentToken).toBe('corrupt-intent');
+    bridge.dataset.response = JSON.stringify({
+      requestId: requestData.requestId,
+      base64: 'data:image/png;base64,cHJvY2Vzc2Vk',
+      corrupted: true,
+    });
+
+    await responsePromise;
+    expect(JSON.parse(bridge.dataset.status ?? '{}')).toMatchObject({
+      type: 'GOOGLE_IMAGE_CORRUPTED',
+      intentToken: 'corrupt-intent',
     });
   });
 

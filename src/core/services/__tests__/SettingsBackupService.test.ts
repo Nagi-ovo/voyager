@@ -50,6 +50,17 @@ describe('SettingsBackupService', () => {
     });
   });
 
+  it('keeps the popup settings search query device-local', () => {
+    expect(BACKUPABLE_SYNC_SETTINGS_DEFAULTS).not.toHaveProperty(
+      StorageKeys.GV_POPUP_SETTINGS_SEARCH_QUERY,
+    );
+    expect(NON_SETTINGS_BACKUP_POLICIES[StorageKeys.GV_POPUP_SETTINGS_SEARCH_QUERY]).toEqual({
+      storage: 'local',
+      disposition: 'device-local',
+      reason: 'Popup settings search query is device-local UI state.',
+    });
+  });
+
   it('exports only backupable sync settings with defaults applied', async () => {
     const storageArea = {
       get: vi.fn().mockResolvedValue({

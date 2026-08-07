@@ -58,6 +58,18 @@ export class PluginHost {
   private unsubscribeState: (() => void) | null = null;
   private unsubscribeCatalog: (() => void) | null = null;
   private started = false;
+  /**
+   * Monotonic lifecycle generation. start() and stop() each bump it; every
+   * async pass captures the value at entry and aborts after any await if it
+   * no longer matches, so a pass that straddles a stop→start restart can
+   * never touch the new generation's engine (a bare `started` boolean would
+   * read true again — the ABA case).
+   */
+  private generation = 0;
+  /** Serializes reconcile/reload work so async passes never interleave. */
+  private opChain: Promise<void> = Promise.resolve();
+  /** Last settings pushed per plugin id, for change detection. */
+  private readonly pushedSettings = new Map<string, string>();
 
   constructor(options: PluginHostOptions = {}) {
     this.url = options.url ?? location.href;
@@ -71,22 +83,34 @@ export class PluginHost {
     return this.adapter;
   }
 
+  /** Live side-effect ledgers of scope-based plugins, keyed by plugin id. */
+  getScopeLedgers(): Record<string, readonly string[]> {
+    return this.engine?.getScopeLedgers() ?? {};
+  }
+
   async start(): Promise<void> {
     if (this.started) return;
     this.started = true;
+    const gen = ++this.generation;
     try {
       this.adapter = this.registry.resolveByUrl(this.url);
       this.engine = new DeclarativeEngine({ doc: this.doc, adapter: this.adapter });
       this.manifests = await this.loadManifests();
-      this.state = await loadPluginState();
-      await this.reconcile();
+      const state = await loadPluginState();
+      if (this.generation !== gen) return;
+      this.state = state;
+      await this.enqueue(() => this.reconcile(gen));
+      if (this.generation !== gen) return;
       this.unsubscribeState = subscribePluginState((next) => {
+        if (this.generation !== gen) return;
         this.state = next;
-        void this.reconcile();
+        void this.enqueue(() => this.reconcile(gen));
       });
       // A marketplace refresh updates the cached catalog: reload + re-mount so
       // new/changed plugin CSS applies live without a page reload.
-      this.unsubscribeCatalog = subscribeCatalog(() => void this.reloadCatalog());
+      this.unsubscribeCatalog = subscribeCatalog(
+        () => void this.enqueue(() => this.reloadCatalog(gen)),
+      );
       logger.info('PluginHost started', {
         site: this.adapter?.id ?? 'unknown',
         manifests: this.manifests.length,
@@ -98,39 +122,86 @@ export class PluginHost {
   }
 
   stop(): void {
+    this.started = false;
+    this.generation += 1;
     this.unsubscribeState?.();
     this.unsubscribeState = null;
     this.unsubscribeCatalog?.();
     this.unsubscribeCatalog = null;
     this.engine?.unmountAll();
-    this.started = false;
+    this.pushedSettings.clear();
+  }
+
+  /**
+   * Append work to the host's single operation chain. Reconcile and catalog
+   * reloads are async (entitlement/storage awaits); running two passes
+   * concurrently lets a stale pass mount what a newer pass just unmounted.
+   *
+   * Returns the RAW operation promise so awaiting callers (start) observe the
+   * pass's own failure; the chain itself continues through a caught tail, so
+   * one failed pass never poisons ordering and fire-and-forget callers never
+   * leak an unhandled rejection (the tail's catch is attached to the same
+   * promise they discard).
+   */
+  private enqueue(work: () => Promise<void>): Promise<void> {
+    const op = this.opChain.then(work);
+    this.opChain = op.catch((error) => {
+      if (isExtensionContextInvalidatedError(error)) return;
+      logger.error('PluginHost operation failed', { error: String(error) });
+    });
+    return op;
   }
 
   /** Reload manifests from the (refreshed) catalog and re-mount so new CSS applies. */
-  private async reloadCatalog(): Promise<void> {
-    if (!this.engine) return;
-    this.manifests = await this.loadManifests();
-    this.engine.unmountAll();
-    await this.reconcile();
+  private async reloadCatalog(gen: number): Promise<void> {
+    const engine = this.engine;
+    if (!engine || this.generation !== gen) return;
+    const manifests = await this.loadManifests();
+    if (this.generation !== gen) return;
+    this.manifests = manifests;
+    engine.unmountAll();
+    this.pushedSettings.clear();
+    await this.reconcile(gen);
   }
 
-  private async reconcile(): Promise<void> {
-    if (!this.engine) return;
-    for (const manifest of this.manifests) {
-      const shouldRun = await this.shouldActivate(manifest);
-      const isActive = this.engine.isActive(manifest.id);
-      if (shouldRun && !isActive) this.engine.mount(manifest, this.resolveSettings(manifest));
-      else if (!shouldRun && isActive) this.engine.unmount(manifest.id);
-      // Already active + still should run: push any live setting changes.
-      else if (shouldRun && isActive)
-        this.engine.updateSettings(manifest.id, this.resolveSettings(manifest));
+  private async reconcile(gen: number): Promise<void> {
+    // Snapshot everything the pass reads, so one pass never mixes two state
+    // revisions (the storage listener replaces `this.state` outside the op
+    // chain). A revision that lands mid-pass gets its own queued pass.
+    const engine = this.engine;
+    const state = this.state;
+    const manifests = this.manifests;
+    if (!engine) return;
+    for (const manifest of manifests) {
+      if (this.generation !== gen) return;
+      const shouldRun = await this.shouldActivate(manifest, state);
+      if (this.generation !== gen) return;
+      const isActive = engine.isActive(manifest.id);
+      if (shouldRun && !isActive) {
+        const settings = this.resolveSettings(manifest, state);
+        engine.mount(manifest, settings);
+        this.pushedSettings.set(manifest.id, JSON.stringify(settings));
+      } else if (!shouldRun && isActive) {
+        engine.unmount(manifest.id);
+        this.pushedSettings.delete(manifest.id);
+      } else if (shouldRun && isActive) {
+        // Already active + still should run: push setting changes, but only to
+        // the plugin whose settings actually changed — a state write for
+        // plugin A must not re-render every other active plugin.
+        const settings = this.resolveSettings(manifest, state);
+        const serialized = JSON.stringify(settings);
+        if (this.pushedSettings.get(manifest.id) !== serialized) {
+          engine.updateSettings(manifest.id, settings);
+          this.pushedSettings.set(manifest.id, serialized);
+        }
+      }
     }
   }
 
   /** Merge the plugin's declared setting defaults with the user's stored values. */
-  private resolveSettings(manifest: PluginManifest): PluginSettings {
+  private resolveSettings(manifest: PluginManifest, state: PluginStateMap): PluginSettings {
     const schema = manifest.contributes.settings;
-    const stored = this.state[manifest.id]?.settings ?? {};
+    const stored = state[manifest.id]?.settings ?? {};
     if (!schema) return stored;
     const resolved: Record<string, PluginSettingValue> = {};
     for (const [key, field] of Object.entries(schema)) {
@@ -139,9 +210,9 @@ export class PluginHost {
     return resolved;
   }
 
-  private async shouldActivate(manifest: PluginManifest): Promise<boolean> {
+  private async shouldActivate(manifest: PluginManifest, state: PluginStateMap): Promise<boolean> {
     if (!matchesAnyPattern(this.url, manifest.matches)) return false;
-    if (!this.state[manifest.id]?.enabled) return false;
+    if (!state[manifest.id]?.enabled) return false;
     if (!engineSatisfied(manifest.engine, PLUGIN_ENGINE_VERSION)) {
       logger.warn('Plugin skipped: engine range not satisfied', {
         id: manifest.id,

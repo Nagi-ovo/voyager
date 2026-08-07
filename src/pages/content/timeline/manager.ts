@@ -5,7 +5,7 @@ import {
 } from '@/core/services/AccountIsolationService';
 import { keyboardShortcutService } from '@/core/services/KeyboardShortcutService';
 import { storageService } from '@/core/services/StorageService';
-import { StorageKeys, type TimelineStyle, type TurnId } from '@/core/types/common';
+import { StorageKeys, type TimelineStyle, type TurnId, isTimelineStyle } from '@/core/types/common';
 import {
   buildConversationIdFromUrl,
   buildLegacyConversationIdFromUrl,
@@ -42,6 +42,21 @@ const TURN_LABEL_PREFIXES =
   /^[\u200B\u200C\u200D\u200E\u200F\uFEFF]*(?:you said|you wrote|user message|your prompt|you asked)[:\s]*/i;
 const VISUALLY_HIDDEN_CLASS_FRAGMENT = 'visually-hidden';
 const INJECTED_UI_SELECTOR = '.gv-fork-btn, .gv-fork-confirm, .gv-fork-indicator-group';
+const ASSISTANT_PREVIEW_SELECTOR = [
+  '[aria-label="Gemini response"]',
+  '[data-message-author-role="assistant"]',
+  '[data-message-author-role="model"]',
+  'article[data-author="assistant"]',
+  'article[data-turn="assistant"]',
+  'article[data-turn="model"]',
+  '.model-response',
+  'model-response',
+  '.response-container',
+].join(',');
+const ASSISTANT_PREVIEW_CONTENT_SELECTOR =
+  'message-content, .markdown, .markdown-main-panel, .presented-response-container, .response-content, response-element';
+const ASSISTANT_PREVIEW_EXCLUDED_SELECTOR =
+  'model-thoughts, .thoughts-container, .thoughts-content, deep-research-immersive-panel';
 let timestampDraftTabId: string | null = null;
 
 function getTimestampDraftTabId(): string {
@@ -107,6 +122,7 @@ interface TimelineMarker {
   id: string;
   element: HTMLElement;
   summary: string;
+  assistantSummary: string;
   n: number;
   baseN: number;
   dotElement: DotElement | null;
@@ -213,18 +229,7 @@ export class TimelineManager {
   private starDisplayOverride: Map<string, boolean> = new Map();
   /** Marker id → every stored turnId record represented by its painted star. */
   private starStorageIdsByMarkerId: Map<string, string[]> = new Map();
-  private markerMap: Map<
-    string,
-    {
-      id: string;
-      element: HTMLElement;
-      dotElement: DotElement | null;
-      starred: boolean;
-      n: number;
-      baseN: number;
-      summary: string;
-    }
-  > = new Map();
+  private markerMap = new Map<string, TimelineMarker>();
   private conversationId: string | null = null;
   private userTurnSelector: string = '';
   private markerLevels: Map<string, MarkerLevel> = new Map();
@@ -390,7 +395,7 @@ export class TimelineManager {
       const m = res?.geminiTimelineScrollMode;
       if (m === 'flow' || m === 'jump') this.scrollMode = m;
       const storedTimelineStyle = res?.[StorageKeys.TIMELINE_STYLE];
-      if (storedTimelineStyle === 'dots' || storedTimelineStyle === 'compact') {
+      if (isTimelineStyle(storedTimelineStyle)) {
         this.timelineStyle = storedTimelineStyle;
       }
       this.hideContainer = !!res?.geminiTimelineHideContainer;
@@ -443,6 +448,7 @@ export class TimelineManager {
           });
         }
       }
+      this.updateRulerDirection();
       this.previewPanel?.reposition();
 
       // listen for changes from popup and update mode live
@@ -475,7 +481,7 @@ export class TimelineManager {
         }
         if (changes?.[StorageKeys.TIMELINE_STYLE]) {
           const nextStyle = changes[StorageKeys.TIMELINE_STYLE].newValue;
-          if (nextStyle === 'dots' || nextStyle === 'compact') {
+          if (isTimelineStyle(nextStyle)) {
             this.timelineStyle = nextStyle;
             this.applyTimelineStyle();
           }
@@ -510,6 +516,7 @@ export class TimelineManager {
               this.ui.timelineBar.style.top = '';
               this.ui.timelineBar.style.left = '';
             }
+            this.updateRulerDirection();
             this.previewPanel?.reposition();
           }
         }
@@ -581,25 +588,32 @@ export class TimelineManager {
     const bar = this.ui.timelineBar;
     if (!bar) return;
     const compact = this.timelineStyle === 'compact';
+    const ruler = this.timelineStyle === 'ruler';
+    const dense = compact || ruler;
     bar.classList.toggle('timeline-style-compact', compact);
-    this.ui.slider?.classList.toggle('timeline-style-compact', compact);
+    bar.classList.toggle('gv-timeline-style-ruler', ruler);
+    this.updateRulerDirection();
+    this.ui.slider?.classList.toggle('timeline-style-compact', dense);
+    this.cancelPendingTooltipShow();
+    this.hideTooltip(true);
+    if (dense) {
+      if (this.ui.track) this.ui.track.scrollTop = 0;
+    }
     if (compact) {
       this.ui.track?.setAttribute('aria-hidden', 'true');
-      if (this.ui.track) this.ui.track.scrollTop = 0;
-      this.cancelPendingTooltipShow();
-      this.hideTooltip(true);
     } else {
       this.ui.track?.removeAttribute('aria-hidden');
-      this.syncTimelineTrackToMain();
+      if (!ruler) this.syncTimelineTrackToMain();
     }
     this.previewPanel?.setCompactMode(compact);
+    this.previewPanel?.setFloatingToggleSuppressed(ruler);
     this.updateVirtualRangeAndRender();
     this.updateSlider();
   }
 
   /** Check if pointer is near either edge of the visual background (::before, centered in the 24px bar). */
   private isInResizeEdge(ev: PointerEvent): boolean {
-    if (this.timelineStyle === 'compact') return false;
+    if (this.timelineStyle !== 'dots') return false;
     if (!this.ui.timelineBar) return false;
     const rect = this.ui.timelineBar.getBoundingClientRect();
     const barCenter = rect.left + rect.width / 2;
@@ -1158,6 +1172,7 @@ export class TimelineManager {
       const tip = document.createElement('div');
       tip.className = 'timeline-tooltip';
       tip.id = 'gemini-timeline-tooltip';
+      tip.setAttribute('role', 'tooltip');
       tip.setAttribute('dir', 'auto');
       document.body.appendChild(tip);
       this.ui.tooltip = tip;
@@ -1197,14 +1212,33 @@ export class TimelineManager {
       this.previewPanel = new TimelinePreviewPanel(this.ui.timelineBar);
       this.previewPanel.init(
         (turnId, index) => {
-          const marker = this.markers[index];
+          let targetIndex = this.markers.findIndex((marker) => marker.id === turnId);
+          if (targetIndex < 0) targetIndex = index;
+
+          const markerBeforeRefresh = this.markers[targetIndex];
+          if (!markerBeforeRefresh?.element) return;
+
+          // Gemini can replace or re-parent the scroll viewport while keeping
+          // the mounted turn nodes connected. Refresh before resolving the
+          // preview target so list navigation uses the current viewport too.
+          if (this.maybeRefreshMarkersForInteraction(markerBeforeRefresh.element)) {
+            const refreshedIndex = this.markers.findIndex((marker) => marker.id === turnId);
+            if (refreshedIndex >= 0) targetIndex = refreshedIndex;
+          }
+
+          const marker = this.markers[targetIndex];
           if (!marker?.element) return;
           const fromIdx = this.getActiveIndex();
-          const dur = this.computeFlowDuration(fromIdx, index);
-          if (this.scrollMode === 'flow' && fromIdx >= 0 && index >= 0 && fromIdx !== index) {
+          const dur = this.computeFlowDuration(fromIdx, targetIndex);
+          if (
+            this.scrollMode === 'flow' &&
+            fromIdx >= 0 &&
+            targetIndex >= 0 &&
+            fromIdx !== targetIndex
+          ) {
             this.activeTurnId = null;
             this.updateActiveDotUI();
-            this.startRunner(fromIdx, index, dur);
+            this.startRunner(fromIdx, targetIndex, dur);
           }
           this.smoothScrollTo(marker.element, dur);
           this.commitActiveMarkerAfterNavigation(marker.id, dur);
@@ -1280,6 +1314,78 @@ export class TimelineManager {
     } catch {
       return this.normalizeText(element.textContent || '');
     }
+  }
+
+  private assistantTextCache = new WeakMap<HTMLElement, { raw: string; summary: string }>();
+
+  private getAssistantTextCached(element: HTMLElement): string {
+    const raw = element.textContent || '';
+    const cached = this.assistantTextCache.get(element);
+    if (cached && cached.raw === raw) return cached.summary;
+
+    const summary = this.extractAssistantText(element);
+    this.assistantTextCache.set(element, { raw, summary });
+    return summary;
+  }
+
+  private extractAssistantText(element: HTMLElement): string {
+    try {
+      const preferred = Array.from(
+        element.querySelectorAll<HTMLElement>(ASSISTANT_PREVIEW_CONTENT_SELECTOR),
+      ).find((candidate) => !candidate.closest(ASSISTANT_PREVIEW_EXCLUDED_SELECTOR));
+      const clone = (preferred ?? element).cloneNode(true) as HTMLElement;
+      clone
+        .querySelectorAll(
+          `${ASSISTANT_PREVIEW_EXCLUDED_SELECTOR}, ${INJECTED_UI_SELECTOR}, button, [role="button"]`,
+        )
+        .forEach((node) => node.remove());
+      clone.querySelectorAll('*').forEach((node) => {
+        if (this.hasVisuallyHiddenClass(node)) node.remove();
+      });
+      return this.normalizeText(clone.textContent || '');
+    } catch {
+      return this.normalizeText(element.textContent || '');
+    }
+  }
+
+  /** Pair each mounted user turn with the first model response before the next user turn. */
+  private collectAssistantSummaries(userTurns: HTMLElement[]): Map<HTMLElement, string> {
+    const summaries = new Map<HTMLElement, string>();
+    if (!this.conversationContainer || userTurns.length === 0) return summaries;
+
+    const assistantCandidates = Array.from(
+      this.conversationContainer.querySelectorAll<HTMLElement>(ASSISTANT_PREVIEW_SELECTOR),
+    ).filter(
+      (candidate) =>
+        !candidate.closest('deep-research-immersive-panel') &&
+        !userTurns.some((userTurn) => userTurn.contains(candidate)),
+    );
+    const assistants = this.filterTopLevel(assistantCandidates);
+    let assistantIndex = 0;
+
+    const isBefore = (first: Node, second: Node): boolean =>
+      Boolean(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING);
+
+    for (let index = 0; index < userTurns.length; index++) {
+      const userTurn = userTurns[index];
+      const nextUserTurn = userTurns[index + 1] ?? null;
+
+      while (
+        assistantIndex < assistants.length &&
+        !isBefore(userTurn, assistants[assistantIndex])
+      ) {
+        assistantIndex += 1;
+      }
+
+      const assistant = assistants[assistantIndex];
+      if (!assistant) break;
+      if (nextUserTurn && !isBefore(assistant, nextUserTurn)) continue;
+
+      const summary = this.getAssistantTextCached(assistant);
+      if (summary) summaries.set(userTurn, summary);
+      assistantIndex += 1;
+    }
+    return summaries;
   }
 
   /**
@@ -1694,6 +1800,7 @@ export class TimelineManager {
 
     const firstTurnOffset = (allEls[0] as HTMLElement).offsetTop;
     allEls = this.dedupeByTextAndOffset(allEls, firstTurnOffset);
+    const assistantSummaries = this.collectAssistantSummaries(allEls);
     this.markerTops = this.computeElementTopsInScrollContainer(allEls);
 
     let contentSpan: number;
@@ -1727,6 +1834,7 @@ export class TimelineManager {
         id,
         element,
         summary: this.getTurnTextCached(element),
+        assistantSummary: assistantSummaries.get(element) ?? '',
         n,
         baseN: n,
         dotElement: oldDots.get(id) ?? null,
@@ -2563,7 +2671,7 @@ export class TimelineManager {
     const rightAvail = Math.max(0, vw - dotRect.right - gap - viewportPad);
     let placement: 'left' | 'right' = rightAvail > leftAvail ? 'right' : 'left';
     let avail = placement === 'right' ? rightAvail : leftAvail;
-    const tiers = [280, 240, 200, 160];
+    const tiers = this.timelineStyle === 'ruler' ? [320, 280, 240, 200, 160] : [280, 240, 200, 160];
     const hardMax = Math.max(minW, Math.min(maxW, Math.floor(avail)));
     let width = tiers.find((t) => t <= hardMax) || Math.max(minW, Math.min(hardMax, 160));
     if (width < minW && placement === 'left' && rightAvail > leftAvail) {
@@ -2591,6 +2699,7 @@ export class TimelineManager {
     }
     const tip = this.ui.tooltip;
     tip.setAttribute('dir', 'auto');
+    tip.classList.toggle('gv-timeline-ruler-tooltip', this.timelineStyle === 'ruler');
     const dotId = dot.dataset.targetTurnId || '';
     if (tip.classList.contains('visible') && this.tooltipDotId === dotId) {
       this.refreshTooltipForDot(dot);
@@ -2598,11 +2707,9 @@ export class TimelineManager {
     }
     this.tooltipDotId = dotId;
     tip.classList.remove('visible');
-    const fullText = this.buildTooltipText(dot);
     const p = this.computePlacementInfo(dot);
-    const layout = this.truncateToThreeLines(fullText, p.width);
-    tip.textContent = layout.text;
-    this.placeTooltipAt(dot, p.placement, p.width, layout.height);
+    const height = this.renderTooltipContent(dot, p.width);
+    this.placeTooltipAt(dot, p.placement, p.width, height);
     tip.setAttribute('aria-hidden', 'false');
     if (this.showRafId !== null) {
       cancelAnimationFrame(this.showRafId);
@@ -2617,6 +2724,14 @@ export class TimelineManager {
   private scheduleTooltipForDot(dot: DotElement): void {
     if (!this.ui.tooltip) return;
     if (this.previewPanel?.isOpen) return;
+
+    // Ruler ticks are a dense, precision-hover control. Delaying their preview
+    // makes a successful hit feel missed, so only the roomier node style keeps
+    // the hover-intent guard.
+    if (this.timelineStyle === 'ruler') {
+      this.showTooltipForDot(dot);
+      return;
+    }
 
     const dotId = dot.dataset.targetTurnId || '';
     if (this.ui.tooltip.classList.contains('visible') && this.tooltipDotId === dotId) {
@@ -2705,11 +2820,46 @@ export class TimelineManager {
     const tip = this.ui.tooltip;
     tip.setAttribute('dir', 'auto');
     if (!tip.classList.contains('visible')) return;
-    const fullText = this.buildTooltipText(dot);
+    tip.classList.toggle('gv-timeline-ruler-tooltip', this.timelineStyle === 'ruler');
     const p = this.computePlacementInfo(dot);
-    const layout = this.truncateToThreeLines(fullText, p.width);
-    tip.textContent = layout.text;
-    this.placeTooltipAt(dot, p.placement, p.width, layout.height);
+    const height = this.renderTooltipContent(dot, p.width);
+    this.placeTooltipAt(dot, p.placement, p.width, height);
+  }
+
+  private renderTooltipContent(dot: DotElement, width: number): number {
+    const tip = this.ui.tooltip;
+    if (!tip) return 0;
+
+    if (this.timelineStyle !== 'ruler') {
+      tip.removeAttribute('aria-label');
+      const fullText = this.buildTooltipText(dot);
+      const layout = this.truncateToThreeLines(fullText, width);
+      tip.textContent = layout.text;
+      return layout.height;
+    }
+
+    const id = dot.dataset.targetTurnId || '';
+    const marker = this.markerMap.get(id) ?? this.markers.find((candidate) => candidate.id === id);
+    const userText = marker?.summary || (dot.getAttribute('aria-label') || '').trim();
+    const prompt = document.createElement('div');
+    prompt.className = 'gv-timeline-ruler-prompt';
+    prompt.setAttribute('dir', 'auto');
+    prompt.textContent = id && this.isMarkerStarred(id) ? `★ ${userText}` : userText;
+
+    const children: HTMLElement[] = [prompt];
+    const assistantText = marker?.assistantSummary.trim() ?? '';
+    if (assistantText) {
+      const response = document.createElement('div');
+      response.className = 'gv-timeline-ruler-response';
+      response.setAttribute('dir', 'auto');
+      response.textContent = assistantText;
+      children.push(response);
+    }
+
+    tip.replaceChildren(...children);
+    tip.setAttribute('aria-label', [prompt.textContent, assistantText].filter(Boolean).join('\n'));
+    tip.style.width = `${Math.floor(width)}px`;
+    return tip.offsetHeight || (assistantText ? 70 : 42);
   }
 
   private buildTooltipText(dot: DotElement): string {
@@ -2803,6 +2953,7 @@ export class TimelineManager {
   }
 
   private syncTimelineTrackToMain(): void {
+    if (this.timelineStyle !== 'dots') return;
     if (this.sliderDragging) return;
     if (!this.ui.track || !this.scrollContainer || !this.contentHeight) return;
     const scrollTop = this.scrollContainer.scrollTop;
@@ -2840,9 +2991,10 @@ export class TimelineManager {
     if (!this.ui.track || !this.ui.trackContent || this.markers.length === 0) return;
     const hiddenIndices = this.getHiddenMarkerIndices();
     const compact = this.timelineStyle === 'compact';
+    const dense = compact || this.timelineStyle === 'ruler';
     let start: number;
     let end: number;
-    if (compact) {
+    if (dense) {
       start = 0;
       end = this.markers.length - 1;
     } else {
@@ -2854,7 +3006,7 @@ export class TimelineManager {
       start = this.lowerBound(this.yPositions, minY);
       end = Math.max(start - 1, this.upperBound(this.yPositions, maxY));
     }
-    const compactOffsets = compact
+    const compactOffsets = dense
       ? this.buildCompactMarkerOffsets(hiddenIndices)
       : new Map<number, number>();
 
@@ -2946,8 +3098,68 @@ export class TimelineManager {
     if (localVersion !== this.markersVersion) return;
     if (frag.childNodes.length) this.ui.trackContent.appendChild(frag);
     this.visibleRange = { start, end };
+    this.updateRulerWave();
     // Note: callers are responsible for updateSlider(); calling it here forced
     // an extra getBoundingClientRect layout twice per scroll frame.
+  }
+
+  private getRulerFocusIndex(): number {
+    const fallback = Math.max(0, this.getActiveIndex());
+    if (
+      !this.scrollContainer ||
+      this.markerTops.length !== this.markers.length ||
+      this.markerTops.length === 0
+    ) {
+      return fallback;
+    }
+
+    const focusTop =
+      this.scrollContainer.scrollTop + Math.max(0, this.scrollContainer.clientHeight) * 0.45;
+    const upperIndex = this.lowerBound(this.markerTops, focusTop);
+    if (upperIndex <= 0) return 0;
+    if (upperIndex >= this.markerTops.length) return this.markerTops.length - 1;
+
+    const lowerIndex = upperIndex - 1;
+    const lowerTop = this.markerTops[lowerIndex];
+    const upperTop = this.markerTops[upperIndex];
+    const progress = Math.max(
+      0,
+      Math.min(1, (focusTop - lowerTop) / Math.max(1, upperTop - lowerTop)),
+    );
+    return lowerIndex + progress;
+  }
+
+  /** Smooth Gaussian crest that travels through the ruler as the page scrolls. */
+  private updateRulerWave(): void {
+    if (this.timelineStyle !== 'ruler') {
+      this.markers.forEach((marker) => {
+        marker.dotElement?.style.removeProperty('--gv-timeline-ruler-scale');
+        marker.dotElement?.style.removeProperty('--gv-timeline-ruler-opacity');
+      });
+      return;
+    }
+
+    const focusIndex = this.getRulerFocusIndex();
+    const sigma = 1.2;
+    const start = Math.max(0, this.visibleRange.start);
+    const end =
+      this.visibleRange.end >= start
+        ? Math.min(this.visibleRange.end, this.markers.length - 1)
+        : this.markers.length - 1;
+    for (let index = start; index <= end; index++) {
+      const marker = this.markers[index];
+      if (!marker) continue;
+      const dot = marker.dotElement;
+      if (!dot) continue;
+      const level = this.getMarkerLevel(marker.id);
+      const baseScale = level === 3 ? 0.54 : level === 2 ? 0.42 : 0.29;
+      const distance = Math.abs(index - focusIndex);
+      const crest = Math.exp(-(distance * distance) / (2 * sigma * sigma));
+      const scale = baseScale + (1 - baseScale) * crest;
+      const opacity = 0.42 + 0.5 * crest;
+      dot.style.setProperty('--gv-timeline-ruler-scale', scale.toFixed(3));
+      dot.style.setProperty('--gv-timeline-ruler-opacity', opacity.toFixed(3));
+    }
   }
 
   private buildCompactMarkerOffsets(hiddenIndices: ReadonlySet<number>): Map<number, number> {
@@ -2959,7 +3171,7 @@ export class TimelineManager {
     const offsets = new Map<number, number>();
     const count = visibleIndices.length;
     if (count === 0) return offsets;
-    const gap = count > 1 ? Math.min(10, 240 / (count - 1)) : 0;
+    const gap = count > 1 ? Math.min(8, 160 / (count - 1)) : 0;
     const center = (count - 1) / 2;
     visibleIndices.forEach((markerIndex, rank) => {
       offsets.set(markerIndex, (rank - center) * gap);
@@ -2968,9 +3180,11 @@ export class TimelineManager {
   }
 
   private applyDotPosition(dot: DotElement, index: number, compactOffset?: number): void {
-    if (this.timelineStyle === 'compact') {
-      dot.style.removeProperty('top');
-      dot.style.setProperty('--timeline-compact-offset', `${compactOffset ?? 0}px`);
+    if (this.timelineStyle === 'compact' || this.timelineStyle === 'ruler') {
+      const offset = compactOffset ?? 0;
+      const operator = offset < 0 ? '-' : '+';
+      dot.style.top = `calc(50% ${operator} ${Math.abs(offset)}px)`;
+      dot.style.setProperty('--timeline-compact-offset', `${offset}px`);
       return;
     }
 
@@ -3109,8 +3323,10 @@ export class TimelineManager {
     if (!this.barDragging) return;
     const dx = e.clientX - this.barStartPos.x;
     const dy = e.clientY - this.barStartPos.y;
-    this.ui.timelineBar!.style.left = `${this.barStartOffset.x + dx}px`;
+    const left = this.barStartOffset.x + dx;
+    this.ui.timelineBar!.style.left = `${left}px`;
     this.ui.timelineBar!.style.top = `${this.barStartOffset.y + dy}px`;
+    this.updateRulerDirection(left);
   }
 
   private endBarDrag(_e: PointerEvent): void {
@@ -3161,6 +3377,7 @@ export class TimelineManager {
         this.ui.timelineBar.style.top = '';
         this.ui.timelineBar.style.left = '';
       }
+      this.updateRulerDirection();
       this.updateSlider();
       this.previewPanel?.reposition();
     }
@@ -3181,7 +3398,17 @@ export class TimelineManager {
 
     this.ui.timelineBar.style.top = `${clampedTop}px`;
     this.ui.timelineBar.style.left = `${clampedLeft}px`;
+    this.updateRulerDirection(clampedLeft);
     this.previewPanel?.reposition();
+  }
+
+  /** Grow ruler ticks toward page content, including after the rail is dragged across the viewport. */
+  private updateRulerDirection(left?: number): void {
+    const bar = this.ui.timelineBar;
+    if (!bar) return;
+    const barLeft = left ?? bar.getBoundingClientRect().left;
+    const center = barLeft + (bar.offsetWidth || 24) / 2;
+    bar.classList.toggle('gv-timeline-ruler-inward-right', center < window.innerWidth / 2);
   }
 
   /**
@@ -4025,9 +4252,11 @@ export class TimelineManager {
   }
 
   private shouldRefreshForInteraction(targetElement: HTMLElement | null): boolean {
-    // The common click path already owns a live marker inside the current
-    // containers. Avoid a full-document selector scan plus an ancestor
-    // getComputedStyle() walk before every navigation.
+    // Avoid the document-wide marker count scan on the common path, but still
+    // validate the nearest scroll container. Gemini can insert a new viewport
+    // inside the old one while both the marker and old viewport remain
+    // connected; treating connectivity as freshness writes scrollTop to the
+    // wrong element and makes clicks and shortcuts appear inert.
     if (
       targetElement?.isConnected &&
       this.conversationContainer?.isConnected &&
@@ -4035,7 +4264,7 @@ export class TimelineManager {
       this.conversationContainer.contains(targetElement) &&
       this.scrollContainer.contains(targetElement)
     ) {
-      return false;
+      return this.getScrollContainerForElement(targetElement) !== this.scrollContainer;
     }
 
     if (this.shouldAttemptRefreshForNavigation()) return true;

@@ -26,6 +26,28 @@ Regression test:
 Commit:
 ```
 
+## Timeline navigation must validate the live scroll viewport
+
+Symptom:
+
+Timeline dots, preview-list items, and `j`/`k` shortcuts could all appear inert after Gemini rebuilt its chat viewport.
+
+Root cause:
+
+The navigation fast path treated connected marker and container nodes as current. Gemini can insert a new scroll viewport inside the old connected container, so Voyager wrote `scrollTop` to the stale ancestor.
+
+Fix:
+
+Before navigation, validate the target's nearest scroll container against the cached viewport. Rebind and recalculate markers when it changed, including preview-panel navigation.
+
+Regression test:
+
+`src/pages/content/timeline/__tests__/TimelineManagerFlowClickActiveReset.test.ts` (`refreshes connected markers when Gemini inserts a new scroll viewport` and `refreshes the scroll viewport before preview-panel navigation`) and `src/pages/content/timeline/__tests__/TimelineManagerNavigationRefresh.test.ts` (`rebinds a connected stale scroll viewport before shortcut navigation`).
+
+Commit:
+
+`fix(timeline): refresh stale scroll viewports`
+
 ## Low-confidence watermark matches require isolated trial removal
 
 Symptom:
@@ -63,6 +85,40 @@ over after a trusted candidate's safety rollback.
 Commit:
 
 `fix(watermark): add difficult-match fallback`
+
+## Full-size V2 removal needs gradient-backed transition evidence
+
+Symptom:
+
+A subtle 96px V2 watermark on a bright diagonal background was detected at the
+correct anchor, but the visually correct reverse-alpha result was rolled back.
+
+Root cause:
+
+The reconstructed background retained mild positive spatial correlation with
+the star template, leaving spatial suppression at `0.177`, just below the
+default `0.2` reliability-transition gate even though gradient correlation
+dropped from `0.167` to `0.052` without clipping or severe undershoot.
+
+Fix:
+
+Keep the default safety gate unchanged. Only for the exact 96px May 2026 V2
+preset, accept the first transition out of reliable detection when spatial and
+gradient suppression independently exceed narrow thresholds, the absolute
+residual correlations are below the direct-match thresholds, and the trial
+introduces no new black or clipped pixels. Correlation sign is deliberately
+ignored because a clean reconstruction can cross zero. Subsequent passes still
+use the default gate.
+
+Regression test:
+
+`src/pages/content/watermarkRemover/__tests__/watermarkEngine.test.ts`
+(`accepts the reported full-size V2 reliability transition without weakening
+the default gate` and `rejects the supported transition when ...`).
+
+Commit:
+
+`fix(watermark): accept safe full-size V2 transitions`
 
 ## Dark watermark restoration must distinguish clipping from severe undershoot
 
@@ -140,6 +196,82 @@ MAIN-world injection and closed-tab failure handling.
 Commit:
 
 `fix(watermark): apply toggles to open Gemini tabs`
+
+## Watermark download indicators must not wait for engine assets
+
+Symptom:
+
+The 🍌 indicator appeared noticeably after Gemini's download button, even
+though clicks during that window already queued correctly for watermark
+processing.
+
+Root cause:
+
+The download bridge was installed before `WatermarkEngine.create()`, but both
+the initial indicator decoration and its DOM observer were installed only after
+the engine finished loading all watermark image assets.
+
+Fix:
+
+Decorate existing buttons and start the lightweight indicator observer before
+awaiting engine initialization. When preview removal is enabled, disconnect
+that temporary observer before the preview observer takes over so only one
+page-wide image observer remains active.
+
+Regression test:
+
+`src/pages/content/watermarkRemover/__tests__/engineRaceCondition.test.ts`
+(`shows download indicators while WatermarkEngine.create is still pending`).
+
+Commit:
+
+`fix(watermark): show indicators while engine loads`
+
+## Native download health checks must not depend on watermark removal
+
+Symptom:
+
+Gemini could show a sharp generated-image preview but return a blurred or
+partially blank full-size PNG from its native download endpoint. With watermark
+removal disabled, Voyager passed the response through correctly but could not
+warn the user that Google's file itself was damaged.
+
+Root cause:
+
+Download click intent, the MAIN-world response bridge, and status toasts were
+all started only for watermark processing. Turning removal off therefore also
+disabled read-only comparison between the clicked preview and Google's final
+image bytes. The first implementation also sampled Gemini's visible
+`googleusercontent.com` `<img>` directly. Because Gemini does not set a
+`crossorigin` attribute, Canvas pixel readback was tainted and silently
+returned no preview fingerprint, causing the damaged download to be reported
+as successful.
+
+Fix:
+
+Keep lightweight click intent and bridge listeners active independently of the
+two removal toggles. When removal is off, return Gemini's original Promise and
+Response objects unchanged, inspect only a clone, and warn only when a 32×32
+preview/download fingerprint has a severe mismatch. Never warn from the
+download alone: a legitimate image may intentionally contain a large flat
+region. If direct preview sampling is tainted, fetch that exact preview URL
+through the extension runtime and await its origin-clean fingerprint without
+delaying the synchronous native download intent.
+
+Regression test:
+
+`src/pages/content/watermarkRemover/__tests__/fetchInterceptor.test.ts` verifies
+the disabled path preserves native Promise/Response identity while requesting
+inspection. `imageHealthDetector.test.ts` covers damaged, healthy, and
+legitimate-flat-region samples; `downloadToasts.test.ts` verifies the disabled
+path stays silent unless a corruption status arrives.
+`corruptedDownloadDetection.test.ts` reproduces a tainted Gemini preview and
+requires the extension-fetch fallback to flag the mismatched download.
+
+Commit:
+
+`fix(watermark): warn about corrupted Google downloads`
+`fix(watermark): handle tainted preview health checks`
 
 ## Mermaid must honor Gemini explicit light theme
 
@@ -960,6 +1092,80 @@ Regression test:
 Commit:
 `fix(timeline): use stable Gemini turn identities`
 
+## The chat width sparkle rule also matches the Gemini logo pill
+
+Symptom:
+With Voyager loaded and the sidebar open at >=1024px, Gemini's own header
+buttons (close sidebar, Upgrade, temporary chat, more) became hard or impossible
+to click. Narrowing the conversation-width slider changed how many buttons were
+affected, which made the bug look like a sidebar-width problem.
+
+Root cause:
+`chatWidth` clamps loading indicators with `main > div:has(img[src*="sparkle"])`
+(added for #110). Gemini's header logo wrapper `main > div.side-nav-menu-button`
+also contains a sparkle SVG, so it matched too and was stretched to
+`round(percent% x screen.availWidth)`. The wrapper itself is
+`pointer-events: none`, but its child `chat-app-side-nav-menu-button` is
+`pointer-events: auto` and inherits the stretched box, turning a 101px pill into
+a transparent hit box across the header. That is why the blast radius tracked
+the slider: the phantom width equals the computed pixel value, so low
+percentages only covered the close-sidebar button while 100% swallowed the whole
+header. Measuring the phantom box while only `sidebarWidth` is suspected is a
+dead end — the box is real but `pointer-events: none`, so it looks harmless.
+
+Fix:
+Exclude the logo wrapper from that one rule with
+`:not(:has(chat-app-side-nav-menu-button))`. Genuine sparkle content wrappers
+still get clamped, so #110 does not regress. Do not clamp the host's width or
+geometry instead: the host is `static` and in-flow, so touching its box
+perturbs header layout.
+
+Regression test:
+`src/pages/content/chatWidth/__tests__/chatWidth.test.ts`
+Live-page verification: toggling only that selector moves the host between 101px
+(hit-stack top `mat-icon` / `span.dynamic-upsell-label`) and the slider's pixel
+value (hit-stack top `chat-app-side-nav-menu-button`) at 30/50/70/100%.
+
+Commit:
+`fix(chatwidth): stop the sparkle rule from stretching the Gemini logo pill`
+
+## The file-drop overlay is pinned to Gemini's native input width
+
+Symptom (#887):
+With chat width widened, the blue "Drop files here" overlay shown while
+dragging a file over the page is visibly narrower than the input box. Dropping
+outside the overlay still uploads, because the real drop target is the
+`xap-uploader-dropzone` directive on the whole `.chat-container` — the overlay
+is only a visual hint, so only the hint is wrong.
+
+Root cause:
+Gemini pins the overlay card with
+`.overlay-container[data-filedrop-id="chat-window-input-container"]
+{ max-width: var(--bard-chat-window-max-width-default, 760px) }`. The variable
+is unset, so the overlay is always 760px — which coincides with Gemini's
+native input width, so nothing looks wrong until `chatWidth` or
+`editInputWidth` widens `input-area-v2` past 760px without widening the
+overlay.
+
+Fix:
+Both width adjusters inject a matching overlay rule with their own width
+value. The selectors are deliberately asymmetric: `chatWidth` prefixes
+`input-container` (higher specificity), `editInputWidth` does not, mirroring
+how the two modules' `input-area-v2` rules already resolve — so when both
+features are enabled the overlay follows the same winner as the visible input
+box in either injection order. Keep that relationship if either selector
+changes.
+
+Regression tests:
+`src/pages/content/chatWidth/__tests__/chatWidth.test.ts`
+`src/pages/content/editInputWidth/__tests__/editInputWidth.test.ts`
+Live verification: synthetic dragenter/dragover over `.chat-container` at 70%
+width — overlay left/right must equal `input-area-v2` left/right (was fixed at
+760px centered).
+
+Commit:
+`fix(chatwidth): widen file-drop overlay to match adjusted input width`
+
 ## Compact timeline preview hover gap closes panel
 
 Symptom:
@@ -989,5 +1195,4 @@ Regression test:
 `treats the compact hover bridge as part of the preview interaction area`).
 
 Commit:
-
-TBD
+`fix(timeline): keep compact preview open across hover gap`

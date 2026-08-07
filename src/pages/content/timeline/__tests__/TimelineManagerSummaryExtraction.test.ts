@@ -20,6 +20,7 @@ function setElementTop(el: HTMLElement, top: number): void {
 type TimelineMarker = {
   id: string;
   summary: string;
+  assistantSummary: string;
 };
 
 type TimelineManagerInternal = {
@@ -151,6 +152,43 @@ describe('TimelineManager summary extraction', () => {
     expect(internal.markers[0]?.id).not.toBe(internal.markers[1]?.id);
     expect(internal.markers[0]?.summary).toBe('好的，继续执行下一步');
     expect(internal.markers[1]?.summary).toBe('好的，继续执行下一步');
+    manager.destroy();
+  });
+
+  it('pairs each user question with the model response before the next turn', () => {
+    const container = document.createElement('div');
+
+    const first = document.createElement('div');
+    first.className = 'user-query-bubble-with-background';
+    first.textContent = 'Can Voyager make this interaction?';
+    setElementTop(first, 0);
+
+    const firstResponse = document.createElement('model-response');
+    firstResponse.innerHTML = `
+      <model-thoughts>Hidden reasoning</model-thoughts>
+      <message-content>Yes. The ruler can follow the active turn smoothly.</message-content>
+    `;
+
+    const second = document.createElement('div');
+    second.className = 'user-query-bubble-with-background';
+    second.textContent = 'Will the preview include both roles?';
+    setElementTop(second, 200);
+
+    const secondResponse = document.createElement('model-response');
+    secondResponse.innerHTML =
+      '<message-content>Yes, with a quieter model-response style.</message-content>';
+
+    container.append(first, firstResponse, second, secondResponse);
+
+    const { manager, internal } = setupForRecalc(container);
+    internal.recalculateAndRenderMarkers();
+
+    expect(internal.markers).toHaveLength(2);
+    expect(internal.markers[0]?.assistantSummary).toBe(
+      'Yes. The ruler can follow the active turn smoothly.',
+    );
+    expect(internal.markers[0]?.assistantSummary).not.toContain('Hidden reasoning');
+    expect(internal.markers[1]?.assistantSummary).toBe('Yes, with a quieter model-response style.');
     manager.destroy();
   });
 

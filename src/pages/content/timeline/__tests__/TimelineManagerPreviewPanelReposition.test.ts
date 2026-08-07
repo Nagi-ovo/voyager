@@ -5,6 +5,7 @@ import { TimelineManager } from '../manager';
 type PreviewPanelLike = {
   reposition: () => void;
   setCompactMode: (compact: boolean) => void;
+  setFloatingToggleSuppressed: (suppressed: boolean) => void;
   destroy: () => void;
 };
 
@@ -17,10 +18,11 @@ type TimelineManagerInternal = {
   };
   previewPanel: PreviewPanelLike | null;
   markers: Array<Record<string, unknown>>;
-  timelineStyle: 'dots' | 'compact';
+  timelineStyle: 'dots' | 'ruler' | 'compact';
   applyPosition: (top: number, left: number) => void;
   applyTimelineStyle: () => void;
   buildCompactMarkerOffsets: (hiddenIndices: ReadonlySet<number>) => Map<number, number>;
+  applyDotPosition: (dot: HTMLElement, index: number, compactOffset?: number) => void;
 };
 
 describe('TimelineManager preview panel reposition', () => {
@@ -40,13 +42,22 @@ describe('TimelineManager preview panel reposition', () => {
     internal.ui.timelineBar = timelineBar;
 
     const reposition = vi.fn();
-    internal.previewPanel = { reposition, setCompactMode: vi.fn(), destroy: vi.fn() };
+    internal.previewPanel = {
+      reposition,
+      setCompactMode: vi.fn(),
+      setFloatingToggleSuppressed: vi.fn(),
+      destroy: vi.fn(),
+    };
 
     internal.applyPosition(120, 260);
 
     expect(timelineBar.style.top).toBe('120px');
     expect(timelineBar.style.left).toBe('260px');
+    expect(timelineBar.classList.contains('gv-timeline-ruler-inward-right')).toBe(true);
     expect(reposition).toHaveBeenCalledTimes(1);
+
+    internal.applyPosition(120, window.innerWidth - 40);
+    expect(timelineBar.classList.contains('gv-timeline-ruler-inward-right')).toBe(false);
 
     manager.destroy();
   });
@@ -61,10 +72,16 @@ describe('TimelineManager preview panel reposition', () => {
     document.body.append(timelineBar, slider);
 
     const setCompactMode = vi.fn();
+    const setFloatingToggleSuppressed = vi.fn();
     internal.ui.timelineBar = timelineBar;
     internal.ui.track = track;
     internal.ui.slider = slider;
-    internal.previewPanel = { reposition: vi.fn(), setCompactMode, destroy: vi.fn() };
+    internal.previewPanel = {
+      reposition: vi.fn(),
+      setCompactMode,
+      setFloatingToggleSuppressed,
+      destroy: vi.fn(),
+    };
     internal.timelineStyle = 'compact';
 
     internal.applyTimelineStyle();
@@ -73,12 +90,27 @@ describe('TimelineManager preview panel reposition', () => {
     expect(slider.classList.contains('timeline-style-compact')).toBe(true);
     expect(track.getAttribute('aria-hidden')).toBe('true');
     expect(setCompactMode).toHaveBeenCalledWith(true);
+    expect(setFloatingToggleSuppressed).toHaveBeenLastCalledWith(false);
 
     internal.timelineStyle = 'dots';
     internal.applyTimelineStyle();
     expect(timelineBar.classList.contains('timeline-style-compact')).toBe(false);
     expect(track.hasAttribute('aria-hidden')).toBe(false);
     expect(setCompactMode).toHaveBeenLastCalledWith(false);
+    expect(setFloatingToggleSuppressed).toHaveBeenLastCalledWith(false);
+
+    internal.timelineStyle = 'ruler';
+    internal.applyTimelineStyle();
+    expect(timelineBar.classList.contains('gv-timeline-style-ruler')).toBe(true);
+    expect(timelineBar.classList.contains('timeline-style-compact')).toBe(false);
+    expect(slider.classList.contains('timeline-style-compact')).toBe(true);
+    expect(track.hasAttribute('aria-hidden')).toBe(false);
+    expect(setCompactMode).toHaveBeenLastCalledWith(false);
+    expect(setFloatingToggleSuppressed).toHaveBeenLastCalledWith(true);
+
+    internal.timelineStyle = 'compact';
+    internal.applyTimelineStyle();
+    expect(timelineBar.classList.contains('gv-timeline-style-ruler')).toBe(false);
 
     manager.destroy();
   });
@@ -90,10 +122,27 @@ describe('TimelineManager preview panel reposition', () => {
 
     const offsets = internal.buildCompactMarkerOffsets(new Set());
 
-    expect(offsets.get(0)).toBe(-10);
+    expect(offsets.get(0)).toBe(-8);
     expect(offsets.get(1)).toBe(0);
-    expect(offsets.get(2)).toBe(10);
+    expect(offsets.get(2)).toBe(8);
 
+    manager.destroy();
+  });
+
+  it('uses the same dense center cluster for ruler ticks instead of full-height positions', () => {
+    const manager = new TimelineManager();
+    const internal = manager as unknown as TimelineManagerInternal;
+    internal.timelineStyle = 'ruler';
+    internal.markers = [{ n: 0 }, { n: 1 }];
+    const offsets = internal.buildCompactMarkerOffsets(new Set());
+    const first = document.createElement('button');
+    const second = document.createElement('button');
+
+    internal.applyDotPosition(first, 0, offsets.get(0));
+    internal.applyDotPosition(second, 1, offsets.get(1));
+
+    expect(first.style.top).toBe('calc(50% - 4px)');
+    expect(second.style.top).toBe('calc(50% + 4px)');
     manager.destroy();
   });
 });

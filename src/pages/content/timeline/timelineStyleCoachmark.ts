@@ -59,6 +59,8 @@ interface TimelineStyleCoachmarkOptions {
   enabled: boolean;
   force?: boolean;
   progress?: CoachmarkProgress;
+  /** Abort to close the guide when the owning feature tears down. */
+  signal?: AbortSignal;
   onStyleChange: (compact: boolean) => void | Promise<void>;
 }
 
@@ -90,6 +92,7 @@ export async function showTimelineStyleCoachmark({
   enabled,
   force = false,
   progress,
+  signal,
   onStyleChange,
 }: TimelineStyleCoachmarkOptions): Promise<CoachmarkResult> {
   if (enabled && !force) return 'skipped';
@@ -148,6 +151,7 @@ export async function showTimelineStyleCoachmark({
     nextLabel: t('coachmarkNext', 'Next'),
     closeLabel: t('coachmarkClose', 'Close'),
     progress,
+    signal,
   });
 }
 

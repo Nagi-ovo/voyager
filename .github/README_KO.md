@@ -14,10 +14,10 @@
     <img src="https://img.shields.io/badge/Brave-✓-FB542B?style=flat-square&logo=brave&logoColor=white" alt="Brave">
   </p>
   <p>
-    <img src="../docs/public/badges/github-stars.svg" alt="GitHub stars">
-    <img src="../docs/public/badges/github-forks.svg" alt="GitHub forks">
-    <img src="../docs/public/badges/github-release.svg" alt="Latest version">
-    <img src="../docs/public/badges/github-downloads.svg" alt="GitHub downloads">
+    <img src="https://voyager.nagi.fun/badges/github-stars.svg" alt="GitHub stars">
+    <img src="https://voyager.nagi.fun/badges/github-forks.svg" alt="GitHub forks">
+    <img src="https://voyager.nagi.fun/badges/github-release.svg" alt="Latest version">
+    <img src="https://voyager.nagi.fun/badges/github-downloads.svg" alt="GitHub downloads">
     <img src="https://img.shields.io/chrome-web-store/users/iifacdnjakkhjjiengaffnegbndgingi?style=flat-square&logo=google-chrome" alt="Chrome Web Store users">
     <img src="https://img.shields.io/chrome-web-store/rating/iifacdnjakkhjjiengaffnegbndgingi?style=flat-square&logo=google-chrome" alt="Chrome Web Store rating">
     <img src="https://img.shields.io/badge/edge%20users-50k%2B-0078D7?style=flat-square&logo=microsoftedge&logoColor=white" alt="Edge Add-ons users">
@@ -284,6 +284,8 @@ Voyager에 기여해 주신 모든 기여자분들께 특별히 감사드립니�
 - **[gemini-watermark-remover](https://github.com/journey-ad/gemini-watermark-remover) / [GeminiWatermarkTool](https://github.com/allenk/GeminiWatermarkTool)** - Image Refinement 는 이 프로젝트들을 바탕으로 적용되었습니다. 관련 제3자 MIT 고지는 [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)에 보존되어 있습니다.
 
 - **[Gemini Helper](https://github.com/urzeye/tampermonkey-scripts)** - 기본 모델 고정 로직에는 Gemini Helper 에서 참고한 상호작용 아이디어가 포함되어 있으며, 소스 코드 수준의 attribution 을 유지하고 있습니다.
+
+- **[cordis](https://github.com/cordiverse/cordis)** - 플러그인 런타임의 사이드 이펙트 원장(`PluginScope`)은 cordis fiber 모델의 effect/해제 수명주기 설계를 참고했습니다.
 
 ## 🌍 에코시스템
 

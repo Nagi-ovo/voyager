@@ -7,10 +7,14 @@ on:
     paths:
       - 'docs/**'
       - '.vitepress/**'
+      - '.github/workflows/deploy-docs.yml'
+      - 'scripts/update-readme-badges.mjs'
       - 'package.json'
       - 'package-lock.json'
       - 'bun.lock'
       - 'CNAME'
+  schedule:
+    - cron: '17 3 * * *'
   workflow_dispatch:
 
 permissions:
@@ -37,6 +41,11 @@ jobs:
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
+
+      - name: Generate README badges
+        run: node scripts/update-readme-badges.mjs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
 
       - name: Build docs
         run: bun run docs:build

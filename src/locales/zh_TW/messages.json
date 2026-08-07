@@ -19,6 +19,10 @@
     "message": "精簡索引",
     "description": "精簡時間軸索引樣式"
   },
+  "timelineStyleRuler": {
+    "message": "刻度",
+    "description": "時間軸刻度樣式"
+  },
   "timelineCompactOpenPreview": {
     "message": "開啟時間軸預覽",
     "description": "精簡時間軸索引的無障礙標籤"
@@ -1647,6 +1651,10 @@
     "message": "失敗",
     "description": "下載失敗時的狀態前置"
   },
+  "googleImageCorrupted": {
+    "message": "Google 傳回的原圖已損壞（並非 Voyager 導致）；下載結果可能模糊或缺少內容",
+    "description": "Google 下載原圖與預覽不一致時顯示的警告"
+  },
   "gemsHide": {
     "message": "隱藏 Gems",
     "description": "隱藏 Gems 列表區域的提示"
@@ -2414,6 +2422,30 @@
   "conversationSortCoachmarkBody": {
     "message": "「手動排序」會保留你拖曳調整後的順序；「最近開啟」會把剛瀏覽的對話排到前面。可隨時在資料夾設定中切換。",
     "description": "Coachmark body explaining manual and recently opened conversation sorting"
+  },
+  "timelineRulerCoachmarkTitle": {
+    "message": "新增：刻度時間軸",
+    "description": "Coachmark title introducing the ruler timeline style"
+  },
+  "timelineRulerCoachmarkBody": {
+    "message": "緊湊的訊號簇會隨閱讀位置形成波峰。懸停任一刻度，即時預覽使用者提問與模型回覆。",
+    "description": "Coachmark body text introducing the ruler timeline style"
+  },
+  "timelineRulerCoachmarkToggle": {
+    "message": "使用刻度時間軸",
+    "description": "Inline toggle label in the ruler-timeline coachmark"
+  },
+  "folderActivityCoachmarkTitle": {
+    "message": "新增：Activity 注意力檢視",
+    "description": "Coachmark title introducing the folder Activity view"
+  },
+  "folderActivityCoachmarkBody": {
+    "message": "依優先、今天與最近幾天彙整進行中的對話，不改變它們原本所在的資料夾。",
+    "description": "Coachmark body text introducing the folder Activity view"
+  },
+  "folderActivityCoachmarkToggle": {
+    "message": "使用 Activity 檢視",
+    "description": "Inline toggle label in the folder-Activity coachmark"
   },
   "timelineCoachmarkTitle": {
     "message": "新增：精簡時間軸",

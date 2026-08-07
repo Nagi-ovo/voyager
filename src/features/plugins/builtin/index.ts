@@ -200,3 +200,12 @@ export const BUILTIN_PLUGINS: readonly PluginManifest[] = [
     },
   },
 ];
+
+/**
+ * Every BUILTIN_PLUGINS entry is a native-function plugin and MUST have a
+ * `registerNativeHandler(<id>, …)` call in the content script (and vice
+ * versa). `verifyNativeHandlerBindings(NATIVE_BUILTIN_PLUGIN_IDS)` enforces
+ * both directions after registration — adding a plugin to one side without
+ * the other surfaces as a logged error instead of a dead toggle.
+ */
+export const NATIVE_BUILTIN_PLUGIN_IDS: readonly string[] = BUILTIN_PLUGINS.map((p) => p.id);

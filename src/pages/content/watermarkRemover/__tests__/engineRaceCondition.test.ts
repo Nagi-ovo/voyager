@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { startWatermarkRemover } from '../index';
+import { startWatermarkRemover, stopWatermarkRemover } from '../index';
 import { WatermarkEngine } from '../watermarkEngine';
 
 vi.mock('@/utils/i18n', () => ({
@@ -32,7 +32,45 @@ describe('watermarkRemover engine-init race', () => {
   });
 
   afterEach(() => {
+    stopWatermarkRemover();
     vi.restoreAllMocks();
+  });
+
+  it('shows download indicators while WatermarkEngine.create is still pending', async () => {
+    vi.useFakeTimers();
+    try {
+      let resolveEngine: (engine: unknown) => void = () => undefined;
+      const enginePromise = new Promise<unknown>((resolve) => {
+        resolveEngine = resolve;
+      });
+      (WatermarkEngine.create as unknown as ReturnType<typeof vi.fn>).mockReturnValueOnce(
+        enginePromise,
+      );
+
+      const existingHost = document.createElement('download-generated-image-button');
+      existingHost.appendChild(document.createElement('button'));
+      document.body.appendChild(existingHost);
+
+      void startWatermarkRemover();
+      await flushMutationObservers();
+
+      expect(existingHost.querySelector('.nanobanana-indicator')).not.toBeNull();
+
+      const lateHost = document.createElement('download-generated-image-button');
+      lateHost.appendChild(document.createElement('button'));
+      document.body.appendChild(lateHost);
+      await flushMutationObservers();
+      await vi.advanceTimersByTimeAsync(100);
+
+      expect(lateHost.querySelector('.nanobanana-indicator')).not.toBeNull();
+
+      resolveEngine({
+        removeWatermarkFromImage: vi.fn(async () => document.createElement('canvas')),
+      });
+      await flushMutationObservers();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('installs the bridge observer before WatermarkEngine.create resolves', async () => {

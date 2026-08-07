@@ -1,5 +1,7 @@
+import { CleanupPositions } from '@/core/types/cleanupPositions';
 import { StorageKeys } from '@/core/types/common';
 import { isHighlightColor, normalizeHighlightColorPalette } from '@/core/types/highlight';
+import { CleanupManager } from '@/core/utils/cleanupManager';
 import { customWebsitesIncludeHost, sanitizeCustomWebsites } from '@/core/utils/customWebsites';
 import {
   hasValidExtensionContext,
@@ -7,15 +9,8 @@ import {
 } from '@/core/utils/extensionContext';
 import { isGeminiEnterpriseEnvironment } from '@/core/utils/gemini';
 import { WATERMARK_STORAGE_KEYS } from '@/core/utils/watermarkSettings';
-import { startFormulaCopy, stopFormulaCopy } from '@/features/formulaCopy';
+import { startFormulaCopy } from '@/features/formulaCopy';
 import { startPluginHost } from '@/features/plugins';
-import {
-  startClaudeTimeline,
-  stopClaudeTimeline,
-  updateClaudeTimelineSettings,
-} from '@/features/plugins/builtin/claudeTimeline';
-import { startInputVimPlugin, stopInputVimPlugin } from '@/features/plugins/builtin/inputVim';
-import { registerNativeHandler } from '@/features/plugins/runtime/nativeHandlers';
 import { resolvePluginPlatformId } from '@/features/plugins/sites/registry';
 import { initI18n } from '@/utils/i18n';
 
@@ -36,6 +31,7 @@ import { startDraftSave } from './draftSave/index';
 import { startEdgeFinalVersionNotice } from './edgeFinalVersionNotice';
 import { startEditInputWidthAdjuster } from './editInputWidth/index';
 import { startExportButton } from './export/index';
+import { folderActivityCoachmarkStep } from './folder/activityCoachmark';
 import { startAIStudioFolderManager } from './folder/aistudio';
 import { conversationSortCoachmarkStep } from './folder/conversationSortCoachmark';
 import { folderSearchCoachmarkStep } from './folder/folderSearchCoachmark';
@@ -53,6 +49,7 @@ import { initKaTeXConfig } from './katexConfig';
 import { startMarkdownPatcher } from './markdownPatcher/index';
 import { startMermaid } from './mermaid/index';
 import { startBrandTheme } from './platformTheme';
+import { registerBuiltinNativeHandlers } from './pluginNativeRegistration';
 import { startPreventAutoScroll } from './preventAutoScroll/index';
 import { startPromptManager } from './prompt/index';
 import { slashPromptCoachmarkStep } from './prompt/slashPromptCoachmark';
@@ -65,7 +62,7 @@ import { startSidebarAutoHide } from './sidebarAutoHide';
 import { startSidebarWidthAdjuster } from './sidebarWidth';
 import { startStorageQuotaWarningToast } from './storageQuotaWarning';
 import { startTimeline } from './timeline/index';
-import { timelineStyleCoachmarkStep } from './timeline/timelineStyleCoachmark';
+import { rulerTimelineCoachmarkStep } from './timeline/rulerTimelineCoachmark';
 import { startUsageStatus } from './usageStatus/index';
 import { usageCoachmarkStep } from './usageStatus/usageCoachmark';
 import { startUserLatex } from './userLatex/index';
@@ -103,27 +100,11 @@ const LIGHT_FEATURE_INIT_DELAY = 50; // For lightweight features
 const BACKGROUND_TAB_MIN_DELAY = 3000; // Minimum delay for background tabs
 const BACKGROUND_TAB_MAX_DELAY = 8000; // Maximum delay for background tabs (3000 + 5000)
 
+const cleanupManager = new CleanupManager();
+
 let initialized = false;
 let initializationTimer: number | null = null;
-let folderManagerInstance: Awaited<ReturnType<typeof startFolderManager>> | null = null;
-
-let promptManagerInstance: Awaited<ReturnType<typeof startPromptManager>> | null = null;
-let slashPromptFeatureInstance: Awaited<ReturnType<typeof startSlashPromptFeature>> | null = null;
-let quoteReplyCleanup: (() => void) | null = null;
-let inputVimModeCleanup: (() => void) | null = null;
-let sendBehaviorCleanup: (() => void) | null = null;
-let draftSaveCleanup: (() => void) | null = null;
 let forkCleanup: (() => void) | null = null;
-let gemsSidebarCleanup: (() => void) | null = null;
-let responseCompleteNotificationCleanup: (() => void) | null = null;
-let edgeFinalVersionNoticeCleanup: (() => void) | null = null;
-let pluginHostCleanup: (() => void) | null = null;
-let brandThemeCleanup: (() => void) | null = null;
-let usageStatusCleanup: (() => void) | null = null;
-let remoteAnnouncementsCleanup: (() => void) | null = null;
-let storageQuotaWarningCleanup: (() => void) | null = null;
-let accountContextBridgeCleanup: (() => void) | null = null;
-let codeBlockCollapseCleanup: (() => void) | null = null;
 let watermarkRemoverStarted = false;
 
 async function isForkFeatureEnabled(): Promise<boolean> {
@@ -148,7 +129,8 @@ function showOnboardingCoachmarksWhenChangelogIsIdle(): void {
 
   onboardingCoachmarkSequenceRunning = true;
   void runCoachmarkSequence([
-    timelineStyleCoachmarkStep,
+    rulerTimelineCoachmarkStep,
+    folderActivityCoachmarkStep,
     usageCoachmarkStep,
     folderSearchCoachmarkStep,
     conversationSortCoachmarkStep,
@@ -204,7 +186,11 @@ async function initializeFeatures(): Promise<void> {
       return;
     }
 
-    slashPromptFeatureInstance = await startSlashPromptFeature();
+    const slashPrompt = await startSlashPromptFeature();
+    cleanupManager.registerCleanupFunction(
+      () => slashPrompt.destroy(),
+      CleanupPositions.DestroySlashPromptFeatureInstance,
+    );
 
     // Yield between features instead of sleeping a fixed amount. On an idle main
     // thread (the common foreground case) requestIdleCallback fires on the next
@@ -229,13 +215,20 @@ async function initializeFeatures(): Promise<void> {
       // Only start prompt manager for custom websites
       console.log('[Gemini Voyager] Custom website detected, starting Prompt Manager only');
 
-      promptManagerInstance = await startPromptManager();
+      const pm = await startPromptManager();
+      cleanupManager.registerCleanupFunction(
+        () => pm.destroy(),
+        CleanupPositions.DestroyPromptManagerInstance,
+      );
       return;
     }
 
     console.log('[Gemini Voyager] Not a custom website, checking for Gemini/AI Studio');
 
-    edgeFinalVersionNoticeCleanup = startEdgeFinalVersionNotice();
+    cleanupManager.registerCleanupFunction(
+      startEdgeFinalVersionNotice(),
+      CleanupPositions.CleanupEdgeFinalVersionNotice,
+    );
 
     const isEnterprise = isGeminiEnterpriseEnvironment(
       {
@@ -249,7 +242,11 @@ async function initializeFeatures(): Promise<void> {
 
     if (isEnterprise) {
       console.log('[Gemini Voyager] Gemini Enterprise detected, starting Prompt Manager only');
-      promptManagerInstance = await startPromptManager();
+      const pm = await startPromptManager();
+      cleanupManager.registerCleanupFunction(
+        () => pm.destroy(),
+        CleanupPositions.DestroyPromptManagerInstance,
+      );
       return;
     }
 
@@ -258,8 +255,14 @@ async function initializeFeatures(): Promise<void> {
       startTimeline();
       await delay(HEAVY_FEATURE_INIT_DELAY);
 
-      folderManagerInstance = await startFolderManager();
-      if (folderManagerInstance) startFolderProject(folderManagerInstance);
+      const folderManager = await startFolderManager();
+      if (folderManager) {
+        cleanupManager.registerCleanupFunction(
+          () => folderManager.destroy(),
+          CleanupPositions.DestroyFolderManagerInstance,
+        );
+        startFolderProject(folderManager);
+      }
       await delay(HEAVY_FEATURE_INIT_DELAY);
 
       // Layout preferences are independent and only install lightweight
@@ -278,11 +281,17 @@ async function initializeFeatures(): Promise<void> {
 
       startInputCollapse();
       startInputHaloHider();
-      inputVimModeCleanup = await startInputVimMode();
+      cleanupManager.registerCleanupFunction(
+        await startInputVimMode(),
+        CleanupPositions.CleanupInputVimMode,
+      );
       await delay(LIGHT_FEATURE_INIT_DELAY);
 
       // Send behavior must be ready before prevent-auto-scroll reads its bridge state.
-      sendBehaviorCleanup = await startSendBehavior('gemini');
+      cleanupManager.registerCleanupFunction(
+        await startSendBehavior('gemini'),
+        CleanupPositions.CleanupSendBehavior,
+      );
       startPreventAutoScroll();
       startFormulaCopy();
       await delay(LIGHT_FEATURE_INIT_DELAY);
@@ -306,24 +315,31 @@ async function initializeFeatures(): Promise<void> {
       // Highlight shares Quote Reply's single selection toolbar/listener. Keep
       // the toolbar manager alive when Quote Reply is disabled; only its Quote
       // action is hidden in that case.
-      quoteReplyCleanup = startQuoteReply({
-        quoteEnabled: quoteReplyResult[StorageKeys.QUOTE_REPLY_ENABLED] !== false,
-        highlightEnabled: quoteReplyResult[StorageKeys.HIGHLIGHT_ENABLED] === true,
-        highlightDefaultColor: isHighlightColor(storedHighlightColor)
-          ? storedHighlightColor
-          : 'yellow',
-        highlightColorPalette: normalizeHighlightColorPalette(
-          quoteReplyResult[StorageKeys.HIGHLIGHT_COLOR_PALETTE],
-          storedHighlightColor,
-        ),
-        highlightTimelineMarkersEnabled:
-          quoteReplyResult[StorageKeys.HIGHLIGHT_TIMELINE_MARKERS_ENABLED] !== false,
-      });
+      cleanupManager.registerCleanupFunction(
+        startQuoteReply({
+          quoteEnabled: quoteReplyResult[StorageKeys.QUOTE_REPLY_ENABLED] !== false,
+          highlightEnabled: quoteReplyResult[StorageKeys.HIGHLIGHT_ENABLED] === true,
+          highlightDefaultColor: isHighlightColor(storedHighlightColor)
+            ? storedHighlightColor
+            : 'yellow',
+          highlightColorPalette: normalizeHighlightColorPalette(
+            quoteReplyResult[StorageKeys.HIGHLIGHT_COLOR_PALETTE],
+            storedHighlightColor,
+          ),
+          highlightTimelineMarkersEnabled:
+            quoteReplyResult[StorageKeys.HIGHLIGHT_TIMELINE_MARKERS_ENABLED] !== false,
+        }),
+        CleanupPositions.CleanupQuoteReply,
+      );
       await delay(LIGHT_FEATURE_INIT_DELAY);
 
       // Independent content helpers can initialize in the same idle slice.
       watermarkRemoverStarted = true;
       void startWatermarkRemover();
+      cleanupManager.registerCleanupFunction(
+        () => stopWatermarkRemover(),
+        CleanupPositions.StopWatermarkRemover,
+      );
       startDeepResearchExport();
       startContextSync();
       startGemsHider();
@@ -338,11 +354,29 @@ async function initializeFeatures(): Promise<void> {
         startUsageStatus(),
       ]);
       if (notificationResult.status === 'fulfilled') {
-        responseCompleteNotificationCleanup = notificationResult.value;
+        cleanupManager.registerCleanupFunction(
+          notificationResult.value,
+          CleanupPositions.CleanupResponseCompleteNotification,
+        );
       }
-      if (draftResult.status === 'fulfilled') draftSaveCleanup = draftResult.value;
-      if (gemsResult.status === 'fulfilled') gemsSidebarCleanup = gemsResult.value;
-      if (usageResult.status === 'fulfilled') usageStatusCleanup = usageResult.value;
+      if (draftResult.status === 'fulfilled') {
+        cleanupManager.registerCleanupFunction(
+          draftResult.value,
+          CleanupPositions.CleanupDraftSave,
+        );
+      }
+      if (gemsResult.status === 'fulfilled') {
+        cleanupManager.registerCleanupFunction(
+          gemsResult.value,
+          CleanupPositions.CleanupGemsSidebar,
+        );
+      }
+      if (usageResult.status === 'fulfilled') {
+        cleanupManager.registerCleanupFunction(
+          usageResult.value,
+          CleanupPositions.CleanupUsageStatus,
+        );
+      }
 
       const failedInitializer = [notificationResult, draftResult, gemsResult, usageResult].find(
         (result): result is PromiseRejectedResult => result.status === 'rejected',
@@ -353,14 +387,20 @@ async function initializeFeatures(): Promise<void> {
       // DOM enhancements install observers/listeners but do not need separate
       // idle waits between each initializer.
       startMarkdownPatcher();
-      codeBlockCollapseCleanup = startCodeBlockCollapse();
+      cleanupManager.registerCleanupFunction(
+        startCodeBlockCollapse(),
+        CleanupPositions.CleanupCodeBlockCollapse,
+      );
       DefaultModelManager.getInstance().init();
       startExportButton();
       void startCanvasExport();
       await delay(LIGHT_FEATURE_INIT_DELAY);
 
       if (await isForkFeatureEnabled()) {
-        forkCleanup = startFork();
+        forkCleanup = cleanupManager.registerCleanupFunctionAndReturnIt(
+          startFork(),
+          CleanupPositions.CleanupFork,
+        );
       }
 
       // Introduce new feature coachmarks once the changelog is out of the way;
@@ -375,7 +415,11 @@ async function initializeFeatures(): Promise<void> {
       location.hostname === 'aistudio.google.com' ||
       location.hostname === 'aistudio.google.cn'
     ) {
-      promptManagerInstance = await startPromptManager();
+      const pm = await startPromptManager();
+      cleanupManager.registerCleanupFunction(
+        () => pm.destroy(),
+        CleanupPositions.DestroyPromptManagerInstance,
+      );
       await delay(HEAVY_FEATURE_INIT_DELAY);
     }
 
@@ -415,7 +459,10 @@ async function initializeFeatures(): Promise<void> {
       await delay(LIGHT_FEATURE_INIT_DELAY);
 
       // Send behavior (Enter to send)
-      sendBehaviorCleanup = await startSendBehavior('aistudio');
+      cleanupManager.registerCleanupFunction(
+        await startSendBehavior('aistudio'),
+        CleanupPositions.CleanupSendBehavior,
+      );
       await delay(LIGHT_FEATURE_INIT_DELAY);
     }
   } catch (e) {
@@ -489,7 +536,11 @@ function handleVisibilityChange(): void {
 
     // Saved Library and cloud sync need the same account identity as highlights.
     // This bridge must exist even when optional Folder Manager code never starts.
-    if (!isPluginSubframe) accountContextBridgeCleanup = startAccountContextBridge();
+    if (!isPluginSubframe)
+      cleanupManager.registerCleanupFunction(
+        startAccountContextBridge(),
+        CleanupPositions.CleanupAccountContextBridge,
+      );
 
     // Plugin ecosystem host. Started up-front on EVERY page the content script is
     // injected into (Gemini / AI Studio, and any site a user enabled a plugin for,
@@ -500,27 +551,16 @@ function handleVisibilityChange(): void {
     // Bind builtin "native function plugins" before the host starts, so
     // PluginHost can run them when enabled on Claude/ChatGPT (default off).
     // Gemini/AI Studio keep their existing core feature lifecycle.
-    registerNativeHandler('voyager.formula-copy', {
-      start: startFormulaCopy,
-      stop: stopFormulaCopy,
-    });
-    registerNativeHandler('voyager.input-vim', {
-      start: startInputVimPlugin,
-      stop: stopInputVimPlugin,
-    });
-    registerNativeHandler('voyager.claude-timeline', {
-      start: startClaudeTimeline,
-      updateSettings: updateClaudeTimelineSettings,
-      stop: stopClaudeTimeline,
-    });
-    pluginHostCleanup = startPluginHost();
+    registerBuiltinNativeHandlers();
+    cleanupManager.registerCleanupFunction(startPluginHost(), CleanupPositions.CleanupPluginHost);
 
     // Cosmetic: on Claude / ChatGPT, re-skin Voyager's accent to the host
     // platform's brand colour (injects --gv-pm-brand + a gv-platform-themed body
     // class; CSS derives the rest). Applies the adapter's built-in colour at
     // once, then lets an enabled plugin's declared theme override it live. No-op
     // on Gemini / AI Studio.
-    if (!isPluginSubframe) brandThemeCleanup = startBrandTheme();
+    if (!isPluginSubframe)
+      cleanupManager.registerCleanupFunction(startBrandTheme(), CleanupPositions.CleanupBrandTheme);
 
     const onUnhandledRejection = (event: PromiseRejectionEvent) => {
       if (isExtensionContextInvalidatedError(event.reason)) {
@@ -533,7 +573,15 @@ function handleVisibilityChange(): void {
       }
     };
     window.addEventListener('unhandledrejection', onUnhandledRejection);
+    cleanupManager.registerCleanupFunction(
+      () => window.removeEventListener('unhandledrejection', onUnhandledRejection),
+      CleanupPositions.RemoveUnhandledRejectionEventListener,
+    );
     window.addEventListener('error', onWindowError);
+    cleanupManager.registerCleanupFunction(
+      () => window.removeEventListener('error', onWindowError),
+      CleanupPositions.RemoveErrorEventListener,
+    );
     const onStorageChanged = (
       changes: Record<string, chrome.storage.StorageChange>,
       areaName: string,
@@ -559,11 +607,15 @@ function handleVisibilityChange(): void {
       const enabled = isForkFeatureEnabledValue(forkSetting.newValue);
       if (enabled) {
         if (!forkCleanup) {
-          forkCleanup = startFork();
+          forkCleanup = cleanupManager.registerCleanupFunctionAndReturnIt(
+            startFork(),
+            CleanupPositions.CleanupFork,
+          );
         }
       } else if (forkCleanup) {
         forkCleanup();
         forkCleanup = null;
+        cleanupManager.withdrawCleanupFunctionsByPositionNumber(CleanupPositions.CleanupFork);
       }
     };
 
@@ -575,7 +627,10 @@ function handleVisibilityChange(): void {
       hostname.includes('aistudio.google.com') ||
       hostname.includes('aistudio.google.cn');
     if (!isPluginSubframe && (isSupportedSite || pluginPlatformId)) {
-      remoteAnnouncementsCleanup = startRemoteAnnouncements();
+      cleanupManager.registerCleanupFunction(
+        startRemoteAnnouncements(),
+        CleanupPositions.CleanupRemoteAnnouncements,
+      );
     }
 
     // Initialize KaTeX configuration early to suppress Unicode warnings
@@ -584,7 +639,10 @@ function handleVisibilityChange(): void {
       initKaTeXConfig();
       // Initialize i18n early to ensure translations are available
       initI18n().catch((e) => console.error('[Gemini Voyager] i18n init error:', e));
-      storageQuotaWarningCleanup = startStorageQuotaWarningToast();
+      cleanupManager.registerCleanupFunction(
+        startStorageQuotaWarningToast(),
+        CleanupPositions.CleanupStorageQuotaWarning,
+      );
     }
 
     // If not a known site, check if it's a custom website (async)
@@ -603,7 +661,10 @@ function handleVisibilityChange(): void {
         console.log('[Gemini Voyager] Plugin platform: prompt manager');
         void startPromptManager()
           .then((instance) => {
-            promptManagerInstance = instance;
+            cleanupManager.registerCleanupFunction(
+              () => instance.destroy(),
+              CleanupPositions.DestroyPromptManagerInstance,
+            );
           })
           .catch((error) => {
             console.error('[Gemini Voyager] Prompt Manager init error on plugin platform:', error);
@@ -628,6 +689,10 @@ function handleVisibilityChange(): void {
       return;
     }
     chrome.storage?.onChanged?.addListener(onStorageChanged);
+    cleanupManager.registerCleanupFunction(
+      () => chrome.storage?.onChanged?.removeListener(onStorageChanged),
+      CleanupPositions.RemoveStorageOnChangedListener,
+    );
 
     const delay = getInitializationDelay();
 
@@ -648,83 +713,7 @@ function handleVisibilityChange(): void {
     // Setup cleanup on page unload to prevent memory leaks
     window.addEventListener('beforeunload', () => {
       try {
-        window.removeEventListener('unhandledrejection', onUnhandledRejection);
-        window.removeEventListener('error', onWindowError);
-        // Disconnect watermark-remover observers.
-        stopWatermarkRemover();
-        if (folderManagerInstance) {
-          folderManagerInstance.destroy();
-          folderManagerInstance = null;
-        }
-        if (promptManagerInstance) {
-          promptManagerInstance.destroy();
-          promptManagerInstance = null;
-        }
-        if (slashPromptFeatureInstance) {
-          slashPromptFeatureInstance.destroy();
-          slashPromptFeatureInstance = null;
-        }
-        if (quoteReplyCleanup) {
-          quoteReplyCleanup();
-          quoteReplyCleanup = null;
-        }
-        if (inputVimModeCleanup) {
-          inputVimModeCleanup();
-          inputVimModeCleanup = null;
-        }
-        if (sendBehaviorCleanup) {
-          sendBehaviorCleanup();
-          sendBehaviorCleanup = null;
-        }
-        if (draftSaveCleanup) {
-          draftSaveCleanup();
-          draftSaveCleanup = null;
-        }
-        if (forkCleanup) {
-          forkCleanup();
-          forkCleanup = null;
-        }
-        if (gemsSidebarCleanup) {
-          gemsSidebarCleanup();
-          gemsSidebarCleanup = null;
-        }
-        if (responseCompleteNotificationCleanup) {
-          responseCompleteNotificationCleanup();
-          responseCompleteNotificationCleanup = null;
-        }
-        if (edgeFinalVersionNoticeCleanup) {
-          edgeFinalVersionNoticeCleanup();
-          edgeFinalVersionNoticeCleanup = null;
-        }
-        if (pluginHostCleanup) {
-          pluginHostCleanup();
-          pluginHostCleanup = null;
-        }
-        if (brandThemeCleanup) {
-          brandThemeCleanup();
-          brandThemeCleanup = null;
-        }
-        if (remoteAnnouncementsCleanup) {
-          remoteAnnouncementsCleanup();
-          remoteAnnouncementsCleanup = null;
-        }
-        if (storageQuotaWarningCleanup) {
-          storageQuotaWarningCleanup();
-          storageQuotaWarningCleanup = null;
-        }
-        if (accountContextBridgeCleanup) {
-          accountContextBridgeCleanup();
-          accountContextBridgeCleanup = null;
-        }
-        if (codeBlockCollapseCleanup) {
-          codeBlockCollapseCleanup();
-          codeBlockCollapseCleanup = null;
-        }
-        if (usageStatusCleanup) {
-          usageStatusCleanup();
-          usageStatusCleanup = null;
-        }
-        chrome.storage?.onChanged?.removeListener(onStorageChanged);
+        cleanupManager.executeCleanups();
       } catch (e) {
         if (isExtensionContextInvalidatedError(e)) {
           return;

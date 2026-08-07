@@ -19,6 +19,10 @@
     "message": "Compact",
     "description": "Compact timeline index style"
   },
+  "timelineStyleRuler": {
+    "message": "Ruler",
+    "description": "Timeline ruler tick style"
+  },
   "timelineCompactOpenPreview": {
     "message": "Open timeline preview",
     "description": "Accessible label for the compact timeline rail"
@@ -1661,6 +1665,10 @@
     "message": "Failed",
     "description": "Status prefix when download fails"
   },
+  "googleImageCorrupted": {
+    "message": "Google returned a corrupted original image (not caused by Voyager); the download may be blurred or incomplete.",
+    "description": "Warning shown when Google's downloaded image does not match its preview"
+  },
   "gemsHide": {
     "message": "Hide Gems",
     "description": "Tooltip for hiding Gems list section"
@@ -2428,6 +2436,30 @@
   "conversationSortCoachmarkBody": {
     "message": "Manual order keeps your drag-and-drop arrangement. Recently opened brings chats you visit back to the top. Switch anytime in Folder settings.",
     "description": "Coachmark body explaining manual and recently opened conversation sorting"
+  },
+  "timelineRulerCoachmarkTitle": {
+    "message": "New: ruler timeline",
+    "description": "Coachmark title introducing the ruler timeline style"
+  },
+  "timelineRulerCoachmarkBody": {
+    "message": "A compact signal follows your reading position. Hover any tick to instantly preview the question and response.",
+    "description": "Coachmark body text introducing the ruler timeline style"
+  },
+  "timelineRulerCoachmarkToggle": {
+    "message": "Use ruler timeline",
+    "description": "Inline toggle label in the ruler-timeline coachmark"
+  },
+  "folderActivityCoachmarkTitle": {
+    "message": "New: Activity view",
+    "description": "Coachmark title introducing the folder Activity view"
+  },
+  "folderActivityCoachmarkBody": {
+    "message": "Focus on conversations in motion: Priority, today, and recent days—without moving anything out of its folders.",
+    "description": "Coachmark body text introducing the folder Activity view"
+  },
+  "folderActivityCoachmarkToggle": {
+    "message": "Use Activity view",
+    "description": "Inline toggle label in the folder-Activity coachmark"
   },
   "timelineCoachmarkTitle": {
     "message": "New: compact timeline",

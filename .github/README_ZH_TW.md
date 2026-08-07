@@ -14,10 +14,10 @@
     <img src="https://img.shields.io/badge/Brave-✓-FB542B?style=flat-square&logo=brave&logoColor=white" alt="Brave">
   </p>
   <p>
-    <img src="../docs/public/badges/github-stars.svg" alt="GitHub Star">
-    <img src="../docs/public/badges/github-forks.svg" alt="GitHub Fork">
-    <img src="../docs/public/badges/github-release.svg" alt="最新版本">
-    <img src="../docs/public/badges/github-downloads.svg" alt="GitHub 下載量">
+    <img src="https://voyager.nagi.fun/badges/github-stars.svg" alt="GitHub Star">
+    <img src="https://voyager.nagi.fun/badges/github-forks.svg" alt="GitHub Fork">
+    <img src="https://voyager.nagi.fun/badges/github-release.svg" alt="最新版本">
+    <img src="https://voyager.nagi.fun/badges/github-downloads.svg" alt="GitHub 下載量">
     <img src="https://img.shields.io/chrome-web-store/users/iifacdnjakkhjjiengaffnegbndgingi?style=flat-square&logo=google-chrome" alt="Chrome 商店用戶數">
     <img src="https://img.shields.io/chrome-web-store/rating/iifacdnjakkhjjiengaffnegbndgingi?style=flat-square&logo=google-chrome" alt="Chrome 商店評分">
     <img src="https://img.shields.io/badge/edge%20users-50k%2B-0078D7?style=flat-square&logo=microsoftedge&logoColor=white" alt="Edge 商店用戶數">
@@ -290,6 +290,8 @@ bun run build:all      # Chrome + Firefox + Safari
 - **[gemini-watermark-remover](https://github.com/journey-ad/gemini-watermark-remover) / [GeminiWatermarkTool](https://github.com/allenk/GeminiWatermarkTool)** - Image Refinement 基於這些專案適配而來，相關第三方 MIT 聲明保留在 [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)。
 
 - **[Gemini Helper](https://github.com/urzeye/tampermonkey-scripts)** - 預設模型鎖定功能中的部分互動邏輯參考自 Gemini Helper，並已在原始碼中保留 attribution。
+
+- **[cordis](https://github.com/cordiverse/cordis)** - 外掛執行階段的副作用帳本（`PluginScope`）借鑒了 cordis fiber 模型的 effect／卸載生命週期設計。
 
 ## 🌍 生態
 
