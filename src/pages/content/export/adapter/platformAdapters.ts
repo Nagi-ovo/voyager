@@ -11,7 +11,7 @@ import {
   DOMContentExtractor,
   ExtractedContent,
 } from '@/features/export/services/DOMContentExtractor';
-import type { ChatTurn, ExportHandler } from '@/features/export/types/export';
+import type { ChatTurn } from '@/features/export/types/export';
 import { SiteRegistry } from '@/features/plugins/sites/registry';
 import type { SiteAdapter } from '@/features/plugins/types';
 
@@ -53,6 +53,14 @@ export interface ExportPlatformAdapter {
    */
   extractUserImage: (element: HTMLElement) => NodeListOf<HTMLImageElement>;
 
+  extractUserText: (
+    textLines: NodeListOf<HTMLElement>,
+    textParts: string[],
+    element: HTMLElement,
+  ) => void;
+
+  getUserAttachmentCandidates: (element: HTMLElement) => HTMLElement[] | undefined;
+
   extractAssistantImage: (
     child: Element,
     htmlParts: string[],
@@ -80,6 +88,12 @@ export interface ExportPlatformAdapter {
     DEBUG?: boolean,
   ) => boolean | undefined;
 
+  extractInlineFormula: (
+    el: Element,
+    htmlParts: string[],
+    textParts: string[],
+  ) => boolean | undefined;
+
   /**
    * Returns the platform's stable, ordered top-level message containers.
    * ChatGPT uses data-turn-id-container; Gemini currently uses its legacy flow.
@@ -90,10 +104,7 @@ export interface ExportPlatformAdapter {
    * Builds export-ready turns from stable platform message IDs. Virtualized
    * platforms may scroll and extract each selected message before returning.
    */
-  buildTurnsForSelection?: (
-    selectedMessageIds: ReadonlySet<string>,
-    exportHandler: ExportHandler,
-  ) => Promise<ChatTurn[]>;
+  buildTurnsForSelection?: (selectedMessageIds: ReadonlySet<string>) => Promise<ChatTurn[]>;
 }
 
 // ---------------------------------------------------------------------------
@@ -210,6 +221,27 @@ function geminiExtractUserImage(element: HTMLElement): NodeListOf<HTMLImageEleme
   return element.querySelectorAll(ImageSelector);
 }
 
+function geminiExtractUserText(textLines: NodeListOf<HTMLElement>, textParts: string[]) {
+  textLines.forEach((line) => {
+    const el = line as HTMLElement;
+    const raw = el.dataset?.userLatexOriginal ?? line.textContent ?? '';
+    const text = DOMContentExtractor.normalizeText(raw);
+    if (text) textParts.push(text);
+  });
+}
+
+function geminiGetUserAttachmentCandidates(element: HTMLElement): HTMLElement[] | undefined {
+  const geminiUploadedFiles = Array.from(
+    element.querySelectorAll<HTMLElement>('user-query-file-preview [data-test-id="uploaded-file"]'),
+  );
+  if (geminiUploadedFiles.length > 0) return geminiUploadedFiles;
+
+  const geminiFilePreviews = Array.from(
+    element.querySelectorAll<HTMLElement>('user-query-file-preview .new-file-preview-file'),
+  );
+  if (geminiFilePreviews.length > 0) return geminiFilePreviews;
+}
+
 function geminiExtractAssistantImage(
   child: Element,
   htmlParts: string[],
@@ -217,7 +249,7 @@ function geminiExtractAssistantImage(
   flags: Pick<ExtractedContent, 'hasImages' | 'hasFormulas' | 'hasTables' | 'hasCode'>,
   tagName?: string,
   DEBUG?: boolean,
-  processedImageSrcs?: ReadonlySet<string>,
+  _processedImageSrcs?: ReadonlySet<string>,
 ): boolean | undefined {
   {
     const searchImageContainers = child.querySelectorAll(
@@ -354,6 +386,28 @@ function geminiExtractCodeBlock(
   }
 }
 
+function geminiExtractInlineFormula(
+  el: Element,
+  htmlParts: string[],
+  textParts: string[],
+): boolean | undefined {
+  if (el.classList.contains('math-inline') || el.hasAttribute('data-math')) {
+    const latex = el.getAttribute('data-math') || '';
+    if (latex) {
+      // For HTML output: preserve the rendered formula HTML for PDF export
+      const clonedFormula = (el as HTMLElement).cloneNode(true) as HTMLElement;
+      // Ensure data-math attribute is preserved
+      if (!clonedFormula.hasAttribute('data-math')) {
+        clonedFormula.setAttribute('data-math', latex);
+      }
+      htmlParts.push(clonedFormula.outerHTML);
+      // For text output: use Markdown format
+      textParts.push(`$${latex}$`);
+      return true;
+    }
+  }
+}
+
 function buildGeminiAdapter(site: SiteAdapter): ExportPlatformAdapter {
   return {
     site,
@@ -401,9 +455,12 @@ function buildGeminiAdapter(site: SiteAdapter): ExportPlatformAdapter {
     shouldPreloadHistory: () => true,
     resolveConversationRoot: geminiResolveConversationRoot,
     extractUserImage: geminiExtractUserImage,
+    extractUserText: geminiExtractUserText,
+    getUserAttachmentCandidates: geminiGetUserAttachmentCandidates,
     extractAssistantImage: geminiExtractAssistantImage,
     extractFormula: geminiExtractFormula,
     extractCodeBlock: geminiExtractCodeBlock,
+    extractInlineFormula: geminiExtractInlineFormula,
   };
 }
 
@@ -444,6 +501,30 @@ function chatgptResolveConversationRoot(
 function chatgptExtractUserImage(element: HTMLElement): NodeListOf<HTMLImageElement> {
   const ImageSelector = 'img';
   return element.querySelectorAll(ImageSelector);
+}
+
+function chatgptExtractUserText(
+  _textLines: NodeListOf<HTMLElement>,
+  textParts: string[],
+  element: HTMLElement,
+) {
+  const contentOnly = element.cloneNode(true) as HTMLElement;
+  chatgptGetUserAttachmentCandidates(contentOnly)?.forEach((candidate) => candidate.remove());
+  const fallback = DOMContentExtractor.normalizeText(contentOnly.textContent || '');
+  if (fallback) textParts.push(fallback);
+}
+
+function chatgptGetUserAttachmentCandidates(element: HTMLElement): HTMLElement[] | undefined {
+  return Array.from(element.querySelectorAll<HTMLElement>('[role="group"][aria-label]')).filter(
+    (candidate) => {
+      const name = candidate.getAttribute('aria-label')?.trim();
+      const buttonName = candidate
+        .querySelector<HTMLElement>('[data-default-action] button[aria-label]')
+        ?.getAttribute('aria-label')
+        ?.trim();
+      return !!name && name === buttonName;
+    },
+  );
 }
 
 function chatgptExtractAssistantImage(
@@ -499,7 +580,7 @@ function chatgptExtractCodeBlock(
   textParts: string[],
   flags: Pick<ExtractedContent, 'hasImages' | 'hasFormulas' | 'hasTables' | 'hasCode'>,
   tagName?: string,
-  DEBUG?: boolean,
+  _DEBUG?: boolean,
 ): boolean | undefined {
   if (tagName === 'pre') {
     const codeEl = child.querySelector('code') || child;
@@ -523,6 +604,23 @@ function chatgptExtractCodeBlock(
   }
 }
 
+function chatgptExtractInlineFormula(
+  el: Element,
+  htmlParts: string[],
+  textParts: string[],
+): boolean | undefined {
+  if (el.classList.contains('katex')) {
+    const latex = DOMContentExtractor.extractKatexLatex(el as HTMLElement);
+    if (latex) {
+      htmlParts.push(
+        `<span class="math-inline" data-math="${DOMContentExtractor.escapeHtml(latex)}">${el.outerHTML}</span>`,
+      );
+      textParts.push(`$${latex}$`);
+      return true;
+    }
+  }
+}
+
 function buildChatGptAdapter(site: SiteAdapter): ExportPlatformAdapter {
   return {
     site,
@@ -534,9 +632,12 @@ function buildChatGptAdapter(site: SiteAdapter): ExportPlatformAdapter {
     shouldPreloadHistory: () => false, // 预加载也没用，所以关了
     resolveConversationRoot: chatgptResolveConversationRoot,
     extractUserImage: chatgptExtractUserImage,
+    extractUserText: chatgptExtractUserText,
+    getUserAttachmentCandidates: chatgptGetUserAttachmentCandidates,
     extractAssistantImage: chatgptExtractAssistantImage,
     extractFormula: chatgptExtractFormula,
     extractCodeBlock: chatgptExtractCodeBlock,
+    extractInlineFormula: chatgptExtractInlineFormula,
     collectTurnContainers: chatgptCollectTurnContainers,
     buildTurnsForSelection: buildChatGptTurnsForSelection,
   };

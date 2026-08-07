@@ -24,7 +24,6 @@ import type {
 import {
   DEFAULT_IMAGE_EXPORT_WIDTH,
   type ExportFormat,
-  ExportHandler,
 } from '../../../features/export/types/export';
 import { ExportDialog } from '../../../features/export/ui/ExportDialog';
 import { resolveExportErrorMessage } from '../../../features/export/ui/ExportErrorMessage';
@@ -79,6 +78,7 @@ const GENERATED_UI_CAPTURE_PERMISSION_MESSAGE_TYPE = 'gv.generatedUi.ensureCaptu
 const GENERATED_UI_SCREENSHOT_SECTION_CLASS = 'gv-generated-ui-screenshot-section';
 // Platform adapter — resolved once per page load
 const exportAdapter: ExportPlatformAdapter = resolveExportAdapter();
+ConversationExportService.setExportAdapter(exportAdapter);
 
 let conversationMenuObserver: MutationObserver | null = null;
 let responseActionObserver: MutationObserver | null = null;
@@ -1543,13 +1543,6 @@ async function performFinalExport(
 
   let autoSelectAll = false;
 
-  const exportHandler: ExportHandler = {
-    extractUserImage: exportAdapter.extractUserImage,
-    extractAssistantImage: exportAdapter.extractAssistantImage,
-    extractFormula: exportAdapter.extractFormula,
-    extractCodeBlock: exportAdapter.extractCodeBlock,
-  };
-
   const cleanup = () => {
     cleanupTasks.forEach((fn) => {
       try {
@@ -1855,7 +1848,7 @@ async function performFinalExport(
     await captureGeneratedUiScreenshots();
 
     const turnsForExport = exportAdapter.buildTurnsForSelection
-      ? await exportAdapter.buildTurnsForSelection(selectedIdsForExport, exportHandler)
+      ? await exportAdapter.buildTurnsForSelection(selectedIdsForExport)
       : buildTurnsForSelectedMessageIds(selectedIdsForExport, collectChatPairs());
     if (turnsForExport.length === 0) {
       alert(t('export_select_mode_empty'));
@@ -1884,17 +1877,12 @@ async function performFinalExport(
 
     const hideProgress = showExportProgressOverlay(t);
     try {
-      const resultPromise = ConversationExportService.export(
-        turnsForExport,
-        metadata,
-        {
-          format,
-          fontSize,
-          includeImageSource,
-          imageWidth,
-        },
-        exportHandler,
-      );
+      const resultPromise = ConversationExportService.export(turnsForExport, metadata, {
+        format,
+        fontSize,
+        includeImageSource,
+        imageWidth,
+      });
       const minVisiblePromise = new Promise((resolve) => setTimeout(resolve, 420));
       const [result] = await Promise.all([resultPromise, minVisiblePromise]);
 
@@ -2187,14 +2175,9 @@ async function handleResponseCopyImageClick(
       platform: exportAdapter.site.label,
     };
 
-    const blob = await ImageExportService.renderConversationBlob(
-      turnsForExport,
-      metadata,
-      {
-        imageWidth,
-      },
-      exportAdapter,
-    );
+    const blob = await ImageExportService.renderConversationBlob(turnsForExport, metadata, {
+      imageWidth,
+    });
     blobForFallback = blob;
     await copyImageBlobToClipboard(blob);
     showExportToast(texts.copied);

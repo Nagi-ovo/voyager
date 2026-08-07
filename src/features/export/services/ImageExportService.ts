@@ -12,7 +12,6 @@ import {
   type ChatTurn,
   type ConversationMetadata,
   DEFAULT_IMAGE_EXPORT_WIDTH,
-  type ExportHandler,
 } from '../types/export';
 import { DOMContentExtractor } from './DOMContentExtractor';
 import { renderElementToImageBlob } from './ImageRenderService';
@@ -35,13 +34,12 @@ export class ImageExportService {
     turns: ChatTurn[],
     metadata: ConversationMetadata,
     options: { filename: string; fontSize?: number; imageWidth?: number },
-    exportHandler?: ExportHandler,
   ): Promise<void> {
     const filename = options.filename.toLowerCase().endsWith('.png')
       ? options.filename
       : `${options.filename}.png`;
 
-    const blob = await this.renderConversationBlob(turns, metadata, options, exportHandler);
+    const blob = await this.renderConversationBlob(turns, metadata, options);
     this.downloadBlob(blob, filename);
   }
 
@@ -61,14 +59,12 @@ export class ImageExportService {
     turns: ChatTurn[],
     metadata: ConversationMetadata,
     options: { fontSize?: number; imageWidth?: number },
-    exportHandler?: ExportHandler,
   ): Promise<Blob> {
     const container = this.createRenderContainer(
       turns,
       metadata,
       options.fontSize,
       options.imageWidth,
-      exportHandler,
     );
     return await this.renderContainerToBlob(container);
   }
@@ -87,7 +83,6 @@ export class ImageExportService {
     metadata: ConversationMetadata,
     fontSize?: number,
     imageWidth?: number,
-    exportHandler?: ExportHandler,
   ): HTMLElement {
     const outer = document.createElement('div');
     outer.className = 'gv-image-export-container';
@@ -124,12 +119,12 @@ export class ImageExportService {
         const userHtml =
           turn.userContent?.html ??
           (turn.userElement
-            ? DOMContentExtractor.extractUserContent(turn.userElement, exportHandler).html
+            ? DOMContentExtractor.extractUserContent(turn.userElement).html
             : this.formatPlainTextAsHtml(turn.user));
         const assistantHtml =
           turn.assistantContent?.html ??
           (turn.assistantElement
-            ? DOMContentExtractor.extractAssistantContent(turn.assistantElement, exportHandler).html
+            ? DOMContentExtractor.extractAssistantContent(turn.assistantElement).html
             : this.formatPlainTextAsHtml(turn.assistant));
 
         if (!turn.omitEmptySections) {

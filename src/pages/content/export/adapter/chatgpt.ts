@@ -1,5 +1,5 @@
 import { DOMContentExtractor } from '@/features/export/services/DOMContentExtractor';
-import type { ChatTurn, ExportHandler } from '@/features/export/types/export';
+import type { ChatTurn } from '@/features/export/types/export';
 
 import {
   computeConversationFingerprint,
@@ -119,7 +119,6 @@ export async function materializeChatGptTurnContainer(
  */
 export async function buildChatGptTurnsForSelection(
   selectedContainerIds: ReadonlySet<string>,
-  exportHandler: ExportHandler,
 ): Promise<ChatTurn[]> {
   // querySelectorAll returns ChatGPT's retained virtual-list order. Filtering
   // this registry, rather than sorting visual coordinates, prevents image cards
@@ -150,7 +149,7 @@ export async function buildChatGptTurnsForSelection(
         continue;
       }
 
-      const userContent = DOMContentExtractor.extractUserContent(userElement, exportHandler);
+      const userContent = DOMContentExtractor.extractUserContent(userElement);
       pendingUser = {
         user: userContent.text,
         assistant: '',
@@ -169,10 +168,7 @@ export async function buildChatGptTurnsForSelection(
       // card and belongs to exactly this stable virtual-list item.
       const assistantElement =
         container.querySelector<HTMLElement>(ASSISTANT_MESSAGE_SELECTOR) ?? container;
-      const assistantContent = DOMContentExtractor.extractAssistantContent(
-        assistantElement,
-        exportHandler,
-      );
+      const assistantContent = DOMContentExtractor.extractAssistantContent(assistantElement);
 
       if (pendingUser) {
         pendingUser.assistant = assistantContent.text;

@@ -6,13 +6,18 @@ import { JSDOM } from 'jsdom';
 import JSZip from 'jszip';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { resolveExportAdapter } from '@/pages/content/export/adapter/platformAdapters';
+
 import type { ChatTurn, ConversationMetadata, ExportLayout } from '../../types/export';
 import { ExportFormat } from '../../types/export';
 import { ConversationExportService } from '../ConversationExportService';
+import { DOMContentExtractor } from '../DOMContentExtractor';
 import { DeepResearchPDFPrintService } from '../DeepResearchPDFPrintService';
 import { ImageExportService } from '../ImageExportService';
 import { MarkdownFormatter } from '../MarkdownFormatter';
 import { PDFPrintService } from '../PDFPrintService';
+
+DOMContentExtractor.setExportAdapter(resolveExportAdapter());
 
 vi.mock('html-to-image', () => {
   return {

@@ -1,11 +1,18 @@
 import { toBlob } from 'html-to-image';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { ChatTurn, ConversationMetadata, ExportHandler } from '../../types/export';
+import { resolveExportAdapter } from '@/pages/content/export/adapter/platformAdapters';
+
+import type { ChatTurn, ConversationMetadata } from '../../types/export';
 import { DOMContentExtractor } from '../DOMContentExtractor';
 import { ImageExportService } from '../ImageExportService';
 
-const exportHandler: ExportHandler = {
+// Base the test adapter on the real Gemini adapter, overriding only the
+// image-extraction methods with a generic, platform-agnostic implementation
+// so these tests exercise ImageExportService's own logic (not Gemini's
+// production selectors for search/generated images).
+DOMContentExtractor.setExportAdapter({
+  ...resolveExportAdapter(),
   extractUserImage: (element) =>
     element.querySelectorAll<HTMLImageElement>('user-query-file-preview img, .preview-image'),
   extractAssistantImage: (
@@ -33,7 +40,7 @@ const exportHandler: ExportHandler = {
   },
   extractFormula: () => undefined,
   extractCodeBlock: () => undefined,
-};
+});
 
 vi.mock('html-to-image', () => {
   return {
@@ -96,12 +103,7 @@ describe('ImageExportService', () => {
       new Blob(['x'], { type: 'image/png' }),
     );
 
-    await ImageExportService.export(
-      mockTurns,
-      mockMetadata,
-      { filename: 'chat.png' },
-      exportHandler,
-    );
+    await ImageExportService.export(mockTurns, mockMetadata, { filename: 'chat.png' });
 
     expect(toBlob).toHaveBeenCalledOnce();
     expect(toBlob).toHaveBeenCalledWith(
@@ -120,12 +122,7 @@ describe('ImageExportService', () => {
     const blob = new Blob(['blob'], { type: 'image/png' });
     (toBlob as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(blob);
 
-    const result = await ImageExportService.renderConversationBlob(
-      mockTurns,
-      mockMetadata,
-      {},
-      exportHandler,
-    );
+    const result = await ImageExportService.renderConversationBlob(mockTurns, mockMetadata, {});
 
     expect(result).toBe(blob);
     expect(toBlob).toHaveBeenCalled();
@@ -155,7 +152,6 @@ describe('ImageExportService', () => {
       [{ user: '', assistant: 'Reviewed', starred: false, userElement }],
       mockMetadata,
       {},
-      exportHandler,
     );
 
     expect(renderedAttachmentText).toContain('proposal.pdf');
@@ -249,12 +245,7 @@ describe('ImageExportService', () => {
       },
     );
 
-    await ImageExportService.export(
-      turnsWithImage,
-      mockMetadata,
-      { filename: 'safari.png' },
-      exportHandler,
-    );
+    await ImageExportService.export(turnsWithImage, mockMetadata, { filename: 'safari.png' });
 
     expect(toBlob).toHaveBeenCalledTimes(2);
     expect(global.URL.createObjectURL).toHaveBeenCalledOnce();
@@ -328,7 +319,7 @@ describe('ImageExportService', () => {
     );
 
     try {
-      await ImageExportService.export(turns, mockMetadata, { filename: 'gen.png' }, exportHandler);
+      await ImageExportService.export(turns, mockMetadata, { filename: 'gen.png' });
     } finally {
       global.fetch = originalFetch;
     }
@@ -355,7 +346,7 @@ describe('ImageExportService', () => {
     );
 
     try {
-      await ImageExportService.export(turns, mockMetadata, { filename: 'pass.png' }, exportHandler);
+      await ImageExportService.export(turns, mockMetadata, { filename: 'pass.png' });
     } finally {
       global.fetch = originalFetch;
     }

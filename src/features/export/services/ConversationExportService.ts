@@ -3,6 +3,8 @@
  * Unified service for exporting conversations in multiple formats
  * Uses Strategy pattern for format-specific implementations
  */
+import { ExportPlatformAdapter } from '@pages/content/export/adapter/platformAdapters';
+
 import { fetchImageViaExtensionRuntime } from '@/core/utils/runtimeImageFetch';
 
 import { IMAGE_RENDER_EVENT_ERROR_CODE, isEventLikeImageRenderError } from '../types/errors';
@@ -10,7 +12,6 @@ import type {
   ChatTurn,
   ConversationMetadata,
   ExportFormat,
-  ExportHandler,
   ExportLayout,
   ExportOptions,
   ExportResult,
@@ -31,32 +32,39 @@ export class ConversationExportService {
   private static readonly CHAT_JSON_FORMAT = 'gemini-voyager.chat.v1' as const;
 
   /**
+   * Set the export adapter.
+   * @param adapter - The export adapter.
+   */
+  static setExportAdapter(adapter: ExportPlatformAdapter) {
+    DOMContentExtractor.setExportAdapter(adapter);
+  }
+
+  /**
    * Export conversation in specified format
    */
   static async export(
     turns: ChatTurn[],
     metadata: ConversationMetadata,
     options: ExportOptions,
-    exportHandler?: ExportHandler,
   ): Promise<ExportResult> {
     try {
       const layout: ExportLayout = options.layout ?? 'conversation';
       if (layout === 'document') {
-        return await this.exportDocument(turns, metadata, options, exportHandler);
+        return await this.exportDocument(turns, metadata, options);
       }
 
       switch (options.format) {
         case 'json':
-          return this.exportJSON(turns, metadata, options, exportHandler);
+          return this.exportJSON(turns, metadata, options);
 
         case 'markdown':
-          return await this.exportMarkdown(turns, metadata, options, exportHandler);
+          return await this.exportMarkdown(turns, metadata, options);
 
         case 'pdf':
-          return await this.exportPDF(turns, metadata, options, exportHandler);
+          return await this.exportPDF(turns, metadata, options);
 
         case 'image':
-          return await this.exportImage(turns, metadata, options, exportHandler);
+          return await this.exportImage(turns, metadata, options);
 
         default:
           return {
@@ -94,9 +102,8 @@ export class ConversationExportService {
     turns: ChatTurn[],
     metadata: ConversationMetadata,
     options: ExportOptions,
-    exportHandler?: ExportHandler,
   ): Promise<ExportResult> {
-    const content = this.extractDocumentContent(turns, exportHandler);
+    const content = this.extractDocumentContent(turns);
 
     switch (options.format) {
       case 'json':
@@ -125,7 +132,6 @@ export class ConversationExportService {
     turns: ChatTurn[],
     metadata: ConversationMetadata,
     options: ExportOptions,
-    exportHandler?: ExportHandler,
   ): ExportResult {
     // Process turns to extract Markdown-formatted content from DOM elements
     const processedItems = turns.map((turn) => {
@@ -139,7 +145,7 @@ export class ConversationExportService {
         userContent = turn.userContent.text || userContent;
         attachments = turn.userContent.attachments;
       } else if (turn.userElement) {
-        const extracted = DOMContentExtractor.extractUserContent(turn.userElement, exportHandler);
+        const extracted = DOMContentExtractor.extractUserContent(turn.userElement);
         if (extracted.text) {
           userContent = extracted.text;
         }
@@ -149,10 +155,7 @@ export class ConversationExportService {
       if (turn.assistantContent) {
         assistantContent = turn.assistantContent.text || assistantContent;
       } else if (turn.assistantElement) {
-        const extracted = DOMContentExtractor.extractAssistantContent(
-          turn.assistantElement,
-          exportHandler,
-        );
+        const extracted = DOMContentExtractor.extractAssistantContent(turn.assistantElement);
         if (extracted.text) {
           assistantContent = extracted.text;
         }
@@ -193,10 +196,9 @@ export class ConversationExportService {
     turns: ChatTurn[],
     metadata: ConversationMetadata,
     options: ExportOptions,
-    exportHandler?: ExportHandler,
   ): Promise<ExportResult> {
     // First create a clean markdown (no inlining)
-    let markdown = MarkdownFormatter.format(turns, metadata, exportHandler);
+    let markdown = MarkdownFormatter.format(turns, metadata);
 
     // Strip image source attribution lines if user opted out
     if (options.includeImageSource === false) {
@@ -216,9 +218,8 @@ export class ConversationExportService {
     turns: ChatTurn[],
     metadata: ConversationMetadata,
     options: ExportOptions,
-    exportHandler?: ExportHandler,
   ): Promise<ExportResult> {
-    await PDFPrintService.export(turns, metadata, { fontSize: options.fontSize }, exportHandler);
+    await PDFPrintService.export(turns, metadata, { fontSize: options.fontSize });
 
     // Note: We can't get the actual filename from print dialog
     // User chooses filename in Save as PDF dialog
@@ -236,20 +237,14 @@ export class ConversationExportService {
     turns: ChatTurn[],
     metadata: ConversationMetadata,
     options: ExportOptions,
-    exportHandler?: ExportHandler,
   ): Promise<ExportResult> {
     const filename =
       options.filename || this.generateFilename('png', metadata.title, metadata.platform);
-    await ImageExportService.export(
-      turns,
-      metadata,
-      {
-        filename,
-        fontSize: options.fontSize,
-        imageWidth: options.imageWidth,
-      },
-      exportHandler,
-    );
+    await ImageExportService.export(turns, metadata, {
+      filename,
+      fontSize: options.fontSize,
+      imageWidth: options.imageWidth,
+    });
     return { success: true, format: 'image' as ExportFormat, filename };
   }
 
@@ -351,10 +346,7 @@ export class ConversationExportService {
     };
   }
 
-  private static extractDocumentContent(
-    turns: ChatTurn[],
-    exportHandler?: ExportHandler,
-  ): { markdown: string; html: string } {
+  private static extractDocumentContent(turns: ChatTurn[]): { markdown: string; html: string } {
     const turn =
       turns.find((item) => item.assistantElement || item.assistant.trim()) ||
       turns.find((item) => item.userElement || item.user.trim());
@@ -364,10 +356,7 @@ export class ConversationExportService {
     }
 
     if (turn.assistantElement) {
-      const extracted = DOMContentExtractor.extractAssistantContent(
-        turn.assistantElement,
-        exportHandler,
-      );
+      const extracted = DOMContentExtractor.extractAssistantContent(turn.assistantElement);
       return {
         markdown: extracted.text || turn.assistant,
         html: extracted.html || this.formatPlainTextAsHtml(extracted.text || turn.assistant),
@@ -375,7 +364,7 @@ export class ConversationExportService {
     }
 
     if (turn.userElement) {
-      const extracted = DOMContentExtractor.extractUserContent(turn.userElement, exportHandler);
+      const extracted = DOMContentExtractor.extractUserContent(turn.userElement);
       return {
         markdown: extracted.text || turn.user,
         html: extracted.html || this.formatPlainTextAsHtml(extracted.text || turn.user),

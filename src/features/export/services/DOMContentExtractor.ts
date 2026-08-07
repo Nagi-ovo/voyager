@@ -2,7 +2,8 @@
  * DOM Content Extractor
  * Extracts rich content from Gemini's DOM structure preserving formatting
  */
-import type { ExportAttachment, ExportHandler } from '../types/export';
+import { ExportPlatformAdapter } from '../../../pages/content/export/adapter/platformAdapters';
+import type { ExportAttachment } from '../types/export';
 
 export interface ExtractedContent {
   text: string;
@@ -45,12 +46,22 @@ function queryOutsideThoughts<T extends Element = Element>(
 }
 export class DOMContentExtractor {
   private static DEBUG = false;
+  private static exportAdapter: ExportPlatformAdapter;
+
+  /**
+   * Set the export adapter.
+   * @param adapter - The export adapter.
+   */
+  static setExportAdapter(adapter: ExportPlatformAdapter) {
+    this.exportAdapter = adapter;
+  }
+
   /**
    * Extract user query content.
    * @param imageSelectors - Platform-specific selectors for finding images.
    *   Empty/omitted = use Gemini's built-in selectors only.
    */
-  static extractUserContent(element: HTMLElement, exportHandler?: ExportHandler): ExtractedContent {
+  static extractUserContent(element: HTMLElement): ExtractedContent {
     const result: ExtractedContent = {
       text: '',
       html: '',
@@ -61,30 +72,20 @@ export class DOMContentExtractor {
       hasCode: false,
     };
 
-    const images = exportHandler?.extractUserImage(element) ?? [];
+    const images = this.exportAdapter.extractUserImage(element) ?? [];
     console.log('[DOMContentExtractor] images:', images);
     result.hasImages = images.length > 0;
 
     const attachments = this.extractUserAttachments(element);
     result.attachments = attachments;
 
-    // Extract text from query-text-line paragraphs (Gemini), with fallback for other platforms
-    const textLines = element.querySelectorAll('.query-text-line');
+    // Extract user message text. Each platform exposes its own DOM shape
+    // (Gemini's .query-text-line paragraphs vs. ChatGPT's plain text node),
+    // so the actual extraction strategy is delegated to the platform adapter.
+    const textLines = element.querySelectorAll<HTMLElement>('.query-text-line');
     const textParts: string[] = [];
-    textLines.forEach((line) => {
-      const el = line as HTMLElement;
-      const raw = el.dataset?.userLatexOriginal ?? line.textContent ?? '';
-      const text = this.normalizeText(raw);
-      if (text) textParts.push(text);
-    });
-    // Fallback: non-Gemini platforms don't have .query-text-line. Remove file
-    // cards first so their visible filename/type is not duplicated beside 📎.
-    if (textParts.length === 0) {
-      const contentOnly = element.cloneNode(true) as HTMLElement;
-      this.getUserAttachmentCandidates(contentOnly).forEach((candidate) => candidate.remove());
-      const fallback = this.normalizeText(contentOnly.textContent || '');
-      if (fallback) textParts.push(fallback);
-    }
+    this.exportAdapter.extractUserText(textLines, textParts, element);
+
     result.text = textParts.join('\n');
 
     // Build HTML representation
@@ -131,11 +132,7 @@ export class DOMContentExtractor {
   /**
    * Extract assistant response content with rich formatting
    */
-  static extractAssistantContent(
-    element: HTMLElement,
-    // _imageSelectors: string[] = [],
-    exportHandler?: ExportHandler,
-  ): ExtractedContent {
+  static extractAssistantContent(element: HTMLElement): ExtractedContent {
     if (this.DEBUG)
       console.log('[DOMContentExtractor] extractAssistantContent called, element:', element);
 
@@ -212,27 +209,13 @@ export class DOMContentExtractor {
       }
 
       // First, process all direct children of markdown that are NOT response-element
-      this.processNodes(
-        markdownDiv,
-        htmlParts,
-        textParts,
-        result,
-        processedImageSrcs,
-        exportHandler,
-      );
+      this.processNodes(markdownDiv, htmlParts, textParts, result, processedImageSrcs);
 
       // Note: response-element contents are processed by processNodes recursion above
     } else {
       // Fallback to old method
       if (this.DEBUG) console.log('[DOMContentExtractor] No markdown div found, using fallback');
-      this.processNodes(
-        messageContent,
-        htmlParts,
-        textParts,
-        result,
-        processedImageSrcs,
-        exportHandler,
-      );
+      this.processNodes(messageContent, htmlParts, textParts, result, processedImageSrcs);
     }
 
     // Additionally, look for code blocks and tables at the element level
@@ -333,7 +316,7 @@ export class DOMContentExtractor {
    * Find non-image file cards in a user message. Gemini and ChatGPT expose
    * different markup, but both provide a stable accessible filename.
    */
-  private static getUserAttachmentCandidates(element: HTMLElement): HTMLElement[] {
+  public static getUserAttachmentCandidates(element: HTMLElement): HTMLElement[] {
     const geminiUploadedFiles = Array.from(
       element.querySelectorAll<HTMLElement>(
         'user-query-file-preview [data-test-id="uploaded-file"]',
@@ -346,9 +329,6 @@ export class DOMContentExtractor {
     );
     if (geminiFilePreviews.length > 0) return geminiFilePreviews;
 
-    // ChatGPT file tiles are role=group containers with the file name in
-    // aria-label and an internal default-action button carrying the same label.
-    // The paired signals keep generic aria-labelled groups out of the export.
     return Array.from(element.querySelectorAll<HTMLElement>('[role="group"][aria-label]')).filter(
       (candidate) => {
         const name = candidate.getAttribute('aria-label')?.trim();
@@ -366,11 +346,12 @@ export class DOMContentExtractor {
    * Image previews are already exported as images above, so they are not duplicated.
    */
   private static extractUserAttachments(element: HTMLElement): ExportAttachment[] {
-    const candidates = this.getUserAttachmentCandidates(element);
+    // const candidates = this.getUserAttachmentCandidates(element);
+    const candidates = this.exportAdapter.getUserAttachmentCandidates(element);
     const attachments: ExportAttachment[] = [];
     const seen = new Set<string>();
 
-    candidates.forEach((candidate) => {
+    candidates?.forEach((candidate) => {
       const labelledElement = candidate.matches('[aria-label]')
         ? candidate
         : candidate.querySelector<HTMLElement>('[aria-label]');
@@ -409,7 +390,6 @@ export class DOMContentExtractor {
     textParts: string[],
     flags: Pick<ExtractedContent, 'hasImages' | 'hasFormulas' | 'hasTables' | 'hasCode'>,
     processedImageSrcs: ReadonlySet<string> = new Set<string>(),
-    exportHandler?: ExportHandler,
   ): void {
     const children = Array.from(container.children);
     if (this.DEBUG)
@@ -452,13 +432,13 @@ export class DOMContentExtractor {
       }
 
       // Extract formula
-      if (exportHandler?.extractFormula(child, flags, htmlParts, textParts, this.DEBUG)) {
+      if (this.exportAdapter.extractFormula(child, flags, htmlParts, textParts, this.DEBUG)) {
         continue;
       }
 
       // Extract code block
       if (
-        exportHandler?.extractCodeBlock(child, htmlParts, textParts, flags, tagName, this.DEBUG)
+        this.exportAdapter.extractCodeBlock(child, htmlParts, textParts, flags, tagName, this.DEBUG)
       ) {
         continue;
       }
@@ -481,7 +461,7 @@ export class DOMContentExtractor {
 
       // Extract assistant image
       if (
-        exportHandler?.extractAssistantImage(
+        this.exportAdapter.extractAssistantImage(
           child,
           htmlParts,
           textParts,
@@ -534,7 +514,7 @@ export class DOMContentExtractor {
       if (child.children.length > 0) {
         if (this.DEBUG)
           console.log('[DOMContentExtractor] Recursing into container:', tagName, child.className);
-        this.processNodes(child, htmlParts, textParts, flags, processedImageSrcs, exportHandler);
+        this.processNodes(child, htmlParts, textParts, flags, processedImageSrcs);
         continue;
       }
 
@@ -693,6 +673,7 @@ export class DOMContentExtractor {
           return;
         }
 
+        /*
         // KaTeX inline formula (used by ChatGPT, Claude, and other platforms)
         // Must be checked BEFORE the Gemini-specific math-inline handler
         if (el.classList.contains('katex')) {
@@ -723,6 +704,12 @@ export class DOMContentExtractor {
             textParts.push(`$${latex}$`);
             return;
           }
+        }
+         */
+
+        if (this.exportAdapter.extractInlineFormula(el, htmlParts, textParts)) {
+          hasFormulas = true;
+          return;
         }
 
         // Emphasis
@@ -1061,7 +1048,7 @@ export class DOMContentExtractor {
   /**
    * Normalize whitespace in text
    */
-  private static normalizeText(text: string): string {
+  public static normalizeText(text: string): string {
     return text.replace(/\s+/g, ' ').trim();
   }
 

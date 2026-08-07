@@ -3,7 +3,7 @@
  * Converts conversation to clean, standard Markdown format
  * Following the "paper book" philosophy - content over design
  */
-import type { ChatTurn, ConversationMetadata, ExportHandler } from '../types/export';
+import type { ChatTurn, ConversationMetadata } from '../types/export';
 import { DOMContentExtractor } from './DOMContentExtractor';
 
 /**
@@ -73,11 +73,7 @@ export class MarkdownFormatter {
   /**
    * Format conversation as Markdown
    */
-  static format(
-    turns: ChatTurn[],
-    metadata: ConversationMetadata,
-    exportHandler?: ExportHandler,
-  ): string {
+  static format(turns: ChatTurn[], metadata: ConversationMetadata): string {
     const sections: string[] = [];
 
     // Header with metadata
@@ -90,7 +86,7 @@ export class MarkdownFormatter {
 
     // Conversation turns
     turns.forEach((turn, index) => {
-      sections.push(this.formatTurn(turn, index + 1, exportHandler));
+      sections.push(this.formatTurn(turn, index + 1));
       sections.push(''); // Empty line between turns
     });
 
@@ -125,7 +121,7 @@ export class MarkdownFormatter {
   /**
    * Format a single conversation turn
    */
-  private static formatTurn(turn: ChatTurn, index: number, exportHandler?: ExportHandler): string {
+  private static formatTurn(turn: ChatTurn, index: number): string {
     const lines: string[] = [];
 
     lines.push(`## Turn ${index}${turn.starred ? ' ⭐' : ''}`);
@@ -142,7 +138,7 @@ export class MarkdownFormatter {
         }
         lines.push(turn.userContent.text || '_No content_');
       } else if (turn.userElement) {
-        const extracted = DOMContentExtractor.extractUserContent(turn.userElement, exportHandler);
+        const extracted = DOMContentExtractor.extractUserContent(turn.userElement);
         if (extracted.hasImages) {
           lines.push('*[This turn includes uploaded images]*');
           lines.push('');
@@ -160,10 +156,7 @@ export class MarkdownFormatter {
       if (turn.assistantContent) {
         lines.push(turn.assistantContent.text || fallback || '_No content_');
       } else if (turn.assistantElement) {
-        const extracted = DOMContentExtractor.extractAssistantContent(
-          turn.assistantElement,
-          exportHandler,
-        );
+        const extracted = DOMContentExtractor.extractAssistantContent(turn.assistantElement);
         lines.push(extracted.text || fallback || '_No content_');
       } else {
         lines.push(this.formatContent(turn.assistant) || '_No content_');
@@ -187,7 +180,7 @@ export class MarkdownFormatter {
         }
         lines.push(turn.userContent.text || userFallback || '_No content_');
       } else if (turn.userElement) {
-        const extracted = DOMContentExtractor.extractUserContent(turn.userElement, exportHandler);
+        const extracted = DOMContentExtractor.extractUserContent(turn.userElement);
         if (extracted.hasImages) {
           lines.push('*[This turn includes uploaded images]*');
           lines.push('');
@@ -210,10 +203,7 @@ export class MarkdownFormatter {
       if (turn.assistantContent) {
         lines.push(turn.assistantContent.text || assistantFallback || '_No content_');
       } else if (turn.assistantElement) {
-        const extracted = DOMContentExtractor.extractAssistantContent(
-          turn.assistantElement,
-          exportHandler,
-        );
+        const extracted = DOMContentExtractor.extractAssistantContent(turn.assistantElement);
         lines.push(extracted.text || assistantFallback || '_No content_');
       } else {
         lines.push(assistantFallback || '_No content_');

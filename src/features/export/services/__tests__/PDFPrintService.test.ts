@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { resolveExportAdapter } from '@/pages/content/export/adapter/platformAdapters';
+
+import { DOMContentExtractor } from '../DOMContentExtractor';
 import { PDFPrintService } from '../PDFPrintService';
+
+DOMContentExtractor.setExportAdapter(resolveExportAdapter());
 
 describe('PDFPrintService', () => {
   afterEach(() => {

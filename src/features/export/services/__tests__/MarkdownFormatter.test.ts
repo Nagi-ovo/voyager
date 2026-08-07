@@ -3,8 +3,13 @@
  */
 import { describe, expect, it } from 'vitest';
 
+import { resolveExportAdapter } from '@/pages/content/export/adapter/platformAdapters';
+
 import type { ChatTurn, ConversationMetadata } from '../../types/export';
+import { DOMContentExtractor } from '../DOMContentExtractor';
 import { MarkdownFormatter } from '../MarkdownFormatter';
+
+DOMContentExtractor.setExportAdapter(resolveExportAdapter());
 
 describe('MarkdownFormatter', () => {
   const mockMetadata: ConversationMetadata = {

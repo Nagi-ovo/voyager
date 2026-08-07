@@ -63,37 +63,6 @@ export enum ExportFormat {
   IMAGE = 'image',
 }
 
-/**
- * Extract all kinds of content from a DOM element
- */
-export interface ExportHandler {
-  extractUserImage: (element: HTMLElement) => NodeListOf<HTMLImageElement>;
-  extractAssistantImage: (
-    child: Element,
-    htmlParts: string[],
-    textParts: string[],
-    flags: Pick<ExtractedContent, 'hasImages' | 'hasFormulas' | 'hasTables' | 'hasCode'>,
-    tagName?: string,
-    DEBUG?: boolean,
-    processedImageSrcs?: ReadonlySet<string>,
-  ) => boolean | undefined;
-  extractFormula: (
-    child: Element,
-    flags: Pick<ExtractedContent, 'hasImages' | 'hasFormulas' | 'hasTables' | 'hasCode'>,
-    htmlParts: string[],
-    textParts: string[],
-    DEBUG: boolean,
-  ) => boolean | undefined;
-  extractCodeBlock: (
-    child: Element,
-    htmlParts: string[],
-    textParts: string[],
-    flags: Pick<ExtractedContent, 'hasImages' | 'hasFormulas' | 'hasTables' | 'hasCode'>,
-    tagName?: string,
-    DEBUG?: boolean,
-  ) => boolean | undefined;
-}
-
 export type ExportLayout = 'conversation' | 'document';
 export type ImageExportWidth = 620 | 960 | 1360;
 

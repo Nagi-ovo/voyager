@@ -5,7 +5,7 @@
  */
 import { isSafari } from '@/core/utils/browser';
 
-import type { ChatTurn, ConversationMetadata, ExportHandler } from '../types/export';
+import type { ChatTurn, ConversationMetadata } from '../types/export';
 import { DOMContentExtractor } from './DOMContentExtractor';
 import { buildKatexExportStyles } from './katexExportStyles';
 
@@ -38,15 +38,11 @@ export class PDFPrintService {
     turns: ChatTurn[],
     metadata: ConversationMetadata,
     options?: { fontSize?: number },
-    exportHandler?: ExportHandler,
   ): Promise<void> {
-    await this.exportInternal(turns, metadata, false, exportHandler, options?.fontSize);
+    await this.exportInternal(turns, metadata, false, options?.fontSize);
   }
 
-  static async exportDocument(
-    content: PrintableDocumentContent,
-    exportHandler?: ExportHandler,
-  ): Promise<void> {
+  static async exportDocument(content: PrintableDocumentContent): Promise<void> {
     const metadata: ConversationMetadata = {
       url: content.url,
       exportedAt: content.exportedAt,
@@ -69,26 +65,20 @@ export class PDFPrintService {
       },
     ];
 
-    await this.exportInternal(turns, metadata, true, exportHandler);
+    await this.exportInternal(turns, metadata, true);
   }
 
   private static async exportInternal(
     turns: ChatTurn[],
     metadata: ConversationMetadata,
     preferMetadataTitle: boolean,
-    exportHandler?: ExportHandler,
     fontSize?: number,
   ): Promise<void> {
     // Ensure we don't leave a previous export container around (e.g. if a prior export failed)
     this.cleanup();
 
     // Create print container
-    const container = this.createPrintContainer(
-      turns,
-      metadata,
-      preferMetadataTitle,
-      exportHandler,
-    );
+    const container = this.createPrintContainer(turns, metadata, preferMetadataTitle);
     document.body.appendChild(container);
 
     // Remove existing print styles so we can re-inject with new font size
@@ -194,7 +184,6 @@ export class PDFPrintService {
     turns: ChatTurn[],
     metadata: ConversationMetadata,
     preferMetadataTitle: boolean,
-    exportHandler?: ExportHandler,
   ): HTMLElement {
     const container = document.createElement('div');
     container.id = this.PRINT_CONTAINER_ID;
@@ -204,7 +193,7 @@ export class PDFPrintService {
     container.innerHTML = `
       <div class="gv-print-document">
         ${this.renderHeader(metadata, preferMetadataTitle)}
-        ${this.renderContent(turns, exportHandler)}
+        ${this.renderContent(turns)}
         ${this.renderFooter(metadata)}
       </div>
     `;
@@ -534,10 +523,10 @@ export class PDFPrintService {
   /**
    * Render conversation content
    */
-  private static renderContent(turns: ChatTurn[], exportHandler?: ExportHandler): string {
+  private static renderContent(turns: ChatTurn[]): string {
     return `
       <div class="gv-print-content">
-        ${turns.map((turn, index) => this.renderTurn(turn, index + 1, exportHandler)).join('\n')}
+        ${turns.map((turn, index) => this.renderTurn(turn, index + 1)).join('\n')}
       </div>
     `;
   }
@@ -545,7 +534,7 @@ export class PDFPrintService {
   /**
    * Render a single turn
    */
-  private static renderTurn(turn: ChatTurn, index: number, exportHandler?: ExportHandler): string {
+  private static renderTurn(turn: ChatTurn, index: number): string {
     const starredClass = turn.starred ? 'gv-print-turn-starred' : '';
 
     // Virtualized-platform content is captured before subsequent scrolling can
@@ -553,14 +542,13 @@ export class PDFPrintService {
     const userContent =
       turn.userContent?.html ||
       (turn.userElement
-        ? DOMContentExtractor.extractUserContent(turn.userElement, exportHandler).html ||
-          '<em>No content</em>'
+        ? DOMContentExtractor.extractUserContent(turn.userElement).html || '<em>No content</em>'
         : this.formatContent(turn.user) || '<em>No content</em>');
 
     const assistantContent =
       turn.assistantContent?.html ||
       (turn.assistantElement
-        ? DOMContentExtractor.extractAssistantContent(turn.assistantElement, exportHandler).html ||
+        ? DOMContentExtractor.extractAssistantContent(turn.assistantElement).html ||
           '<em>No content</em>'
         : this.formatContent(turn.assistant) || '<em>No content</em>');
 
