@@ -135,6 +135,17 @@ function applyWidth(widthPercent: number): void {
       width: 100% !important;
     }
 
+    /* Widen the file-drop overlay with the input area (#887). Gemini pins it to
+       var(--bard-chat-window-max-width-default, 760px), which only matches the
+       native input width. Kept less specific than chatWidth's overlay rule so
+       both-enabled sessions follow chatWidth, like the input-area-v2 rules do. */
+    file-drop-indicator .overlay-container[data-filedrop-id="chat-window-input-container"] {
+      max-width: ${widthValue} !important;
+      width: min(100%, ${widthValue}) !important;
+      margin-left: auto !important;
+      margin-right: auto !important;
+    }
+
     /* Fallback for browsers without :has() support */
     @supports not selector(:has(*)) {
       .content-wrapper,

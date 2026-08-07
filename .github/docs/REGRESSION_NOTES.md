@@ -1092,6 +1092,43 @@ Regression test:
 Commit:
 `fix(timeline): use stable Gemini turn identities`
 
+## The file-drop overlay is pinned to Gemini's native input width
+
+Symptom (#887):
+With chat width widened, the blue "Drop files here" overlay shown while
+dragging a file over the page is visibly narrower than the input box. Dropping
+outside the overlay still uploads, because the real drop target is the
+`xap-uploader-dropzone` directive on the whole `.chat-container` — the overlay
+is only a visual hint, so only the hint is wrong.
+
+Root cause:
+Gemini pins the overlay card with
+`.overlay-container[data-filedrop-id="chat-window-input-container"]
+{ max-width: var(--bard-chat-window-max-width-default, 760px) }`. The variable
+is unset, so the overlay is always 760px — which coincides with Gemini's
+native input width, so nothing looks wrong until `chatWidth` or
+`editInputWidth` widens `input-area-v2` past 760px without widening the
+overlay.
+
+Fix:
+Both width adjusters inject a matching overlay rule with their own width
+value. The selectors are deliberately asymmetric: `chatWidth` prefixes
+`input-container` (higher specificity), `editInputWidth` does not, mirroring
+how the two modules' `input-area-v2` rules already resolve — so when both
+features are enabled the overlay follows the same winner as the visible input
+box in either injection order. Keep that relationship if either selector
+changes.
+
+Regression tests:
+`src/pages/content/chatWidth/__tests__/chatWidth.test.ts`
+`src/pages/content/editInputWidth/__tests__/editInputWidth.test.ts`
+Live verification: synthetic dragenter/dragover over `.chat-container` at 70%
+width — overlay left/right must equal `input-area-v2` left/right (was fixed at
+760px centered).
+
+Commit:
+`fix(chatwidth): widen file-drop overlay to match adjusted input width`
+
 ## ChatGPT KaTeX may omit MathML annotations
 
 Symptom:

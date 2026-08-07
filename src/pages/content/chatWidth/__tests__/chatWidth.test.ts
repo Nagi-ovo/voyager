@@ -119,4 +119,45 @@ describe('chatWidth', () => {
     expect(styleText).toContain(`max-width: ${expectedPx}px !important`);
     expect(styleText).toContain(`width: min(100%, ${expectedPx}px) !important`);
   });
+
+  it('widens the file-drop overlay to match the input area (#887)', async () => {
+    const { startChatWidthAdjuster } = await import('../index');
+    startChatWidthAdjuster();
+
+    const styleText = getInjectedStyle().textContent ?? '';
+    // Read the selector back out of the injected CSS so this test fails if the
+    // shipped rule changes, instead of only checking a hardcoded copy of it
+    const overlayRule = styleText.match(/(input-container file-drop-indicator[^{]+)\{([^}]+)\}/);
+    expect(overlayRule).not.toBeNull();
+    const [, selector, body] = overlayRule as RegExpMatchArray;
+
+    const expectedPx = percentToPixels(85);
+    expect(body).toContain(`max-width: ${expectedPx}px !important`);
+    expect(body).toContain(`width: min(100%, ${expectedPx}px) !important`);
+    expect(body).toContain('margin-left: auto !important');
+    expect(body).toContain('margin-right: auto !important');
+
+    // Behavioral check against the real DOM shape: the overlay Gemini renders
+    // while dragging must match; an overlay with a different filedrop id
+    // (a non-chat drop target) must not
+    document.body.innerHTML = `
+      <main>
+        <input-container>
+          <fieldset class="input-area-container">
+            <input-area-v2></input-area-v2>
+            <file-drop-indicator>
+              <div class="overlay-container" data-filedrop-id="chat-window-input-container"></div>
+            </file-drop-indicator>
+          </fieldset>
+        </input-container>
+        <file-drop-indicator>
+          <div class="overlay-container" data-filedrop-id="some-other-target"></div>
+        </file-drop-indicator>
+      </main>
+    `;
+    const matches = [...document.querySelectorAll(selector.trim())];
+    expect(matches.map((el) => el.getAttribute('data-filedrop-id'))).toEqual([
+      'chat-window-input-container',
+    ]);
+  });
 });

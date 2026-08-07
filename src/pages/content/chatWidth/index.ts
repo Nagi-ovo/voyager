@@ -216,6 +216,18 @@ function applyWidth(widthPercent: number) {
       margin-right: auto !important;
     }
 
+    /* Widen the file-drop overlay with the input area (#887). Gemini pins it to
+       var(--bard-chat-window-max-width-default, 760px), which only matches the
+       native input width. The input-container prefix keeps this rule more
+       specific than editInputWidth's overlay rule, mirroring how the two
+       modules' input-area-v2 rules already resolve when both are enabled. */
+    input-container file-drop-indicator .overlay-container[data-filedrop-id="chat-window-input-container"] {
+      max-width: ${widthValue} !important;
+      width: min(100%, ${widthValue}) !important;
+      margin-left: auto !important;
+      margin-right: auto !important;
+    }
+
     /* Specific fix for user bubble background to fit content but respect max-width */
     .user-query-bubble-with-background {
       max-width: ${widthValue} !important;
