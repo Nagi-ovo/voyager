@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { CleanupPositions } from '@/core/types/cleanupPositions';
 import { CleanupManager } from '@/core/utils/cleanupManager';
 
 enum Sequence {
@@ -118,6 +119,37 @@ describe('willCleanUp tests module', () => {
 
     expect(function2).toHaveBeenCalledAfter(function1);
     expect(function3).toHaveBeenCalledAfter(function2);
+  });
+
+  it('keeps production cleanup positions in the legacy execution order', () => {
+    const positionsInExecutionOrder = Object.values(CleanupPositions).filter(
+      (position): position is string => typeof position === 'string',
+    );
+
+    expect(positionsInExecutionOrder).toEqual([
+      'RemoveUnhandledRejectionEventListener',
+      'RemoveErrorEventListener',
+      'StopWatermarkRemover',
+      'DestroyFolderManagerInstance',
+      'DestroyPromptManagerInstance',
+      'DestroySlashPromptFeatureInstance',
+      'CleanupQuoteReply',
+      'CleanupInputVimMode',
+      'CleanupSendBehavior',
+      'CleanupDraftSave',
+      'CleanupFork',
+      'CleanupGemsSidebar',
+      'CleanupResponseCompleteNotification',
+      'CleanupEdgeFinalVersionNotice',
+      'CleanupPluginHost',
+      'CleanupBrandTheme',
+      'CleanupRemoteAnnouncements',
+      'CleanupStorageQuotaWarning',
+      'CleanupAccountContextBridge',
+      'CleanupCodeBlockCollapse',
+      'CleanupUsageStatus',
+      'RemoveStorageOnChangedListener',
+    ]);
   });
 
   it('can withdraw functions by position number', () => {
