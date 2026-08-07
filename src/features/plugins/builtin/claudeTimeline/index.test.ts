@@ -150,6 +150,23 @@ describe('Claude timeline', () => {
     ).toBe(true);
   });
 
+  it('suppresses the compact-view guide while an artifact iframe is open', async () => {
+    addTurn('first prompt');
+    const artifact = document.createElement('iframe');
+    artifact.src = 'https://abc123.frame.claudeusercontent.com/artifact';
+    document.body.appendChild(artifact);
+    try {
+      startClaudeTimeline({ compactView: false });
+      await flush();
+
+      expect(showTimelineStyleCoachmark).not.toHaveBeenCalled();
+      // The timeline itself still runs — only the guide is suppressed.
+      expect(document.querySelector('.gemini-timeline-bar')).toBeTruthy();
+    } finally {
+      artifact.remove();
+    }
+  });
+
   it('switches live between node and compact hover-panel views', async () => {
     addTurn('first prompt');
     addTurn('second prompt');

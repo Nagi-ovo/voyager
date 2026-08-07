@@ -72,6 +72,11 @@ export function extractClaudeTurnHash(turnId: string): string {
   return segments[segments.length - 1] || base;
 }
 
+/** Claude renders artifacts in a sandboxed claudeusercontent.com iframe. */
+export function hasOpenClaudeArtifact(doc: Document = document): boolean {
+  return !!doc.querySelector('iframe[src*="claudeusercontent.com"]');
+}
+
 class ClaudeTimeline {
   private bar: HTMLElement | null = null;
   private trackContent: HTMLElement | null = null;
@@ -139,6 +144,10 @@ class ClaudeTimeline {
 
   private maybeShowStyleCoachmark(): void {
     if (this.disposed || this.timelineStyle === 'compact') return;
+    // Never open a scrimmed guide over an active artifact: the panel is part
+    // of the top document view. Skipping does NOT burn the once-per-user seen
+    // state, so the guide simply shows on a later artifact-free page load.
+    if (hasOpenClaudeArtifact()) return;
     void showTimelineStyleCoachmark({
       id: CLAUDE_TIMELINE_COACHMARK_ID,
       enabled: false,

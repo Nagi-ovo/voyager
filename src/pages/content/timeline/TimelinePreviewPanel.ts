@@ -12,11 +12,17 @@ const COMPACT_CLOSE_DELAY_MS = 160;
 const LONG_PRESS_DURATION_MS = 550;
 const LONG_PRESS_MOVE_TOLERANCE_PX = 6;
 const LONG_PRESS_CLICK_SUPPRESSION_MS = 350;
+const PREVIEW_PANEL_WIDTH_PX = 320;
+const PREVIEW_PANEL_GAP_PX = 12;
+const PREVIEW_HOVER_BRIDGE_PADDING_PX = 8;
+const PREVIEW_HOVER_BRIDGE_CLASS = 'gv-timeline-preview-hover-bridge';
+const PREVIEW_HOVER_BRIDGE_VISIBLE_CLASS = 'gv-timeline-preview-hover-bridge-visible';
 
 const LIST_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>`;
 
 export class TimelinePreviewPanel {
   private panelEl: HTMLElement | null = null;
+  private hoverBridgeEl: HTMLElement | null = null;
   private listEl: HTMLElement | null = null;
   private searchInput: HTMLInputElement | null = null;
   private toggleBtn: HTMLElement | null = null;
@@ -52,6 +58,8 @@ export class TimelinePreviewPanel {
   private onAnchorMouseLeave: (() => void) | null = null;
   private onPanelMouseEnter: (() => void) | null = null;
   private onPanelMouseLeave: (() => void) | null = null;
+  private onHoverBridgeMouseEnter: (() => void) | null = null;
+  private onHoverBridgeMouseLeave: (() => void) | null = null;
   private onAnchorFocusIn: (() => void) | null = null;
   private onAnchorFocusOut: (() => void) | null = null;
   private onAnchorKeyDown: ((event: KeyboardEvent) => void) | null = null;
@@ -135,6 +143,7 @@ export class TimelinePreviewPanel {
       this.anchorElement.removeAttribute('role');
       this.anchorElement.removeAttribute('aria-label');
       this.anchorElement.removeAttribute('aria-expanded');
+      this.hoverBridgeEl?.classList.remove(PREVIEW_HOVER_BRIDGE_VISIBLE_CLASS);
       if (this._isOpen && !this._isPinned) this.close();
     }
   }
@@ -173,6 +182,7 @@ export class TimelinePreviewPanel {
     this.suppressClickUntil = 0;
     this._isOpen = false;
     this.panelEl.classList.remove('visible');
+    this.hoverBridgeEl?.classList.remove(PREVIEW_HOVER_BRIDGE_VISIBLE_CLASS);
     this.toggleBtn?.classList.remove('active');
     this.toggleBtn?.setAttribute('aria-pressed', 'false');
     if (this._isCompactMode) this.anchorElement.setAttribute('aria-expanded', 'false');
@@ -246,6 +256,14 @@ export class TimelinePreviewPanel {
       this.panelEl.removeEventListener('mouseleave', this.onPanelMouseLeave);
       this.onPanelMouseLeave = null;
     }
+    if (this.onHoverBridgeMouseEnter && this.hoverBridgeEl) {
+      this.hoverBridgeEl.removeEventListener('mouseenter', this.onHoverBridgeMouseEnter);
+      this.onHoverBridgeMouseEnter = null;
+    }
+    if (this.onHoverBridgeMouseLeave && this.hoverBridgeEl) {
+      this.hoverBridgeEl.removeEventListener('mouseleave', this.onHoverBridgeMouseLeave);
+      this.onHoverBridgeMouseLeave = null;
+    }
     if (this.onAnchorFocusIn) {
       this.anchorElement.removeEventListener('focusin', this.onAnchorFocusIn);
       this.onAnchorFocusIn = null;
@@ -273,8 +291,10 @@ export class TimelinePreviewPanel {
     }
     this.toggleBtn?.remove();
     this.panelEl?.remove();
+    this.hoverBridgeEl?.remove();
     this.toggleBtn = null;
     this.panelEl = null;
+    this.hoverBridgeEl = null;
     this.listEl = null;
     this.searchInput = null;
     this.onSearchChange?.('');
@@ -306,6 +326,9 @@ export class TimelinePreviewPanel {
     // Panel
     this.panelEl = document.createElement('div');
     this.panelEl.className = 'timeline-preview-panel';
+    this.hoverBridgeEl = document.createElement('div');
+    this.hoverBridgeEl.className = PREVIEW_HOVER_BRIDGE_CLASS;
+    this.hoverBridgeEl.setAttribute('aria-hidden', 'true');
 
     // Search section
     const searchWrapper = document.createElement('div');
@@ -327,6 +350,7 @@ export class TimelinePreviewPanel {
     this.panelEl.appendChild(this.listEl);
 
     document.body.appendChild(this.panelEl);
+    document.body.appendChild(this.hoverBridgeEl);
   }
 
   private syncFloatingToggleVisibility(): void {
@@ -342,6 +366,7 @@ export class TimelinePreviewPanel {
       const target = e.target as Node;
       if (
         this.panelEl?.contains(target) ||
+        this.hoverBridgeEl?.contains(target) ||
         this.toggleBtn?.contains(target) ||
         this.anchorElement.contains(target)
       )
@@ -443,6 +468,11 @@ export class TimelinePreviewPanel {
       this.cancelCompactClose();
     };
     this.onPanelMouseLeave = () => this.scheduleCompactClose();
+    this.onHoverBridgeMouseEnter = () => {
+      if (!this._isCompactMode) return;
+      this.cancelCompactClose();
+    };
+    this.onHoverBridgeMouseLeave = () => this.scheduleCompactClose();
     this.onAnchorFocusIn = () => {
       if (!this._isCompactMode) return;
       this.cancelCompactClose();
@@ -473,6 +503,8 @@ export class TimelinePreviewPanel {
     this.anchorElement.addEventListener('mouseleave', this.onAnchorMouseLeave);
     this.panelEl?.addEventListener('mouseenter', this.onPanelMouseEnter);
     this.panelEl?.addEventListener('mouseleave', this.onPanelMouseLeave);
+    this.hoverBridgeEl?.addEventListener('mouseenter', this.onHoverBridgeMouseEnter);
+    this.hoverBridgeEl?.addEventListener('mouseleave', this.onHoverBridgeMouseLeave);
     this.anchorElement.addEventListener('focusin', this.onAnchorFocusIn);
     this.anchorElement.addEventListener('focusout', this.onAnchorFocusOut);
     this.anchorElement.addEventListener('keydown', this.onAnchorKeyDown);
@@ -566,8 +598,8 @@ export class TimelinePreviewPanel {
   private positionPanel(): void {
     if (!this.panelEl) return;
     const barRect = this.anchorElement.getBoundingClientRect();
-    const panelWidth = 320;
-    const gap = 12;
+    const panelWidth = PREVIEW_PANEL_WIDTH_PX;
+    const gap = PREVIEW_PANEL_GAP_PX;
     const maxHeight = this._isCompactMode
       ? Math.min(700, window.innerHeight * 0.82)
       : Math.min(500, window.innerHeight * 0.7);
@@ -596,6 +628,40 @@ export class TimelinePreviewPanel {
     top = Math.max(8, Math.min(top, window.innerHeight - panelHeight - 8));
 
     this.panelEl.style.top = `${Math.round(top)}px`;
+    this.positionHoverBridge(barRect, left, top, panelWidth, panelHeight);
+  }
+
+  private positionHoverBridge(
+    barRect: DOMRect,
+    panelLeft: number,
+    panelTop: number,
+    panelWidth: number,
+    panelHeight: number,
+  ): void {
+    if (!this.hoverBridgeEl) return;
+    const isRTL = this.isRTLContext();
+    const panelRight = panelLeft + panelWidth;
+    const bridgeLeft = isRTL ? barRect.right : panelRight;
+    const bridgeWidth = isRTL
+      ? Math.max(0, panelLeft - barRect.right)
+      : Math.max(0, barRect.left - panelRight);
+    const viewportTop = Math.max(
+      0,
+      Math.min(barRect.top, panelTop) - PREVIEW_HOVER_BRIDGE_PADDING_PX,
+    );
+    const viewportBottom = Math.min(
+      window.innerHeight,
+      Math.max(barRect.bottom, panelTop + panelHeight) + PREVIEW_HOVER_BRIDGE_PADDING_PX,
+    );
+
+    this.hoverBridgeEl.style.left = `${Math.round(bridgeLeft)}px`;
+    this.hoverBridgeEl.style.top = `${Math.round(viewportTop)}px`;
+    this.hoverBridgeEl.style.width = `${Math.round(bridgeWidth)}px`;
+    this.hoverBridgeEl.style.height = `${Math.round(Math.max(0, viewportBottom - viewportTop))}px`;
+    this.hoverBridgeEl.classList.toggle(
+      PREVIEW_HOVER_BRIDGE_VISIBLE_CLASS,
+      this._isOpen && this._isCompactMode && bridgeWidth > 0,
+    );
   }
 
   private applyFilter(): void {

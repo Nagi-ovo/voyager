@@ -1082,6 +1082,17 @@ html.dark .timeline-left-slider::before {
   pointer-events: auto;
 }
 
+.gv-timeline-preview-hover-bridge {
+  position: fixed;
+  z-index: 2147483645;
+  pointer-events: none;
+  background: transparent;
+}
+
+.gv-timeline-preview-hover-bridge-visible {
+  pointer-events: auto;
+}
+
 .timeline-preview-panel.timeline-preview-panel-compact .timeline-preview-search {
   display: none;
 }
