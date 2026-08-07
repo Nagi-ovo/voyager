@@ -190,13 +190,20 @@ export class FormulaCopyService {
       return dataMath;
     }
 
-    // 2. Try AI Studio's annotation element with encoding="application/x-tex"
+    // 2. ChatGPT's client-side KaTeX layout omits the MathML annotation and
+    // keeps the original TeX on the semantic wrapper around .katex-display.
+    const dataMathSource = element.closest('[data-math-source]')?.getAttribute('data-math-source');
+    if (dataMathSource?.trim()) {
+      return dataMathSource.trim();
+    }
+
+    // 3. Try AI Studio's annotation element with encoding="application/x-tex"
     const annotation = element.querySelector('annotation[encoding="application/x-tex"]');
     if (annotation?.textContent) {
       return annotation.textContent.trim();
     }
 
-    // 3. Fallback: try any annotation element
+    // 4. Fallback: try any annotation element
     const anyAnnotation = element.querySelector('annotation');
     if (anyAnnotation?.textContent) {
       return anyAnnotation.textContent.trim();
@@ -399,13 +406,19 @@ export class FormulaCopyService {
       return true;
     }
 
-    // 2. AI Studio: check for math element with display="block" attribute
+    // 2. ChatGPT / Claude: block KaTeX uses a .katex-display wrapper. Current
+    // ChatGPT markup no longer includes the MathML node checked below.
+    if (element.closest('.katex-display') !== null) {
+      return true;
+    }
+
+    // 3. AI Studio: check for math element with display="block" attribute
     const mathElement = element.querySelector('math[display="block"]');
     if (mathElement) {
       return true;
     }
 
-    // 3. AI Studio: check if ms-katex container has block-like styling
+    // 4. AI Studio: check if ms-katex container has block-like styling
     // (display formulas are typically block-level in AI Studio)
     if (element.tagName.toLowerCase() === 'ms-katex') {
       const style = window.getComputedStyle(element);

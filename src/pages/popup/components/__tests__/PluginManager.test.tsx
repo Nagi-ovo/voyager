@@ -16,6 +16,7 @@ const {
   setPluginSetting,
   permissionContains,
   permissionRequest,
+  runtimeSendMessage,
   permissionOrigins,
   pluginState,
   PLUGIN_ID,
@@ -26,6 +27,7 @@ const {
   setPluginSetting: vi.fn().mockResolvedValue(undefined),
   permissionContains: vi.fn().mockResolvedValue(false),
   permissionRequest: vi.fn().mockResolvedValue(true),
+  runtimeSendMessage: vi.fn().mockResolvedValue({ ok: true }),
   permissionOrigins: vi.fn().mockReturnValue([]),
   pluginState: { current: {} as Record<string, { enabled: boolean; installedAt: number }> },
   PLUGIN_ID: 'voyager.test-width',
@@ -38,6 +40,9 @@ vi.mock('webextension-polyfill', () => ({
     permissions: {
       contains: permissionContains,
       request: permissionRequest,
+    },
+    runtime: {
+      sendMessage: runtimeSendMessage,
     },
   },
 }));
@@ -158,6 +163,7 @@ beforeEach(() => {
   setPluginSetting.mockClear();
   permissionContains.mockReset().mockResolvedValue(false);
   permissionRequest.mockReset().mockResolvedValue(true);
+  runtimeSendMessage.mockReset().mockResolvedValue({ ok: true });
   permissionOrigins.mockReset().mockReturnValue([]);
   supportsDynamicRegistration.mockReset().mockReturnValue(true);
   container = document.createElement('div');
@@ -268,7 +274,7 @@ describe('PluginManager host permission flow', () => {
     expect(setPluginEnabled).toHaveBeenCalledWith(PLUGIN_ID, true);
   });
 
-  it('persists enable intent before opening the Chrome permission prompt', async () => {
+  it('persists enable intent and explicitly reconciles after the host grant resolves', async () => {
     let resolvePermission: (granted: boolean) => void = () => {};
     permissionRequest.mockReturnValue(
       new Promise<boolean>((resolve) => {
@@ -302,7 +308,13 @@ describe('PluginManager host permission flow', () => {
     await act(async () => {
       resolvePermission(true);
       await Promise.resolve();
+      await Promise.resolve();
     });
+
+    expect(runtimeSendMessage).toHaveBeenCalledWith({ type: 'gv.plugins.syncContentScripts' });
+    expect(permissionRequest.mock.invocationCallOrder[0]).toBeLessThan(
+      runtimeSendMessage.mock.invocationCallOrder[0],
+    );
   });
 
   it('refuses the host grant when dynamic registration is unavailable', async () => {
@@ -361,6 +373,7 @@ describe('PluginManager host permission flow', () => {
     expect(permissionRequest).toHaveBeenCalledWith({
       origins: ['https://claude.ai/*', 'https://*.frame.claudeusercontent.com/*'],
     });
+    expect(runtimeSendMessage).toHaveBeenCalledWith({ type: 'gv.plugins.syncContentScripts' });
     expect(container.textContent).not.toContain('pluginGrantRequiredAccess');
     expect(container.querySelector('input[type="range"]')).not.toBeNull();
   });

@@ -2,6 +2,8 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
+import { PLUGIN_CONTENT_SCRIPT_SYNC_MESSAGE } from '@/features/plugins/runtime/messages';
+
 import { isHandledBackgroundRuntimeMessage } from '../runtimeMessageRouting';
 
 describe('background runtime message routing', () => {
@@ -9,11 +11,25 @@ describe('background runtime message routing', () => {
     expect(isHandledBackgroundRuntimeMessage({ type: 'gv.account.resolve' })).toBe(true);
     expect(isHandledBackgroundRuntimeMessage({ type: 'gv.highlight.list' })).toBe(true);
     expect(isHandledBackgroundRuntimeMessage({ type: 'gv.sync.upload' })).toBe(true);
+    expect(isHandledBackgroundRuntimeMessage({ type: PLUGIN_CONTENT_SCRIPT_SYNC_MESSAGE })).toBe(
+      true,
+    );
 
     expect(isHandledBackgroundRuntimeMessage({ type: 'gv.highlight.unknown' })).toBe(false);
     expect(isHandledBackgroundRuntimeMessage({ type: 'gv.storageQuota.ready' })).toBe(false);
     expect(isHandledBackgroundRuntimeMessage({ type: 'gv.unhandled' })).toBe(false);
     expect(isHandledBackgroundRuntimeMessage(null)).toBe(false);
+  });
+
+  it('routes explicit plugin registration repair through the serialized background sync', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/pages/background/index.ts'), 'utf8');
+    const repairBranch =
+      source.match(
+        /if \(message\?\.type === PLUGIN_CONTENT_SCRIPT_SYNC_MESSAGE\) \{[\s\S]*?\n\s*\}/,
+      )?.[0] ?? '';
+
+    expect(repairBranch).toContain('await syncPluginContentScripts()');
+    expect(repairBranch).toContain('sendResponse({ ok: true })');
   });
 
   it('uploads the complete prompt union even when duplicate names remain', () => {
