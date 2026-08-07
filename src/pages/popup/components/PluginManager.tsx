@@ -32,14 +32,19 @@ type SettingsMap = Record<string, Record<string, PluginSettingValue>>;
  * Ask the background service to reconcile dynamic plugin content scripts after
  * an optional host permission grant. This is best-effort because Chrome may
  * close the popup while displaying its permission prompt; the background
- * permissions listener remains the fallback in that case.
+ * permissions listener remains the fallback in that case. Returns whether the
+ * background confirmed that reconciliation completed.
  */
-async function requestPluginContentScriptSync(): Promise<void> {
+async function requestPluginContentScriptSync(): Promise<boolean> {
   try {
-    await browser.runtime.sendMessage({ type: PLUGIN_CONTENT_SCRIPT_SYNC_MESSAGE });
+    const response = (await browser.runtime.sendMessage({
+      type: PLUGIN_CONTENT_SCRIPT_SYNC_MESSAGE,
+    })) as { ok?: unknown } | null;
+    return response?.ok === true;
   } catch {
     // Chrome may close the popup while showing the optional-host prompt. The
     // background permissions.onAdded listener remains the fallback in that case.
+    return false;
   }
 }
 
@@ -392,7 +397,7 @@ export function PluginManager({
           setDeniedId(plugin.id);
           return;
         }
-        await requestPluginContentScriptSync();
+        if (!(await requestPluginContentScriptSync())) return;
         setMissingPermissionIds((previous) => {
           const next = new Set(previous);
           next.delete(plugin.id);

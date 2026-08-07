@@ -377,6 +377,41 @@ describe('PluginManager host permission flow', () => {
     expect(container.textContent).not.toContain('pluginGrantRequiredAccess');
     expect(container.querySelector('input[type="range"]')).not.toBeNull();
   });
+
+  it('keeps the permission repair available when content-script sync fails', async () => {
+    pluginState.current = { [PLUGIN_ID]: { enabled: true, installedAt: 0 } };
+    permissionOrigins.mockReturnValue([
+      'https://claude.ai/*',
+      'https://*.frame.claudeusercontent.com/*',
+    ]);
+    permissionContains.mockResolvedValue(false);
+    runtimeSendMessage.mockRejectedValue(new Error('background unavailable'));
+
+    await act(async () => {
+      root.render(
+        React.createElement(PluginManager, {
+          manifests: [widthPlugin],
+          activeUrl: 'https://claude.ai/code/artifact/example',
+        }),
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const repairButton = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent === 'pluginGrantRequiredAccess',
+    );
+    if (!repairButton) throw new Error('Expected permission repair button');
+
+    await act(async () => {
+      repairButton.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(runtimeSendMessage).toHaveBeenCalledWith({ type: 'gv.plugins.syncContentScripts' });
+    expect(container.textContent).toContain('pluginGrantRequiredAccess');
+  });
 });
 
 describe('platformBadge', () => {
