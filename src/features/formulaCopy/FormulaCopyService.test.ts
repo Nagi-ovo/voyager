@@ -475,10 +475,8 @@ describe('FormulaCopyService', () => {
     document.body.removeChild(displayMath);
   });
 
-  // ChatGPT and Claude render math with standard KaTeX: a `.katex` span whose
-  // `.katex-mathml` holds <annotation encoding="application/x-tex">, with block
-  // formulas wrapped in `.katex-display` and `math[display="block"]`. There is no
-  // `data-math` attribute and no `<ms-katex>` wrapper (unlike Gemini / AI Studio).
+  // Claude and older ChatGPT markup render standard KaTeX with a MathML
+  // annotation. Keep this fixture to preserve compatibility with that shape.
   function makeKatex(latex: string, opts: { display: boolean }): HTMLElement {
     const katex = document.createElement('span');
     katex.className = 'katex';
@@ -559,5 +557,65 @@ describe('FormulaCopyService', () => {
     expect(writeTextMock).toHaveBeenCalledWith('$$a^2 + b^2 = c^2$$');
 
     document.body.removeChild(block);
+  });
+
+  function makeCurrentChatGptKatex(latex: string, display: boolean): HTMLElement {
+    const semanticWrapper = document.createElement('span');
+    semanticWrapper.setAttribute('role', 'math');
+    semanticWrapper.setAttribute('aria-label', latex);
+    semanticWrapper.setAttribute('data-math-source', latex);
+
+    const katex = document.createElement('span');
+    katex.className = 'katex';
+    const html = document.createElement('span');
+    html.className = 'katex-html';
+    html.setAttribute('aria-hidden', 'true');
+    html.textContent = 'rendered';
+    katex.appendChild(html);
+
+    if (display) {
+      const displayWrapper = document.createElement('span');
+      displayWrapper.className = 'katex-display';
+      displayWrapper.appendChild(katex);
+      semanticWrapper.appendChild(displayWrapper);
+    } else {
+      semanticWrapper.appendChild(katex);
+    }
+
+    return semanticWrapper;
+  }
+
+  it('copies current ChatGPT block KaTeX from data-math-source without MathML', async () => {
+    const clipboard = navigator.clipboard as unknown as { write?: unknown };
+    clipboard.write = undefined;
+
+    resetSingleton();
+    service = FormulaCopyService.getInstance({ format: 'latex' });
+
+    const block = makeCurrentChatGptKatex('C = B\\log_2\\left(1+\\frac{S}{N}\\right)', true);
+    document.body.appendChild(block);
+
+    service.initialize();
+    block.querySelector('.katex-html')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await Promise.resolve();
+
+    expect(writeTextMock).toHaveBeenCalledWith('$$C = B\\log_2\\left(1+\\frac{S}{N}\\right)$$');
+  });
+
+  it('copies current ChatGPT inline KaTeX from data-math-source as inline LaTeX', async () => {
+    const clipboard = navigator.clipboard as unknown as { write?: unknown };
+    clipboard.write = undefined;
+
+    resetSingleton();
+    service = FormulaCopyService.getInstance({ format: 'latex' });
+
+    const inline = makeCurrentChatGptKatex('E = mc^2', false);
+    document.body.appendChild(inline);
+
+    service.initialize();
+    inline.querySelector('.katex-html')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await Promise.resolve();
+
+    expect(writeTextMock).toHaveBeenCalledWith('$E = mc^2$');
   });
 });

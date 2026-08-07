@@ -1091,3 +1091,35 @@ Regression test:
 
 Commit:
 `fix(timeline): use stable Gemini turn identities`
+
+## ChatGPT KaTeX may omit MathML annotations
+
+Symptom:
+
+Formula Copy showed its hover treatment on ChatGPT, but clicking a formula did
+not copy anything or show a toast. The same feature continued to work on
+Gemini.
+
+Root cause:
+
+ChatGPT's client-side KaTeX layout stopped rendering the hidden MathML
+`annotation[encoding="application/x-tex"]` used by the original extractor. The
+raw TeX moved to `data-math-source` on the semantic wrapper outside
+`.katex-display`. Without the MathML node, display-mode detection also lost its
+old `math[display="block"]` signal.
+
+Fix:
+
+Read `data-math-source` from the nearest semantic wrapper before falling back
+to legacy annotations, and recognize `.katex-display` directly for block
+delimiters. Keep the annotation path for Claude and older ChatGPT markup.
+
+Regression test:
+
+`src/features/formulaCopy/FormulaCopyService.test.ts`
+(`copies current ChatGPT block KaTeX from data-math-source without MathML` and
+`copies current ChatGPT inline KaTeX from data-math-source as inline LaTeX`).
+
+Commit:
+
+`fix(plugins): restore ChatGPT formula copy in Edge`

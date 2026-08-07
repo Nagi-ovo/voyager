@@ -7,6 +7,7 @@ import {
   supportsDynamicContentScriptRegistration,
   supportsOptionalHostPermissions,
 } from '@/core/utils/browser';
+import { PLUGIN_CONTENT_SCRIPT_SYNC_MESSAGE } from '@/features/plugins/runtime/messages';
 import { pluginToOriginPatternsForActiveUrl } from '@/features/plugins/runtime/siteRegistration';
 import { SiteRegistry } from '@/features/plugins/sites/registry';
 import {
@@ -26,6 +27,15 @@ import { IconChatGPT, IconClaude } from './WebsiteLogos';
 
 type EnabledMap = Record<string, boolean>;
 type SettingsMap = Record<string, Record<string, PluginSettingValue>>;
+
+async function requestPluginContentScriptSync(): Promise<void> {
+  try {
+    await browser.runtime.sendMessage({ type: PLUGIN_CONTENT_SCRIPT_SYNC_MESSAGE });
+  } catch {
+    // Chrome may close the popup while showing the optional-host prompt. The
+    // background permissions.onAdded listener remains the fallback in that case.
+  }
+}
 
 /** Logo + default accent per known site id. */
 const SITE_BADGES: Record<string, { Icon: typeof IconClaude; color: string }> = {
@@ -277,14 +287,21 @@ export function PluginManager({
               if (!alreadyGranted) {
                 // Chrome closes extension popups while showing an optional-host
                 // prompt. Persist the user's intent BEFORE opening it so a
-                // successful grant can be completed by the background
-                // permissions.onAdded handler without another popup visit.
+                // successful grant can be completed by the background even if
+                // the popup is closed before permissions.request resolves.
                 setEnabledMap((prev) => ({ ...prev, [plugin.id]: true }));
                 await setPluginEnabled(plugin.id, true);
-                if (!(await browser.permissions.request({ origins }))) {
+                const granted = await browser.permissions.request({ origins });
+                if (!granted) {
                   setEnabledMap((prev) => ({ ...prev, [plugin.id]: false }));
                   await setPluginEnabled(plugin.id, false);
                   setDeniedId(plugin.id);
+                } else {
+                  // Edge can resolve the request without reliably delivering the
+                  // permissions.onAdded event that normally performs registration.
+                  // Reconcile explicitly while retaining onAdded as Chrome's
+                  // popup-close fallback.
+                  await requestPluginContentScriptSync();
                 }
                 return;
               }
@@ -365,6 +382,7 @@ export function PluginManager({
           setDeniedId(plugin.id);
           return;
         }
+        await requestPluginContentScriptSync();
         setMissingPermissionIds((previous) => {
           const next = new Set(previous);
           next.delete(plugin.id);

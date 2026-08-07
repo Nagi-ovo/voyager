@@ -1,8 +1,11 @@
+import { PLUGIN_CONTENT_SCRIPT_SYNC_MESSAGE } from '@/features/plugins/runtime/messages';
+
 const HANDLED_BACKGROUND_MESSAGE_TYPES = new Set([
   'gv.fetchImage',
   'gv.fetchImageViaPage',
   'gv.generatedUi.ensureCapturePermission',
   'gv.generatedUi.captureVisibleTab',
+  PLUGIN_CONTENT_SCRIPT_SYNC_MESSAGE,
   'gv.account.resolve',
   'gv.responseComplete.notify',
   'gv.responseComplete.requestNativePermission',
