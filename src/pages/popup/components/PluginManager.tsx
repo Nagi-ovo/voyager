@@ -28,6 +28,12 @@ import { IconChatGPT, IconClaude } from './WebsiteLogos';
 type EnabledMap = Record<string, boolean>;
 type SettingsMap = Record<string, Record<string, PluginSettingValue>>;
 
+/**
+ * Ask the background service to reconcile dynamic plugin content scripts after
+ * an optional host permission grant. This is best-effort because Chrome may
+ * close the popup while displaying its permission prompt; the background
+ * permissions listener remains the fallback in that case.
+ */
 async function requestPluginContentScriptSync(): Promise<void> {
   try {
     await browser.runtime.sendMessage({ type: PLUGIN_CONTENT_SCRIPT_SYNC_MESSAGE });
