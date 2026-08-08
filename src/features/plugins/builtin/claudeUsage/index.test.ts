@@ -578,8 +578,11 @@ describe('Claude usage bar', () => {
 
   it('uses shared cache to avoid multiplying API requests across Claude tabs', async () => {
     vi.useFakeTimers();
-    const store = {
-      gvClaudeUsageCache: {
+    const orgId = 'org_123';
+    const scopedKey = claudeUsageCacheKeyForOrg(orgId);
+    const store: Record<string, unknown> = {
+      [scopedKey]: {
+        orgId,
         plan: 'Pro',
         updatedAt: Date.now(),
         metrics: [
@@ -592,7 +595,7 @@ describe('Claude usage bar', () => {
       },
     };
     mockLocalStorageStore(store);
-    mockDocumentCookie('lastActiveOrg=org_123');
+    mockDocumentCookie(`lastActiveOrg=${orgId}`);
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
 
@@ -602,7 +605,8 @@ describe('Claude usage bar', () => {
     expect(fetchMock).not.toHaveBeenCalled();
 
     await vi.advanceTimersByTimeAsync(4 * 60_000);
-    store.gvClaudeUsageCache = {
+    store[scopedKey] = {
+      orgId,
       plan: 'Pro',
       updatedAt: Date.now(),
       metrics: [
@@ -904,11 +908,12 @@ describe('Claude usage bar', () => {
     expect(document.querySelector('.gv-usage-tier')?.textContent).toBe('Pro');
   });
 
-  it('falls back to legacy cache key when no scoped key exists', async () => {
+  it('falls back to legacy cache key when legacy has matching orgId', async () => {
     vi.useFakeTimers();
     const orgId = 'org_legacy';
     mockDocumentCookie(`lastActiveOrg=${orgId}`);
     const legacySnapshot = {
+      orgId,
       plan: 'Pro',
       updatedAt: Date.now(),
       metrics: [{ label: '5h', percent: 50, resetLabel: 'Tue 12:00 PM' }],

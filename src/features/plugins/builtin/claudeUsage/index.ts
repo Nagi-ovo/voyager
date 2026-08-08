@@ -709,7 +709,7 @@ async function readCache(orgId: string | null): Promise<ClaudeUsageSnapshot | nu
     const legacy = result?.[StorageKeys.GV_CLAUDE_USAGE_CACHE];
     if (isUsageSnapshot(legacy)) {
       if (!orgId) return legacy;
-      if (!legacy.orgId) return legacy;
+      if (legacy.orgId === orgId) return legacy;
     }
     return null;
   } catch {
@@ -738,6 +738,11 @@ async function saveCache(next: ClaudeUsageSnapshot, orgId: string | null): Promi
 }
 
 function applySnapshot(next: ClaudeUsageSnapshot): void {
+  const cookieOrg = getLastActiveOrg();
+  if (cookieOrg && cookieOrg !== currentOrgId) {
+    currentOrgId = cookieOrg;
+    snapshot = null;
+  }
   const merged = withFallbackCountdowns(withFallbackPlan(next));
   if (snapshot && sameSnapshotData(snapshot, merged)) return;
   snapshot = merged;
@@ -909,10 +914,12 @@ async function refreshFromApi(force = false): Promise<void> {
       headers: { Accept: 'application/json' },
     });
     if (g !== generation || !response.ok) return;
+    if (currentOrgId !== orgId) return;
     const next = snapshotFromClaudeUsageApi(await response.json());
     if (g !== generation || !next) return;
+    if (currentOrgId !== orgId) return;
     const plan = next.plan ?? (await fetchPlanFromBootstrap(orgId)) ?? snapshot?.plan;
-    if (g !== generation) return;
+    if (g !== generation || currentOrgId !== orgId) return;
     snapshot = { ...next, plan, orgId };
     renderPill();
     await saveCache(snapshot, orgId);
