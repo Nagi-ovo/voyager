@@ -80,7 +80,7 @@ export function claudeUsageCacheKeyForOrg(orgId: string): string {
 }
 
 function isSnapshotForOrg(snapshot: ClaudeUsageSnapshot, orgId: string): boolean {
-  return !snapshot.orgId || snapshot.orgId === orgId;
+  return snapshot.orgId === orgId;
 }
 
 function pageText(doc: Document): string {
@@ -707,7 +707,10 @@ async function readCache(orgId: string | null): Promise<ClaudeUsageSnapshot | nu
       if (isUsageSnapshot(scoped) && isSnapshotForOrg(scoped, orgId)) return scoped;
     }
     const legacy = result?.[StorageKeys.GV_CLAUDE_USAGE_CACHE];
-    if (isUsageSnapshot(legacy) && (!orgId || isSnapshotForOrg(legacy, orgId))) return legacy;
+    if (isUsageSnapshot(legacy)) {
+      if (!orgId) return legacy;
+      if (!legacy.orgId) return legacy;
+    }
     return null;
   } catch {
     return null;
@@ -811,10 +814,6 @@ async function discoverClaudeOrgId(): Promise<string | null> {
   }
 }
 
-async function getClaudeOrgId(): Promise<string | null> {
-  return getLastActiveOrg() ?? discoverClaudeOrgId();
-}
-
 async function acquireRefreshLock(): Promise<boolean> {
   try {
     const now = Date.now();
@@ -857,9 +856,9 @@ async function releaseRefreshLock(): Promise<void> {
   }
 }
 
-async function hasFreshSharedCache(maxAgeMs: number): Promise<boolean> {
+async function hasFreshSharedCache(orgId: string | null, maxAgeMs: number): Promise<boolean> {
   const g = generation;
-  const cached = await readCache(currentOrgId);
+  const cached = await readCache(orgId);
   if (g !== generation || !cached) return false;
   applyStoredSnapshot(cached);
   if (Date.now() - cached.updatedAt >= maxAgeMs) return false;
@@ -874,18 +873,27 @@ async function hasFreshSharedCache(maxAgeMs: number): Promise<boolean> {
 
 async function refreshFromApi(force = false): Promise<void> {
   const g = generation;
+  const cookieOrg = getLastActiveOrg();
+  if (g !== generation) return;
+  const orgChanged = cookieOrg !== null && currentOrgId !== null && cookieOrg !== currentOrgId;
+  if (cookieOrg) currentOrgId = cookieOrg;
+  if (orgChanged) {
+    snapshot = null;
+  }
+  const effectiveOrgId = currentOrgId ?? cookieOrg;
   if (
     !force &&
+    !orgChanged &&
     snapshot?.plan &&
     hasCountdownData(snapshot) &&
     Date.now() - snapshot.updatedAt < STALE_MS
   ) {
     return;
   }
-  if (await hasFreshSharedCache(force ? REFRESH_INTERVAL_MS : STALE_MS)) return;
-  if (!force && (await hasFreshSharedCache(REFRESH_INTERVAL_MS))) return;
+  if (await hasFreshSharedCache(effectiveOrgId, force ? REFRESH_INTERVAL_MS : STALE_MS)) return;
+  if (!force && (await hasFreshSharedCache(effectiveOrgId, REFRESH_INTERVAL_MS))) return;
   if (g !== generation || refreshInFlight) return;
-  const orgId = await getClaudeOrgId();
+  const orgId = cookieOrg ?? (await discoverClaudeOrgId());
   if (g !== generation || !orgId) return;
   currentOrgId = orgId;
   if (!(await acquireRefreshLock())) return;
@@ -1000,7 +1008,7 @@ export function startClaudeUsage(): void {
         const next = change.newValue as ClaudeUsageSnapshot;
         if (
           isUsageSnapshot(next) &&
-          (!orgId || isSnapshotForOrg(next, orgId)) &&
+          (!orgId || next.orgId === orgId || !next.orgId) &&
           (!snapshot || next.updatedAt > snapshot.updatedAt)
         ) {
           snapshot = withFallbackCountdowns(next);

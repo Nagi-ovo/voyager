@@ -118,6 +118,7 @@ describe('StorageQuotaService', () => {
       'gvDraft_/app/one': { text: 'draft' },
       [StorageKeys.GV_GEMS_LIST_CACHE]: { items: [] },
       [`${StorageKeys.GV_USAGE_CACHE}:account`]: { daily: [] },
+      [`${StorageKeys.GV_CLAUDE_USAGE_CACHE}:org_123`]: { metrics: [] },
       [StorageKeys.LANGUAGE]: 'en',
       [STORAGE_QUOTA_SOFT_CAP_KEY]: 50,
       unknownFuturePayload: { large: true },
@@ -168,6 +169,7 @@ describe('StorageQuotaService', () => {
     expect(category(snapshot, 'cache').keys).toEqual([
       StorageKeys.GV_GEMS_LIST_CACHE,
       `${StorageKeys.GV_USAGE_CACHE}:account`,
+      `${StorageKeys.GV_CLAUDE_USAGE_CACHE}:org_123`,
     ]);
     expect(category(snapshot, 'settings').keys).toEqual([
       'gvAnnotation:index',
