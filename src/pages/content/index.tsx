@@ -531,6 +531,20 @@ function handleVisibilityChange(): void {
   try {
     if (!hasValidExtensionContext()) return;
 
+    // Setup cleanup on page unload to prevent memory leaks. Registered before
+    // any early return so cleanup functions queued on every entry path (plugin
+    // host, brand theme, error listeners, …) always run on unload.
+    window.addEventListener('beforeunload', () => {
+      try {
+        cleanupManager.executeCleanups();
+      } catch (e) {
+        if (isExtensionContextInvalidatedError(e)) {
+          return;
+        }
+        console.error('[Gemini Voyager] Cleanup error:', e);
+      }
+    });
+
     const pluginPlatformId = resolvePluginPlatformId(location.href);
     const isPluginSubframe = window.top !== window && pluginPlatformId !== null;
 
@@ -725,18 +739,6 @@ function handleVisibilityChange(): void {
 
     // Listen for visibility changes to handle tab switching
     document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    // Setup cleanup on page unload to prevent memory leaks
-    window.addEventListener('beforeunload', () => {
-      try {
-        cleanupManager.executeCleanups();
-      } catch (e) {
-        if (isExtensionContextInvalidatedError(e)) {
-          return;
-        }
-        console.error('[Gemini Voyager] Cleanup error:', e);
-      }
-    });
   } catch (e) {
     if (isExtensionContextInvalidatedError(e)) {
       return;
