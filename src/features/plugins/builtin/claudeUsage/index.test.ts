@@ -1,6 +1,7 @@
 import { type Mock, afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  claudeUsageCacheKeyForOrg,
   claudeUsageUrl,
   isClaudeUsageSettings,
   planFromClaudeBootstrap,
@@ -853,5 +854,73 @@ describe('Claude usage bar', () => {
 
     expect(document.querySelector('.gv-usage-tier')?.textContent).toBe('New');
     expect(document.querySelector<HTMLElement>('.gv-usage-fill')?.style.width).toBe('60%');
+  });
+
+  it('scopes the cache key by organization id', () => {
+    expect(claudeUsageCacheKeyForOrg('org_123')).toBe('gvClaudeUsageCache:org_123');
+    expect(claudeUsageCacheKeyForOrg('org_456')).toBe('gvClaudeUsageCache:org_456');
+  });
+
+  it('does not show cached usage from a different org after account switch', async () => {
+    vi.useFakeTimers();
+    const orgAKey = claudeUsageCacheKeyForOrg('org_A');
+    const store: Record<string, unknown> = {
+      [orgAKey]: {
+        orgId: 'org_A',
+        plan: 'Max (20x)',
+        updatedAt: Date.now(),
+        metrics: [{ label: '5h', percent: 80, resetLabel: 'Tue 10:00 AM' }],
+      },
+    };
+    mockLocalStorageStore(store);
+    mockDocumentCookie('lastActiveOrg=org_B');
+
+    startClaudeUsage();
+    await flushAsyncWork();
+
+    expect(document.querySelector('.gv-usage-pct')?.textContent).not.toBe('80%');
+    expect(document.querySelector('.gv-usage-tier')?.textContent).not.toBe('Max (20x)');
+  });
+
+  it('preserves cache behavior for the same org', async () => {
+    vi.useFakeTimers();
+    const orgId = 'org_123';
+    mockDocumentCookie(`lastActiveOrg=${orgId}`);
+    const scopedKey = claudeUsageCacheKeyForOrg(orgId);
+    const cachedSnapshot = {
+      orgId,
+      plan: 'Pro',
+      updatedAt: Date.now(),
+      metrics: [{ label: '5h', percent: 30, resetLabel: 'Tue 11:00 AM' }],
+    };
+    mockLocalStorageStore({ [scopedKey]: cachedSnapshot });
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    startClaudeUsage();
+    await flushAsyncWork();
+
+    expect(document.querySelector('.gv-usage-pct')?.textContent).toBe('30%');
+    expect(document.querySelector('.gv-usage-tier')?.textContent).toBe('Pro');
+  });
+
+  it('falls back to legacy cache key when no scoped key exists', async () => {
+    vi.useFakeTimers();
+    const orgId = 'org_legacy';
+    mockDocumentCookie(`lastActiveOrg=${orgId}`);
+    const legacySnapshot = {
+      plan: 'Pro',
+      updatedAt: Date.now(),
+      metrics: [{ label: '5h', percent: 50, resetLabel: 'Tue 12:00 PM' }],
+    };
+    mockLocalStorageStore({ gvClaudeUsageCache: legacySnapshot });
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    startClaudeUsage();
+    await flushAsyncWork();
+
+    expect(document.querySelector('.gv-usage-pct')?.textContent).toBe('50%');
+    expect(document.querySelector('.gv-usage-tier')?.textContent).toBe('Pro');
   });
 });

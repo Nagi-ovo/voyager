@@ -28,6 +28,7 @@ export interface ClaudeUsageSnapshot {
   plan?: string;
   lastUpdatedLabel?: string;
   updatedAt: number;
+  orgId?: string;
 }
 
 interface ClaudeUsageRefreshLock {
@@ -60,6 +61,7 @@ const refreshOwnerId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 // re-check it before touching the DOM, or a disabled plugin resurrects the
 // pill as un-removable zombie UI.
 let generation = 0;
+let currentOrgId: string | null = null;
 
 export function claudeUsageUrl(pathname = location.pathname, search = location.search): string {
   return `${CLAUDE_ORIGIN}${pathname === '/' ? '/new' : pathname}${search}#settings/usage`;
@@ -71,6 +73,14 @@ export function isClaudeUsageSettings(hash = location.hash): boolean {
 
 export function setClaudeUsageReloadForTest(fn: (() => void) | null): void {
   reloadPage = fn ?? (() => location.reload());
+}
+
+export function claudeUsageCacheKeyForOrg(orgId: string): string {
+  return `${StorageKeys.GV_CLAUDE_USAGE_CACHE}:${orgId}`;
+}
+
+function isSnapshotForOrg(snapshot: ClaudeUsageSnapshot, orgId: string): boolean {
+  return !snapshot.orgId || snapshot.orgId === orgId;
 }
 
 function pageText(doc: Document): string {
@@ -684,24 +694,41 @@ function applyStoredSnapshot(cached: ClaudeUsageSnapshot): void {
   }
 }
 
-async function readCache(): Promise<ClaudeUsageSnapshot | null> {
+async function readCache(orgId: string | null): Promise<ClaudeUsageSnapshot | null> {
   try {
-    const result = await chrome.storage?.local?.get({ [StorageKeys.GV_CLAUDE_USAGE_CACHE]: null });
-    const raw = result?.[StorageKeys.GV_CLAUDE_USAGE_CACHE];
-    return isUsageSnapshot(raw) ? raw : null;
+    const keys = orgId
+      ? [claudeUsageCacheKeyForOrg(orgId), StorageKeys.GV_CLAUDE_USAGE_CACHE]
+      : [StorageKeys.GV_CLAUDE_USAGE_CACHE];
+    const result = await chrome.storage?.local?.get(
+      Object.fromEntries(keys.map((key) => [key, null])),
+    );
+    if (orgId) {
+      const scoped = result?.[claudeUsageCacheKeyForOrg(orgId)];
+      if (isUsageSnapshot(scoped) && isSnapshotForOrg(scoped, orgId)) return scoped;
+    }
+    const legacy = result?.[StorageKeys.GV_CLAUDE_USAGE_CACHE];
+    if (isUsageSnapshot(legacy) && (!orgId || isSnapshotForOrg(legacy, orgId))) return legacy;
+    return null;
   } catch {
     return null;
   }
 }
 
 async function loadCache(): Promise<void> {
-  const cached = await readCache();
+  const cookieOrg = getLastActiveOrg();
+  if (cookieOrg) currentOrgId = cookieOrg;
+  const cached = await readCache(cookieOrg);
   if (cached) applyStoredSnapshot(cached);
 }
 
-async function saveCache(next: ClaudeUsageSnapshot): Promise<void> {
+async function saveCache(next: ClaudeUsageSnapshot, orgId: string | null): Promise<void> {
   try {
-    await chrome.storage?.local?.set({ [StorageKeys.GV_CLAUDE_USAGE_CACHE]: next });
+    const withOrg = orgId ? { ...next, orgId } : next;
+    const payload: Record<string, ClaudeUsageSnapshot> = {
+      [StorageKeys.GV_CLAUDE_USAGE_CACHE]: withOrg,
+    };
+    if (orgId) payload[claudeUsageCacheKeyForOrg(orgId)] = withOrg;
+    await chrome.storage?.local?.set(payload);
   } catch {
     // ignore
   }
@@ -712,7 +739,7 @@ function applySnapshot(next: ClaudeUsageSnapshot): void {
   if (snapshot && sameSnapshotData(snapshot, merged)) return;
   snapshot = merged;
   renderPill();
-  void saveCache(merged);
+  void saveCache(merged, currentOrgId);
 }
 
 function injectClaudeUsageObserver(): void {
@@ -832,7 +859,7 @@ async function releaseRefreshLock(): Promise<void> {
 
 async function hasFreshSharedCache(maxAgeMs: number): Promise<boolean> {
   const g = generation;
-  const cached = await readCache();
+  const cached = await readCache(currentOrgId);
   if (g !== generation || !cached) return false;
   applyStoredSnapshot(cached);
   if (Date.now() - cached.updatedAt >= maxAgeMs) return false;
@@ -860,6 +887,7 @@ async function refreshFromApi(force = false): Promise<void> {
   if (g !== generation || refreshInFlight) return;
   const orgId = await getClaudeOrgId();
   if (g !== generation || !orgId) return;
+  currentOrgId = orgId;
   if (!(await acquireRefreshLock())) return;
   if (g !== generation) {
     void releaseRefreshLock();
@@ -877,9 +905,9 @@ async function refreshFromApi(force = false): Promise<void> {
     if (g !== generation || !next) return;
     const plan = next.plan ?? (await fetchPlanFromBootstrap(orgId)) ?? snapshot?.plan;
     if (g !== generation) return;
-    snapshot = { ...next, plan };
+    snapshot = { ...next, plan, orgId };
     renderPill();
-    await saveCache(snapshot);
+    await saveCache(snapshot, orgId);
   } catch {
     // ignore
   } finally {
@@ -964,10 +992,17 @@ export function startClaudeUsage(): void {
   if (chrome.storage?.onChanged && !storageListener) {
     storageListener = (changes, areaName) => {
       if (areaName !== 'local') return;
-      const change = changes[StorageKeys.GV_CLAUDE_USAGE_CACHE];
+      const orgId = currentOrgId;
+      const scopedKey = orgId ? claudeUsageCacheKeyForOrg(orgId) : null;
+      const change =
+        (scopedKey ? changes[scopedKey] : null) ?? changes[StorageKeys.GV_CLAUDE_USAGE_CACHE];
       if (change?.newValue) {
         const next = change.newValue as ClaudeUsageSnapshot;
-        if (!snapshot || next.updatedAt > snapshot.updatedAt) {
+        if (
+          isUsageSnapshot(next) &&
+          (!orgId || isSnapshotForOrg(next, orgId)) &&
+          (!snapshot || next.updatedAt > snapshot.updatedAt)
+        ) {
           snapshot = withFallbackCountdowns(next);
           renderPill();
         }
@@ -986,6 +1021,7 @@ export function startClaudeUsage(): void {
 
 export function stopClaudeUsage(): void {
   generation++;
+  currentOrgId = null;
   if (scrapeTimer !== null) clearTimeout(scrapeTimer);
   scrapeTimer = null;
   if (pillMoveHandler) {

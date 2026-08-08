@@ -242,7 +242,7 @@ const CATEGORY_DEFINITIONS: readonly CategoryDefinition[] = [
   {
     id: 'cache',
     exactKeys: REGENERABLE_CACHE_KEYS,
-    prefixes: [`${StorageKeys.GV_USAGE_CACHE}:`],
+    prefixes: [`${StorageKeys.GV_USAGE_CACHE}:`, `${StorageKeys.GV_CLAUDE_USAGE_CACHE}:`],
     clearable: true,
   },
   {
