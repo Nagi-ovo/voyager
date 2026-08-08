@@ -869,6 +869,7 @@ async function hasFreshSharedCache(orgId: string | null, maxAgeMs: number): Prom
   const g = generation;
   const cached = await readCache(orgId);
   if (g !== generation || !cached) return false;
+  if (orgId !== null && currentOrgId !== orgId) return false;
   applyStoredSnapshot(cached);
   if (Date.now() - cached.updatedAt >= maxAgeMs) return false;
   if (!cached.plan) return false;
@@ -888,6 +889,7 @@ async function refreshFromApi(force = false): Promise<void> {
   if (cookieOrg) currentOrgId = cookieOrg;
   if (orgChanged) {
     snapshot = null;
+    renderPill();
   }
   const effectiveOrgId = currentOrgId ?? cookieOrg ?? (await discoverClaudeOrgId());
   if (g !== generation || !effectiveOrgId) return;
