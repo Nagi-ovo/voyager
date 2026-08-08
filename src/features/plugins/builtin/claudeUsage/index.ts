@@ -62,6 +62,27 @@ const refreshOwnerId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 // pill as un-removable zombie UI.
 let generation = 0;
 let currentOrgId: string | null = null;
+let refreshToken = 0;
+
+function generateRefreshToken(): number {
+  return ++refreshToken;
+}
+
+function captureToken(): number {
+  return refreshToken;
+}
+
+function isTokenValid(token: number): boolean {
+  return token === refreshToken;
+}
+
+function switchOrg(newOrgId: string | null): void {
+  if (newOrgId === currentOrgId) return;
+  snapshot = null;
+  currentOrgId = newOrgId;
+  generateRefreshToken();
+  renderPill();
+}
 
 export function claudeUsageUrl(pathname = location.pathname, search = location.search): string {
   return `${CLAUDE_ORIGIN}${pathname === '/' ? '/new' : pathname}${search}#settings/usage`;
@@ -723,7 +744,9 @@ async function readCache(orgId: string | null): Promise<ClaudeUsageSnapshot | nu
 
 async function loadCache(): Promise<void> {
   const cookieOrg = getLastActiveOrg();
-  if (cookieOrg) currentOrgId = cookieOrg;
+  if (cookieOrg && cookieOrg !== currentOrgId) {
+    switchOrg(cookieOrg);
+  }
   const cached = await readCache(cookieOrg);
   if (cached) applyStoredSnapshot(cached);
 }
@@ -744,8 +767,7 @@ async function saveCache(next: ClaudeUsageSnapshot, orgId: string | null): Promi
 function applySnapshot(next: ClaudeUsageSnapshot): void {
   const cookieOrg = getLastActiveOrg();
   if (cookieOrg && cookieOrg !== currentOrgId) {
-    currentOrgId = cookieOrg;
-    snapshot = null;
+    switchOrg(cookieOrg);
   }
   const merged = withFallbackCountdowns(withFallbackPlan(next));
   if (snapshot && sameSnapshotData(snapshot, merged)) return;
@@ -866,10 +888,10 @@ async function releaseRefreshLock(): Promise<void> {
 }
 
 async function hasFreshSharedCache(orgId: string | null, maxAgeMs: number): Promise<boolean> {
+  const token = captureToken();
   const g = generation;
   const cached = await readCache(orgId);
-  if (g !== generation || !cached) return false;
-  if (orgId !== null && currentOrgId !== orgId) return false;
+  if (g !== generation || !isTokenValid(token) || !cached) return false;
   applyStoredSnapshot(cached);
   if (Date.now() - cached.updatedAt >= maxAgeMs) return false;
   if (!cached.plan) return false;
@@ -882,21 +904,18 @@ async function hasFreshSharedCache(orgId: string | null, maxAgeMs: number): Prom
 }
 
 async function refreshFromApi(force = false): Promise<void> {
+  const token = captureToken();
   const g = generation;
   const cookieOrg = getLastActiveOrg();
-  if (g !== generation) return;
-  const orgChanged = cookieOrg !== null && currentOrgId !== null && cookieOrg !== currentOrgId;
-  if (cookieOrg) currentOrgId = cookieOrg;
-  if (orgChanged) {
-    snapshot = null;
-    renderPill();
+  if (g !== generation || !isTokenValid(token)) return;
+  if (cookieOrg && cookieOrg !== currentOrgId) {
+    switchOrg(cookieOrg);
   }
   const effectiveOrgId = currentOrgId ?? cookieOrg ?? (await discoverClaudeOrgId());
-  if (g !== generation || !effectiveOrgId) return;
+  if (g !== generation || !isTokenValid(token) || !effectiveOrgId) return;
   currentOrgId = effectiveOrgId;
   if (
     !force &&
-    !orgChanged &&
     snapshot?.plan &&
     hasCountdownData(snapshot) &&
     Date.now() - snapshot.updatedAt < STALE_MS
@@ -904,10 +923,11 @@ async function refreshFromApi(force = false): Promise<void> {
     return;
   }
   if (await hasFreshSharedCache(effectiveOrgId, force ? REFRESH_INTERVAL_MS : STALE_MS)) return;
+  if (!isTokenValid(token)) return;
   if (!force && (await hasFreshSharedCache(effectiveOrgId, REFRESH_INTERVAL_MS))) return;
-  if (g !== generation || refreshInFlight) return;
+  if (g !== generation || !isTokenValid(token) || refreshInFlight) return;
   if (!(await acquireRefreshLock())) return;
-  if (g !== generation) {
+  if (g !== generation || !isTokenValid(token)) {
     void releaseRefreshLock();
     return;
   }
@@ -918,13 +938,11 @@ async function refreshFromApi(force = false): Promise<void> {
       credentials: 'include',
       headers: { Accept: 'application/json' },
     });
-    if (g !== generation || !response.ok) return;
-    if (currentOrgId !== effectiveOrgId) return;
+    if (g !== generation || !isTokenValid(token) || !response.ok) return;
     const next = snapshotFromClaudeUsageApi(await response.json());
-    if (g !== generation || !next) return;
-    if (currentOrgId !== effectiveOrgId) return;
+    if (g !== generation || !isTokenValid(token) || !next) return;
     const plan = next.plan ?? (await fetchPlanFromBootstrap(effectiveOrgId)) ?? snapshot?.plan;
-    if (g !== generation || currentOrgId !== effectiveOrgId) return;
+    if (g !== generation || !isTokenValid(token)) return;
     snapshot = { ...next, plan, orgId: effectiveOrgId };
     renderPill();
     await saveCache(snapshot, effectiveOrgId);
@@ -1012,6 +1030,7 @@ export function startClaudeUsage(): void {
   if (chrome.storage?.onChanged && !storageListener) {
     storageListener = (changes, areaName) => {
       if (areaName !== 'local') return;
+      const token = captureToken();
       const orgId = currentOrgId;
       const scopedKey = orgId ? claudeUsageCacheKeyForOrg(orgId) : null;
       const change =
@@ -1020,6 +1039,7 @@ export function startClaudeUsage(): void {
         const next = change.newValue as ClaudeUsageSnapshot;
         if (
           isUsageSnapshot(next) &&
+          isTokenValid(token) &&
           (!orgId || next.orgId === orgId) &&
           (!snapshot || next.updatedAt > snapshot.updatedAt)
         ) {
@@ -1041,7 +1061,7 @@ export function startClaudeUsage(): void {
 
 export function stopClaudeUsage(): void {
   generation++;
-  currentOrgId = null;
+  switchOrg(null);
   if (scrapeTimer !== null) clearTimeout(scrapeTimer);
   scrapeTimer = null;
   if (pillMoveHandler) {
