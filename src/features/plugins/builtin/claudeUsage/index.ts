@@ -708,7 +708,11 @@ async function readCache(orgId: string | null): Promise<ClaudeUsageSnapshot | nu
     }
     const legacy = result?.[StorageKeys.GV_CLAUDE_USAGE_CACHE];
     if (isUsageSnapshot(legacy)) {
-      if (!orgId) return legacy;
+      if (!orgId) {
+        // When org is unknown, only accept truly legacy snapshots (no orgId field)
+        if (!legacy.orgId) return legacy;
+        return null;
+      }
       if (legacy.orgId === orgId) return legacy;
     }
     return null;
@@ -885,7 +889,9 @@ async function refreshFromApi(force = false): Promise<void> {
   if (orgChanged) {
     snapshot = null;
   }
-  const effectiveOrgId = currentOrgId ?? cookieOrg;
+  const effectiveOrgId = currentOrgId ?? cookieOrg ?? (await discoverClaudeOrgId());
+  if (g !== generation || !effectiveOrgId) return;
+  currentOrgId = effectiveOrgId;
   if (
     !force &&
     !orgChanged &&
@@ -898,9 +904,6 @@ async function refreshFromApi(force = false): Promise<void> {
   if (await hasFreshSharedCache(effectiveOrgId, force ? REFRESH_INTERVAL_MS : STALE_MS)) return;
   if (!force && (await hasFreshSharedCache(effectiveOrgId, REFRESH_INTERVAL_MS))) return;
   if (g !== generation || refreshInFlight) return;
-  const orgId = cookieOrg ?? (await discoverClaudeOrgId());
-  if (g !== generation || !orgId) return;
-  currentOrgId = orgId;
   if (!(await acquireRefreshLock())) return;
   if (g !== generation) {
     void releaseRefreshLock();
@@ -908,21 +911,21 @@ async function refreshFromApi(force = false): Promise<void> {
   }
   refreshInFlight = true;
   try {
-    const response = await fetch(`https://claude.ai/api/organizations/${orgId}/usage`, {
+    const response = await fetch(`https://claude.ai/api/organizations/${effectiveOrgId}/usage`, {
       method: 'GET',
       credentials: 'include',
       headers: { Accept: 'application/json' },
     });
     if (g !== generation || !response.ok) return;
-    if (currentOrgId !== orgId) return;
+    if (currentOrgId !== effectiveOrgId) return;
     const next = snapshotFromClaudeUsageApi(await response.json());
     if (g !== generation || !next) return;
-    if (currentOrgId !== orgId) return;
-    const plan = next.plan ?? (await fetchPlanFromBootstrap(orgId)) ?? snapshot?.plan;
-    if (g !== generation || currentOrgId !== orgId) return;
-    snapshot = { ...next, plan, orgId };
+    if (currentOrgId !== effectiveOrgId) return;
+    const plan = next.plan ?? (await fetchPlanFromBootstrap(effectiveOrgId)) ?? snapshot?.plan;
+    if (g !== generation || currentOrgId !== effectiveOrgId) return;
+    snapshot = { ...next, plan, orgId: effectiveOrgId };
     renderPill();
-    await saveCache(snapshot, orgId);
+    await saveCache(snapshot, effectiveOrgId);
   } catch {
     // ignore
   } finally {
@@ -1015,7 +1018,7 @@ export function startClaudeUsage(): void {
         const next = change.newValue as ClaudeUsageSnapshot;
         if (
           isUsageSnapshot(next) &&
-          (!orgId || next.orgId === orgId || !next.orgId) &&
+          (!orgId || next.orgId === orgId) &&
           (!snapshot || next.updatedAt > snapshot.updatedAt)
         ) {
           snapshot = withFallbackCountdowns(next);

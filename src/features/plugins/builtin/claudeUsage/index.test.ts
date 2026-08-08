@@ -398,8 +398,10 @@ describe('Claude usage bar', () => {
   it('refreshes countdown labels without another API request', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-06-28T10:00:00.000Z'));
+    mockDocumentCookie('lastActiveOrg=org_123');
     (chrome.storage.local.get as unknown as Mock).mockResolvedValue({
       gvClaudeUsageCache: {
+        orgId: 'org_123',
         plan: 'Pro',
         updatedAt: Date.now(),
         metrics: [
@@ -812,8 +814,10 @@ describe('Claude usage bar', () => {
         storageListeners.push(listener);
       },
     );
+    mockDocumentCookie('lastActiveOrg=org_123');
     (chrome.storage.local.get as unknown as Mock).mockResolvedValue({
       gvClaudeUsageCache: {
+        orgId: 'org_123',
         plan: 'Fresh',
         updatedAt: 10,
         metrics: [{ label: 'All', percent: 45 }],
@@ -831,6 +835,7 @@ describe('Claude usage bar', () => {
       {
         gvClaudeUsageCache: {
           newValue: {
+            orgId: 'org_123',
             plan: 'Old',
             updatedAt: 5,
             metrics: [{ label: 'All', percent: 12 }],
@@ -847,6 +852,7 @@ describe('Claude usage bar', () => {
       {
         gvClaudeUsageCache: {
           newValue: {
+            orgId: 'org_123',
             plan: 'New',
             updatedAt: 11,
             metrics: [{ label: 'All', percent: 60 }],
