@@ -65,6 +65,29 @@ describe('DOMContentExtractor', () => {
     expect(extracted.text).toContain('[the docs](https://example.com/docs)');
     expect(extracted.text).toContain('[notes.pdf](https://example.com/notes.pdf)');
     expect(extracted.html).toContain('href="https://example.com/notes.pdf"');
+    expect(extracted.attachments).toEqual([{ name: 'notes.pdf', type: 'pdf' }]);
+  });
+
+  it('preserves mixed text and rich link children with safe absolute destinations', () => {
+    const user = document.createElement('div');
+    const resolved = new URL('/docs', document.baseURI).href;
+    user.innerHTML = `
+      <div>Before <a href="/docs"><strong>rich</strong><img src="https://example.com/icon.png" alt="Icon"></a> after <a href="javascript:alert(1)">unsafe</a></div>
+    `;
+
+    const extracted = DOMContentExtractor.extractUserContent(user);
+
+    expect(extracted.text).toContain('Before ');
+    expect(extracted.text).toContain(' after ');
+    expect(extracted.text).toContain(
+      `[**rich**![Icon](https://example.com/icon.png)](${resolved})`,
+    );
+    expect(extracted.html).toContain(
+      `<a href="${resolved}"><strong>rich</strong><img src="https://example.com/icon.png" alt="Icon" /></a>`,
+    );
+    expect(extracted.text).toContain('unsafe');
+    expect(extracted.text).not.toContain('javascript:');
+    expect(extracted.html).not.toContain('javascript:');
   });
 
   it('extracts standard ChatGPT code blocks exactly once', () => {
@@ -82,6 +105,23 @@ describe('DOMContentExtractor', () => {
     expect(extracted.text.match(/const once = true;/g)).toHaveLength(1);
     expect(extracted.html.match(/const once = true;/g)).toHaveLength(1);
     expect(extracted.text).toContain('```ts');
+  });
+
+  it('keeps a bare code block inside a list item exactly once', () => {
+    const assistant = document.createElement('div');
+    assistant.innerHTML = `
+      <div class="markdown">
+        <ul><li>Run this<pre><code class="language-ts">const nested = true;</code></pre><ul><li>Then continue</li></ul></li></ul>
+      </div>
+    `;
+
+    const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+
+    expect(extracted.hasCode).toBe(true);
+    expect(extracted.text.match(/const nested = true;/g)).toHaveLength(1);
+    expect(extracted.html.match(/const nested = true;/g)).toHaveLength(1);
+    expect(extracted.text).toContain('```ts');
+    expect(extracted.text).toContain('Then continue');
   });
 
   it('exports rendered Mermaid SVG in HTML while preserving Mermaid source in text', () => {

@@ -275,23 +275,39 @@ async function deliver(input: HTMLElement, delivery: HandoffDelivery): Promise<b
   return insertComposerText(input, delivery.directive);
 }
 
-async function findComposer(scope: PluginScope, timeoutMs: number): Promise<HTMLElement | null> {
+function currentComposer(excluded?: HTMLElement): HTMLElement | null {
+  return (
+    Array.from(document.querySelectorAll<HTMLElement>(COMPOSER_SELECTOR)).find(
+      (candidate) => candidate !== excluded,
+    ) || null
+  );
+}
+
+async function findComposer(
+  scope: PluginScope,
+  timeoutMs: number,
+  excluded?: HTMLElement,
+): Promise<HTMLElement | null> {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
     if (scope.signal.aborted) return null;
-    const input = document.querySelector<HTMLElement>(COMPOSER_SELECTOR);
+    const input = currentComposer(excluded);
     if (input) return input;
     await wait(scope, 120);
   }
   return null;
 }
 
-export async function leaveTemporaryChat(scope: PluginScope): Promise<boolean> {
+export async function leaveTemporaryChat(scope: PluginScope): Promise<HTMLElement | null> {
+  const temporaryComposer = currentComposer() || undefined;
   const toggle = document.querySelector<HTMLElement>(TEMP_TOGGLE_SELECTOR);
   if (toggle) {
     toggle.click();
     for (let attempt = 0; attempt < 16; attempt += 1) {
-      if (!isTemporaryChat()) return true;
+      if (!isTemporaryChat()) {
+        const replacement = currentComposer(temporaryComposer);
+        if (replacement) return replacement;
+      }
       await wait(scope, 100);
     }
   }
@@ -301,10 +317,13 @@ export async function leaveTemporaryChat(scope: PluginScope): Promise<boolean> {
   else location.assign(getChatGptNewChatPath());
 
   for (let attempt = 0; attempt < 30; attempt += 1) {
-    if (!isTemporaryChat() && document.querySelector(COMPOSER_SELECTOR)) return true;
+    if (!isTemporaryChat()) {
+      const replacement = currentComposer(temporaryComposer);
+      if (replacement) return replacement;
+    }
     await wait(scope, 100);
   }
-  return !isTemporaryChat();
+  return null;
 }
 
 export async function handoffTemporaryChat(
@@ -317,8 +336,8 @@ export async function handoffTemporaryChat(
   } catch {
     // The live same-page path still works without the reload safety net.
   }
-  const left = await leaveTemporaryChat(scope);
-  if (!left) {
+  const input = await leaveTemporaryChat(scope);
+  if (!input) {
     clearPending();
     return 'leave-failed';
   }
@@ -326,8 +345,6 @@ export async function handoffTemporaryChat(
     clearPending();
     return 'account-mismatch';
   }
-  const input = await findComposer(scope, 6_000);
-  if (!input) return 'composer-missing';
   const delivered = await deliver(input, delivery);
   if (!delivered) return 'delivery-failed';
   clearPending();

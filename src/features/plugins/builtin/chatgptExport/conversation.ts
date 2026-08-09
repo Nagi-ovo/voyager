@@ -1,4 +1,3 @@
-import { hashString } from '@/core/utils/hash';
 import { DOMContentExtractor } from '@/features/export/services/DOMContentExtractor';
 import type { ChatTurn, ConversationMetadata } from '@/features/export/types/export';
 
@@ -44,7 +43,7 @@ const TURN_SELECTOR = '[data-testid^="conversation-turn-"]';
 const DEFAULT_SETTLE_MS = 120;
 const DEFAULT_MAX_STEPS = 240;
 let fallbackIdentitySequence = 0;
-const fallbackIdentities = new WeakMap<HTMLElement, { signature: string; id: string }>();
+const fallbackIdentities = new WeakMap<HTMLElement, { role: ChatGptMessageRole; id: string }>();
 
 class IncompleteConversationCollectionError extends Error {
   constructor(readonly messageCount: number) {
@@ -155,7 +154,7 @@ function readVirtualPosition(host: HTMLElement): { key: string; order?: number }
   return null;
 }
 
-function readStableId(element: HTMLElement, role: ChatGptMessageRole, text: string): string {
+function readStableId(element: HTMLElement, role: ChatGptMessageRole): string {
   const turn = element.closest<HTMLElement>(TURN_SELECTOR);
   const nativeId =
     element.getAttribute('data-message-id') ||
@@ -166,18 +165,16 @@ function readStableId(element: HTMLElement, role: ChatGptMessageRole, text: stri
   if (nativeId) return nativeId;
 
   const host = turn || element;
-  const signature = `${role}:${hashString(text)}`;
   const virtualPosition = readVirtualPosition(host);
-  if (virtualPosition) return `fallback-${signature}-${virtualPosition.key}`;
+  if (virtualPosition) return `fallback-${role}-${virtualPosition.key}`;
 
   // Outside a measurable virtual scroller, keep an identity only for this
-  // concrete DOM host/content pair. This avoids scan-local indexes while still
-  // retaining repeated role/text messages mounted as distinct elements.
+  // concrete DOM host. The ID must not change while a response is streaming.
   const previous = fallbackIdentities.get(host);
-  if (previous?.signature === signature) return previous.id;
+  if (previous?.role === role) return previous.id;
   fallbackIdentitySequence += 1;
-  const id = `fallback-${signature}-${fallbackIdentitySequence}`;
-  fallbackIdentities.set(host, { signature, id });
+  const id = `fallback-${role}-${fallbackIdentitySequence}`;
+  fallbackIdentities.set(host, { role, id });
   return id;
 }
 
@@ -199,7 +196,7 @@ export function collectMountedChatGptMessagesWithHosts(
     const text = normalizePlainText(element);
     if (!text && !element.querySelector('img, video, audio, pre, code, table, .katex')) return;
     const order = readOrder(element, index);
-    const id = readStableId(element, role, text);
+    const id = readStableId(element, role);
     const previous = messages.get(id);
     if (previous?.snapshot.element.hasAttribute('data-message-author-role')) return;
 

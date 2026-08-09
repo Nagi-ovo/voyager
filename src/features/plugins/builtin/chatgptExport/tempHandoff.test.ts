@@ -64,16 +64,24 @@ function addComposer(draft = ''): HTMLElement {
   return composer;
 }
 
-function addTemporaryExit(): void {
+function addTemporaryExit(
+  onReplacement?: (composer: HTMLElement) => void,
+): () => HTMLElement | null {
   history.replaceState({}, '', '/?temporary-chat=true');
+  let replacement: HTMLElement | null = null;
   const toggle = document.createElement('button');
   toggle.dataset.testid = 'temporary-chat-toggle';
   toggle.setAttribute('aria-label', 'Close temporary chat');
   toggle.addEventListener('click', () => {
+    const oldComposer = document.querySelector<HTMLElement>('#prompt-textarea');
     history.replaceState({}, '', '/');
     toggle.remove();
+    oldComposer?.remove();
+    replacement = addComposer(oldComposer?.textContent || '');
+    onReplacement?.(replacement);
   });
   document.body.appendChild(toggle);
+  return () => replacement;
 }
 
 afterEach(() => {
@@ -128,15 +136,42 @@ describe('temporary chat handoff', () => {
 
   it('hands an inline temporary transcript to the normal-chat composer and clears pending state', async () => {
     const scope = new PluginScope();
-    const composer = addComposer();
-    addTemporaryExit();
+    addComposer();
+    const getComposer = addTemporaryExit();
 
     await expect(
       handoffTemporaryChat(scope, { mode: 'inline', text: 'Continue this transcript' }),
     ).resolves.toBe('ready');
 
-    expect(composer.textContent).toContain('Continue this transcript');
+    expect(getComposer()?.textContent).toContain('Continue this transcript');
     expect(sessionStorage.getItem(PENDING_KEY)).toBeNull();
+    await scope.dispose();
+  });
+
+  it('waits for the replacement composer after the temporary flag clears', async () => {
+    const scope = new PluginScope();
+    history.replaceState({}, '', '/?temporary-chat=true');
+    const staleComposer = addComposer('Temporary draft');
+    const normalComposer: { current: HTMLElement | null } = { current: null };
+    const toggle = document.createElement('button');
+    toggle.dataset.testid = 'temporary-chat-toggle';
+    toggle.setAttribute('aria-label', 'Close temporary chat');
+    toggle.addEventListener('click', () => {
+      history.replaceState({}, '', '/');
+      toggle.remove();
+      window.setTimeout(() => {
+        staleComposer.remove();
+        normalComposer.current = addComposer();
+      }, 150);
+    });
+    document.body.appendChild(toggle);
+
+    await expect(
+      handoffTemporaryChat(scope, { mode: 'inline', text: 'Deliver after transition' }),
+    ).resolves.toBe('ready');
+
+    expect(staleComposer.textContent).toBe('Temporary draft');
+    expect(normalComposer.current?.textContent).toContain('Deliver after transition');
     await scope.dispose();
   });
 
@@ -148,6 +183,8 @@ describe('temporary chat handoff', () => {
     toggle.dataset.testid = 'temporary-chat-toggle';
     toggle.setAttribute('aria-label', 'Close temporary chat');
     toggle.addEventListener('click', () => {
+      composer.remove();
+      addComposer('Existing draft');
       history.replaceState({}, '', '/u/1/');
       toggle.remove();
     });
@@ -204,8 +241,8 @@ describe('temporary chat handoff', () => {
     vi.stubGlobal('DataTransfer', undefined);
     vi.stubGlobal('ClipboardEvent', undefined);
     const scope = new PluginScope();
-    const composer = addComposer('Existing draft');
-    addTemporaryExit();
+    addComposer('Existing draft');
+    const getComposer = addTemporaryExit();
 
     await expect(
       handoffTemporaryChat(scope, {
@@ -216,7 +253,7 @@ describe('temporary chat handoff', () => {
       }),
     ).resolves.toBe('delivery-failed');
 
-    expect(composer.textContent).toBe('Existing draft');
+    expect(getComposer()?.textContent).toBe('Existing draft');
     expect(sessionStorage.getItem(PENDING_KEY)).not.toBeNull();
     await scope.dispose();
   });
@@ -224,8 +261,8 @@ describe('temporary chat handoff', () => {
   it('does not report success when ChatGPT ignores a synthetic attachment paste', async () => {
     enableSyntheticPaste();
     const scope = new PluginScope();
-    const composer = addComposer('Existing draft');
-    addTemporaryExit();
+    addComposer('Existing draft');
+    const getComposer = addTemporaryExit();
 
     await expect(
       handoffTemporaryChat(scope, {
@@ -236,7 +273,7 @@ describe('temporary chat handoff', () => {
       }),
     ).resolves.toBe('delivery-failed');
 
-    expect(composer.textContent).toBe('Existing draft');
+    expect(getComposer()?.textContent).toBe('Existing draft');
     expect(sessionStorage.getItem(PENDING_KEY)).not.toBeNull();
     await scope.dispose();
   });
@@ -244,16 +281,17 @@ describe('temporary chat handoff', () => {
   it('reports attachment handoff success only after a file preview appears', async () => {
     enableSyntheticPaste();
     const scope = new PluginScope();
-    const composer = addComposer();
-    composer.addEventListener('paste', (event) => {
-      const pasted = (event as FakeClipboardEvent).clipboardData?.files[0];
-      if (!pasted) return;
-      const preview = document.createElement('div');
-      preview.dataset.testid = 'file-attachment';
-      preview.textContent = pasted.name;
-      document.body.appendChild(preview);
+    addComposer();
+    const getComposer = addTemporaryExit((composer) => {
+      composer.addEventListener('paste', (event) => {
+        const pasted = (event as FakeClipboardEvent).clipboardData?.files[0];
+        if (!pasted) return;
+        const preview = document.createElement('div');
+        preview.dataset.testid = 'file-attachment';
+        preview.textContent = pasted.name;
+        document.body.appendChild(preview);
+      });
     });
-    addTemporaryExit();
 
     await expect(
       handoffTemporaryChat(scope, {
@@ -264,7 +302,7 @@ describe('temporary chat handoff', () => {
       }),
     ).resolves.toBe('ready');
 
-    expect(composer.textContent).toContain('Read the attachment');
+    expect(getComposer()?.textContent).toContain('Read the attachment');
     expect(sessionStorage.getItem(PENDING_KEY)).toBeNull();
     await scope.dispose();
   });

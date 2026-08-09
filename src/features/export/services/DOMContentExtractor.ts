@@ -79,11 +79,17 @@ export class DOMContentExtractor {
 
     // Extract text from query-text-line paragraphs
     const textLines = element.querySelectorAll('.query-text-line');
-    if (images.length === 0 && attachments.length === 0 && textLines.length === 0) {
+    const hasGeminiUserStructure =
+      images.length > 0 ||
+      textLines.length > 0 ||
+      element.querySelector('user-query-file-preview') !== null;
+    if (!hasGeminiUserStructure) {
       // ChatGPT and other hosts use ordinary semantic HTML rather than Gemini's
       // query-text-line/file-preview elements. Reuse the standards-aware rich
       // fallback so paragraphs, links, images, and file pills are retained.
-      return this.extractAssistantContent(element);
+      const extracted = this.extractAssistantContent(element);
+      extracted.attachments = attachments;
+      return extracted;
     }
     const textParts: string[] = [];
     textLines.forEach((line) => {
@@ -331,7 +337,9 @@ export class DOMContentExtractor {
       uploadedFiles.length > 0
         ? uploadedFiles
         : Array.from(
-            element.querySelectorAll<HTMLElement>('user-query-file-preview .new-file-preview-file'),
+            element.querySelectorAll<HTMLElement>(
+              'user-query-file-preview .new-file-preview-file, [data-testid="file-attachment"]',
+            ),
           );
     const attachments: ExportAttachment[] = [];
     const seen = new Set<string>();
@@ -366,6 +374,35 @@ export class DOMContentExtractor {
     return attachments;
   }
 
+  private static resolveExportLink(link: HTMLAnchorElement): string | null {
+    const rawHref = link.getAttribute('href')?.trim();
+    if (!rawHref) return null;
+
+    try {
+      const destination = new URL(rawHref, link.ownerDocument.baseURI);
+      return destination.protocol === 'http:' || destination.protocol === 'https:'
+        ? destination.href
+        : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private static extractLinkLabel(
+    link: HTMLAnchorElement,
+    fallback: string,
+  ): {
+    html: string;
+    text: string;
+  } {
+    const inline = this.processInlineContent(link);
+    const text = inline.text || this.normalizeText(link.textContent || '') || fallback;
+    return {
+      html: inline.html || this.escapeHtml(text),
+      text,
+    };
+  }
+
   /**
    * Process DOM nodes recursively
    */
@@ -375,7 +412,7 @@ export class DOMContentExtractor {
     textParts: string[],
     flags: Pick<ExtractedContent, 'hasImages' | 'hasFormulas' | 'hasTables' | 'hasCode'>,
   ): void {
-    const children = Array.from(container.children);
+    const children = Array.from(container.childNodes);
     if (this.DEBUG)
       console.log(
         `[DOMContentExtractor] processNodes: ${children.length} children in`,
@@ -391,7 +428,18 @@ export class DOMContentExtractor {
       this.processNodes(shadowRoot as unknown as Element, htmlParts, textParts, flags);
     }
 
-    for (const child of children) {
+    for (const node of children) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        const text = (node.textContent || '').replace(/\s+/g, ' ');
+        if (text.trim()) {
+          htmlParts.push(this.escapeHtml(text));
+          textParts.push(text);
+        }
+        continue;
+      }
+      if (node.nodeType !== Node.ELEMENT_NODE) continue;
+
+      const child = node as Element;
       const tagName = child.tagName.toLowerCase();
       if (this.DEBUG)
         console.log('[DOMContentExtractor] Processing child:', tagName, child.className);
@@ -611,15 +659,16 @@ export class DOMContentExtractor {
       // children in some message layouts, so preserve their destination here.
       if (tagName === 'a') {
         const link = child as HTMLAnchorElement;
-        const href = link.getAttribute('href') || link.href;
-        const label = this.normalizeText(link.textContent || '') || href;
+        const href = this.resolveExportLink(link);
+        const label = this.extractLinkLabel(link, href || '');
         if (href) {
-          htmlParts.push(
-            `<a href="${this.escapeHtmlAttribute(href)}">${this.escapeHtml(label)}</a>`,
-          );
-          textParts.push(`[${label.replace(/([\\\]])/g, '\\$1')}](${href.replace(/\)/g, '\\)')})`);
-          continue;
+          htmlParts.push(`<a href="${this.escapeHtmlAttribute(href)}">${label.html}</a>`);
+          textParts.push(`[${label.text}](${href.replace(/\)/g, '\\)')})`);
+        } else {
+          htmlParts.push(label.html);
+          textParts.push(label.text);
         }
+        continue;
       }
 
       // Paragraph with possible inline formulas
@@ -869,17 +918,16 @@ export class DOMContentExtractor {
         // Links and linked attachment labels
         if (el.tagName === 'A') {
           const link = el as HTMLAnchorElement;
-          const href = link.getAttribute('href') || link.href;
-          const label = this.normalizeText(link.textContent || '') || href;
+          const href = this.resolveExportLink(link);
+          const label = this.extractLinkLabel(link, href || '');
           if (href) {
-            htmlParts.push(
-              `<a href="${this.escapeHtmlAttribute(href)}">${this.escapeHtml(label)}</a>`,
-            );
-            textParts.push(
-              `[${label.replace(/([\\\]])/g, '\\$1')}](${href.replace(/\)/g, '\\)')})`,
-            );
-            return;
+            htmlParts.push(`<a href="${this.escapeHtmlAttribute(href)}">${label.html}</a>`);
+            textParts.push(`[${label.text}](${href.replace(/\)/g, '\\)')})`);
+          } else {
+            htmlParts.push(label.html);
+            textParts.push(label.text);
           }
+          return;
         }
 
         // Inline images
@@ -1153,6 +1201,24 @@ export class DOMContentExtractor {
               textLines.push(nestedResult.text);
             }
             return;
+          }
+
+          if (child.tagName === 'PRE') {
+            const codeElement = child.querySelector<HTMLElement>(':scope > code');
+            if (codeElement) {
+              flushProse();
+              const extracted = this.extractCodeFromCodeElement(codeElement);
+              (codeElement as Element & { processedByGV?: boolean }).processedByGV = true;
+              ensureItemMarker();
+              hasCode = true;
+              textLines.push(
+                extracted.text
+                  .split('\n')
+                  .map((line) => continuationIndent + line)
+                  .join('\n'),
+              );
+              return;
+            }
           }
 
           const exportCodeBlocks = this.findExportCodeBlocks(child);

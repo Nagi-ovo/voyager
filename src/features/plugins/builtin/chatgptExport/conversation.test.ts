@@ -163,6 +163,19 @@ describe('ChatGPT conversation snapshots', () => {
     ]);
   });
 
+  it('keeps a fallback id stable while a mounted response streams', () => {
+    const message = fallbackTurn('assistant', 'Partial');
+    document.body.appendChild(message);
+
+    const first = collectMountedChatGptMessages()[0];
+    message.querySelector<HTMLElement>('[data-message-author-role]')!.textContent =
+      'Partial response completed';
+    const completed = collectMountedChatGptMessages()[0];
+
+    expect(completed.id).toBe(first.id);
+    expect(completed.text).toBe('Partial response completed');
+  });
+
   it('orders fallback messages by global virtual position when bottom is discovered first', () => {
     const scroller = document.createElement('main');
     scroller.style.overflowY = 'auto';
