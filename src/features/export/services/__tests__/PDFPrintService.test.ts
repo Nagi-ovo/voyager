@@ -92,6 +92,64 @@ describe('PDFPrintService', () => {
     expect(styleText).toContain('background: #fff !important;');
   });
 
+  it('uses a compact ChatGPT-like conversation layout when requested', async () => {
+    document.title = 'Export test';
+    window.print = vi.fn();
+
+    await PDFPrintService.export(
+      [{ user: 'A short question', assistant: 'A useful answer', starred: false }],
+      {
+        url: 'https://chatgpt.com/c/abc',
+        exportedAt: new Date().toISOString(),
+        count: 1,
+        title: 'Export test',
+      },
+      { appearance: 'chatgpt' },
+    );
+
+    const documentRoot = document.querySelector('.gv-print-document--chatgpt');
+    const sourceLink = document.querySelector('.gv-print-meta a');
+    const styleText = document.getElementById('gv-pdf-print-styles')?.textContent ?? '';
+
+    expect(documentRoot).toBeTruthy();
+    expect(sourceLink?.textContent).toBe('ChatGPT conversation');
+    expect(document.title).toBe('Export test - ChatGPT');
+    expect(styleText).toContain('.gv-print-document--chatgpt');
+    expect(styleText).toContain('border-radius: 18px 18px 4px 18px;');
+    expect(styleText).toContain('background: #1f1f1f;');
+    expect(styleText).toContain('display: table-header-group !important;');
+    expect(styleText).toContain('page-break-after: auto;');
+    expect(styleText).toContain('list-style: disc outside !important;');
+    expect(styleText).toContain('.gv-print-cover-title::before');
+  });
+
+  it('falls back to captured text when rich user HTML extraction is empty', async () => {
+    window.print = vi.fn();
+    const userElement = document.createElement('div');
+
+    await PDFPrintService.export(
+      [
+        {
+          user: 'Fallback user message',
+          assistant: 'Answer',
+          starred: false,
+          userElement,
+        },
+      ],
+      {
+        url: 'https://chatgpt.com/c/abc',
+        exportedAt: new Date().toISOString(),
+        count: 1,
+        title: 'Fallback content',
+      },
+      { appearance: 'chatgpt' },
+    );
+
+    expect(document.querySelector('.gv-print-turn-user .gv-print-turn-text')?.textContent).toBe(
+      'Fallback user message',
+    );
+  });
+
   it('injects descendant display override to survive immersive-mode print rules', async () => {
     window.print = vi.fn();
 

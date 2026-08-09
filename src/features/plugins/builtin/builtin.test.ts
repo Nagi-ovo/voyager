@@ -53,6 +53,17 @@ describe('BUILTIN_PLUGINS', () => {
     expect(timeline?.i18n?.zh?.settings?.compactView?.label).toBe('使用紧凑索引');
   });
 
+  it('includes the ChatGPT conversation export native function plugin', () => {
+    const exporter = BUILTIN_PLUGINS.find((m) => m.id === 'voyager.chatgpt-export');
+    expect(exporter).toBeDefined();
+    expect(exporter?.matches).toEqual(['https://chatgpt.com/*', 'https://chat.openai.com/*']);
+    expect(exporter?.contributes.styles ?? []).toEqual([]);
+    expect(exporter?.contributes.domOps ?? []).toEqual([]);
+    expect(exporter?.i18n?.zh?.name).toBe('ChatGPT 对话导出');
+    expect(exporter?.description).not.toContain('PNG');
+    expect(exporter?.i18n?.zh?.description).not.toContain('PNG');
+  });
+
   it('does not expose the retired Claude usage plugin', () => {
     const usage = BUILTIN_PLUGINS.find((m) => m.id === 'voyager.claude-usage');
     expect(usage).toBeUndefined();

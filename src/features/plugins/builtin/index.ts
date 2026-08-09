@@ -199,6 +199,32 @@ export const BUILTIN_PLUGINS: readonly PluginManifest[] = [
       },
     },
   },
+  {
+    id: 'voyager.chatgpt-export',
+    name: 'ChatGPT Conversation Export',
+    version: '1.0.0',
+    description:
+      'Exports a whole ChatGPT conversation or selected messages as Markdown, JSON, or PDF, and can save and continue a temporary chat.',
+    i18n: {
+      zh: {
+        name: 'ChatGPT 对话导出',
+        description:
+          '把整个 ChatGPT 对话或选择的消息导出为 Markdown、JSON 或 PDF，也可保存并继续临时对话。',
+      },
+      zh_TW: {
+        name: 'ChatGPT 對話匯出',
+        description:
+          '將完整 ChatGPT 對話或選取的訊息匯出為 Markdown、JSON 或 PDF，也可儲存並繼續暫時對話。',
+      },
+    },
+    author: 'voyager-official',
+    category: 'productivity',
+    license: 'GPL-3.0-or-later',
+    engine: '>=1.1.0',
+    tier: 'declarative',
+    matches: ['https://chatgpt.com/*', 'https://chat.openai.com/*'],
+    contributes: {},
+  },
 ];
 
 /**

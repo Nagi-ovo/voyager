@@ -24,6 +24,14 @@ export interface PrintableDocumentContent {
   html: string;
 }
 
+export type PDFPrintAppearance = 'default' | 'chatgpt';
+
+export interface PDFPrintOptions {
+  fontSize?: number;
+  speakerLabels?: ExportSpeakerLabels;
+  appearance?: PDFPrintAppearance;
+}
+
 /**
  * PDF print service using browser's native print dialog
  * Injects optimized styles for paper-friendly output
@@ -44,9 +52,16 @@ export class PDFPrintService {
   static async export(
     turns: ChatTurn[],
     metadata: ConversationMetadata,
-    options?: { fontSize?: number; speakerLabels?: ExportSpeakerLabels },
+    options?: PDFPrintOptions,
   ): Promise<void> {
-    await this.exportInternal(turns, metadata, false, options?.fontSize, options?.speakerLabels);
+    await this.exportInternal(
+      turns,
+      metadata,
+      false,
+      options?.fontSize,
+      options?.speakerLabels,
+      options?.appearance,
+    );
   }
 
   static async exportDocument(content: PrintableDocumentContent): Promise<void> {
@@ -80,6 +95,7 @@ export class PDFPrintService {
     preferMetadataTitle: boolean,
     fontSize?: number,
     speakerLabels: ExportSpeakerLabels = DEFAULT_EXPORT_SPEAKER_LABELS,
+    appearance: PDFPrintAppearance = 'default',
   ): Promise<void> {
     // Ensure we don't leave a previous export container around (e.g. if a prior export failed)
     this.cleanup();
@@ -92,6 +108,7 @@ export class PDFPrintService {
       metadata,
       preferMetadataTitle,
       speakerLabels,
+      appearance,
     );
     if (safari) {
       isolateMermaidSvgImages(container);
@@ -105,12 +122,12 @@ export class PDFPrintService {
     if (existingStyles) existingStyles.remove();
 
     // Inject print styles
-    this.injectPrintStyles(fontSize);
+    this.injectPrintStyles(fontSize, appearance);
     document.body.classList.add(this.PRINT_BODY_CLASS);
 
     // Keep print header/footer title aligned with conversation title in print dialog output.
     this.originalDocumentTitle = document.title;
-    const printDialogTitle = this.getPrintDialogTitle(metadata, preferMetadataTitle);
+    const printDialogTitle = this.getPrintDialogTitle(metadata, preferMetadataTitle, appearance);
     if (printDialogTitle) {
       document.title = printDialogTitle;
     }
@@ -202,6 +219,7 @@ export class PDFPrintService {
     metadata: ConversationMetadata,
     preferMetadataTitle: boolean,
     speakerLabels: ExportSpeakerLabels,
+    appearance: PDFPrintAppearance,
   ): HTMLElement {
     const container = document.createElement('div');
     container.id = this.PRINT_CONTAINER_ID;
@@ -209,8 +227,8 @@ export class PDFPrintService {
 
     // Build HTML content
     container.innerHTML = `
-      <div class="gv-print-document">
-        ${this.renderHeader(metadata, preferMetadataTitle)}
+      <div class="gv-print-document${appearance === 'chatgpt' ? ' gv-print-document--chatgpt' : ''}">
+        ${this.renderHeader(metadata, preferMetadataTitle, appearance)}
         ${this.renderContent(turns, speakerLabels)}
         ${this.renderFooter(metadata)}
       </div>
@@ -511,15 +529,18 @@ export class PDFPrintService {
   private static renderHeader(
     metadata: ConversationMetadata,
     preferMetadataTitle: boolean,
+    appearance: PDFPrintAppearance,
   ): string {
     const metadataTitle = this.normalizeConversationTitle(metadata.title);
     const pageConversationTitle = this.normalizeConversationTitle(this.getConversationTitle());
-    const conversationTitle = preferMetadataTitle
-      ? metadataTitle || pageConversationTitle || 'Untitled Conversation'
-      : pageConversationTitle || metadataTitle || 'Untitled Conversation';
+    const conversationTitle =
+      preferMetadataTitle || appearance === 'chatgpt'
+        ? metadataTitle || pageConversationTitle || 'Untitled Conversation'
+        : pageConversationTitle || metadataTitle || 'Untitled Conversation';
     // For PDF, avoid repeating the same title in smaller text under the H1.
     // Always derive a neutral "source" label from the URL instead of using metadata.title.
-    const urlTitle = this.extractTitleFromURL(metadata.url);
+    const urlTitle =
+      appearance === 'chatgpt' ? 'ChatGPT conversation' : this.extractTitleFromURL(metadata.url);
     const date = this.formatDate(metadata.exportedAt);
     const turnsCount = metadata.count;
 
@@ -559,11 +580,14 @@ export class PDFPrintService {
     const starredClass = turn.starred ? 'gv-print-turn-starred' : '';
 
     const userContent = turn.userElement
-      ? DOMContentExtractor.extractUserContent(turn.userElement).html || '<em>No content</em>'
+      ? DOMContentExtractor.extractUserContent(turn.userElement).html ||
+        this.formatContent(turn.user) ||
+        '<em>No content</em>'
       : this.formatContent(turn.user) || '<em>No content</em>';
 
     const assistantContent = turn.assistantElement
       ? DOMContentExtractor.extractAssistantContent(turn.assistantElement).html ||
+        this.formatContent(turn.assistant) ||
         '<em>No content</em>'
       : this.formatContent(turn.assistant) || '<em>No content</em>';
 
@@ -656,13 +680,18 @@ export class PDFPrintService {
   /**
    * Inject print-optimized styles
    */
-  private static injectPrintStyles(fontSize?: number): void {
+  private static injectPrintStyles(
+    fontSize?: number,
+    appearance: PDFPrintAppearance = 'default',
+  ): void {
     // Check if already injected
     if (document.getElementById(this.PRINT_STYLES_ID)) return;
 
     const basePt = fontSize ?? 11;
     const codePt = Math.max(basePt - 2, 6);
     const footerPt = Math.max(basePt - 2, 6);
+    const appearanceStyles =
+      appearance === 'chatgpt' ? this.buildChatGptPrintStyles(basePt, codePt, footerPt) : '';
 
     const style = document.createElement('style');
     style.id = this.PRINT_STYLES_ID;
@@ -1020,10 +1049,323 @@ export class PDFPrintService {
         strong {
           font-weight: 600;
         }
+
+        ${appearanceStyles}
       }
     `;
 
     document.head.appendChild(style);
+  }
+
+  private static buildChatGptPrintStyles(basePt: number, codePt: number, footerPt: number): string {
+    const root = `body.${this.PRINT_BODY_CLASS} #${this.PRINT_CONTAINER_ID} .gv-print-document--chatgpt`;
+    return `
+      @page {
+        margin: 16mm 18mm 18mm;
+        size: A4;
+      }
+
+      ${root} {
+        width: 100%;
+        max-width: 760px;
+        margin: 0 auto;
+        color: #0d0d0d;
+        background: #fff;
+        font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
+        font-size: ${basePt}pt;
+        line-height: 1.55;
+        text-rendering: optimizeLegibility;
+      }
+
+      ${root} .gv-print-cover-page {
+        min-height: 0 !important;
+        display: block !important;
+        margin: 0 0 2.2em;
+        padding: 0 0 1.15em;
+        border-bottom: 1px solid #e5e5e5;
+        page-break-after: auto;
+        break-after: auto;
+      }
+
+      ${root} .gv-print-cover-content {
+        max-width: none;
+        text-align: left;
+      }
+
+      ${root} .gv-print-cover-title {
+        margin: 0 0 0.45em;
+        color: #0d0d0d;
+        font-size: 24pt;
+        font-weight: 700;
+        letter-spacing: -0.025em;
+        line-height: 1.18;
+        overflow-wrap: anywhere;
+      }
+
+      ${root} .gv-print-cover-title::before,
+      ${root} .gv-print-cover-title::after {
+        content: none !important;
+        display: none !important;
+      }
+
+      ${root} .gv-print-meta {
+        display: flex !important;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.35em 0.7em;
+        margin: 0;
+        color: #6e6e80;
+        font-size: ${footerPt}pt;
+        line-height: 1.4;
+      }
+
+      ${root} .gv-print-meta p {
+        display: inline-flex !important;
+        align-items: center;
+        margin: 0;
+      }
+
+      ${root} .gv-print-meta p + p::before {
+        content: "·";
+        margin-right: 0.7em;
+        color: #b4b4b4;
+      }
+
+      ${root} .gv-print-meta a,
+      ${root} .gv-print-meta a:visited {
+        color: inherit;
+      }
+
+      ${root} .gv-print-content {
+        margin: 0;
+      }
+
+      ${root} .gv-print-turn {
+        margin: 0 0 2em;
+        page-break-inside: auto;
+        break-inside: auto;
+      }
+
+      ${root} .gv-print-turn-header,
+      ${root} .gv-print-turn-label {
+        display: none !important;
+      }
+
+      ${root} .gv-print-turn-user {
+        display: flex !important;
+        justify-content: flex-end;
+        margin: 0 0 1.25em;
+        page-break-inside: avoid;
+        break-inside: avoid;
+      }
+
+      ${root} .gv-print-turn-user .gv-print-turn-text {
+        width: fit-content;
+        max-width: 78%;
+        padding: 0.7em 1em;
+        border: 0;
+        border-radius: 18px 18px 4px 18px;
+        color: #0d0d0d;
+        background: #f4f4f4;
+        line-height: 1.5;
+        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact;
+      }
+
+      ${root} .gv-print-turn-assistant {
+        margin: 0;
+      }
+
+      ${root} .gv-print-turn-assistant .gv-print-turn-text {
+        max-width: 100%;
+        padding: 0;
+        border: 0;
+        color: #0d0d0d;
+      }
+
+      ${root} .gv-print-turn-text p {
+        margin: 0 0 0.85em;
+        orphans: 3;
+        widows: 3;
+      }
+
+      ${root} .gv-print-turn-text > :first-child {
+        margin-top: 0;
+      }
+
+      ${root} .gv-print-turn-text > :last-child {
+        margin-bottom: 0;
+      }
+
+      ${root} .gv-print-turn-text h1,
+      ${root} .gv-print-turn-text h2,
+      ${root} .gv-print-turn-text h3,
+      ${root} .gv-print-turn-text h4 {
+        margin: 1.35em 0 0.55em;
+        color: #0d0d0d;
+        font-weight: 650;
+        line-height: 1.25;
+        page-break-after: avoid;
+        break-after: avoid;
+      }
+
+      ${root} .gv-print-turn-text h1 { font-size: 1.55em; }
+      ${root} .gv-print-turn-text h2 { font-size: 1.35em; }
+      ${root} .gv-print-turn-text h3 { font-size: 1.16em; }
+      ${root} .gv-print-turn-text h4 { font-size: 1em; }
+
+      ${root} .gv-print-turn-text ul,
+      ${root} .gv-print-turn-text ol {
+        margin: 0.45em 0 0.9em;
+        padding-left: 1.45em;
+      }
+
+      ${root} .gv-print-turn-text ul {
+        list-style: disc outside !important;
+      }
+
+      ${root} .gv-print-turn-text ol {
+        list-style: decimal outside !important;
+      }
+
+      ${root} .gv-print-turn-text li {
+        display: list-item !important;
+        margin: 0.25em 0;
+        padding-left: 0.1em;
+      }
+
+      ${root} .gv-print-turn-text blockquote {
+        margin: 1em 0;
+        padding: 0.1em 0 0.1em 1em;
+        border-left: 3px solid #d1d1d1;
+        color: #565869;
+      }
+
+      ${root} .gv-print-turn-text hr {
+        margin: 1.5em 0;
+        border: 0;
+        border-top: 1px solid #e5e5e5;
+      }
+
+      ${root} .gv-print-turn-text code {
+        padding: 0.14em 0.36em;
+        border-radius: 5px;
+        color: #242424;
+        background: #ececec;
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+        font-size: ${codePt}pt;
+        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact;
+      }
+
+      ${root} .gv-print-turn-text pre {
+        margin: 1em 0;
+        padding: 1em 1.1em;
+        border: 0;
+        border-radius: 10px;
+        color: #f7f7f8;
+        background: #1f1f1f;
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+        font-size: ${codePt}pt;
+        line-height: 1.5;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact;
+      }
+
+      ${root} .gv-print-turn-text pre code {
+        padding: 0;
+        color: inherit;
+        background: transparent;
+        font-size: inherit;
+      }
+
+      ${root} .gv-print-turn-text table {
+        display: table !important;
+        width: 100%;
+        margin: 1em 0;
+        border-collapse: collapse;
+        border-spacing: 0;
+        font-size: 0.94em;
+      }
+
+      ${root} .gv-print-turn-text thead {
+        display: table-header-group !important;
+      }
+
+      ${root} .gv-print-turn-text tr {
+        display: table-row !important;
+        page-break-inside: avoid;
+        break-inside: avoid;
+      }
+
+      ${root} .gv-print-turn-text th,
+      ${root} .gv-print-turn-text td {
+        display: table-cell !important;
+        padding: 0.6em 0.7em;
+        border: 1px solid #dedede;
+        text-align: left;
+        vertical-align: top;
+        overflow-wrap: anywhere;
+      }
+
+      ${root} .gv-print-turn-text th {
+        background: #f7f7f8;
+        font-weight: 600;
+        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact;
+      }
+
+      ${root} .gv-print-turn-text img {
+        max-width: 100%;
+        max-height: 160mm;
+        height: auto;
+        margin: 1em auto;
+        border-radius: 8px;
+        object-fit: contain;
+        page-break-inside: avoid;
+        break-inside: avoid;
+      }
+
+      ${root} .gv-print-turn-text .gv-export-attachment {
+        border-color: #dedede;
+        border-radius: 10px;
+        background: #f7f7f8;
+        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact;
+      }
+
+      ${root} .gv-print-footer {
+        display: flex !important;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        gap: 0.35em 1em;
+        margin-top: 2.5em;
+        padding-top: 0.9em;
+        border-top: 1px solid #e5e5e5;
+        color: #8e8ea0;
+        font-size: ${footerPt}pt;
+        text-align: left;
+      }
+
+      ${root} .gv-print-footer p {
+        margin: 0;
+      }
+
+      ${root} a,
+      ${root} a:visited {
+        color: #2f6feb;
+        text-decoration: underline;
+        text-decoration-color: #b7cdf7;
+        text-underline-offset: 0.12em;
+      }
+
+      ${root} a[href]::after {
+        content: none !important;
+      }
+    `;
   }
 
   /**
@@ -1114,6 +1456,7 @@ export class PDFPrintService {
       .trim()
       .replace(/\s+-\s+Gemini$/i, '')
       .replace(/\s+-\s+Google Gemini$/i, '')
+      .replace(/\s+-\s+ChatGPT$/i, '')
       .replace(/\s+/g, ' ')
       .trim();
     return this.isMeaningfulConversationTitle(normalized) ? normalized : '';
@@ -1122,17 +1465,21 @@ export class PDFPrintService {
   private static getPrintDialogTitle(
     metadata: ConversationMetadata,
     preferMetadataTitle: boolean,
+    appearance: PDFPrintAppearance = 'default',
   ): string {
     const metadataTitle = this.normalizeConversationTitle(metadata.title);
     const conversationTitle = this.normalizeConversationTitle(this.getConversationTitle());
 
-    if (preferMetadataTitle) {
-      return metadataTitle || conversationTitle || 'Gemini Conversation';
-    }
+    const platform = appearance === 'chatgpt' ? 'ChatGPT' : 'Gemini';
+    const fallback = `${platform} Conversation`;
+    if (preferMetadataTitle) return metadataTitle || conversationTitle || fallback;
 
-    const base = conversationTitle || metadataTitle;
-    if (!base) return 'Gemini Conversation';
-    return `${base} - Gemini`;
+    const base =
+      appearance === 'chatgpt'
+        ? metadataTitle || conversationTitle
+        : conversationTitle || metadataTitle;
+    if (!base) return fallback;
+    return `${base} - ${platform}`;
   }
 
   /**

@@ -6,6 +6,7 @@
  */
 import { activateFormulaCopy } from '@/features/formulaCopy';
 import { NATIVE_BUILTIN_PLUGIN_IDS } from '@/features/plugins/builtin';
+import { activateChatGptExport } from '@/features/plugins/builtin/chatgptExport';
 import {
   activateClaudeTimeline,
   updateClaudeTimelineSettings,
@@ -27,6 +28,9 @@ export const NATIVE_HANDLER_BINDINGS: Readonly<Record<string, NativeHandler>> = 
   'voyager.claude-timeline': {
     activate: activateClaudeTimeline,
     updateSettings: updateClaudeTimelineSettings,
+  },
+  'voyager.chatgpt-export': {
+    activate: activateChatGptExport,
   },
 };
 
