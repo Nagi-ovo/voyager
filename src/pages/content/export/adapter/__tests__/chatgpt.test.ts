@@ -50,6 +50,23 @@ afterEach(() => {
 });
 
 describe('chatgptCollectTurnContainers', () => {
+  it('ignores ChatGPT virtual-list root without dropping the first real turn', () => {
+    document.body.innerHTML = `
+      <div data-turn-id-container="client-created-root"></div>
+      <div data-turn-id-container="user-1">
+        <div data-message-author-role="user">First prompt</div>
+      </div>
+      <div data-turn-id-container="assistant-1">
+        <div data-message-author-role="assistant">First answer</div>
+      </div>
+    `;
+
+    const turns = chatgptCollectTurnContainers();
+
+    expect(turns.map((turn) => turn.id)).toEqual(['user-1', 'assistant-1']);
+    expect(turns.map((turn) => turn.sequence)).toEqual([0, 1]);
+  });
+
   it('keeps only the first container for each stable turn id', () => {
     document.body.innerHTML = `
       <div data-turn-id-container="user-1">

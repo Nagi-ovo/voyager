@@ -5,6 +5,7 @@ import { computeConversationFingerprint } from '../topNodePreload';
 import type { ChatGptTurnContainer, ChatGptTurnRole, ExportSelectionOptions } from './type';
 
 const TURN_CONTAINER_SELECTOR = '[data-turn-id-container]';
+const NON_TURN_CONTAINER_IDS = new Set(['client-created-root']);
 const USER_MESSAGE_SELECTOR = '[data-message-author-role="user"]';
 const ASSISTANT_MESSAGE_SELECTOR = '[data-message-author-role="assistant"]';
 const IMAGEGEN_SELECTOR = '[class*="group/imagegen-image"]';
@@ -48,7 +49,7 @@ export function chatgptCollectTurnContainers(root: ParentNode = document): ChatG
 
   for (const container of root.querySelectorAll<HTMLElement>(TURN_CONTAINER_SELECTOR)) {
     const id = container.getAttribute('data-turn-id-container')?.trim();
-    if (!id) continue;
+    if (!id || NON_TURN_CONTAINER_IDS.has(id)) continue;
 
     const role = resolveTurnRole(container);
     const existing = turnsById.get(id);
