@@ -2,8 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { resolveExportAdapter } from '@/pages/content/export/adapter/platformAdapters';
 
-import { renderElementToImageBlob } from '../ImageRenderService';
 import { DOMContentExtractor } from '../DOMContentExtractor';
+import { renderElementToImageBlob } from '../ImageRenderService';
 import { PDFPrintService } from '../PDFPrintService';
 
 vi.mock('../ImageRenderService', () => ({
