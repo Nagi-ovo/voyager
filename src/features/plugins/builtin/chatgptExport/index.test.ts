@@ -4,8 +4,17 @@ import { PluginScope } from '@/features/plugins/runtime/pluginScope';
 
 import { activateChatGptExport } from './index';
 
+const { resumePendingHandoffMock } = vi.hoisted(() => ({
+  resumePendingHandoffMock: vi.fn().mockResolvedValue(null),
+}));
+
 vi.mock('@/utils/i18n', () => ({
   getCurrentLanguage: vi.fn().mockResolvedValue('en'),
+}));
+
+vi.mock('./tempHandoff', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./tempHandoff')>()),
+  resumePendingHandoff: resumePendingHandoffMock,
 }));
 
 function addConversation(): void {
@@ -44,6 +53,7 @@ afterEach(() => {
   document.head.querySelectorAll('[data-gv-plugin-scope]').forEach((node) => node.remove());
   sessionStorage.clear();
   vi.restoreAllMocks();
+  resumePendingHandoffMock.mockReset().mockResolvedValue(null);
 });
 
 describe('ChatGPT export native plugin lifecycle', () => {
@@ -81,6 +91,32 @@ describe('ChatGPT export native plugin lifecycle', () => {
     expect(document.querySelectorAll('[data-gv-chatgpt-export-button]')).toHaveLength(1);
     await second.dispose();
     expect(document.querySelectorAll('[data-gv-chatgpt-export-button]')).toHaveLength(0);
+  });
+
+  it('retries a pending handoff when the composer mounts during a slow SPA transition', async () => {
+    document.body.innerHTML = '<div id="conversation-header-actions"></div>';
+    let finishFirst: ((value: null) => void) | undefined;
+    resumePendingHandoffMock
+      .mockReturnValueOnce(
+        new Promise<null>((resolve) => {
+          finishFirst = resolve;
+        }),
+      )
+      .mockResolvedValue(null);
+    const scope = new PluginScope();
+    await activateChatGptExport(scope);
+    expect(resumePendingHandoffMock).toHaveBeenCalledTimes(1);
+
+    const composer = document.createElement('div');
+    composer.id = 'prompt-textarea';
+    composer.contentEditable = 'true';
+    composer.setAttribute('role', 'textbox');
+    document.body.appendChild(composer);
+    await vi.waitFor(() => expect(finishFirst).toBeTypeOf('function'));
+    finishFirst?.(null);
+
+    await vi.waitFor(() => expect(resumePendingHandoffMock).toHaveBeenCalledTimes(2));
+    await scope.dispose();
   });
 
   it('runs whole-conversation Markdown export through the plugin dialogs', async () => {

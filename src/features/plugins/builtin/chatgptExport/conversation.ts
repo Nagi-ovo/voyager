@@ -123,15 +123,22 @@ function readOrder(element: HTMLElement, fallback: number): number {
   const turn = element.closest<HTMLElement>(TURN_SELECTOR);
   const testId = turn?.getAttribute('data-testid') || '';
   const numeric = /conversation-turn-(\d+)/.exec(testId)?.[1];
-  return numeric === undefined ? fallback : Number(numeric);
+  if (numeric !== undefined) return Number(numeric);
+  return readVirtualPosition(turn || element)?.order ?? fallback;
 }
 
-function readVirtualPosition(host: HTMLElement): string | null {
+function readVirtualPosition(host: HTMLElement): { key: string; order?: number } | null {
   const explicit =
     host.getAttribute('data-index') ||
     host.getAttribute('data-message-index') ||
     host.getAttribute('aria-posinset');
-  if (explicit) return `index-${explicit}`;
+  if (explicit) {
+    const numeric = Number(explicit);
+    return {
+      key: `index-${explicit}`,
+      order: Number.isFinite(numeric) ? numeric : undefined,
+    };
+  }
 
   for (let parent = host.parentElement; parent && parent !== document.body; ) {
     const style = window.getComputedStyle(parent);
@@ -140,7 +147,8 @@ function readVirtualPosition(host: HTMLElement): string | null {
       parent.scrollHeight > parent.clientHeight + 4
     ) {
       const offset = host.getBoundingClientRect().top - parent.getBoundingClientRect().top;
-      return `offset-${Math.round(offset + parent.scrollTop)}`;
+      const globalOffset = Math.round(offset + parent.scrollTop);
+      return { key: `offset-${globalOffset}`, order: globalOffset };
     }
     parent = parent.parentElement;
   }
@@ -160,7 +168,7 @@ function readStableId(element: HTMLElement, role: ChatGptMessageRole, text: stri
   const host = turn || element;
   const signature = `${role}:${hashString(text)}`;
   const virtualPosition = readVirtualPosition(host);
-  if (virtualPosition) return `fallback-${signature}-${virtualPosition}`;
+  if (virtualPosition) return `fallback-${signature}-${virtualPosition.key}`;
 
   // Outside a measurable virtual scroller, keep an identity only for this
   // concrete DOM host/content pair. This avoids scan-local indexes while still

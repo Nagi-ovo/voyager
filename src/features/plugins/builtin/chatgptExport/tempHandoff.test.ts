@@ -5,6 +5,7 @@ import { PluginScope } from '@/features/plugins/runtime/pluginScope';
 import { collectMountedChatGptMessages } from './conversation';
 import {
   buildHandoffTranscript,
+  getChatGptNewChatPath,
   handoffTemporaryChat,
   isTemporaryChat,
   planHandoff,
@@ -95,6 +96,13 @@ describe('temporary chat handoff', () => {
     expect(isTemporaryChat()).toBe(true);
   });
 
+  it('keeps the active account prefix in fallback new-chat navigation', () => {
+    history.replaceState({}, '', '/u/12/c/example');
+    expect(getChatGptNewChatPath()).toBe('/u/12/');
+    history.replaceState({}, '', '/c/example');
+    expect(getChatGptNewChatPath()).toBe('/');
+  });
+
   it('builds a role-preserving Markdown transcript and inline handoff', () => {
     addMessage('u-1', 'user', 'First question');
     addMessage('a-1', 'assistant', 'First answer');
@@ -128,6 +136,28 @@ describe('temporary chat handoff', () => {
     ).resolves.toBe('ready');
 
     expect(composer.textContent).toContain('Continue this transcript');
+    expect(sessionStorage.getItem(PENDING_KEY)).toBeNull();
+    await scope.dispose();
+  });
+
+  it('rejects an immediate handoff when temporary-chat exit switches accounts', async () => {
+    const scope = new PluginScope();
+    history.replaceState({}, '', '/u/0/?temporary-chat=true');
+    const composer = addComposer('Existing draft');
+    const toggle = document.createElement('button');
+    toggle.dataset.testid = 'temporary-chat-toggle';
+    toggle.setAttribute('aria-label', 'Close temporary chat');
+    toggle.addEventListener('click', () => {
+      history.replaceState({}, '', '/u/1/');
+      toggle.remove();
+    });
+    document.body.appendChild(toggle);
+
+    await expect(
+      handoffTemporaryChat(scope, { mode: 'inline', text: 'Other account transcript' }),
+    ).resolves.toBe('account-mismatch');
+
+    expect(composer.textContent).toBe('Existing draft');
     expect(sessionStorage.getItem(PENDING_KEY)).toBeNull();
     await scope.dispose();
   });

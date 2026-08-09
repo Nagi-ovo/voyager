@@ -163,6 +163,51 @@ describe('ChatGPT conversation snapshots', () => {
     ]);
   });
 
+  it('orders fallback messages by global virtual position when bottom is discovered first', () => {
+    const scroller = document.createElement('main');
+    scroller.style.overflowY = 'auto';
+    let currentTop = 400;
+    Object.defineProperties(scroller, {
+      clientHeight: { configurable: true, value: 400 },
+      scrollHeight: { configurable: true, value: 800 },
+      scrollTop: {
+        configurable: true,
+        get: () => currentTop,
+        set: (value: number) => {
+          currentTop = value;
+        },
+      },
+    });
+    const render = (text: string, globalTop: number): void => {
+      const message = fallbackTurn('user', text);
+      const host = message.querySelector<HTMLElement>('[data-message-author-role]')!;
+      host.getBoundingClientRect = () =>
+        ({
+          top: globalTop - currentTop,
+          bottom: globalTop - currentTop + 40,
+          left: 0,
+          right: 200,
+          width: 200,
+          height: 40,
+          x: 0,
+          y: globalTop - currentTop,
+          toJSON: () => ({}),
+        }) as DOMRect;
+      scroller.replaceChildren(message);
+    };
+    document.body.appendChild(scroller);
+
+    render('Bottom message', 400);
+    const bottom = collectMountedChatGptMessages();
+    currentTop = 0;
+    render('Top message', 0);
+    const top = collectMountedChatGptMessages();
+
+    expect(
+      [...bottom, ...top].sort((left, right) => left.order - right.order).map(({ text }) => text),
+    ).toEqual(['Top message', 'Bottom message']);
+  });
+
   it('merges the final scroll window and rejects an incomplete step-limited export', async () => {
     const scroller = document.createElement('main');
     scroller.style.overflowY = 'auto';

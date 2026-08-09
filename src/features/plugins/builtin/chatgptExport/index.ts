@@ -28,6 +28,7 @@ import {
 const BUTTON_MARKER = 'data-gv-chatgpt-export-button';
 const HEADER_SELECTOR = '#conversation-header-actions';
 const SHARE_SELECTOR = '[data-testid="share-chat-button"]';
+const COMPOSER_SELECTOR = '#prompt-textarea, [contenteditable="true"][role="textbox"]';
 const REINJECT_DELAY_MS = 80;
 
 function downloadIcon(): SVGSVGElement {
@@ -101,6 +102,8 @@ class ChatGptExportPlugin {
   private stopMenu: Dispose | null = null;
   private stopOperation: Dispose | null = null;
   private stopReinjectTimer: Dispose | null = null;
+  private resumeHandoffInFlight: Promise<void> | null = null;
+  private resumeHandoffRequested = false;
 
   constructor(
     private readonly scope: PluginScope,
@@ -111,25 +114,18 @@ class ChatGptExportPlugin {
     this.scope.style(CHATGPT_EXPORT_CSS);
     this.ensureButton();
     this.scope.observe(document.body, { childList: true, subtree: true }, (records) => {
-      if (!this.mutationsTouchMount(records)) return;
-      this.scheduleButtonCheck();
+      if (this.mutationsTouchComposer(records)) this.tryResumePendingHandoff();
+      if (this.mutationsTouchMount(records)) this.scheduleButtonCheck();
     });
-    this.scope.on(window, 'popstate', () => this.scheduleButtonCheck());
-    this.scope.on(window, 'hashchange', () => this.scheduleButtonCheck());
-    this.scope.effect(
-      () =>
-        resumePendingHandoff(this.scope).then((result) => {
-          if (this.scope.isDisposed) return () => {};
-          if (result === 'ready') showExportToast(this.scope, this.copy.tempReady);
-          else if (result === 'delivery-failed') {
-            showExportToast(this.scope, this.copy.tempDeliveryFailed, 'error');
-          } else if (result === 'account-mismatch') {
-            showExportToast(this.scope, this.copy.tempAccountChanged, 'error');
-          }
-          return () => {};
-        }),
-      'chatgpt-export-resume-handoff',
-    );
+    this.scope.on(window, 'popstate', () => {
+      this.scheduleButtonCheck();
+      this.tryResumePendingHandoff();
+    });
+    this.scope.on(window, 'hashchange', () => {
+      this.scheduleButtonCheck();
+      this.tryResumePendingHandoff();
+    });
+    this.tryResumePendingHandoff();
     this.scope.effect(
       () => () => {
         void this.stopOperation?.();
@@ -155,6 +151,40 @@ class ChatGptExportPlugin {
         );
       }),
     );
+  }
+
+  private mutationsTouchComposer(records: readonly MutationRecord[]): boolean {
+    return records.some((record) =>
+      [...record.addedNodes].some((node) => {
+        if (!(node instanceof Element)) return false;
+        return node.matches(COMPOSER_SELECTOR) || node.querySelector(COMPOSER_SELECTOR) !== null;
+      }),
+    );
+  }
+
+  private tryResumePendingHandoff(): void {
+    if (this.scope.isDisposed) return;
+    if (this.resumeHandoffInFlight) {
+      this.resumeHandoffRequested = true;
+      return;
+    }
+
+    this.resumeHandoffInFlight = resumePendingHandoff(this.scope)
+      .then((result) => {
+        if (this.scope.isDisposed) return;
+        if (result === 'ready') showExportToast(this.scope, this.copy.tempReady);
+        else if (result === 'delivery-failed') {
+          showExportToast(this.scope, this.copy.tempDeliveryFailed, 'error');
+        } else if (result === 'account-mismatch') {
+          showExportToast(this.scope, this.copy.tempAccountChanged, 'error');
+        }
+      })
+      .finally(() => {
+        this.resumeHandoffInFlight = null;
+        if (!this.resumeHandoffRequested) return;
+        this.resumeHandoffRequested = false;
+        this.tryResumePendingHandoff();
+      });
   }
 
   private scheduleButtonCheck(): void {

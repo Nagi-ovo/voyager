@@ -122,6 +122,15 @@ function readAccountScope(): string {
   }
 }
 
+export function getChatGptNewChatPath(): string {
+  try {
+    const accountPrefix = /^\/u\/[^/]+/.exec(new URL(location.href).pathname)?.[0];
+    return accountPrefix ? `${accountPrefix}/` : '/';
+  } catch {
+    return '/';
+  }
+}
+
 function writePending(delivery: HandoffDelivery, accountScope: string): void {
   sessionStorage.setItem(
     PENDING_KEY,
@@ -289,7 +298,7 @@ export async function leaveTemporaryChat(scope: PluginScope): Promise<boolean> {
 
   const newChat = document.querySelector<HTMLElement>(NEW_CHAT_SELECTOR);
   if (newChat) newChat.click();
-  else location.assign('/');
+  else location.assign(getChatGptNewChatPath());
 
   for (let attempt = 0; attempt < 30; attempt += 1) {
     if (!isTemporaryChat() && document.querySelector(COMPOSER_SELECTOR)) return true;
