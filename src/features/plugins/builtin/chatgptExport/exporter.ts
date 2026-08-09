@@ -127,6 +127,7 @@ export async function exportChatGptConversation(request: ChatGptExportRequest): 
         fontSize: request.fontSize ?? 11,
         speakerLabels: { user: 'User', assistant: 'ChatGPT' },
         appearance: 'chatgpt',
+        documentTitle: filename.replace(/\.pdf$/i, ''),
       });
       break;
   }

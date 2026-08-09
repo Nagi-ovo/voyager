@@ -4,6 +4,10 @@ import { PluginScope } from '@/features/plugins/runtime/pluginScope';
 
 import { activateChatGptExport } from './index';
 
+vi.mock('@/utils/i18n', () => ({
+  getCurrentLanguage: vi.fn().mockResolvedValue('en'),
+}));
+
 function addConversation(): void {
   document.body.innerHTML = `
     <div id="conversation-header-actions"></div>
@@ -46,7 +50,7 @@ describe('ChatGPT export native plugin lifecycle', () => {
   it('mounts one button and removes all owned UI on scope disposal', async () => {
     document.body.innerHTML = '<div id="conversation-header-actions"></div>';
     const scope = new PluginScope();
-    activateChatGptExport(scope);
+    await activateChatGptExport(scope);
 
     const button = document.querySelector<HTMLButtonElement>('[data-gv-chatgpt-export-button]');
     expect(button).not.toBeNull();
@@ -68,11 +72,11 @@ describe('ChatGPT export native plugin lifecycle', () => {
   it('supports disable and re-enable without duplicate injection', async () => {
     document.body.innerHTML = '<div id="conversation-header-actions"></div>';
     const first = new PluginScope();
-    activateChatGptExport(first);
+    await activateChatGptExport(first);
     await first.dispose();
 
     const second = new PluginScope();
-    activateChatGptExport(second);
+    await activateChatGptExport(second);
 
     expect(document.querySelectorAll('[data-gv-chatgpt-export-button]')).toHaveLength(1);
     await second.dispose();
@@ -90,7 +94,7 @@ describe('ChatGPT export native plugin lifecycle', () => {
       downloaded = this.download;
     });
     const scope = new PluginScope();
-    activateChatGptExport(scope);
+    await activateChatGptExport(scope);
 
     clickButton('Export conversation');
     clickButton('Export entire conversation');
@@ -114,7 +118,7 @@ describe('ChatGPT export native plugin lifecycle', () => {
       downloaded = this.download;
     });
     const scope = new PluginScope();
-    activateChatGptExport(scope);
+    await activateChatGptExport(scope);
 
     clickButton('Export conversation');
     clickButton('Select messages to export');

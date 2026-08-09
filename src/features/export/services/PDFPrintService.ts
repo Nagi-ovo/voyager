@@ -30,6 +30,7 @@ export interface PDFPrintOptions {
   fontSize?: number;
   speakerLabels?: ExportSpeakerLabels;
   appearance?: PDFPrintAppearance;
+  documentTitle?: string;
 }
 
 /**
@@ -61,6 +62,7 @@ export class PDFPrintService {
       options?.fontSize,
       options?.speakerLabels,
       options?.appearance,
+      options?.documentTitle,
     );
   }
 
@@ -96,6 +98,7 @@ export class PDFPrintService {
     fontSize?: number,
     speakerLabels: ExportSpeakerLabels = DEFAULT_EXPORT_SPEAKER_LABELS,
     appearance: PDFPrintAppearance = 'default',
+    documentTitle?: string,
   ): Promise<void> {
     // Ensure we don't leave a previous export container around (e.g. if a prior export failed)
     this.cleanup();
@@ -127,7 +130,8 @@ export class PDFPrintService {
 
     // Keep print header/footer title aligned with conversation title in print dialog output.
     this.originalDocumentTitle = document.title;
-    const printDialogTitle = this.getPrintDialogTitle(metadata, preferMetadataTitle, appearance);
+    const printDialogTitle =
+      documentTitle?.trim() || this.getPrintDialogTitle(metadata, preferMetadataTitle, appearance);
     if (printDialogTitle) {
       document.title = printDialogTitle;
     }

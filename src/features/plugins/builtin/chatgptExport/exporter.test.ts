@@ -111,11 +111,11 @@ describe('ChatGPT export formats', () => {
       format: 'pdf',
       messages,
       metadata,
-      selected: false,
+      selected: true,
       fontSize: 12,
     });
 
-    expect(filename).toMatch(/^chatgpt-Export-test-\d{8}-\d{4}\.pdf$/);
+    expect(filename).toMatch(/^chatgpt-Export-test-selected-\d{8}-\d{4}\.pdf$/);
     expect(exportPdf).toHaveBeenCalledOnce();
     const [turns, receivedMetadata, options] = exportPdf.mock.calls[0];
     expect(receivedMetadata).toBe(metadata);
@@ -123,6 +123,7 @@ describe('ChatGPT export formats', () => {
       fontSize: 12,
       speakerLabels: { user: 'User', assistant: 'ChatGPT' },
       appearance: 'chatgpt',
+      documentTitle: filename.replace(/\.pdf$/i, ''),
     });
     expect(turns[0].userElement?.querySelector('p')?.textContent).toBe('Hello');
     expect(turns[0].assistantElement?.querySelector('code')?.textContent).toBe('const x = 1;');

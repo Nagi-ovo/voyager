@@ -1,6 +1,7 @@
 import { logger } from '@/core/services/LoggerService';
 import { type Dispose, PluginScope } from '@/features/plugins/runtime/pluginScope';
 import type { PluginSettings } from '@/features/plugins/types';
+import { getCurrentLanguage } from '@/utils/i18n';
 
 import {
   type ChatGptMessageSnapshot,
@@ -95,14 +96,16 @@ function findButtonTarget(): ButtonMountTarget {
 }
 
 class ChatGptExportPlugin {
-  private readonly copy = getChatGptExportCopy();
   private button: HTMLButtonElement | null = null;
   private stopButton: Dispose | null = null;
   private stopMenu: Dispose | null = null;
   private stopOperation: Dispose | null = null;
   private stopReinjectTimer: Dispose | null = null;
 
-  constructor(private readonly scope: PluginScope) {}
+  constructor(
+    private readonly scope: PluginScope,
+    private readonly copy: ReturnType<typeof getChatGptExportCopy>,
+  ) {}
 
   start(): void {
     this.scope.style(CHATGPT_EXPORT_CSS);
@@ -386,6 +389,11 @@ class ChatGptExportPlugin {
   }
 }
 
-export function activateChatGptExport(scope: PluginScope, _settings: PluginSettings = {}): void {
-  new ChatGptExportPlugin(scope).start();
+export async function activateChatGptExport(
+  scope: PluginScope,
+  _settings: PluginSettings = {},
+): Promise<void> {
+  const copy = getChatGptExportCopy(await getCurrentLanguage());
+  if (scope.isDisposed) return;
+  new ChatGptExportPlugin(scope, copy).start();
 }

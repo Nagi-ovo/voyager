@@ -137,6 +137,6 @@ const ZH: ChatGptExportCopy = {
   tempReady: '备份已保存。请检查交接提示，确认后再手动发送。',
 };
 
-export function getChatGptExportCopy(): ChatGptExportCopy {
-  return /^zh(?:-|_|$)/i.test(navigator.language) ? ZH : EN;
+export function getChatGptExportCopy(language = navigator.language): ChatGptExportCopy {
+  return /^zh(?:-|_|$)/i.test(language) ? ZH : EN;
 }

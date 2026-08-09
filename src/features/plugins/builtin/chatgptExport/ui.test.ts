@@ -18,6 +18,11 @@ afterEach(() => {
 });
 
 describe('ChatGPT export plugin dialogs', () => {
+  it('selects Chinese copy from the explicit Voyager language', () => {
+    expect(getChatGptExportCopy('zh_TW').tempRegret).toContain('反悔临时对话');
+    expect(getChatGptExportCopy('fr').button).toBe('Export conversation');
+  });
+
   it('offers PDF controls without the removed PNG format', async () => {
     const copy = getChatGptExportCopy();
     const scope = new PluginScope();
