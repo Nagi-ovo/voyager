@@ -13,6 +13,38 @@ import {
 
 const PENDING_KEY = 'gv-chatgpt-export-pending-handoff';
 
+class FakeDataTransfer {
+  readonly files: File[] = [];
+  readonly items = {
+    add: (file: File): void => {
+      this.files.push(file);
+    },
+  };
+  private readonly data = new Map<string, string>();
+
+  setData(type: string, value: string): void {
+    this.data.set(type, value);
+  }
+
+  getData(type: string): string {
+    return this.data.get(type) || '';
+  }
+}
+
+class FakeClipboardEvent extends Event {
+  readonly clipboardData: FakeDataTransfer | null;
+
+  constructor(type: string, init: EventInit & { clipboardData?: FakeDataTransfer | null } = {}) {
+    super(type, init);
+    this.clipboardData = init.clipboardData || null;
+  }
+}
+
+function enableSyntheticPaste(): void {
+  vi.stubGlobal('DataTransfer', FakeDataTransfer);
+  vi.stubGlobal('ClipboardEvent', FakeClipboardEvent);
+}
+
 function addMessage(id: string, role: 'user' | 'assistant', text: string): void {
   const message = document.createElement('div');
   message.dataset.messageId = id;
@@ -155,6 +187,54 @@ describe('temporary chat handoff', () => {
     ).resolves.toBe('delivery-failed');
 
     expect(composer.textContent).toBe('Existing draft');
+    expect(sessionStorage.getItem(PENDING_KEY)).not.toBeNull();
+    await scope.dispose();
+  });
+
+  it('does not report success when ChatGPT ignores a synthetic attachment paste', async () => {
+    enableSyntheticPaste();
+    const scope = new PluginScope();
+    const composer = addComposer('Existing draft');
+    addTemporaryExit();
+
+    await expect(
+      handoffTemporaryChat(scope, {
+        mode: 'attachment',
+        directive: 'Read the attachment',
+        attachment: '# Transcript',
+        filename: 'ignored-transcript.md',
+      }),
+    ).resolves.toBe('delivery-failed');
+
+    expect(composer.textContent).toBe('Existing draft');
+    expect(sessionStorage.getItem(PENDING_KEY)).not.toBeNull();
+    await scope.dispose();
+  });
+
+  it('reports attachment handoff success only after a file preview appears', async () => {
+    enableSyntheticPaste();
+    const scope = new PluginScope();
+    const composer = addComposer();
+    composer.addEventListener('paste', (event) => {
+      const pasted = (event as FakeClipboardEvent).clipboardData?.files[0];
+      if (!pasted) return;
+      const preview = document.createElement('div');
+      preview.dataset.testid = 'file-attachment';
+      preview.textContent = pasted.name;
+      document.body.appendChild(preview);
+    });
+    addTemporaryExit();
+
+    await expect(
+      handoffTemporaryChat(scope, {
+        mode: 'attachment',
+        directive: 'Read the attachment',
+        attachment: '# Transcript',
+        filename: 'accepted-transcript.md',
+      }),
+    ).resolves.toBe('ready');
+
+    expect(composer.textContent).toContain('Read the attachment');
     expect(sessionStorage.getItem(PENDING_KEY)).toBeNull();
     await scope.dispose();
   });

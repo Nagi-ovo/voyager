@@ -29,7 +29,10 @@ describe('ChatGPT export formats', () => {
         <div data-message-author-role="user" data-message-id="u-1"><p>Hello</p></div>
       </section>
       <section data-testid="conversation-turn-1">
-        <div data-message-author-role="assistant" data-message-id="a-1"><pre><code>const x = 1;</code></pre></div>
+        <div data-message-author-role="assistant" data-message-id="a-1">
+          <p>Read <a href="https://example.com/docs">the docs</a>.</p>
+          <pre><code>const x = 1;</code></pre>
+        </div>
       </section>
     `;
 
@@ -38,7 +41,8 @@ describe('ChatGPT export formats', () => {
     expect(markdown).toContain('**Source**: [ChatGPT](https://chatgpt.com/c/abc)');
     expect(markdown).toContain('## User');
     expect(markdown).toContain('## ChatGPT');
-    expect(markdown).toContain('const x = 1;');
+    expect(markdown).toContain('[the docs](https://example.com/docs)');
+    expect(markdown.match(/const x = 1;/g)).toHaveLength(1);
     expect(markdown).not.toContain('Gemini Chat');
   });
 

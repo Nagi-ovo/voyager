@@ -79,6 +79,12 @@ export class DOMContentExtractor {
 
     // Extract text from query-text-line paragraphs
     const textLines = element.querySelectorAll('.query-text-line');
+    if (images.length === 0 && attachments.length === 0 && textLines.length === 0) {
+      // ChatGPT and other hosts use ordinary semantic HTML rather than Gemini's
+      // query-text-line/file-preview elements. Reuse the standards-aware rich
+      // fallback so paragraphs, links, images, and file pills are retained.
+      return this.extractAssistantContent(element);
+    }
     const textParts: string[] = [];
     textLines.forEach((line) => {
       const el = line as HTMLElement;
@@ -447,6 +453,21 @@ export class DOMContentExtractor {
         }
       }
 
+      // Standard Markdown renderers, including ChatGPT, emit bare <pre><code>
+      // blocks rather than Gemini's code-block custom element. Consume the code
+      // here and mark it so the later compatibility scan cannot emit it twice.
+      if (tagName === 'pre') {
+        const codeElement = child.querySelector<HTMLElement>(':scope > code');
+        if (codeElement) {
+          const extracted = this.extractCodeFromCodeElement(codeElement);
+          (codeElement as Element & { processedByGV?: boolean }).processedByGV = true;
+          flags.hasCode = true;
+          htmlParts.push(extracted.html);
+          textParts.push(`\n${extracted.text}\n`);
+          continue;
+        }
+      }
+
       const exportCodeBlocks = this.findExportCodeBlocks(child);
       const directExportCodeBlock = exportCodeBlocks.find(({ element }) => element === child);
       if (directExportCodeBlock) {
@@ -584,6 +605,21 @@ export class DOMContentExtractor {
         htmlParts.push('<hr>');
         textParts.push('\n---\n');
         continue;
+      }
+
+      // Standalone links (for example ChatGPT attachment pills) are block-level
+      // children in some message layouts, so preserve their destination here.
+      if (tagName === 'a') {
+        const link = child as HTMLAnchorElement;
+        const href = link.getAttribute('href') || link.href;
+        const label = this.normalizeText(link.textContent || '') || href;
+        if (href) {
+          htmlParts.push(
+            `<a href="${this.escapeHtmlAttribute(href)}">${this.escapeHtml(label)}</a>`,
+          );
+          textParts.push(`[${label.replace(/([\\\]])/g, '\\$1')}](${href.replace(/\)/g, '\\)')})`);
+          continue;
+        }
       }
 
       // Paragraph with possible inline formulas
@@ -828,6 +864,22 @@ export class DOMContentExtractor {
           htmlParts.push(`<code>${this.escapeHtml(text)}</code>`);
           textParts.push(`\`${text}\``);
           return;
+        }
+
+        // Links and linked attachment labels
+        if (el.tagName === 'A') {
+          const link = el as HTMLAnchorElement;
+          const href = link.getAttribute('href') || link.href;
+          const label = this.normalizeText(link.textContent || '') || href;
+          if (href) {
+            htmlParts.push(
+              `<a href="${this.escapeHtmlAttribute(href)}">${this.escapeHtml(label)}</a>`,
+            );
+            textParts.push(
+              `[${label.replace(/([\\\]])/g, '\\$1')}](${href.replace(/\)/g, '\\)')})`,
+            );
+            return;
+          }
         }
 
         // Inline images

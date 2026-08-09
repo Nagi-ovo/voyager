@@ -189,28 +189,81 @@ function dispatchPaste(input: HTMLElement, text: string | null, file: File | nul
   }
 }
 
-function insertComposerText(input: HTMLElement, text: string): void {
+function readComposerText(input: HTMLElement): string {
+  if (input instanceof HTMLTextAreaElement || input instanceof HTMLInputElement) return input.value;
+  return input.textContent || '';
+}
+
+function insertComposerText(input: HTMLElement, text: string): boolean {
   input.focus();
-  if (dispatchPaste(input, text, null)) return;
   const inserted = document.execCommand?.('insertText', false, text) === true;
-  if (!inserted) {
-    const existing = input.textContent?.trim() || '';
-    input.textContent = existing ? `${existing}\n\n${text}` : text;
+  if (inserted && readComposerText(input).includes(text)) {
+    input.dispatchEvent(
+      new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }),
+    );
+    return true;
   }
+
+  const existing = readComposerText(input).trim();
+  const next = existing ? `${existing}\n\n${text}` : text;
+  if (input instanceof HTMLTextAreaElement || input instanceof HTMLInputElement) input.value = next;
+  else input.textContent = next;
   input.dispatchEvent(
     new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }),
   );
+  return readComposerText(input).includes(text);
+}
+
+function hasAttachmentPreview(input: HTMLElement, filename: string): boolean {
+  const root = input.closest('form') || document.body;
+  const normalizedFilename = filename.trim().toLowerCase();
+  if (!normalizedFilename) return false;
+
+  const fileInputs = root.querySelectorAll<HTMLInputElement>('input[type="file"]');
+  if (
+    Array.from(fileInputs).some((fileInput) =>
+      Array.from(fileInput.files || []).some(
+        (candidate) => candidate.name.toLowerCase() === normalizedFilename,
+      ),
+    )
+  ) {
+    return true;
+  }
+
+  const labelledPreview = Array.from(
+    root.querySelectorAll<HTMLElement>(
+      '[data-testid*="attachment" i], [data-testid*="file" i], [aria-label], [title]',
+    ),
+  ).some((candidate) => {
+    const label =
+      `${candidate.textContent || ''} ${candidate.getAttribute('aria-label') || ''} ${candidate.getAttribute('title') || ''}`
+        .trim()
+        .toLowerCase();
+    return label.includes(normalizedFilename);
+  });
+  return labelledPreview || (root.textContent || '').toLowerCase().includes(normalizedFilename);
+}
+
+async function dispatchAttachmentAndVerify(input: HTMLElement, file: File): Promise<boolean> {
+  const alreadyVisible = hasAttachmentPreview(input, file.name);
+  if (!dispatchPaste(input, null, file)) return false;
+  if (!alreadyVisible && hasAttachmentPreview(input, file.name)) return true;
+
+  const deadline = Date.now() + 1_200;
+  while (Date.now() < deadline) {
+    await new Promise((resolve) => window.setTimeout(resolve, 60));
+    if (!alreadyVisible && hasAttachmentPreview(input, file.name)) return true;
+  }
+  return false;
 }
 
 async function deliver(input: HTMLElement, delivery: HandoffDelivery): Promise<boolean> {
   if (delivery.mode === 'inline') {
-    insertComposerText(input, delivery.text);
-    return true;
+    return insertComposerText(input, delivery.text);
   }
   const file = new File([delivery.attachment], delivery.filename, { type: 'text/markdown' });
-  if (!dispatchPaste(input, null, file)) return false;
-  insertComposerText(input, delivery.directive);
-  return true;
+  if (!(await dispatchAttachmentAndVerify(input, file))) return false;
+  return insertComposerText(input, delivery.directive);
 }
 
 async function findComposer(scope: PluginScope, timeoutMs: number): Promise<HTMLElement | null> {
@@ -267,10 +320,7 @@ export async function handoffTemporaryChat(
   const input = await findComposer(scope, 6_000);
   if (!input) return 'composer-missing';
   const delivered = await deliver(input, delivery);
-  if (!delivered) {
-    clearPending();
-    return 'delivery-failed';
-  }
+  if (!delivered) return 'delivery-failed';
   clearPending();
   return 'ready';
 }
@@ -290,10 +340,7 @@ export async function resumePendingHandoff(scope: PluginScope): Promise<PendingH
   const input = await findComposer(scope, 6_000);
   if (!input) return null;
   const delivered = await deliver(input, pending.delivery);
-  if (!delivered) {
-    clearPending();
-    return 'delivery-failed';
-  }
+  if (!delivered) return 'delivery-failed';
   clearPending();
   return 'ready';
 }

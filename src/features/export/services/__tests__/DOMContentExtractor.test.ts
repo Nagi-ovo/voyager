@@ -51,6 +51,39 @@ describe('DOMContentExtractor', () => {
     expect(extracted.text).not.toContain('📎 photo.png');
   });
 
+  it('preserves standard ChatGPT user links and attachment pills', () => {
+    const user = document.createElement('div');
+    user.innerHTML = `
+      <div>
+        <p>Review <a href="https://example.com/docs">the docs</a>.</p>
+        <a data-testid="file-attachment" href="https://example.com/notes.pdf">notes.pdf</a>
+      </div>
+    `;
+
+    const extracted = DOMContentExtractor.extractUserContent(user);
+
+    expect(extracted.text).toContain('[the docs](https://example.com/docs)');
+    expect(extracted.text).toContain('[notes.pdf](https://example.com/notes.pdf)');
+    expect(extracted.html).toContain('href="https://example.com/notes.pdf"');
+  });
+
+  it('extracts standard ChatGPT code blocks exactly once', () => {
+    const assistant = document.createElement('div');
+    assistant.innerHTML = `
+      <div class="markdown">
+        <p>Use <a href="https://example.com/api">the API</a>.</p>
+        <pre><code class="language-ts">const once = true;</code></pre>
+      </div>
+    `;
+
+    const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+
+    expect(extracted.text).toContain('[the API](https://example.com/api)');
+    expect(extracted.text.match(/const once = true;/g)).toHaveLength(1);
+    expect(extracted.html.match(/const once = true;/g)).toHaveLength(1);
+    expect(extracted.text).toContain('```ts');
+  });
+
   it('exports rendered Mermaid SVG in HTML while preserving Mermaid source in text', () => {
     const assistant = document.createElement('div');
     assistant.innerHTML = `
