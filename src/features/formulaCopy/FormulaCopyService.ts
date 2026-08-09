@@ -686,14 +686,11 @@ export class FormulaCopyService {
    * @returns Object containing text and optional html
    */
   private wrapFormula(formula: string, isDisplayMode: boolean): { text: string; html?: string } {
-    // Host markup can expose either raw TeX or an already-delimited source.
-    // Normalize once so every output mode adds exactly the delimiters it owns.
-    const normalizedFormula = this.stripMathDelimiters(formula).trim();
-
     if (this.currentFormat === 'unicodemath') {
       // Convert to Word-friendly MathML (replaces previous UnicodeMath)
       try {
-        const rawMathML = temml.renderToString(normalizedFormula, {
+        const strippedFormula = this.stripMathDelimiters(formula);
+        const rawMathML = temml.renderToString(strippedFormula, {
           displayMode: isDisplayMode,
           xml: true,
           annotate: false,
@@ -709,22 +706,22 @@ export class FormulaCopyService {
         return { text: wordMathML, html: htmlWrapped };
       } catch (error) {
         this.logger.error('MathML conversion failed', { error });
-        return { text: normalizedFormula };
+        return { text: formula };
       }
     }
 
     if (this.currentFormat === 'no-dollar') {
-      return { text: normalizedFormula };
+      return { text: formula };
     }
 
     if (this.currentFormat === 'notion') {
       // Notion format: always use $$ for both inline and display formulas
-      const wrapped = `$$${normalizedFormula}$$`;
+      const wrapped = `$$${formula}$$`;
       return { text: wrapped };
     }
 
     // Default: LaTeX format with delimiters
-    const wrapped = isDisplayMode ? `$$${normalizedFormula}$$` : `$${normalizedFormula}$`;
+    const wrapped = isDisplayMode ? `$$${formula}$$` : `$${formula}$`;
     return { text: wrapped };
   }
 

@@ -39,6 +39,7 @@ import { shouldShowUpdateReminderForCurrentVersion } from '@/core/utils/updateRe
 import { compareVersions } from '@/core/utils/version';
 import { resolveWatermarkSettings } from '@/core/utils/watermarkSettings';
 import { PromptImportExportService } from '@/features/backup/services/PromptImportExportService';
+import type { FormulaCopyFormat } from '@/features/formulaCopy/FormulaCopyService';
 import { matchesAnyPattern } from '@/features/plugins/sites/matchPattern';
 import {
   listPluginManifestsWithSources,
@@ -102,6 +103,7 @@ import {
   IconQwen,
 } from './components/WebsiteLogos';
 import WidthSlider from './components/WidthSlider';
+import { useFormulaCopyPopupSettings } from './hooks/useFormulaCopyPopupSettings';
 import { usePopupScrollRestoration } from './hooks/usePopupScrollRestoration';
 import {
   type SettingsSearchItem,
@@ -951,10 +953,13 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
   const [websiteError, setWebsiteError] = useState<string>('');
   const [showStarredHistory, setShowStarredHistory] = useState<boolean>(false);
   const [showStorageManager, setShowStorageManager] = useState<boolean>(false);
-  const [formulaCopyEnabled, setFormulaCopyEnabled] = useState<boolean>(true);
-  const [formulaCopyFormat, setFormulaCopyFormat] = useState<
-    'latex' | 'unicodemath' | 'no-dollar' | 'notion'
-  >('latex');
+  const {
+    enabled: formulaCopyEnabled,
+    format: formulaCopyFormat,
+    setEnabledFromUser: setFormulaCopyEnabledFromUser,
+    setFormatFromUser: setFormulaCopyFormatFromUser,
+    hydrateFromStorage: hydrateFormulaCopySettings,
+  } = useFormulaCopyPopupSettings();
   const [extVersion, setExtVersion] = useState<string | null>(null);
   const [latestVersion, setLatestVersion] = useState<string | null>(null);
   const [safariDmgUrl, setSafariDmgUrl] = useState<string | null>(null);
@@ -1311,18 +1316,18 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
 
   const handleFormulaCopyEnabledChange = useCallback(
     (enabled: boolean) => {
-      setFormulaCopyEnabled(enabled);
+      setFormulaCopyEnabledFromUser(enabled);
       void setSyncStorage({ [StorageKeys.FORMULA_COPY_ENABLED]: enabled });
     },
-    [setSyncStorage],
+    [setFormulaCopyEnabledFromUser, setSyncStorage],
   );
 
   const handleFormulaCopyFormatChange = useCallback(
-    (format: 'latex' | 'unicodemath' | 'no-dollar' | 'notion') => {
-      setFormulaCopyFormat(format);
+    (format: FormulaCopyFormat) => {
+      setFormulaCopyFormatFromUser(format);
       void setSyncStorage({ [StorageKeys.FORMULA_COPY_FORMAT]: format });
     },
-    [setSyncStorage],
+    [setFormulaCopyFormatFromUser, setSyncStorage],
   );
 
   // Helper function to apply settings to storage
@@ -1991,19 +1996,10 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
           if (isTimelineStyle(storedTimelineStyle)) {
             setTimelineStyle(storedTimelineStyle);
           }
-          setFormulaCopyEnabled(res?.[StorageKeys.FORMULA_COPY_ENABLED] !== false);
-          const format = res?.[StorageKeys.FORMULA_COPY_FORMAT] as
-            | 'latex'
-            | 'unicodemath'
-            | 'no-dollar'
-            | 'notion';
-          if (
-            format === 'latex' ||
-            format === 'unicodemath' ||
-            format === 'no-dollar' ||
-            format === 'notion'
-          )
-            setFormulaCopyFormat(format);
+          hydrateFormulaCopySettings(
+            res?.[StorageKeys.FORMULA_COPY_ENABLED],
+            res?.[StorageKeys.FORMULA_COPY_FORMAT],
+          );
           setHideContainer(!!res?.geminiTimelineHideContainer);
           setDraggableTimeline(!!res?.geminiTimelineDraggable);
           setTimelinePreviewPinned(res?.[StorageKeys.TIMELINE_PREVIEW_PINNED] === true);
@@ -2161,7 +2157,7 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
         },
       );
     } catch {}
-  }, [setSyncStorage]);
+  }, [hydrateFormulaCopySettings, setSyncStorage]);
 
   // Validate and normalize URL
   const normalizeUrl = useCallback((url: string): string | null => {

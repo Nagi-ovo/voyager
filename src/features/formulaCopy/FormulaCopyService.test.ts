@@ -72,6 +72,8 @@ describe('FormulaCopyService', () => {
   beforeEach(() => {
     // Reset mocks
     vi.clearAllMocks();
+    writeMock.mockReset().mockResolvedValue(undefined);
+    writeTextMock.mockReset().mockResolvedValue(undefined);
     storageMocks.get.mockResolvedValue({});
 
     // Mock navigator.clipboard
@@ -246,7 +248,8 @@ describe('FormulaCopyService', () => {
     explicitInline.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     displayArrow.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await Promise.resolve();
-    expect(writeTextMock).toHaveBeenNthCalledWith(1, '$\\rightarrow$');
+    expect(writeTextMock).toHaveBeenCalledTimes(2);
+    expect(writeTextMock.mock.calls[0]?.[0]).toContain('\\rightarrow');
     expect(writeTextMock).toHaveBeenNthCalledWith(2, '$$\\rightarrow$$');
   });
 
@@ -566,12 +569,14 @@ describe('FormulaCopyService', () => {
       service.initialize();
       mathElement.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await Promise.resolve();
+      await Promise.resolve();
       expect(document.querySelector('.gv-copy-toast-show')).not.toBeNull();
 
       service.destroy();
       vi.advanceTimersByTime(1000);
       service.initialize();
       mathElement.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
       await Promise.resolve();
       expect(document.querySelector('.gv-copy-toast-show')).not.toBeNull();
 

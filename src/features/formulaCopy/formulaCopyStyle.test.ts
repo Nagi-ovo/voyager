@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 function readFormulaCopyCss(): string {
   const css = readFileSync(resolve(process.cwd(), 'public/contentStyle.css'), 'utf8');
   const start = css.indexOf('/* ==================== Formula Copy Feature ==================== */');
-  const end = css.indexOf('/* Folder Import/Export Styles', start);
+  const end = css.indexOf('Folder Import/Export Styles', start);
   expect(start).toBeGreaterThan(-1);
   expect(end).toBeGreaterThan(start);
   return css.slice(start, end);
@@ -27,6 +27,7 @@ describe('formula copy interaction styles', () => {
     );
 
     expect(css).not.toMatch(/^\.math-inline/m);
+    expect(css).not.toMatch(/^\.math-display/m);
     expect(css).not.toMatch(/^\[data-math\]/m);
     expect(css).not.toMatch(/^ms-katex/m);
     expect(css).not.toContain(':root.gv-platform-themed .katex');

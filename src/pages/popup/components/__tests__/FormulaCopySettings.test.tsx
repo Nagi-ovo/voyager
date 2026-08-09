@@ -47,6 +47,10 @@ describe('FormulaCopySettings', () => {
     render(true);
     const switchInput = container.querySelector<HTMLInputElement>('#formula-copy-enabled')!;
     expect(switchInput.checked).toBe(true);
+    expect(switchInput.getAttribute('aria-describedby')).toBe('formula-copy-enabled-hint');
+    expect(container.querySelector('#formula-copy-enabled-hint')?.textContent).toBe(
+      'enableFormulaCopyHint',
+    );
     expect(container.querySelector<HTMLInputElement>('input[value="notion"]')?.checked).toBe(true);
 
     act(() => switchInput.click());
@@ -83,20 +87,45 @@ describe('FormulaCopySettings', () => {
     expect(onEnabledChange).not.toHaveBeenCalled();
   });
 
-  it('does not disable plugin-site formats when the native switch is hidden', () => {
+  it('keeps formats enabled when search hides an enabled native switch', () => {
+    const onFormatChange = vi.fn();
     act(() => {
       root.render(
         <FormulaCopySettings
-          enabled={false}
+          enabled={true}
           format="latex"
           onEnabledChange={vi.fn()}
-          onFormatChange={vi.fn()}
+          onFormatChange={onFormatChange}
           showEnabled={false}
           t={translate}
         />,
       );
     });
 
-    expect(container.querySelector<HTMLInputElement>('input[value="latex"]')?.disabled).toBe(false);
+    const notionInput = container.querySelector<HTMLInputElement>('input[value="notion"]')!;
+    expect(notionInput.disabled).toBe(false);
+    act(() => notionInput.click());
+    expect(onFormatChange).toHaveBeenCalledWith('notion');
+  });
+
+  it('keeps formats disabled when search hides an off native switch', () => {
+    const onFormatChange = vi.fn();
+    act(() => {
+      root.render(
+        <FormulaCopySettings
+          enabled={false}
+          format="latex"
+          onEnabledChange={vi.fn()}
+          onFormatChange={onFormatChange}
+          showEnabled={false}
+          t={translate}
+        />,
+      );
+    });
+
+    const latexInput = container.querySelector<HTMLInputElement>('input[value="latex"]')!;
+    expect(latexInput.disabled).toBe(true);
+    act(() => latexInput.click());
+    expect(onFormatChange).not.toHaveBeenCalled();
   });
 });

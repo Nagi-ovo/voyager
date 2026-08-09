@@ -33,7 +33,7 @@ export function FormulaCopySettings({
   showFormat = true,
   t,
 }: FormulaCopySettingsProps) {
-  const formatsDisabled = showEnabled && !enabled;
+  const formatsDisabled = !enabled;
 
   return (
     <Card className="p-4 transition-all hover:shadow-md">
@@ -48,10 +48,13 @@ export function FormulaCopySettings({
               >
                 {t('enableFormulaCopy')}
               </Label>
-              <p className="text-muted-foreground mt-1 text-xs">{t('enableFormulaCopyHint')}</p>
+              <p id="formula-copy-enabled-hint" className="text-muted-foreground mt-1 text-xs">
+                {t('enableFormulaCopyHint')}
+              </p>
             </div>
             <Switch
               id="formula-copy-enabled"
+              aria-describedby="formula-copy-enabled-hint"
               checked={enabled}
               onChange={(event) => onEnabledChange(event.target.checked)}
             />
