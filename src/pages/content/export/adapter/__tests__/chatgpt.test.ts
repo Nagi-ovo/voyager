@@ -122,6 +122,65 @@ describe('chatgptCollectTurnContainers', () => {
     expect(HTMLElement.prototype.scrollIntoView).not.toHaveBeenCalled();
   });
 
+  it('does not treat image-generation controls as loaded image content', async () => {
+    vi.useFakeTimers();
+    document.body.innerHTML = `
+      <div data-turn-id-container="assistant-image-1">
+        <section data-turn-id="assistant-image-1">
+          <h4>ChatGPT said:</h4>
+          <div class="group/imagegen-image">
+            <div role="button" aria-label="Generated image: Poster">
+              <button aria-label="Edit image">Edit</button>
+              <button aria-label="Share this image">Share</button>
+            </div>
+          </div>
+        </section>
+      </div>
+    `;
+
+    const exportPromise = buildChatGptTurnsForSelection(new Set(['assistant-image-1']));
+    const assertion = expect(exportPromise).rejects.toThrow(
+      'chatgpt_export_message_unavailable:assistant-image-1',
+    );
+    await vi.advanceTimersByTimeAsync(3200);
+    await assertion;
+    expect(HTMLElement.prototype.scrollIntoView).toHaveBeenCalled();
+  });
+
+  it('exports a mounted generated image without waiting', async () => {
+    DOMContentExtractor.setExportAdapter({
+      extractUserImage: (element: HTMLElement) => element.querySelectorAll('img'),
+      extractUserText: () => undefined,
+      getUserAttachmentCandidates: () => [],
+      extractAssistantImage: ((child, htmlParts, textParts, flags, tagName) => {
+        if (tagName !== 'img') return undefined;
+        const image = child as HTMLImageElement;
+        flags.hasImages = true;
+        htmlParts.push(`<img src="${image.src}" alt="${image.alt}" />`);
+        textParts.push(`![${image.alt}](${image.src})`);
+        return true;
+      }) as ExportPlatformAdapter['extractAssistantImage'],
+      extractFormula: () => undefined,
+      extractCodeBlock: () => undefined,
+      extractInlineFormula: () => undefined,
+    } as unknown as ExportPlatformAdapter);
+    document.body.innerHTML = `
+      <div data-turn-id-container="assistant-image-1">
+        <section data-turn-id="assistant-image-1">
+          <div class="group/imagegen-image">
+            <img src="https://example.com/generated.png" alt="Generated poster" />
+          </div>
+        </section>
+      </div>
+    `;
+
+    const turns = await buildChatGptTurnsForSelection(new Set(['assistant-image-1']));
+
+    expect(turns[0]?.assistantContent).toMatchObject({ hasImages: true });
+    expect(turns[0]?.assistant).toContain('https://example.com/generated.png');
+    expect(HTMLElement.prototype.scrollIntoView).not.toHaveBeenCalled();
+  });
+
   it('does not pair non-adjacent selected messages', async () => {
     document.body.innerHTML = `
       <div data-turn-id-container="user-1"><div data-message-author-role="user">U1</div></div>

@@ -119,12 +119,28 @@ function findTurnContainer(id: string): ChatGptTurnContainer | null {
   return chatgptCollectTurnContainers().find((turn) => turn.id === id) ?? null;
 }
 
+function hasUsableGeneratedImage(container: HTMLElement): boolean {
+  const imageGenRoot = container.querySelector(IMAGEGEN_SELECTOR);
+  if (!imageGenRoot) return false;
+
+  return Array.from(imageGenRoot.querySelectorAll<HTMLImageElement>('img')).some((image) => {
+    const src = (image.getAttribute('src') || image.src || '').trim();
+    return src.length > 0 && src !== 'about:blank';
+  });
+}
+
 function hasMountedContent(turn: ChatGptTurnContainer): boolean {
+  if (turn.container.querySelector(IMAGEGEN_SELECTOR)) {
+    // Image-generation cards mount their Edit/Share controls before the image.
+    // Those labels are not exportable response content, so wait for a usable
+    // image URL instead of snapshotting the placeholder card.
+    return hasUsableGeneratedImage(turn.container);
+  }
+
   const root =
     turn.role === 'user'
       ? turn.container.querySelector(USER_MESSAGE_SELECTOR)
-      : (turn.container.querySelector(ASSISTANT_MESSAGE_SELECTOR) ??
-        turn.container.querySelector(IMAGEGEN_SELECTOR));
+      : turn.container.querySelector(ASSISTANT_MESSAGE_SELECTOR);
   if (!root) return false;
   return (
     (root.textContent?.trim().length ?? 0) > 0 ||
@@ -329,9 +345,13 @@ export async function buildChatGptTurnsForSelection(
       if (role === 'assistant') {
         // Image-generation replies can be identified by IMAGEGEN_SELECTOR before
         // ChatGPT exposes a conventional assistant root.
+        const expectsGeneratedImage = container.querySelector(IMAGEGEN_SELECTOR) != null;
         const assistantElement =
           container.querySelector<HTMLElement>(ASSISTANT_MESSAGE_SELECTOR) ?? container;
         const assistantContent = DOMContentExtractor.extractAssistantContent(assistantElement);
+        if (expectsGeneratedImage && !assistantContent.hasImages) {
+          throw new Error(`chatgpt_export_message_empty:${turn.id}`);
+        }
         if (!assistantContent.text && !assistantContent.html) {
           throw new Error(`chatgpt_export_message_empty:${turn.id}`);
         }
