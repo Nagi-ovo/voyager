@@ -565,6 +565,14 @@
     "message": "✗ Falha ao copiar",
     "description": "Formula copy failed message"
   },
+  "enableFormulaCopy": {
+    "message": "Ativar cópia de fórmulas",
+    "description": "Formula copy enable toggle"
+  },
+  "enableFormulaCopyHint": {
+    "message": "Copia uma fórmula no formato selecionado ao clicar nela.",
+    "description": "Formula copy enable toggle hint"
+  },
   "formulaCopyFormat": {
     "message": "Formato de cópia de fórmula",
     "description": "Formula copy format setting label"

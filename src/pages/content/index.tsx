@@ -9,7 +9,7 @@ import {
 } from '@/core/utils/extensionContext';
 import { isGeminiEnterpriseEnvironment } from '@/core/utils/gemini';
 import { WATERMARK_STORAGE_KEYS } from '@/core/utils/watermarkSettings';
-import { startFormulaCopy } from '@/features/formulaCopy';
+import { startNativeFormulaCopy } from '@/features/formulaCopy';
 import { startPluginHost } from '@/features/plugins';
 import { resolvePluginPlatformId } from '@/features/plugins/sites/registry';
 import { initI18n } from '@/utils/i18n';
@@ -308,7 +308,11 @@ async function initializeFeatures(): Promise<void> {
         CleanupPositions.CleanupSendBehavior,
       );
       startPreventAutoScroll();
-      startFormulaCopy();
+      const formulaCopyController = await startNativeFormulaCopy();
+      cleanupManager.registerCleanupFunction(
+        formulaCopyController.destroy,
+        CleanupPositions.CleanupFormulaCopy,
+      );
       await delay(LIGHT_FEATURE_INIT_DELAY);
 
       // Quote Reply - conditionally start based on storage setting
@@ -470,7 +474,11 @@ async function initializeFeatures(): Promise<void> {
       await delay(LIGHT_FEATURE_INIT_DELAY);
 
       // Formula copy support for AI Studio
-      startFormulaCopy();
+      const formulaCopyController = await startNativeFormulaCopy();
+      cleanupManager.registerCleanupFunction(
+        formulaCopyController.destroy,
+        CleanupPositions.CleanupFormulaCopy,
+      );
       await delay(LIGHT_FEATURE_INIT_DELAY);
 
       // Send behavior (Enter to send)

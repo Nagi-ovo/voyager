@@ -562,6 +562,14 @@
     "message": "✗ コピーに失敗しました",
     "description": "Formula copy failed message"
   },
+  "enableFormulaCopy": {
+    "message": "数式コピーを有効にする",
+    "description": "Formula copy enable toggle"
+  },
+  "enableFormulaCopyHint": {
+    "message": "数式をクリックすると、選択した形式でコピーします。",
+    "description": "Formula copy enable toggle hint"
+  },
   "formulaCopyFormat": {
     "message": "数式コピー形式",
     "description": "Formula copy format setting label"

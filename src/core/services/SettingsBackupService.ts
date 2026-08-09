@@ -76,6 +76,7 @@ export const BACKUPABLE_SYNC_SETTINGS_DEFAULTS = {
   [StorageKeys.PROMPT_PANEL_VIEW]: 'prompts',
   [StorageKeys.SLASH_PROMPT_ENABLED]: true,
   [StorageKeys.LANGUAGE]: null,
+  [StorageKeys.FORMULA_COPY_ENABLED]: true,
   [StorageKeys.FORMULA_COPY_FORMAT]: 'latex',
   [StorageKeys.WATERMARK_REMOVER_ENABLED]: true,
   [StorageKeys.WATERMARK_DOWNLOAD_ENABLED]: true,

@@ -85,6 +85,7 @@ import { useWidthAdjuster } from '../../hooks/useWidthAdjuster';
 import { CloudSyncSettings } from './components/CloudSyncSettings';
 import { ContextSyncSettings } from './components/ContextSyncSettings';
 import { DiagnosticsExportCard } from './components/DiagnosticsExportCard';
+import { FormulaCopySettings } from './components/FormulaCopySettings';
 import { KeyboardShortcutSettings } from './components/KeyboardShortcutSettings';
 import { PluginManager } from './components/PluginManager';
 import { StarredHistory } from './components/StarredHistory';
@@ -347,10 +348,16 @@ const POPUP_SETTINGS_SEARCH_ITEMS = [
     ],
     ['animation background sakura rain effects off snow 动效 背景 樱花 下雨 下雪 关闭'],
   ),
-  popupSectionSearchTarget('formulaCopy', ['formulaCopyFormat']),
+  popupSectionSearchTarget('formulaCopy', ['formulaCopyFormat', 'enableFormulaCopy']),
   popupSearchTarget(
     'formulaCopy',
-    'controls',
+    'formulaCopyEnabled',
+    ['enableFormulaCopy', 'enableFormulaCopyHint'],
+    ['enable disable toggle math equation latex copy formula 开启 关闭 数学 公式 复制'],
+  ),
+  popupSearchTarget(
+    'formulaCopy',
+    'formulaCopyFormat',
     [
       'formulaCopyFormat',
       'formulaCopyFormatHint',
@@ -944,6 +951,7 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
   const [websiteError, setWebsiteError] = useState<string>('');
   const [showStarredHistory, setShowStarredHistory] = useState<boolean>(false);
   const [showStorageManager, setShowStorageManager] = useState<boolean>(false);
+  const [formulaCopyEnabled, setFormulaCopyEnabled] = useState<boolean>(true);
   const [formulaCopyFormat, setFormulaCopyFormat] = useState<
     'latex' | 'unicodemath' | 'no-dollar' | 'notion'
   >('latex');
@@ -1284,16 +1292,6 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
     };
   }, []);
 
-  const handleFormulaCopyFormatChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const format = e.target.value as 'latex' | 'unicodemath' | 'no-dollar' | 'notion';
-    setFormulaCopyFormat(format);
-    try {
-      chrome.storage?.sync?.set({ gvFormulaCopyFormat: format });
-    } catch (err) {
-      console.error('[Gemini Voyager] Failed to save formula copy format:', err);
-    }
-  }, []);
-
   const setSyncStorage = useCallback(async (payload: Record<string, unknown>) => {
     try {
       await browser.storage.sync.set(payload);
@@ -1310,6 +1308,22 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
       }
     });
   }, []);
+
+  const handleFormulaCopyEnabledChange = useCallback(
+    (enabled: boolean) => {
+      setFormulaCopyEnabled(enabled);
+      void setSyncStorage({ [StorageKeys.FORMULA_COPY_ENABLED]: enabled });
+    },
+    [setSyncStorage],
+  );
+
+  const handleFormulaCopyFormatChange = useCallback(
+    (format: 'latex' | 'unicodemath' | 'no-dollar' | 'notion') => {
+      setFormulaCopyFormat(format);
+      void setSyncStorage({ [StorageKeys.FORMULA_COPY_FORMAT]: format });
+    },
+    [setSyncStorage],
+  );
 
   // Helper function to apply settings to storage
   const apply = useCallback(
@@ -1920,7 +1934,8 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
           geminiFolderHideArchivedConversations: false,
           [StorageKeys.FOLDER_SEARCH_ENABLED]: true,
           gvPromptCustomWebsites: [],
-          gvFormulaCopyFormat: 'latex',
+          [StorageKeys.FORMULA_COPY_ENABLED]: true,
+          [StorageKeys.FORMULA_COPY_FORMAT]: 'latex',
           [StorageKeys.WATERMARK_REMOVER_ENABLED]: null,
           [StorageKeys.WATERMARK_DOWNLOAD_ENABLED]: null,
           [StorageKeys.WATERMARK_PREVIEW_ENABLED]: null,
@@ -1976,7 +1991,8 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
           if (isTimelineStyle(storedTimelineStyle)) {
             setTimelineStyle(storedTimelineStyle);
           }
-          const format = res?.gvFormulaCopyFormat as
+          setFormulaCopyEnabled(res?.[StorageKeys.FORMULA_COPY_ENABLED] !== false);
+          const format = res?.[StorageKeys.FORMULA_COPY_FORMAT] as
             | 'latex'
             | 'unicodemath'
             | 'no-dollar'
@@ -3736,58 +3752,15 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
         {/* Formula Copy Options */}
         {wrapSection(
           'formulaCopy',
-          <Card className="p-4 transition-all hover:shadow-md">
-            <CardTitle className="mb-4">{t('formulaCopyFormat')}</CardTitle>
-            <CardContent className="space-y-3 p-0">
-              <p className="text-muted-foreground mb-3 text-xs">{t('formulaCopyFormatHint')}</p>
-              <div className="space-y-2">
-                <label className="flex cursor-pointer items-center space-x-3">
-                  <input
-                    type="radio"
-                    name="formulaCopyFormat"
-                    value="latex"
-                    checked={formulaCopyFormat === 'latex'}
-                    onChange={handleFormulaCopyFormatChange}
-                    className="h-4 w-4"
-                  />
-                  <span className="text-sm">{t('formulaCopyFormatLatex')}</span>
-                </label>
-                <label className="flex cursor-pointer items-center space-x-3">
-                  <input
-                    type="radio"
-                    name="formulaCopyFormat"
-                    value="unicodemath"
-                    checked={formulaCopyFormat === 'unicodemath'}
-                    onChange={handleFormulaCopyFormatChange}
-                    className="h-4 w-4"
-                  />
-                  <span className="text-sm">{t('formulaCopyFormatUnicodeMath')}</span>
-                </label>
-                <label className="flex cursor-pointer items-center space-x-3">
-                  <input
-                    type="radio"
-                    name="formulaCopyFormat"
-                    value="no-dollar"
-                    checked={formulaCopyFormat === 'no-dollar'}
-                    onChange={handleFormulaCopyFormatChange}
-                    className="h-4 w-4"
-                  />
-                  <span className="text-sm">{t('formulaCopyFormatNoDollar')}</span>
-                </label>
-                <label className="flex cursor-pointer items-center space-x-3">
-                  <input
-                    type="radio"
-                    name="formulaCopyFormat"
-                    value="notion"
-                    checked={formulaCopyFormat === 'notion'}
-                    onChange={handleFormulaCopyFormatChange}
-                    className="h-4 w-4"
-                  />
-                  <span className="text-sm">{t('formulaCopyFormatNotion')}</span>
-                </label>
-              </div>
-            </CardContent>
-          </Card>,
+          <FormulaCopySettings
+            enabled={formulaCopyEnabled}
+            format={formulaCopyFormat}
+            onEnabledChange={handleFormulaCopyEnabledChange}
+            onFormatChange={handleFormulaCopyFormatChange}
+            showEnabled={shouldShowSetting('formulaCopy', 'formulaCopyEnabled')}
+            showFormat={shouldShowSetting('formulaCopy', 'formulaCopyFormat')}
+            t={t}
+          />,
         )}
 
         {/* Keyboard Shortcuts */}

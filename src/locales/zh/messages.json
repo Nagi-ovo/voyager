@@ -556,6 +556,14 @@
     "message": "✗ 复制失败",
     "description": "公式复制失败消息"
   },
+  "enableFormulaCopy": {
+    "message": "启用公式复制",
+    "description": "公式复制启用开关"
+  },
+  "enableFormulaCopyHint": {
+    "message": "点击公式时按所选格式复制。",
+    "description": "公式复制启用开关提示"
+  },
   "formulaCopyFormat": {
     "message": "公式复制格式",
     "description": "公式复制格式设置标签"

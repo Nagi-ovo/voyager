@@ -43,6 +43,17 @@ describe('native popup site capabilities', () => {
     }
   });
 
+  it('keeps both formula-copy controls available on Gemini and AI Studio', () => {
+    for (const platform of ['gemini', 'aistudio'] as const) {
+      expect(isNativePopupSettingAvailable(platform, 'formulaCopy', 'formulaCopyEnabled')).toBe(
+        true,
+      );
+      expect(isNativePopupSettingAvailable(platform, 'formulaCopy', 'formulaCopyFormat')).toBe(
+        true,
+      );
+    }
+  });
+
   it('filters mixed sections down to their supported AI Studio settings', () => {
     expect(isNativePopupSettingAvailable('aistudio', 'folder', 'enableFolderFeature')).toBe(true);
     expect(isNativePopupSettingAvailable('aistudio', 'folder', 'hideArchivedConversations')).toBe(

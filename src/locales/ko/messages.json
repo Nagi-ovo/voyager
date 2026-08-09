@@ -556,6 +556,14 @@
     "message": "✗ 복사 실패",
     "description": "Formula copy failed message"
   },
+  "enableFormulaCopy": {
+    "message": "수식 복사 사용",
+    "description": "Formula copy enable toggle"
+  },
+  "enableFormulaCopyHint": {
+    "message": "수식을 클릭하면 선택한 형식으로 복사합니다.",
+    "description": "Formula copy enable toggle hint"
+  },
   "formulaCopyFormat": {
     "message": "수식 복사 형식",
     "description": "Formula copy format setting label"

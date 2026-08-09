@@ -568,6 +568,14 @@
     "message": "✗ Échec de la copie",
     "description": "Formula copy failed message"
   },
+  "enableFormulaCopy": {
+    "message": "Activer la copie des formules",
+    "description": "Formula copy enable toggle"
+  },
+  "enableFormulaCopyHint": {
+    "message": "Copie une formule dans le format sélectionné lorsque vous cliquez dessus.",
+    "description": "Formula copy enable toggle hint"
+  },
   "formulaCopyFormat": {
     "message": "Format de copie de formule",
     "description": "Formula copy format setting label"

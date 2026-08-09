@@ -24,6 +24,8 @@ export interface FormulaCopyConfig {
   toastOffsetY?: number;
   maxTraversalDepth?: number;
   format?: FormulaCopyFormat;
+  /** Test/embedding override; production defaults to Gemini host detection. */
+  observeGeminiArrows?: boolean;
 }
 
 /**
@@ -33,6 +35,12 @@ export interface FormulaCopyConfig {
 export class FormulaCopyService {
   private static instance: FormulaCopyService | null = null;
   private static readonly MATHML_NS = 'http://www.w3.org/1998/Math/MathML';
+  private static readonly ACTIVE_ROOT_CLASS = 'gv-formula-copy-enabled';
+  private static readonly IGNORED_INTERACTION_CLASS = 'gv-formula-copy-ignored';
+  // Issue #902 only demonstrates Gemini turning an ordinary right arrow into
+  // an inline data-math formula. Keep this intentionally narrow so explicit
+  // KaTeX/MathML arrows on other sites and display equations remain copyable.
+  private static readonly PRESENTATIONAL_INLINE_ARROW_SOURCES = new Set(['\\rightarrow', '→']);
   private readonly logger: ILogger;
   private readonly config: Required<Omit<FormulaCopyConfig, 'format'>>;
   private currentFormat: FormulaCopyFormat = 'latex';
@@ -49,6 +57,7 @@ export class FormulaCopyService {
         newFormat === 'no-dollar' ||
         newFormat === 'notion'
       ) {
+        this.formatPreferenceChangeVersion += 1;
         this.currentFormat = newFormat;
         this.logger.debug('Formula format changed', { format: newFormat });
       }
@@ -56,7 +65,14 @@ export class FormulaCopyService {
   };
 
   private isInitialized = false;
+  private isFormatChangeListenerAttached = false;
+  private formatPreferenceLoadGeneration = 0;
+  private formatPreferenceChangeVersion = 0;
+  private lifecycleGeneration = 0;
   private copyToast: HTMLDivElement | null = null;
+  private copyToastHideTimer: ReturnType<typeof setTimeout> | null = null;
+  private arrowExclusionObserver: MutationObserver | null = null;
+  private activeRootObserver: MutationObserver | null = null;
 
   private constructor(config: FormulaCopyConfig = {}) {
     this.logger = logger.createChild('FormulaCopy');
@@ -64,9 +80,12 @@ export class FormulaCopyService {
       toastDuration: config.toastDuration ?? 2000,
       toastOffsetY: config.toastOffsetY ?? 40,
       maxTraversalDepth: config.maxTraversalDepth ?? 10,
+      observeGeminiArrows:
+        config.observeGeminiArrows ??
+        (window.location.hostname === 'gemini.google.com' ||
+          window.location.hostname === 'business.gemini.google'),
     };
     this.currentFormat = config.format ?? 'latex';
-    this.loadFormatPreference();
   }
 
   /**
@@ -96,9 +115,18 @@ export class FormulaCopyService {
   /**
    * Load format preference from storage
    */
-  private async loadFormatPreference(): Promise<void> {
+  private async loadFormatPreference(
+    loadGeneration: number,
+    changeVersionAtStart: number,
+  ): Promise<void> {
     try {
       const result = await browser.storage.sync.get(StorageKeys.FORMULA_COPY_FORMAT);
+      if (
+        loadGeneration !== this.formatPreferenceLoadGeneration ||
+        changeVersionAtStart !== this.formatPreferenceChangeVersion
+      )
+        return;
+
       const format = result[StorageKeys.FORMULA_COPY_FORMAT] as FormulaCopyFormat | undefined;
       if (
         format === 'latex' ||
@@ -110,11 +138,46 @@ export class FormulaCopyService {
         this.logger.debug('Loaded formula format preference', { format });
       }
     } catch (error) {
-      this.logger.warn('Failed to load format preference, using default', { error });
+      if (loadGeneration === this.formatPreferenceLoadGeneration) {
+        this.logger.warn('Failed to load format preference, using default', { error });
+      }
+    }
+  }
+
+  private startFormatPreferenceSync(): Promise<void> {
+    const loadGeneration = ++this.formatPreferenceLoadGeneration;
+    if (!this.isFormatChangeListenerAttached) {
+      try {
+        browser.storage.onChanged.addListener(this.handleStorageChange);
+        this.isFormatChangeListenerAttached = true;
+      } catch (error) {
+        this.logger.warn('Failed to listen for formula format changes', { error });
+      }
     }
 
-    // Listen for format changes
-    browser.storage.onChanged.addListener(this.handleStorageChange);
+    return this.loadFormatPreference(loadGeneration, this.formatPreferenceChangeVersion);
+  }
+
+  private stopFormatPreferenceSync(): void {
+    this.formatPreferenceLoadGeneration += 1;
+    if (!this.isFormatChangeListenerAttached) return;
+
+    try {
+      browser.storage.onChanged.removeListener(this.handleStorageChange);
+    } catch (error) {
+      this.logger.warn('Failed to remove storage change listener', { error });
+    } finally {
+      this.isFormatChangeListenerAttached = false;
+    }
+  }
+
+  /**
+   * Resolve the current format before click handling becomes active. The
+   * storage listener stays attached while the interaction feature is toggled
+   * off, so an off -> on transition cannot briefly copy with a stale format.
+   */
+  public prepare(): Promise<void> {
+    return this.startFormatPreferenceSync();
   }
 
   /**
@@ -126,8 +189,17 @@ export class FormulaCopyService {
       return;
     }
 
+    // Production entry points await prepare(); keep direct callers and older
+    // integrations compatible while still subscribing synchronously here.
+    if (!this.isFormatChangeListenerAttached) void this.prepare();
+
+    this.startArrowExclusionObserver();
     document.addEventListener('click', this.handleClick, true);
+    document.addEventListener('mouseover', this.handleMouseOver, true);
     this.isInitialized = true;
+    this.lifecycleGeneration += 1;
+    document.documentElement.classList.add(FormulaCopyService.ACTIVE_ROOT_CLASS);
+    this.startActiveRootObserver();
     this.logger.info('Formula copy service initialized');
   }
 
@@ -135,29 +207,39 @@ export class FormulaCopyService {
    * Clean up the service (for extension unloading)
    */
   public destroy(): void {
-    // Always detach storage change listener
-    try {
-      browser.storage.onChanged.removeListener(this.handleStorageChange);
-    } catch (error) {
-      this.logger.warn('Failed to remove storage change listener', { error });
-    }
-
     if (!this.isInitialized) {
-      this.logger.warn('Service not initialized, cannot destroy');
+      document.documentElement.classList.remove(FormulaCopyService.ACTIVE_ROOT_CLASS);
       return;
     }
 
+    this.stopActiveRootObserver();
+    document.documentElement.classList.remove(FormulaCopyService.ACTIVE_ROOT_CLASS);
     document.removeEventListener('click', this.handleClick, true);
+    document.removeEventListener('mouseover', this.handleMouseOver, true);
+    this.stopArrowExclusionObserver();
+    for (const element of document.querySelectorAll(
+      `.${FormulaCopyService.IGNORED_INTERACTION_CLASS}`,
+    )) {
+      element.classList.remove(FormulaCopyService.IGNORED_INTERACTION_CLASS);
+    }
     this.removeCopyToast();
     this.isInitialized = false;
+    this.lifecycleGeneration += 1;
     this.logger.info('Formula copy service destroyed');
+  }
+
+  /** Fully release long-lived preference synchronization on page teardown. */
+  public dispose(): void {
+    this.destroy();
+    this.stopFormatPreferenceSync();
   }
 
   /**
    * Handle click events using event delegation
    */
   private handleClick = (event: MouseEvent): void => {
-    const target = event.target as HTMLElement;
+    const target = event.target;
+    if (!(target instanceof Element)) return;
     const mathElement = this.findMathElement(target);
 
     if (!mathElement) {
@@ -171,13 +253,177 @@ export class FormulaCopyService {
       return;
     }
 
+    const isPresentationalArrow = this.isPresentationalInlineArrow(mathElement, latexSource);
+    this.setInteractionIgnored(mathElement, isPresentationalArrow);
+    if (isPresentationalArrow) {
+      this.logger.debug('Ignoring presentational inline arrow rendered as Gemini math', {
+        latexSource,
+      });
+      return;
+    }
+
     // Wrap formula with delimiters based on display type
     const isDisplayMode = this.isDisplayMode(mathElement);
     const { text, html } = this.wrapFormula(latexSource, isDisplayMode);
 
-    this.copyFormula(text, html, event.clientX, event.clientY);
+    void this.copyFormula(text, html, event.clientX, event.clientY, this.lifecycleGeneration);
     event.stopPropagation();
   };
+
+  /**
+   * Mouseover fallback for host DOM that is assembled in an unusual order after
+   * the initial scan/observer pass.
+   */
+  private handleMouseOver = (event: MouseEvent): void => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+
+    const mathElement = this.findMathElement(target);
+    if (!mathElement) return;
+    const latexSource = this.extractLatexSource(mathElement);
+    if (!latexSource) return;
+
+    this.setInteractionIgnored(
+      mathElement,
+      this.isPresentationalInlineArrow(mathElement, latexSource),
+    );
+  };
+
+  /**
+   * Mark existing and newly-rendered Gemini arrows before the active CSS can
+   * give them formula padding/cursor affordances. Mouseover remains a fallback
+   * for host DOM that mutates in an unusual order.
+   */
+  private startArrowExclusionObserver(): void {
+    if (!this.config.observeGeminiArrows) return;
+    this.refreshArrowExclusions(document);
+    if (this.arrowExclusionObserver || !document.documentElement) return;
+
+    this.arrowExclusionObserver = new MutationObserver((records) => {
+      for (const record of records) {
+        if (record.type === 'attributes') {
+          if (record.target instanceof HTMLElement) this.refreshArrowExclusions(record.target);
+          continue;
+        }
+
+        for (const node of record.addedNodes) {
+          if (node instanceof HTMLElement || node instanceof DocumentFragment) {
+            const containsMathSource =
+              node instanceof HTMLElement && node.matches('[data-math]')
+                ? true
+                : node.querySelector('[data-math]') !== null;
+            if (containsMathSource) this.refreshArrowExclusions(node);
+          }
+        }
+
+        const removedIgnoredArrow = Array.from(record.removedNodes).some(
+          (node) =>
+            node instanceof HTMLElement &&
+            (node.classList.contains(FormulaCopyService.IGNORED_INTERACTION_CLASS) ||
+              node.querySelector(`.${FormulaCopyService.IGNORED_INTERACTION_CLASS}`) !== null),
+        );
+        if (removedIgnoredArrow && record.target instanceof HTMLElement) {
+          this.refreshArrowExclusions(record.target);
+        }
+      }
+    });
+    this.arrowExclusionObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-math'],
+      childList: true,
+      subtree: true,
+    });
+  }
+
+  private stopArrowExclusionObserver(): void {
+    this.arrowExclusionObserver?.disconnect();
+    this.arrowExclusionObserver = null;
+  }
+
+  private startActiveRootObserver(): void {
+    if (this.activeRootObserver) return;
+    this.activeRootObserver = new MutationObserver(() => {
+      if (
+        this.isInitialized &&
+        !document.documentElement.classList.contains(FormulaCopyService.ACTIVE_ROOT_CLASS)
+      ) {
+        document.documentElement.classList.add(FormulaCopyService.ACTIVE_ROOT_CLASS);
+      }
+    });
+    this.activeRootObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class'],
+    });
+  }
+
+  private stopActiveRootObserver(): void {
+    this.activeRootObserver?.disconnect();
+    this.activeRootObserver = null;
+  }
+
+  private refreshArrowExclusions(root: ParentNode): void {
+    const inlineContainer =
+      root instanceof HTMLElement ? root.closest<HTMLElement>('.math-inline') : null;
+    const scanRoot: ParentNode = inlineContainer ?? root;
+
+    if (
+      scanRoot instanceof HTMLElement &&
+      scanRoot.classList.contains(FormulaCopyService.IGNORED_INTERACTION_CLASS)
+    ) {
+      scanRoot.classList.remove(FormulaCopyService.IGNORED_INTERACTION_CLASS);
+    }
+    for (const ignored of scanRoot.querySelectorAll<HTMLElement>(
+      `.${FormulaCopyService.IGNORED_INTERACTION_CLASS}`,
+    )) {
+      ignored.classList.remove(FormulaCopyService.IGNORED_INTERACTION_CLASS);
+    }
+
+    const candidates: HTMLElement[] = [];
+    if (scanRoot instanceof HTMLElement && scanRoot.matches('[data-math]')) {
+      candidates.push(scanRoot);
+    }
+    candidates.push(...scanRoot.querySelectorAll<HTMLElement>('[data-math]'));
+
+    for (const candidate of candidates) {
+      const latexSource = candidate.getAttribute('data-math');
+      if (!latexSource) continue;
+      this.setInteractionIgnored(
+        candidate,
+        this.isPresentationalInlineArrow(candidate, latexSource),
+      );
+    }
+  }
+
+  private setInteractionIgnored(mathElement: HTMLElement, ignored: boolean): void {
+    const exactElements = new Set<HTMLElement>([mathElement]);
+    const presentationContainer = mathElement.closest(
+      '.math-inline, .math-display, .math-block, ms-katex, .katex, .katex-display',
+    );
+
+    for (const katexElement of mathElement.querySelectorAll<HTMLElement>('.katex')) {
+      exactElements.add(katexElement);
+    }
+
+    for (const element of exactElements) {
+      element.classList.toggle(FormulaCopyService.IGNORED_INTERACTION_CLASS, ignored);
+    }
+
+    if (presentationContainer instanceof HTMLElement) {
+      const sources = presentationContainer.matches('[data-math]')
+        ? [presentationContainer]
+        : [...presentationContainer.querySelectorAll<HTMLElement>('[data-math]')];
+      const containerIsOnlyPresentationalArrows =
+        sources.length > 0 &&
+        sources.every((source) => {
+          const formula = source.getAttribute('data-math');
+          return formula !== null && this.isPresentationalInlineArrow(source, formula);
+        });
+      presentationContainer.classList.toggle(
+        FormulaCopyService.IGNORED_INTERACTION_CLASS,
+        containerIsOnlyPresentationalArrows,
+      );
+    }
+  }
 
   /**
    * Extract LaTeX source from a math element
@@ -220,9 +466,11 @@ export class FormulaCopyService {
     html: string | undefined,
     x: number,
     y: number,
+    lifecycleGeneration: number,
   ): Promise<void> {
     try {
       const success = await this.copyToClipboard(text, html);
+      if (!this.isInitialized || lifecycleGeneration !== this.lifecycleGeneration) return;
 
       if (success) {
         this.showToast(this.toastMessage('formula_copied'), x, y, true);
@@ -232,6 +480,7 @@ export class FormulaCopyService {
         this.logger.error('Failed to copy formula');
       }
     } catch (error) {
+      if (!this.isInitialized || lifecycleGeneration !== this.lifecycleGeneration) return;
       this.showToast(this.toastMessage('formula_copy_failed'), x, y, false);
       this.logger.error('Error copying formula', { error });
     }
@@ -346,7 +595,7 @@ export class FormulaCopyService {
    * Find the nearest math element in the DOM tree
    * Supports both Gemini (data-math attribute) and AI Studio (ms-katex container)
    */
-  private findMathElement(target: HTMLElement): HTMLElement | null {
+  private findMathElement(target: Element): HTMLElement | null {
     // 1. Try Gemini's data-math attribute (direct)
     const direct = target.closest('[data-math]');
     if (direct instanceof HTMLElement) {
@@ -401,8 +650,8 @@ export class FormulaCopyService {
    * Supports both Gemini (.math-block class) and AI Studio (math display="block" attribute)
    */
   private isDisplayMode(element: HTMLElement): boolean {
-    // 1. Gemini: check for .math-block container
-    if (element.closest('.math-block') !== null) {
+    // 1. Gemini: check for a block/display container
+    if (element.closest('.math-block, .math-display') !== null) {
       return true;
     }
 
@@ -437,11 +686,14 @@ export class FormulaCopyService {
    * @returns Object containing text and optional html
    */
   private wrapFormula(formula: string, isDisplayMode: boolean): { text: string; html?: string } {
+    // Host markup can expose either raw TeX or an already-delimited source.
+    // Normalize once so every output mode adds exactly the delimiters it owns.
+    const normalizedFormula = this.stripMathDelimiters(formula).trim();
+
     if (this.currentFormat === 'unicodemath') {
       // Convert to Word-friendly MathML (replaces previous UnicodeMath)
       try {
-        const strippedFormula = this.stripMathDelimiters(formula);
-        const rawMathML = temml.renderToString(strippedFormula, {
+        const rawMathML = temml.renderToString(normalizedFormula, {
           displayMode: isDisplayMode,
           xml: true,
           annotate: false,
@@ -457,22 +709,22 @@ export class FormulaCopyService {
         return { text: wordMathML, html: htmlWrapped };
       } catch (error) {
         this.logger.error('MathML conversion failed', { error });
-        return { text: formula };
+        return { text: normalizedFormula };
       }
     }
 
     if (this.currentFormat === 'no-dollar') {
-      return { text: formula };
+      return { text: normalizedFormula };
     }
 
     if (this.currentFormat === 'notion') {
       // Notion format: always use $$ for both inline and display formulas
-      const wrapped = `$$${formula}$$`;
+      const wrapped = `$$${normalizedFormula}$$`;
       return { text: wrapped };
     }
 
     // Default: LaTeX format with delimiters
-    const wrapped = isDisplayMode ? `$$${formula}$$` : `$${formula}$`;
+    const wrapped = isDisplayMode ? `$$${normalizedFormula}$$` : `$${normalizedFormula}$`;
     return { text: wrapped };
   }
 
@@ -631,6 +883,20 @@ export class FormulaCopyService {
     return formula;
   }
 
+  private isPresentationalInlineArrow(element: HTMLElement, formula: string): boolean {
+    if (
+      !this.config.observeGeminiArrows ||
+      !element.hasAttribute('data-math') ||
+      element.closest('.math-inline') === null ||
+      this.isDisplayMode(element)
+    )
+      return false;
+    // Explicit delimiters are evidence that this is an intentional formula,
+    // even when its entire mathematical content is an arrow.
+    const normalized = formula.trim();
+    return FormulaCopyService.PRESENTATIONAL_INLINE_ARROW_SOURCES.has(normalized);
+  }
+
   /**
    * Search for data-math attribute in element subtree
    */
@@ -662,8 +928,11 @@ export class FormulaCopyService {
 
     this.copyToast.classList.add('gv-copy-toast-show');
 
-    setTimeout(() => {
-      this.copyToast?.classList.remove('gv-copy-toast-show');
+    if (this.copyToastHideTimer !== null) clearTimeout(this.copyToastHideTimer);
+    const toast = this.copyToast;
+    this.copyToastHideTimer = setTimeout(() => {
+      if (this.copyToast === toast) toast.classList.remove('gv-copy-toast-show');
+      this.copyToastHideTimer = null;
     }, this.config.toastDuration);
   }
 
@@ -681,6 +950,10 @@ export class FormulaCopyService {
    * Remove toast element from DOM
    */
   private removeCopyToast(): void {
+    if (this.copyToastHideTimer !== null) {
+      clearTimeout(this.copyToastHideTimer);
+      this.copyToastHideTimer = null;
+    }
     if (this.copyToast?.parentElement) {
       this.copyToast.parentElement.removeChild(this.copyToast);
       this.copyToast = null;

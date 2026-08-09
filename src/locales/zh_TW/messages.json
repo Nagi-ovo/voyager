@@ -516,6 +516,14 @@
     "message": "✗ 複製失敗",
     "description": "公式複製失敗訊息"
   },
+  "enableFormulaCopy": {
+    "message": "啟用公式複製",
+    "description": "公式複製啟用開關"
+  },
+  "enableFormulaCopyHint": {
+    "message": "點擊公式時依所選格式複製。",
+    "description": "公式複製啟用開關提示"
+  },
   "formulaCopyFormat": {
     "message": "公式複製格式",
     "description": "公式複製格式設定標籤"
