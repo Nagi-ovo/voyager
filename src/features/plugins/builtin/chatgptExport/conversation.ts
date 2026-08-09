@@ -43,6 +43,17 @@ const MESSAGE_SELECTOR = [
 const TURN_SELECTOR = '[data-testid^="conversation-turn-"]';
 const DEFAULT_SETTLE_MS = 120;
 const DEFAULT_MAX_STEPS = 240;
+let fallbackIdentitySequence = 0;
+const fallbackIdentities = new WeakMap<HTMLElement, { signature: string; id: string }>();
+
+class IncompleteConversationCollectionError extends Error {
+  constructor(readonly messageCount: number) {
+    super(
+      `Conversation collection stopped before reaching the end (${messageCount} messages found)`,
+    );
+    this.name = 'IncompleteConversationCollectionError';
+  }
+}
 
 function abortError(): DOMException {
   return new DOMException('Conversation collection was cancelled', 'AbortError');
@@ -115,12 +126,28 @@ function readOrder(element: HTMLElement, fallback: number): number {
   return numeric === undefined ? fallback : Number(numeric);
 }
 
-function readStableId(
-  element: HTMLElement,
-  role: ChatGptMessageRole,
-  text: string,
-  order: number,
-): string {
+function readVirtualPosition(host: HTMLElement): string | null {
+  const explicit =
+    host.getAttribute('data-index') ||
+    host.getAttribute('data-message-index') ||
+    host.getAttribute('aria-posinset');
+  if (explicit) return `index-${explicit}`;
+
+  for (let parent = host.parentElement; parent && parent !== document.body; ) {
+    const style = window.getComputedStyle(parent);
+    if (
+      /(auto|scroll|overlay)/.test(style.overflowY) &&
+      parent.scrollHeight > parent.clientHeight + 4
+    ) {
+      const offset = host.getBoundingClientRect().top - parent.getBoundingClientRect().top;
+      return `offset-${Math.round(offset + parent.scrollTop)}`;
+    }
+    parent = parent.parentElement;
+  }
+  return null;
+}
+
+function readStableId(element: HTMLElement, role: ChatGptMessageRole, text: string): string {
   const turn = element.closest<HTMLElement>(TURN_SELECTOR);
   const nativeId =
     element.getAttribute('data-message-id') ||
@@ -129,7 +156,21 @@ function readStableId(
     turn?.getAttribute('data-testid') ||
     element.getAttribute('id');
   if (nativeId) return nativeId;
-  return `fallback-${role}-${order}-${hashString(text)}`;
+
+  const host = turn || element;
+  const signature = `${role}:${hashString(text)}`;
+  const virtualPosition = readVirtualPosition(host);
+  if (virtualPosition) return `fallback-${signature}-${virtualPosition}`;
+
+  // Outside a measurable virtual scroller, keep an identity only for this
+  // concrete DOM host/content pair. This avoids scan-local indexes while still
+  // retaining repeated role/text messages mounted as distinct elements.
+  const previous = fallbackIdentities.get(host);
+  if (previous?.signature === signature) return previous.id;
+  fallbackIdentitySequence += 1;
+  const id = `fallback-${signature}-${fallbackIdentitySequence}`;
+  fallbackIdentities.set(host, { signature, id });
+  return id;
 }
 
 /**
@@ -150,7 +191,7 @@ export function collectMountedChatGptMessagesWithHosts(
     const text = normalizePlainText(element);
     if (!text && !element.querySelector('img, video, audio, pre, code, table, .katex')) return;
     const order = readOrder(element, index);
-    const id = readStableId(element, role, text, order);
+    const id = readStableId(element, role, text);
     const previous = messages.get(id);
     if (previous?.snapshot.element.hasAttribute('data-message-author-role')) return;
 
@@ -260,8 +301,6 @@ export async function collectChatGptConversation(
 
       const maximum = Math.max(0, target.scrollHeight - target.clientHeight);
       if (target.scrollTop >= maximum - 2) {
-        await wait(settleMs, options.signal);
-        mergeSnapshots(collected, collectMountedChatGptMessages(root));
         break;
       }
 
@@ -272,6 +311,18 @@ export async function collectChatGptConversation(
       stalled = target.scrollTop <= previousTop + 1 ? stalled + 1 : 0;
       if (stalled >= 3) break;
       steps += 1;
+    }
+
+    // Always merge the window produced by the final scroll assignment. If the
+    // safety limit or a stalled scroller stops us above the bottom, fail
+    // explicitly instead of presenting a partial export as complete.
+    await wait(settleMs, options.signal);
+    assertNotAborted(options.signal);
+    mergeSnapshots(collected, collectMountedChatGptMessages(root));
+    emitProgress(options, collected.size, target);
+    const finalMaximum = Math.max(0, target.scrollHeight - target.clientHeight);
+    if (target.scrollTop < finalMaximum - 2) {
+      throw new IncompleteConversationCollectionError(collected.size);
     }
   } finally {
     target.scrollTop = Math.min(

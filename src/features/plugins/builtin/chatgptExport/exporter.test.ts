@@ -51,6 +51,48 @@ describe('ChatGPT export formats', () => {
     );
   });
 
+  it('exports a structured JSON payload with selection and message identity intact', async () => {
+    document.body.innerHTML = `
+      <section data-testid="conversation-turn-0">
+        <div data-message-author-role="user" data-message-id="u-1"><p>Hello</p></div>
+      </section>
+      <section data-testid="conversation-turn-1">
+        <div data-message-author-role="assistant" data-message-id="a-1"><p>Hi there</p></div>
+      </section>
+    `;
+    const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:test');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+
+    const filename = await exportChatGptConversation({
+      format: 'json',
+      messages: collectMountedChatGptMessages(),
+      metadata,
+      selected: true,
+    });
+    const blob = createObjectURL.mock.calls[0][0] as Blob;
+    const payloadText = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.addEventListener('load', () => resolve(String(reader.result)));
+      reader.addEventListener('error', () => reject(reader.error));
+      reader.readAsText(blob);
+    });
+
+    expect(filename).toMatch(/^chatgpt-Export-test-selected-\d{8}-\d{4}\.json$/);
+    expect(JSON.parse(payloadText)).toEqual({
+      format: 'voyager.chatgpt.conversation.v1',
+      url: metadata.url,
+      title: metadata.title,
+      exportedAt: metadata.exportedAt,
+      selected: true,
+      count: 2,
+      messages: [
+        { id: 'u-1', role: 'user', content: 'Hello' },
+        { id: 'a-1', role: 'assistant', content: 'Hi there' },
+      ],
+    });
+  });
+
   it('delegates PDF rendering to the rich export service with cloned message DOM', async () => {
     document.body.innerHTML = `
       <section data-testid="conversation-turn-0">

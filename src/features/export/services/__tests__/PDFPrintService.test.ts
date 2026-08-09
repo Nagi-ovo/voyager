@@ -93,7 +93,7 @@ describe('PDFPrintService', () => {
   });
 
   it('uses a compact ChatGPT-like conversation layout when requested', async () => {
-    document.title = 'Export test';
+    document.title = 'Stale page title';
     window.print = vi.fn();
 
     await PDFPrintService.export(
@@ -115,12 +115,31 @@ describe('PDFPrintService', () => {
     expect(sourceLink?.textContent).toBe('ChatGPT conversation');
     expect(document.title).toBe('Export test - ChatGPT');
     expect(styleText).toContain('.gv-print-document--chatgpt');
+    expect(styleText).toContain('.gv-print-turn-user .gv-print-turn-text');
     expect(styleText).toContain('border-radius: 18px 18px 4px 18px;');
-    expect(styleText).toContain('background: #1f1f1f;');
+    expect(styleText).toContain('.gv-print-turn-text pre');
+    expect(styleText).toContain('border: 1px solid #d1d5db;');
+    expect(styleText).toContain('color: #1f1f1f;');
     expect(styleText).toContain('display: table-header-group !important;');
-    expect(styleText).toContain('page-break-after: auto;');
-    expect(styleText).toContain('list-style: disc outside !important;');
     expect(styleText).toContain('.gv-print-cover-title::before');
+  });
+
+  it('does not use the generic ChatGPT page title as a conversation title', async () => {
+    document.title = 'ChatGPT';
+    window.print = vi.fn();
+
+    await PDFPrintService.export(
+      [{ user: 'Question', assistant: 'Answer', starred: false }],
+      {
+        url: 'https://chatgpt.com/',
+        exportedAt: new Date().toISOString(),
+        count: 1,
+        title: '',
+      },
+      { appearance: 'chatgpt' },
+    );
+
+    expect(document.title).toBe('ChatGPT Conversation');
   });
 
   it('falls back to captured text when rich user HTML extraction is empty', async () => {

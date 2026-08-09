@@ -18,6 +18,8 @@ export interface ProgressHandle {
   readonly close: Dispose;
 }
 
+let dialogSequence = 0;
+
 function ownScope(parent: PluginScope, label: string): OwnedScope {
   const scope = new PluginScope();
   const close = parent.child({ destroy: () => scope.dispose() }, label);
@@ -56,6 +58,9 @@ function createDialog(
   header.className = 'gv-chatgpt-export-dialog-header';
   const title = document.createElement('h2');
   title.className = 'gv-chatgpt-export-dialog-title';
+  dialogSequence += 1;
+  title.id = `gv-chatgpt-export-dialog-title-${dialogSequence}`;
+  dialog.setAttribute('aria-labelledby', title.id);
   title.textContent = titleText;
   const hint = document.createElement('p');
   hint.className = 'gv-chatgpt-export-dialog-hint';
@@ -71,15 +76,57 @@ function createDialog(
   return { overlay, dialog, header, body, footer };
 }
 
-function bindDialogDismiss(scope: PluginScope, overlay: HTMLElement, onDismiss: () => void): void {
+function getDialogFocusables(dialog: HTMLElement): HTMLElement[] {
+  return Array.from(
+    dialog.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    ),
+  ).filter((element) => !element.closest('[hidden], [aria-hidden="true"]'));
+}
+
+function mountDialog(
+  scope: PluginScope,
+  overlay: HTMLElement,
+  dialog: HTMLElement,
+  onDismiss: () => void,
+): void {
+  const previousFocus =
+    document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  scope.effect(
+    () => () => {
+      if (previousFocus?.isConnected) previousFocus.focus();
+    },
+    'restore-dialog-focus',
+  );
   scope.on(overlay, 'pointerdown', (event) => {
     if (event.target === overlay) onDismiss();
   });
   scope.on(window, 'keydown', (event) => {
-    if (event.key !== 'Escape') return;
-    event.preventDefault();
-    onDismiss();
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      onDismiss();
+      return;
+    }
+    if (event.key !== 'Tab') return;
+    const focusables = getDialogFocusables(dialog);
+    if (focusables.length === 0) {
+      event.preventDefault();
+      dialog.focus();
+      return;
+    }
+    const active = document.activeElement;
+    const first = focusables[0];
+    const last = focusables.at(-1)!;
+    if (event.shiftKey && (active === first || !dialog.contains(active))) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && (active === last || !dialog.contains(active))) {
+      event.preventDefault();
+      first.focus();
+    }
   });
+  scope.mount(overlay, document.body);
+  (getDialogFocusables(dialog)[0] || dialog).focus();
 }
 
 export function showCollectionProgress(
@@ -108,9 +155,7 @@ export function showCollectionProgress(
     void owned.close();
   };
   owned.scope.on(cancel, 'click', dismiss);
-  bindDialogDismiss(owned.scope, overlay, dismiss);
-  owned.scope.mount(overlay, document.body);
-  dialog.focus();
+  mountDialog(owned.scope, overlay, dialog, dismiss);
   return {
     setCount: (count) => {
       message.textContent = copy.collectProgress(count);
@@ -129,8 +174,7 @@ export function showFormatDialog(
     const finish = (value: ExportFormatChoice | null): void => {
       if (settled) return;
       settled = true;
-      resolve(value);
-      void owned.close();
+      void Promise.resolve(owned.close()).then(() => resolve(value));
     };
     owned.scope.signal.addEventListener('abort', () => finish(null), { once: true });
 
@@ -194,12 +238,10 @@ export function showFormatDialog(
         fontSize: selected === 'pdf' ? Number(fontControl.input.value) : undefined,
       }),
     );
-    bindDialogDismiss(owned.scope, overlay, () => finish(null));
     body.append(list, options);
     footer.append(cancel, submit);
-    owned.scope.mount(overlay, document.body);
     updateOptions();
-    dialog.focus();
+    mountDialog(owned.scope, overlay, dialog, () => finish(null));
   });
 }
 
@@ -242,8 +284,7 @@ export function showConfirmationDialog(
     const finish = (value: boolean): void => {
       if (settled) return;
       settled = true;
-      resolve(value);
-      void owned.close();
+      void Promise.resolve(owned.close()).then(() => resolve(value));
     };
     owned.scope.signal.addEventListener('abort', () => finish(false), { once: true });
     const { overlay, dialog, footer } = createDialog(copy.tempTitle, copy.tempBody);
@@ -251,10 +292,8 @@ export function showConfirmationDialog(
     const confirm = createButton(copy.tempConfirm, true);
     owned.scope.on(cancel, 'click', () => finish(false));
     owned.scope.on(confirm, 'click', () => finish(true));
-    bindDialogDismiss(owned.scope, overlay, () => finish(false));
     footer.append(cancel, confirm);
-    owned.scope.mount(overlay, document.body);
-    dialog.focus();
+    mountDialog(owned.scope, overlay, dialog, () => finish(false));
   });
 }
 

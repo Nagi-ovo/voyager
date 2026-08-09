@@ -65,7 +65,7 @@ function menuIcon(kind: 'whole' | 'selected' | 'temporary'): SVGSVGElement {
   svg.setAttribute('stroke-linejoin', 'round');
   svg.classList.add('gv-chatgpt-export-menu-icon');
   const paths: Record<typeof kind, readonly string[]> = {
-    whole: ['M12 3v12', 'm7 10-7 7-7-7', 'M5 21h14'],
+    whole: ['M12 3v12', 'm7 10 5 5 5-5', 'M5 21h14'],
     selected: ['m3 6 2 2 3-3', 'm3 16 2 2 3-3', 'M12 6h9', 'M12 17h9'],
     temporary: ['M3 12a9 9 0 1 0 3-6.7', 'M3 4v6h6', 'M12 7v5l3 2'],
   };
@@ -115,8 +115,14 @@ class ChatGptExportPlugin {
     this.scope.on(window, 'hashchange', () => this.scheduleButtonCheck());
     this.scope.effect(
       () =>
-        resumePendingHandoff(this.scope).then((resumed) => {
-          if (resumed && !this.scope.isDisposed) showExportToast(this.scope, this.copy.tempReady);
+        resumePendingHandoff(this.scope).then((result) => {
+          if (this.scope.isDisposed) return () => {};
+          if (result === 'ready') showExportToast(this.scope, this.copy.tempReady);
+          else if (result === 'delivery-failed') {
+            showExportToast(this.scope, this.copy.tempDeliveryFailed, 'error');
+          } else if (result === 'account-mismatch') {
+            showExportToast(this.scope, this.copy.tempAccountChanged, 'error');
+          }
           return () => {};
         }),
       'chatgpt-export-resume-handoff',
@@ -350,6 +356,10 @@ class ChatGptExportPlugin {
       if (result === 'ready') showExportToast(this.scope, this.copy.tempReady);
       else if (result === 'leave-failed') {
         showExportToast(this.scope, this.copy.tempLeaveFailed, 'error');
+      } else if (result === 'delivery-failed') {
+        showExportToast(this.scope, this.copy.tempDeliveryFailed, 'error');
+      } else if (result === 'account-mismatch') {
+        showExportToast(this.scope, this.copy.tempAccountChanged, 'error');
       } else showExportToast(this.scope, this.copy.tempComposerFailed, 'error');
     });
   }

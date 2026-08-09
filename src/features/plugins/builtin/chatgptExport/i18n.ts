@@ -33,6 +33,8 @@ export interface ChatGptExportCopy {
   readonly tempNotActive: string;
   readonly tempLeaveFailed: string;
   readonly tempComposerFailed: string;
+  readonly tempDeliveryFailed: string;
+  readonly tempAccountChanged: string;
   readonly tempReady: string;
 }
 
@@ -82,6 +84,10 @@ const EN: ChatGptExportCopy = {
   tempLeaveFailed: 'The backup was saved, but ChatGPT did not leave temporary mode.',
   tempComposerFailed:
     'The backup was saved, but the new composer was not found. The hand-off remains available for this tab for one minute.',
+  tempDeliveryFailed:
+    'The backup was saved, but ChatGPT did not accept the attachment. Your existing draft was not changed.',
+  tempAccountChanged:
+    'The backup was saved, but the active ChatGPT account changed. The hand-off was not inserted.',
   tempReady: 'Backup saved. Review the hand-off prompt, then send it when ready.',
 };
 
@@ -126,6 +132,8 @@ const ZH: ChatGptExportCopy = {
   tempNotActive: '该操作只在临时对话中可用。',
   tempLeaveFailed: '备份已经保存，但 ChatGPT 没有成功退出临时模式。',
   tempComposerFailed: '备份已经保存，但没有找到新对话输入框；交接内容会在本标签页保留一分钟。',
+  tempDeliveryFailed: '备份已经保存，但 ChatGPT 没有接受附件；现有输入草稿未被修改。',
+  tempAccountChanged: '备份已经保存，但当前 ChatGPT 账号发生了变化；交接内容没有写入。',
   tempReady: '备份已保存。请检查交接提示，确认后再手动发送。',
 };
 

@@ -20,6 +20,15 @@ function turn(index: number, id: string, role: 'user' | 'assistant', text: strin
   return section;
 }
 
+function fallbackTurn(role: 'user' | 'assistant', text: string): HTMLElement {
+  const section = document.createElement('section');
+  const message = document.createElement('div');
+  message.dataset.messageAuthorRole = role;
+  message.textContent = text;
+  section.appendChild(message);
+  return section;
+}
+
 afterEach(() => {
   document.body.replaceChildren();
   document.title = '';
@@ -82,6 +91,7 @@ describe('ChatGPT conversation snapshots', () => {
         configurable: true,
         get: () => currentTop,
         set: (value: number) => {
+          if (value === currentTop) return;
           currentTop = value;
           render();
         },
@@ -100,6 +110,98 @@ describe('ChatGPT conversation snapshots', () => {
     expect(messages.map((message) => message.id)).toEqual(['u-1', 'a-1', 'u-2', 'a-2']);
     expect(currentTop).toBe(500);
     expect(progress).toHaveBeenCalled();
+  });
+
+  it('retains repeated role and text messages across fallback-id window swaps', async () => {
+    const scroller = document.createElement('main');
+    scroller.style.overflowY = 'auto';
+    let currentTop = 0;
+    const render = (): void => {
+      const message = fallbackTurn('user', 'Repeated message');
+      const globalTop = currentTop < 300 ? 0 : 400;
+      const messageHost = message.querySelector<HTMLElement>('[data-message-author-role]')!;
+      messageHost.getBoundingClientRect = () =>
+        ({
+          top: globalTop - currentTop,
+          bottom: globalTop - currentTop + 40,
+          left: 0,
+          right: 200,
+          width: 200,
+          height: 40,
+          x: 0,
+          y: globalTop - currentTop,
+          toJSON: () => ({}),
+        }) as DOMRect;
+      scroller.replaceChildren(message);
+    };
+    Object.defineProperties(scroller, {
+      clientHeight: { configurable: true, value: 400 },
+      scrollHeight: { configurable: true, value: 800 },
+      scrollTop: {
+        configurable: true,
+        get: () => currentTop,
+        set: (value: number) => {
+          if (value === currentTop) return;
+          currentTop = value;
+          render();
+        },
+      },
+    });
+    render();
+    document.body.appendChild(scroller);
+
+    const messages = await collectChatGptConversation({
+      signal: new AbortController().signal,
+      settleMs: 0,
+    });
+
+    expect(messages).toHaveLength(2);
+    expect(new Set(messages.map((message) => message.id))).toHaveLength(2);
+    expect(messages.map((message) => message.text)).toEqual([
+      'Repeated message',
+      'Repeated message',
+    ]);
+  });
+
+  it('merges the final scroll window and rejects an incomplete step-limited export', async () => {
+    const scroller = document.createElement('main');
+    scroller.style.overflowY = 'auto';
+    let currentTop = 0;
+    const render = (): void => {
+      scroller.replaceChildren(
+        currentTop < 300
+          ? turn(0, 'u-top', 'user', 'Top message')
+          : turn(1, 'u-next', 'user', 'Next window message'),
+      );
+    };
+    Object.defineProperties(scroller, {
+      clientHeight: { configurable: true, value: 400 },
+      scrollHeight: { configurable: true, value: 2_000 },
+      scrollTop: {
+        configurable: true,
+        get: () => currentTop,
+        set: (value: number) => {
+          if (value === currentTop) return;
+          currentTop = value;
+          render();
+        },
+      },
+    });
+    render();
+    document.body.appendChild(scroller);
+    const progress: number[] = [];
+
+    await expect(
+      collectChatGptConversation({
+        signal: new AbortController().signal,
+        settleMs: 0,
+        maxSteps: 1,
+        onProgress: ({ messages }) => progress.push(messages),
+      }),
+    ).rejects.toThrow('Conversation collection stopped before reaching the end');
+
+    expect(progress.at(-1)).toBe(2);
+    expect(currentTop).toBe(0);
   });
 
   it('builds ChatGPT metadata without Gemini branding', () => {

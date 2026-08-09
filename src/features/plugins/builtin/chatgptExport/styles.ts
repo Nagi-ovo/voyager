@@ -295,7 +295,12 @@ export const CHATGPT_EXPORT_CSS = `
   html.dark .gv-chatgpt-export-menu-item:focus-visible,
   html.dark .gv-chatgpt-export-btn:hover,
   html.dark .gv-chatgpt-export-format-option:has(input:checked),
+  body.dark .gv-chatgpt-export-menu-item:hover,
+  body.dark .gv-chatgpt-export-menu-item:focus-visible,
+  body.dark .gv-chatgpt-export-btn:hover,
+  body.dark .gv-chatgpt-export-format-option:has(input:checked),
   [data-theme='dark'] .gv-chatgpt-export-menu-item:hover,
+  [data-theme='dark'] .gv-chatgpt-export-menu-item:focus-visible,
   [data-theme='dark'] .gv-chatgpt-export-btn:hover,
   [data-theme='dark'] .gv-chatgpt-export-format-option:has(input:checked) { background: #303030; }
   html.dark .gv-chatgpt-export-attribution,
@@ -312,6 +317,7 @@ export const CHATGPT_EXPORT_CSS = `
     background: var(--main-surface-primary, #212121);
   }
   html.dark .gv-chatgpt-export-button--floating,
+  body.dark .gv-chatgpt-export-button--floating,
   [data-theme='dark'] .gv-chatgpt-export-button--floating { color: #f5f5f5; background: rgba(33, 33, 33, 0.94); }
   @media (max-width: 520px) {
     .gv-chatgpt-export-button { width: 36px; padding: 0; }

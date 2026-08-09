@@ -15,7 +15,17 @@ export type HandoffDelivery =
 interface PendingHandoff {
   readonly delivery: HandoffDelivery;
   readonly storedAt: number;
+  readonly accountScope: string;
 }
+
+export type HandoffResult =
+  | 'ready'
+  | 'leave-failed'
+  | 'composer-missing'
+  | 'delivery-failed'
+  | 'account-mismatch';
+
+export type PendingHandoffResult = 'ready' | 'delivery-failed' | 'account-mismatch' | null;
 
 const TEMP_TOGGLE_SELECTOR = [
   '[data-testid="temporary-chat-toggle"]',
@@ -103,10 +113,19 @@ export function planHandoff(messages: readonly ChatGptMessageSnapshot[]): Handof
   };
 }
 
-function writePending(delivery: HandoffDelivery): void {
+function readAccountScope(): string {
+  try {
+    const routeAccount = /^\/u\/([^/]+)(?:\/|$)/.exec(new URL(location.href).pathname)?.[1];
+    return routeAccount ? `route:${routeAccount}` : 'route:default';
+  } catch {
+    return 'route:default';
+  }
+}
+
+function writePending(delivery: HandoffDelivery, accountScope: string): void {
   sessionStorage.setItem(
     PENDING_KEY,
-    JSON.stringify({ delivery, storedAt: Date.now() } satisfies PendingHandoff),
+    JSON.stringify({ delivery, storedAt: Date.now(), accountScope } satisfies PendingHandoff),
   );
 }
 
@@ -115,10 +134,16 @@ function readPending(): PendingHandoff | null {
     const raw = sessionStorage.getItem(PENDING_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<PendingHandoff>;
-    if (typeof parsed.storedAt !== 'number' || !parsed.delivery) return null;
+    if (
+      typeof parsed.storedAt !== 'number' ||
+      typeof parsed.accountScope !== 'string' ||
+      !parsed.delivery
+    ) {
+      return null;
+    }
     const delivery = parsed.delivery;
     if (delivery.mode === 'inline' && typeof delivery.text === 'string') {
-      return { delivery, storedAt: parsed.storedAt };
+      return { delivery, storedAt: parsed.storedAt, accountScope: parsed.accountScope };
     }
     if (
       delivery.mode === 'attachment' &&
@@ -126,7 +151,7 @@ function readPending(): PendingHandoff | null {
       typeof delivery.attachment === 'string' &&
       typeof delivery.filename === 'string'
     ) {
-      return { delivery, storedAt: parsed.storedAt };
+      return { delivery, storedAt: parsed.storedAt, accountScope: parsed.accountScope };
     }
     return null;
   } catch {
@@ -168,23 +193,24 @@ function insertComposerText(input: HTMLElement, text: string): void {
   input.focus();
   if (dispatchPaste(input, text, null)) return;
   const inserted = document.execCommand?.('insertText', false, text) === true;
-  if (!inserted) input.textContent = text;
+  if (!inserted) {
+    const existing = input.textContent?.trim() || '';
+    input.textContent = existing ? `${existing}\n\n${text}` : text;
+  }
   input.dispatchEvent(
     new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }),
   );
 }
 
-async function deliver(input: HTMLElement, delivery: HandoffDelivery): Promise<void> {
+async function deliver(input: HTMLElement, delivery: HandoffDelivery): Promise<boolean> {
   if (delivery.mode === 'inline') {
     insertComposerText(input, delivery.text);
-    return;
+    return true;
   }
-  insertComposerText(input, delivery.directive);
   const file = new File([delivery.attachment], delivery.filename, { type: 'text/markdown' });
-  if (dispatchPaste(input, null, file)) return;
-  input.replaceChildren();
-  input.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'deleteContent' }));
-  insertComposerText(input, `${delivery.directive}\n\n${delivery.attachment}`);
+  if (!dispatchPaste(input, null, file)) return false;
+  insertComposerText(input, delivery.directive);
+  return true;
 }
 
 async function findComposer(scope: PluginScope, timeoutMs: number): Promise<HTMLElement | null> {
@@ -222,9 +248,10 @@ export async function leaveTemporaryChat(scope: PluginScope): Promise<boolean> {
 export async function handoffTemporaryChat(
   scope: PluginScope,
   delivery: HandoffDelivery,
-): Promise<'ready' | 'leave-failed' | 'composer-missing'> {
+): Promise<HandoffResult> {
+  const accountScope = readAccountScope();
   try {
-    writePending(delivery);
+    writePending(delivery, accountScope);
   } catch {
     // The live same-page path still works without the reload safety net.
   }
@@ -233,24 +260,40 @@ export async function handoffTemporaryChat(
     clearPending();
     return 'leave-failed';
   }
+  if (readAccountScope() !== accountScope) {
+    clearPending();
+    return 'account-mismatch';
+  }
   const input = await findComposer(scope, 6_000);
   if (!input) return 'composer-missing';
-  await deliver(input, delivery);
+  const delivered = await deliver(input, delivery);
+  if (!delivered) {
+    clearPending();
+    return 'delivery-failed';
+  }
   clearPending();
   return 'ready';
 }
 
-export async function resumePendingHandoff(scope: PluginScope): Promise<boolean> {
+export async function resumePendingHandoff(scope: PluginScope): Promise<PendingHandoffResult> {
   const pending = readPending();
-  if (!pending) return false;
+  if (!pending) return null;
   if (Date.now() - pending.storedAt > PENDING_TTL_MS) {
     clearPending();
-    return false;
+    return null;
   }
-  if (isTemporaryChat()) return false;
+  if (pending.accountScope !== readAccountScope()) {
+    clearPending();
+    return 'account-mismatch';
+  }
+  if (isTemporaryChat()) return null;
   const input = await findComposer(scope, 6_000);
-  if (!input) return false;
-  await deliver(input, pending.delivery);
+  if (!input) return null;
+  const delivered = await deliver(input, pending.delivery);
+  if (!delivered) {
+    clearPending();
+    return 'delivery-failed';
+  }
   clearPending();
-  return true;
+  return 'ready';
 }
