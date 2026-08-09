@@ -87,6 +87,34 @@ describe('MarkdownFormatter', () => {
       expect(markdown).toContain('https://example.com/diagram.png');
     });
 
+    it('keeps uploaded media from a materialized user snapshot when using prompt headings', () => {
+      const markdown = MarkdownFormatter.format(
+        [
+          {
+            user: 'Review this diagram',
+            assistant: 'Done.',
+            starred: false,
+            omitEmptySections: true,
+            userContent: {
+              text: '![Architecture](https://example.com/diagram.png)\n\nReview this diagram',
+              html: '<img src="https://example.com/diagram.png" /><p>Review this diagram</p>',
+              attachments: [],
+              hasImages: true,
+              hasFormulas: false,
+              hasTables: false,
+              hasCode: false,
+            },
+          },
+        ],
+        mockMetadata,
+        { usePromptAsTurnHeading: true },
+      );
+
+      expect(markdown).toContain('## Turn 1: Architecture Review this diagram');
+      expect(markdown).toContain('### 👤 User');
+      expect(markdown).toContain('https://example.com/diagram.png');
+    });
+
     it('should include user content', () => {
       const markdown = MarkdownFormatter.format(mockTurns, mockMetadata);
 

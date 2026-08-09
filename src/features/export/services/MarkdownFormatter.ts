@@ -244,10 +244,10 @@ export class MarkdownFormatter {
 
   private static formatPromptHeading(turn: ChatTurn): { hasMedia: boolean; text: string } {
     const fallback = this.formatContent(turn.user);
-    const domContent = turn.userElement
-      ? DOMContentExtractor.extractUserContent(turn.userElement)
-      : null;
-    const extracted = domContent?.text || fallback;
+    const extractedContent =
+      turn.userContent ??
+      (turn.userElement ? DOMContentExtractor.extractUserContent(turn.userElement) : null);
+    const extracted = extractedContent?.text || fallback;
 
     if (!extracted) return { hasMedia: false, text: '' };
 
@@ -257,7 +257,7 @@ export class MarkdownFormatter {
       .trim();
 
     return {
-      hasMedia: domContent?.hasImages === true || /!\[[^\]]*\]\([^)]*\)/.test(extracted),
+      hasMedia: extractedContent?.hasImages === true || /!\[[^\]]*\]\([^)]*\)/.test(extracted),
       text: singleLine ? this.escapeMarkdown(singleLine) : '',
     };
   }
