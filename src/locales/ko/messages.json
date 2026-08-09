@@ -1136,6 +1136,14 @@
     "message": "로드 중...",
     "description": "Loading message"
   },
+  "export_collecting_title": {
+    "message": "대화를 수집하는 중입니다",
+    "description": "ChatGPT 대화 DOM 수집을 위해 페이지를 스크롤하는 동안 표시되는 배너"
+  },
+  "export_collecting_desc": {
+    "message": "잠시만 기다려 주세요…",
+    "description": "ChatGPT 대화 DOM 수집 중 배너 설명"
+  },
   "keyboardShortcuts": {
     "message": "키보드 단축키",
     "description": "Keyboard shortcuts section title"

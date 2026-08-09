@@ -1148,6 +1148,14 @@
     "message": "Chargement...",
     "description": "Loading message"
   },
+  "export_collecting_title": {
+    "message": "Collecte de la conversation",
+    "description": "Bandeau affiché pendant le défilement pour collecter le DOM de la conversation ChatGPT"
+  },
+  "export_collecting_desc": {
+    "message": "Veuillez patienter…",
+    "description": "Description du bandeau pendant la collecte du DOM de la conversation ChatGPT"
+  },
   "keyboardShortcuts": {
     "message": "Raccourcis",
     "description": "Keyboard shortcuts section title"

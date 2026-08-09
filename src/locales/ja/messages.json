@@ -1142,6 +1142,14 @@
     "message": "読み込み中...",
     "description": "Loading message"
   },
+  "export_collecting_title": {
+    "message": "会話を収集しています",
+    "description": "ChatGPT の会話 DOM を収集するためにページをスクロール中に表示するバナー"
+  },
+  "export_collecting_desc": {
+    "message": "しばらくお待ちください…",
+    "description": "ChatGPT の会話 DOM 収集中のバナー説明"
+  },
   "keyboardShortcuts": {
     "message": "キーボードショートカット",
     "description": "Keyboard shortcuts section title"

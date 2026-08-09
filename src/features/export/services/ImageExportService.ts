@@ -129,12 +129,18 @@ export class ImageExportService {
       .map((turn, idx) => {
         const turnIndex = idx + 1;
         const starred = turn.starred ? ' ⭐' : '';
-        const userHtml = turn.userElement
-          ? DOMContentExtractor.extractUserContent(turn.userElement).html
-          : this.formatPlainTextAsHtml(turn.user);
-        const assistantHtml = turn.assistantElement
-          ? DOMContentExtractor.extractAssistantContent(turn.assistantElement).html
-          : this.formatPlainTextAsHtml(turn.assistant);
+        // Prefer content captured while a virtualized ChatGPT turn was mounted.
+        // Reading its element after later scrolls can otherwise yield an empty shell.
+        const userHtml =
+          turn.userContent?.html ??
+          (turn.userElement
+            ? DOMContentExtractor.extractUserContent(turn.userElement).html
+            : this.formatPlainTextAsHtml(turn.user));
+        const assistantHtml =
+          turn.assistantContent?.html ??
+          (turn.assistantElement
+            ? DOMContentExtractor.extractAssistantContent(turn.assistantElement).html
+            : this.formatPlainTextAsHtml(turn.assistant));
 
         if (!turn.omitEmptySections) {
           return `
@@ -152,8 +158,9 @@ export class ImageExportService {
         `;
         }
 
-        const hasUser = !!turn.userElement || !!turn.user.trim();
-        const hasAssistant = !!turn.assistantElement || !!turn.assistant.trim();
+        const hasUser = !!turn.userContent || !!turn.userElement || !!turn.user.trim();
+        const hasAssistant =
+          !!turn.assistantContent || !!turn.assistantElement || !!turn.assistant.trim();
 
         return `
           <article class="gv-image-export-turn">

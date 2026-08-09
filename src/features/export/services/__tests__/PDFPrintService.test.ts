@@ -1,11 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { resolveExportAdapter } from '@/pages/content/export/adapter/platformAdapters';
+
 import { renderElementToImageBlob } from '../ImageRenderService';
+import { DOMContentExtractor } from '../DOMContentExtractor';
 import { PDFPrintService } from '../PDFPrintService';
 
 vi.mock('../ImageRenderService', () => ({
   renderElementToImageBlob: vi.fn(async () => new Blob(['png'], { type: 'image/png' })),
 }));
+
+DOMContentExtractor.setExportAdapter(resolveExportAdapter());
 
 describe('PDFPrintService', () => {
   afterEach(() => {

@@ -1145,6 +1145,14 @@
     "message": "Carregando...",
     "description": "Loading message"
   },
+  "export_collecting_title": {
+    "message": "Coletando a conversa",
+    "description": "Banner exibido enquanto a página é rolada para coletar o DOM da conversa do ChatGPT"
+  },
+  "export_collecting_desc": {
+    "message": "Aguarde…",
+    "description": "Descrição do banner durante a coleta do DOM da conversa do ChatGPT"
+  },
   "keyboardShortcuts": {
     "message": "Atalhos de Teclado",
     "description": "Keyboard shortcuts section title"

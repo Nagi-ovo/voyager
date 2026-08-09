@@ -74,7 +74,21 @@ afterAll(() => {
 describe('manifest permissions', () => {
   it('keeps all-site access optional', () => {
     expect(manifestChrome.host_permissions).not.toContain('<all_urls>');
-    expect(manifestChrome.optional_host_permissions).toEqual(['<all_urls>']);
+    expect(manifestChrome.optional_host_permissions).toEqual(
+      expect.arrayContaining(['<all_urls>']),
+    );
+  });
+
+  it('keeps ChatGPT host access opt-in', () => {
+    expect(manifestChrome.host_permissions).not.toContain('https://chatgpt.com/*');
+    expect(manifestChrome.optional_host_permissions).toEqual(
+      expect.arrayContaining(['https://chatgpt.com/*']),
+    );
+    expect(
+      manifestChrome.content_scripts.some((entry) =>
+        entry.matches.includes('https://chatgpt.com/*'),
+      ),
+    ).toBe(false);
   });
 
   it('keeps unlimitedStorage out of the shared manifest', () => {

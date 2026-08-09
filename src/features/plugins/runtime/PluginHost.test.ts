@@ -91,12 +91,12 @@ describe('PluginHost', () => {
   it('resolves the adapter for the current site', async () => {
     mockState({});
     const host = new PluginHost({
-      url: 'https://claude.ai/x',
+      url: 'https://chatgpt.com/x',
       sources: [new StaticSource([])],
       doc: document,
     });
     await host.start();
-    expect(host.activeAdapter?.id).toBe('claude');
+    expect(host.activeAdapter?.id).toBe('chatgpt');
   });
 
   it('stop() unmounts active plugins', async () => {

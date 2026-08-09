@@ -1,8 +1,46 @@
 import { toBlob } from 'html-to-image';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { resolveExportAdapter } from '@/pages/content/export/adapter/platformAdapters';
+
 import type { ChatTurn, ConversationMetadata } from '../../types/export';
+import { DOMContentExtractor } from '../DOMContentExtractor';
 import { ImageExportService } from '../ImageExportService';
+
+// Base the test adapter on the real Gemini adapter, overriding only the
+// image-extraction methods with a generic, platform-agnostic implementation
+// so these tests exercise ImageExportService's own logic (not Gemini's
+// production selectors for search/generated images).
+DOMContentExtractor.setExportAdapter({
+  ...resolveExportAdapter(),
+  extractUserImage: (element) =>
+    element.querySelectorAll<HTMLImageElement>('user-query-file-preview img, .preview-image'),
+  extractAssistantImage: (
+    child,
+    htmlParts,
+    textParts,
+    flags,
+    tagName,
+    _debug,
+    processedImageSrcs,
+  ) => {
+    if (tagName !== 'img') return undefined;
+
+    const image = child as HTMLImageElement;
+    const src = image.getAttribute('src') || image.src || '';
+    if (src && src !== 'about:blank' && !processedImageSrcs?.has(src)) {
+      const alt = image.getAttribute('alt')?.trim() || 'Image';
+      flags.hasImages = true;
+      htmlParts.push(
+        `<img src="${DOMContentExtractor.escapeHtmlAttribute(src)}" alt="${DOMContentExtractor.escapeHtmlAttribute(alt)}" />`,
+      );
+      textParts.push(`\n![${alt.replace(/\]/g, '\\]')}](${src})\n`);
+    }
+    return true;
+  },
+  extractFormula: () => undefined,
+  extractCodeBlock: () => undefined,
+});
 
 vi.mock('html-to-image', () => {
   return {

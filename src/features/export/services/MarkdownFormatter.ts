@@ -114,14 +114,15 @@ export class MarkdownFormatter {
     const lines: string[] = [];
 
     // Title
-    const title = metadata.title || this.extractTitleFromURL(metadata.url);
+    const title = metadata.title || this.extractTitleFromURL(metadata.url, metadata.platform);
     lines.push(`# ${this.escapeMarkdown(title)}`);
     lines.push('');
 
     // Metadata table
     lines.push(`**Date**: ${this.formatDate(metadata.exportedAt)}`);
     lines.push(`**Turns**: ${metadata.count}`);
-    lines.push(`**Source**: [Gemini Chat](${metadata.url})`);
+    const platformName = metadata.platform || 'Gemini';
+    lines.push(`**Source**: [${platformName} Chat](${metadata.url})`);
 
     return lines.join('\n');
   }
@@ -151,7 +152,13 @@ export class MarkdownFormatter {
         lines.push(`### 👤 ${this.escapeMarkdownLabel(speakerLabels.user)}`);
         lines.push('');
 
-        if (turn.userElement) {
+        if (turn.userContent) {
+          if (turn.userContent.hasImages) {
+            lines.push('*[This turn includes uploaded images]*');
+            lines.push('');
+          }
+          lines.push(turn.userContent.text || '_No content_');
+        } else if (turn.userElement) {
           const extracted = DOMContentExtractor.extractUserContent(turn.userElement);
           if (extracted.hasImages) {
             lines.push('*[This turn includes uploaded images]*');
@@ -168,9 +175,11 @@ export class MarkdownFormatter {
       lines.push(`### 🤖 ${this.escapeMarkdownLabel(speakerLabels.assistant)}`);
       lines.push('');
 
-      if (turn.assistantElement) {
+      const fallback = this.formatContent(turn.assistant);
+      if (turn.assistantContent) {
+        lines.push(turn.assistantContent.text || fallback || '_No content_');
+      } else if (turn.assistantElement) {
         const extracted = DOMContentExtractor.extractAssistantContent(turn.assistantElement);
-        const fallback = this.formatContent(turn.assistant);
         lines.push(extracted.text || fallback || '_No content_');
       } else {
         lines.push(this.formatContent(turn.assistant) || '_No content_');
@@ -182,12 +191,18 @@ export class MarkdownFormatter {
     let hasAnySection = false;
 
     const userFallback = this.formatContent(turn.user);
-    const hasUser = !!turn.userElement || !!userFallback;
+    const hasUser = !!turn.userContent || !!turn.userElement || !!userFallback;
     if (hasUser && !omitUserSection) {
       lines.push(`### 👤 ${this.escapeMarkdownLabel(speakerLabels.user)}`);
       lines.push('');
 
-      if (turn.userElement) {
+      if (turn.userContent) {
+        if (turn.userContent.hasImages) {
+          lines.push('*[This turn includes uploaded images]*');
+          lines.push('');
+        }
+        lines.push(turn.userContent.text || userFallback || '_No content_');
+      } else if (turn.userElement) {
         const extracted = DOMContentExtractor.extractUserContent(turn.userElement);
         if (extracted.hasImages) {
           lines.push('*[This turn includes uploaded images]*');
@@ -203,12 +218,14 @@ export class MarkdownFormatter {
     }
 
     const assistantFallback = this.formatContent(turn.assistant);
-    const hasAssistant = !!turn.assistantElement || !!assistantFallback;
+    const hasAssistant = !!turn.assistantContent || !!turn.assistantElement || !!assistantFallback;
     if (hasAssistant) {
       lines.push(`### 🤖 ${this.escapeMarkdownLabel(speakerLabels.assistant)}`);
       lines.push('');
 
-      if (turn.assistantElement) {
+      if (turn.assistantContent) {
+        lines.push(turn.assistantContent.text || assistantFallback || '_No content_');
+      } else if (turn.assistantElement) {
         const extracted = DOMContentExtractor.extractAssistantContent(turn.assistantElement);
         lines.push(extracted.text || assistantFallback || '_No content_');
       } else {
@@ -277,22 +294,21 @@ export class MarkdownFormatter {
   /**
    * Extract title from URL
    */
-  private static extractTitleFromURL(url: string): string {
+  private static extractTitleFromURL(url: string, platform?: string): string {
+    const name = platform || 'Gemini';
     try {
       const urlObj = new URL(url);
       const pathname = urlObj.pathname;
 
-      // Extract from Gemini URL pattern
-      // e.g., /app/conversation-id or /chat/conversation-id
-      const match = pathname.match(/\/(app|chat)\/([^/]+)/);
+      const match = pathname.match(/\/(app|chat|c)\/([^/]+)/);
       if (match) {
         const id = match[2];
-        return `Gemini Conversation ${id.substring(0, 8)}`;
+        return `${name} Conversation ${id.substring(0, 8)}`;
       }
 
-      return 'Gemini Conversation';
+      return `${name} Conversation`;
     } catch {
-      return 'Gemini Conversation';
+      return `${name} Conversation`;
     }
   }
 
@@ -330,7 +346,8 @@ export class MarkdownFormatter {
   /**
    * Generate filename for Markdown export
    */
-  static generateFilename(): string {
+  static generateFilename(platform?: string): string {
+    const slug = (platform || 'gemini').toLowerCase().replace(/\s+/g, '-');
     const pad = (n: number) => String(n).padStart(2, '0');
     const d = new Date();
     const y = d.getFullYear();
@@ -339,18 +356,18 @@ export class MarkdownFormatter {
     const hh = pad(d.getHours());
     const mm = pad(d.getMinutes());
     const ss = pad(d.getSeconds());
-    return `gemini-chat-${y}${m}${day}-${hh}${mm}${ss}.md`;
+    return `${slug}-chat-${y}${m}${day}-${hh}${mm}${ss}.md`;
   }
 
   /**
    * Download Markdown file
    */
-  static download(content: string, filename?: string): void {
+  static download(content: string, filename?: string, platform?: string): void {
     const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = filename || this.generateFilename();
+    a.download = filename || this.generateFilename(platform);
     document.body.appendChild(a);
     a.click();
     setTimeout(() => {

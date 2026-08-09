@@ -3,6 +3,8 @@
  * Unified service for exporting conversations in multiple formats
  * Uses Strategy pattern for format-specific implementations
  */
+import { ExportPlatformAdapter } from '@pages/content/export/adapter/platformAdapters';
+
 import { fetchImageViaExtensionRuntime } from '@/core/utils/runtimeImageFetch';
 
 import { IMAGE_RENDER_EVENT_ERROR_CODE, isEventLikeImageRenderError } from '../types/errors';
@@ -29,6 +31,14 @@ export class ConversationExportService {
   private static readonly REPORT_JSON_FORMAT = 'gemini-voyager.report.v1' as const;
 
   private static readonly CHAT_JSON_FORMAT = 'gemini-voyager.chat.v1' as const;
+
+  /**
+   * Set the export adapter.
+   * @param adapter - The export adapter.
+   */
+  static setExportAdapter(adapter: ExportPlatformAdapter) {
+    DOMContentExtractor.setExportAdapter(adapter);
+  }
 
   /**
    * Export conversation in specified format
@@ -135,8 +145,12 @@ export class ConversationExportService {
       let assistantContent = turn.assistant;
       let attachments = turn.attachments ?? [];
 
-      // Extract rich content with Markdown formatting from DOM elements if available
-      if (turn.userElement) {
+      // ChatGPT snapshots rich content while its virtual-list item is mounted.
+      // Prefer that stable snapshot over a later DOM read, which may be empty.
+      if (turn.userContent) {
+        userContent = turn.userContent.text || userContent;
+        attachments = turn.userContent.attachments;
+      } else if (turn.userElement) {
         const extracted = DOMContentExtractor.extractUserContent(turn.userElement);
         if (extracted.text) {
           userContent = extracted.text;
@@ -144,7 +158,9 @@ export class ConversationExportService {
         attachments = extracted.attachments;
       }
 
-      if (turn.assistantElement) {
+      if (turn.assistantContent) {
+        assistantContent = turn.assistantContent.text || assistantContent;
+      } else if (turn.assistantElement) {
         const extracted = DOMContentExtractor.extractAssistantContent(turn.assistantElement);
         if (extracted.text) {
           assistantContent = extracted.text;
@@ -168,7 +184,8 @@ export class ConversationExportService {
       items: processedItems,
     };
 
-    const filename = options.filename || this.generateFilename('json', metadata.title);
+    const filename =
+      options.filename || this.generateFilename('json', metadata.title, metadata.platform);
     this.downloadJSON(payload, filename);
 
     return {
@@ -197,7 +214,8 @@ export class ConversationExportService {
       markdown = markdown.replace(/\n\*Source: \[[^\]]*\]\([^)]*\)\*\n/g, '\n');
     }
 
-    const filename = options.filename || this.generateFilename('md', metadata.title);
+    const filename =
+      options.filename || this.generateFilename('md', metadata.title, metadata.platform);
     const finalFilename = await this.downloadMarkdownOrZip(markdown, filename, 'chat.md');
     return { success: true, format: 'markdown' as ExportFormat, filename: finalFilename };
   }
@@ -220,7 +238,7 @@ export class ConversationExportService {
     return {
       success: true,
       format: 'pdf' as ExportFormat,
-      filename: options.filename || this.generateFilename('pdf', metadata.title),
+      filename: options.filename || this.generateFilename('pdf', metadata.title, metadata.platform),
     };
   }
 
@@ -232,7 +250,8 @@ export class ConversationExportService {
     metadata: ConversationMetadata,
     options: ExportOptions,
   ): Promise<ExportResult> {
-    const filename = options.filename || this.generateFilename('png', metadata.title);
+    const filename =
+      options.filename || this.generateFilename('png', metadata.title, metadata.platform);
     await ImageExportService.export(turns, metadata, {
       filename,
       fontSize: options.fontSize,
@@ -258,7 +277,8 @@ export class ConversationExportService {
       },
     };
 
-    const filename = options.filename || this.generateFilename('json', metadata.title);
+    const filename =
+      options.filename || this.generateFilename('json', metadata.title, metadata.platform);
     this.downloadJSON(payload, filename);
     return {
       success: true,
@@ -273,7 +293,8 @@ export class ConversationExportService {
     options: ExportOptions,
   ): Promise<ExportResult> {
     const markdown = this.composeDocumentMarkdown(content.markdown, metadata);
-    const filename = options.filename || this.generateFilename('md', metadata.title);
+    const filename =
+      options.filename || this.generateFilename('md', metadata.title, metadata.platform);
     const mdEntryName = filename.toLowerCase().endsWith('.md')
       ? filename.split('/').pop() || 'report.md'
       : 'report.md';
@@ -305,7 +326,7 @@ export class ConversationExportService {
     return {
       success: true,
       format: 'pdf' as ExportFormat,
-      filename: options.filename || this.generateFilename('pdf', metadata.title),
+      filename: options.filename || this.generateFilename('pdf', metadata.title, metadata.platform),
     };
   }
 
@@ -314,7 +335,8 @@ export class ConversationExportService {
     metadata: ConversationMetadata,
     options: ExportOptions,
   ): Promise<ExportResult> {
-    const filename = options.filename || this.generateFilename('png', metadata.title);
+    const filename =
+      options.filename || this.generateFilename('png', metadata.title, metadata.platform);
     await ImageExportService.exportDocument(
       {
         title: metadata.title || 'Deep Research Report',
@@ -628,12 +650,13 @@ export class ConversationExportService {
   /**
    * Generate filename with timestamp
    */
-  private static generateFilename(extension: string, title?: string): string {
+  private static generateFilename(extension: string, title?: string, platform?: string): string {
     const titlePart = this.sanitizeFilenamePart(title);
     if (titlePart) {
       return `${titlePart}.${extension}`;
     }
 
+    const slug = (platform || 'gemini').toLowerCase().replace(/\s+/g, '-');
     const pad = (n: number) => String(n).padStart(2, '0');
     const d = new Date();
     const y = d.getFullYear();
@@ -642,7 +665,7 @@ export class ConversationExportService {
     const hh = pad(d.getHours());
     const mm = pad(d.getMinutes());
     const ss = pad(d.getSeconds());
-    return `gemini-chat-${y}${m}${day}-${hh}${mm}${ss}.${extension}`;
+    return `${slug}-chat-${y}${m}${day}-${hh}${mm}${ss}.${extension}`;
   }
 
   private static sanitizeFilenamePart(title?: string): string {

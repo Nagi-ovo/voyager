@@ -1148,6 +1148,14 @@
     "message": "Loading...",
     "description": "Loading message"
   },
+  "export_collecting_title": {
+    "message": "Collecting conversation",
+    "description": "Banner shown while the page is scrolled to collect ChatGPT conversation DOM"
+  },
+  "export_collecting_desc": {
+    "message": "Please wait…",
+    "description": "Banner description shown during ChatGPT conversation DOM collection"
+  },
   "keyboardShortcuts": {
     "message": "Keyboard Shortcuts",
     "description": "Keyboard shortcuts section title"

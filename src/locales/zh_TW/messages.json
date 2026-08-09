@@ -1096,6 +1096,14 @@
     "message": "載入中...",
     "description": "載入訊息"
   },
+  "export_collecting_title": {
+    "message": "收集對話中",
+    "description": "滾動收集 ChatGPT 對話 DOM 時顯示的橫幅"
+  },
+  "export_collecting_desc": {
+    "message": "請稍候…",
+    "description": "ChatGPT 對話 DOM 收集期間橫幅的描述"
+  },
   "keyboardShortcuts": {
     "message": "鍵盤快速鍵",
     "description": "鍵盤快速鍵區段標題"

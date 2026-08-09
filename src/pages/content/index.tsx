@@ -660,6 +660,11 @@ function handleVisibilityChange(): void {
       );
     }
 
+    // Initialize i18n for plugin platforms (Claude/ChatGPT) so export translations load
+    if (pluginPlatformId && !isSupportedSite) {
+      initI18n().catch((e) => console.error('[Gemini Voyager] i18n init error:', e));
+    }
+
     // If not a known site, check if it's a custom website (async)
     if (!isSupportedSite) {
       // Third-party plugin platforms (Claude / ChatGPT / Grok …): the plugin
@@ -684,6 +689,8 @@ function handleVisibilityChange(): void {
           .catch((error) => {
             console.error('[Gemini Voyager] Prompt Manager init error on plugin platform:', error);
           });
+        // ChatGPT export is driven by PluginHost via the voyager.chatgpt-export
+        // builtin plugin (opt-in), not started unconditionally here.
         // Formula copy here is driven by PluginHost via the voyager.formula-copy
         // builtin plugin (opt-in), not started unconditionally.
         return;

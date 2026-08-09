@@ -1580,6 +1580,11 @@ body.dark-theme .gv-export-dropdown-btn:hover,
   pointer-events: auto;
 }
 
+.gv-persistent-export-toolbar[data-gv-platform='chatgpt'] {
+  top: 50px;
+  right: calc(var(--gv-persistent-export-right, 84px) - 50px);
+}
+
 .gv-persistent-export-btn {
   display: inline-flex;
   align-items: center;
