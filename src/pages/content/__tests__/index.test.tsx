@@ -1,10 +1,14 @@
 import { type Mock, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+const mocks = vi.hoisted(() => ({
+  pluginCleanup: vi.fn(),
+}));
+
 // The entrypoint IIFE calls these modules before its early returns. Mock them
 // all to no-ops so the plugin-platform / custom-website entry paths can be
 // exercised without mounting real features.
 vi.mock('@/features/plugins', () => ({
-  startPluginHost: () => () => {},
+  startPluginHost: () => mocks.pluginCleanup,
 }));
 vi.mock('@/features/formulaCopy', () => ({
   startFormulaCopy: () => {},
@@ -68,6 +72,7 @@ function mockCustomWebsites(hosts: string[]): void {
 
 beforeEach(() => {
   vi.resetModules();
+  mocks.pluginCleanup.mockClear();
 });
 
 afterEach(() => {
@@ -107,5 +112,6 @@ describe('content entrypoint beforeunload cleanup registration', () => {
     expect(beforeunloadHandler).toBeDefined();
 
     expect(() => beforeunloadHandler?.()).not.toThrow();
+    expect(mocks.pluginCleanup).toHaveBeenCalledTimes(1);
   });
 });
