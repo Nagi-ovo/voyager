@@ -175,6 +175,23 @@ describe('temporary chat handoff', () => {
     await scope.dispose();
   });
 
+  it('serializes observer resumption with an active handoff', async () => {
+    const scope = new PluginScope();
+    addComposer();
+    const getComposer = addTemporaryExit();
+
+    const active = handoffTemporaryChat(scope, {
+      mode: 'inline',
+      text: 'Insert this transcript once',
+    });
+    const resumed = resumePendingHandoff(scope);
+
+    await expect(active).resolves.toBe('ready');
+    await expect(resumed).resolves.toBeNull();
+    expect(getComposer()?.textContent?.match(/Insert this transcript once/g)).toHaveLength(1);
+    await scope.dispose();
+  });
+
   it('rejects an immediate handoff when temporary-chat exit switches accounts', async () => {
     const scope = new PluginScope();
     history.replaceState({}, '', '/u/0/?temporary-chat=true');

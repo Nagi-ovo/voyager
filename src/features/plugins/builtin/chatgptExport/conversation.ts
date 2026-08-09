@@ -42,6 +42,8 @@ const MESSAGE_SELECTOR = [
 const TURN_SELECTOR = '[data-testid^="conversation-turn-"]';
 const DEFAULT_SETTLE_MS = 120;
 const DEFAULT_MAX_STEPS = 240;
+const TOP_STABLE_SAMPLES = 10;
+const TOP_LOADING_SELECTOR = '[aria-busy="true"], [data-testid*="loading"]';
 let fallbackIdentitySequence = 0;
 const fallbackIdentities = new WeakMap<HTMLElement, { role: ChatGptMessageRole; id: string }>();
 
@@ -285,16 +287,30 @@ export async function collectChatGptConversation(
   try {
     target.scrollTop = 0;
     let stableAtTop = 0;
-    let previousSize = -1;
-    while (stableAtTop < 3) {
+    let topSamples = 0;
+    let previousTopSignature = '';
+    const requiredTopSamples = settleMs === 0 ? 3 : TOP_STABLE_SAMPLES;
+    const maximumTopSamples =
+      settleMs === 0 ? 50 : Math.max(requiredTopSamples, Math.ceil(15_000 / settleMs));
+    while (stableAtTop < requiredTopSamples) {
       await wait(settleMs, options.signal);
       assertNotAborted(options.signal);
-      mergeSnapshots(collected, collectMountedChatGptMessages(root));
+      const mounted = collectMountedChatGptMessages(root);
+      mergeSnapshots(collected, mounted);
       emitProgress(options, collected.size, target);
-      if (collected.size === previousSize && target.scrollTop <= 1) stableAtTop += 1;
-      else stableAtTop = 0;
-      previousSize = collected.size;
+      const topSignature = `${target.scrollHeight}:${mounted
+        .map(({ id, text }) => `${id}:${text}`)
+        .join('|')}`;
+      const historyLoading = target.querySelector(TOP_LOADING_SELECTOR) !== null;
+      if (!historyLoading && topSignature === previousTopSignature && target.scrollTop <= 1) {
+        stableAtTop += 1;
+      } else stableAtTop = 0;
+      previousTopSignature = topSignature;
       target.scrollTop = 0;
+      topSamples += 1;
+      if (topSamples >= maximumTopSamples && stableAtTop < requiredTopSamples) {
+        throw new IncompleteConversationCollectionError(collected.size);
+      }
     }
 
     let steps = 0;

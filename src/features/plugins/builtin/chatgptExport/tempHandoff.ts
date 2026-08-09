@@ -39,6 +39,7 @@ const NEW_CHAT_SELECTOR =
 const PENDING_KEY = 'gv-chatgpt-export-pending-handoff';
 const PENDING_TTL_MS = 60_000;
 const INLINE_THRESHOLD = 5_000;
+let activeHandoffOperations = 0;
 
 function wait(scope: PluginScope, ms: number): Promise<void> {
   if (scope.signal.aborted) return Promise.reject(new DOMException('Cancelled', 'AbortError'));
@@ -313,8 +314,9 @@ export async function leaveTemporaryChat(scope: PluginScope): Promise<HTMLElemen
   }
 
   const newChat = document.querySelector<HTMLElement>(NEW_CHAT_SELECTOR);
-  if (newChat) newChat.click();
-  else location.assign(getChatGptNewChatPath());
+  const newChatPath = getChatGptNewChatPath();
+  if (newChat && newChatPath === '/') newChat.click();
+  else location.assign(newChatPath);
 
   for (let attempt = 0; attempt < 30; attempt += 1) {
     if (!isTemporaryChat()) {
@@ -330,28 +332,37 @@ export async function handoffTemporaryChat(
   scope: PluginScope,
   delivery: HandoffDelivery,
 ): Promise<HandoffResult> {
-  const accountScope = readAccountScope();
+  activeHandoffOperations += 1;
   try {
-    writePending(delivery, accountScope);
-  } catch {
-    // The live same-page path still works without the reload safety net.
-  }
-  const input = await leaveTemporaryChat(scope);
-  if (!input) {
+    const accountScope = readAccountScope();
+    try {
+      writePending(delivery, accountScope);
+    } catch {
+      // The live same-page path still works without the reload safety net.
+    }
+    const input = await leaveTemporaryChat(scope);
+    if (!input) {
+      clearPending();
+      return 'leave-failed';
+    }
+    if (readAccountScope() !== accountScope) {
+      clearPending();
+      return 'account-mismatch';
+    }
+    const delivered = await deliver(input, delivery);
+    if (!delivered) return 'delivery-failed';
     clearPending();
-    return 'leave-failed';
+    return 'ready';
+  } finally {
+    activeHandoffOperations -= 1;
   }
-  if (readAccountScope() !== accountScope) {
-    clearPending();
-    return 'account-mismatch';
-  }
-  const delivered = await deliver(input, delivery);
-  if (!delivered) return 'delivery-failed';
-  clearPending();
-  return 'ready';
 }
 
 export async function resumePendingHandoff(scope: PluginScope): Promise<PendingHandoffResult> {
+  while (activeHandoffOperations > 0) {
+    if (scope.signal.aborted) return null;
+    await wait(scope, 120);
+  }
   const pending = readPending();
   if (!pending) return null;
   if (Date.now() - pending.storedAt > PENDING_TTL_MS) {

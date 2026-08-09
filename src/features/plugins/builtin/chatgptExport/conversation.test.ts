@@ -112,6 +112,42 @@ describe('ChatGPT conversation snapshots', () => {
     expect(progress).toHaveBeenCalled();
   });
 
+  it('waits for delayed history to prepend before leaving the top window', async () => {
+    const scroller = document.createElement('main');
+    scroller.style.overflowY = 'auto';
+    scroller.appendChild(turn(1, 'u-current', 'user', 'Current oldest message'));
+    let currentTop = 400;
+    let scrollHeight = 800;
+    let preloadScheduled = false;
+    Object.defineProperties(scroller, {
+      clientHeight: { configurable: true, value: 400 },
+      scrollHeight: { configurable: true, get: () => scrollHeight },
+      scrollTop: {
+        configurable: true,
+        get: () => currentTop,
+        set: (value: number) => {
+          currentTop = value;
+          if (value > 1 || preloadScheduled) return;
+          preloadScheduled = true;
+          window.setTimeout(() => {
+            if (currentTop > 1) return;
+            scroller.prepend(turn(0, 'u-prepended', 'user', 'Preloaded oldest message'));
+            scrollHeight = 1_000;
+          }, 50);
+        },
+      },
+    });
+    document.body.appendChild(scroller);
+
+    const messages = await collectChatGptConversation({
+      signal: new AbortController().signal,
+      settleMs: 10,
+    });
+
+    expect(messages.map(({ id }) => id)).toEqual(['u-prepended', 'u-current']);
+    expect(currentTop).toBe(400);
+  });
+
   it('retains repeated role and text messages across fallback-id window swaps', async () => {
     const scroller = document.createElement('main');
     scroller.style.overflowY = 'auto';
