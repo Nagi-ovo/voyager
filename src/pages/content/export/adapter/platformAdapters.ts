@@ -562,7 +562,12 @@ function chatgptExtractFormula(
   textParts: string[],
 ) {
   if (child.classList.contains('katex-display') || child.classList.contains('katex')) {
-    const latex = DOMContentExtractor.extractKatexLatex(child as HTMLElement);
+    const source = child.closest('[data-math-source]') ?? child.closest('[role="math"]');
+    const latex = (
+      source?.getAttribute('data-math-source') ||
+      source?.getAttribute('aria-label') ||
+      ''
+    ).trim();
     if (latex) {
       flags.hasFormulas = true;
       htmlParts.push(
@@ -610,7 +615,12 @@ function chatgptExtractInlineFormula(
   textParts: string[],
 ): boolean | undefined {
   if (el.classList.contains('katex')) {
-    const latex = DOMContentExtractor.extractKatexLatex(el as HTMLElement);
+    const source = el.closest('[data-math-source]') ?? el.closest('[role="math"]');
+    const latex = (
+      source?.getAttribute('data-math-source') ||
+      source?.getAttribute('aria-label') ||
+      ''
+    ).trim();
     if (latex) {
       htmlParts.push(
         `<span class="math-inline" data-math="${DOMContentExtractor.escapeHtml(latex)}">${el.outerHTML}</span>`,

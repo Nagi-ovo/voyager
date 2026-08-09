@@ -313,40 +313,10 @@ export class DOMContentExtractor {
   }
 
   /**
-   * Find non-image file cards in a user message. Gemini and ChatGPT expose
-   * different markup, but both provide a stable accessible filename.
-   */
-  public static getUserAttachmentCandidates(element: HTMLElement): HTMLElement[] {
-    const geminiUploadedFiles = Array.from(
-      element.querySelectorAll<HTMLElement>(
-        'user-query-file-preview [data-test-id="uploaded-file"]',
-      ),
-    );
-    if (geminiUploadedFiles.length > 0) return geminiUploadedFiles;
-
-    const geminiFilePreviews = Array.from(
-      element.querySelectorAll<HTMLElement>('user-query-file-preview .new-file-preview-file'),
-    );
-    if (geminiFilePreviews.length > 0) return geminiFilePreviews;
-
-    return Array.from(element.querySelectorAll<HTMLElement>('[role="group"][aria-label]')).filter(
-      (candidate) => {
-        const name = candidate.getAttribute('aria-label')?.trim();
-        const buttonName = candidate
-          .querySelector<HTMLElement>('[data-default-action] button[aria-label]')
-          ?.getAttribute('aria-label')
-          ?.trim();
-        return !!name && name === buttonName;
-      },
-    );
-  }
-
-  /**
    * Extract non-image uploads from platform-specific user message file cards.
    * Image previews are already exported as images above, so they are not duplicated.
    */
   private static extractUserAttachments(element: HTMLElement): ExportAttachment[] {
-    // const candidates = this.getUserAttachmentCandidates(element);
     const candidates = this.exportAdapter.getUserAttachmentCandidates(element);
     const attachments: ExportAttachment[] = [];
     const seen = new Set<string>();
@@ -673,40 +643,6 @@ export class DOMContentExtractor {
           return;
         }
 
-        /*
-        // KaTeX inline formula (used by ChatGPT, Claude, and other platforms)
-        // Must be checked BEFORE the Gemini-specific math-inline handler
-        if (el.classList.contains('katex')) {
-          const latex = this.extractKatexLatex(el as HTMLElement);
-          if (latex) {
-            hasFormulas = true;
-            htmlParts.push(
-              `<span class="math-inline" data-math="${this.escapeHtml(latex)}">${el.outerHTML}</span>`,
-            );
-            textParts.push(`$${latex}$`);
-            return;
-          }
-        }
-
-        // Inline formula - check both class and data-math attribute
-        if (el.classList.contains('math-inline') || el.hasAttribute('data-math')) {
-          const latex = el.getAttribute('data-math') || '';
-          if (latex) {
-            hasFormulas = true;
-            // For HTML output: preserve the rendered formula HTML for PDF export
-            const clonedFormula = (el as HTMLElement).cloneNode(true) as HTMLElement;
-            // Ensure data-math attribute is preserved
-            if (!clonedFormula.hasAttribute('data-math')) {
-              clonedFormula.setAttribute('data-math', latex);
-            }
-            htmlParts.push(clonedFormula.outerHTML);
-            // For text output: use Markdown format
-            textParts.push(`$${latex}$`);
-            return;
-          }
-        }
-         */
-
         if (this.exportAdapter.extractInlineFormula(el, htmlParts, textParts)) {
           hasFormulas = true;
           return;
@@ -763,70 +699,6 @@ export class DOMContentExtractor {
       text: textParts.join(''),
       hasFormulas,
     };
-  }
-
-  /**
-   * Extract LaTeX source from a KaTeX-rendered element.
-   * Works across platforms (ChatGPT, Claude, etc.) that use KaTeX.
-   *
-   * Extraction priority:
-   * 1. `annotation[encoding="application/x-tex"]` inside MathML
-   * 2. `data-latex` / `data-expression` attributes on the element or `.katex-expression` child
-   * 3. Walk `.katex-html > .base` children to reconstruct visible text (best-effort)
-   */
-  public static extractKatexLatex(element: HTMLElement): string {
-    // 1. annotation element (most reliable)
-    const annotation = element.querySelector('annotation[encoding="application/x-tex"]');
-    if (annotation?.textContent?.trim()) {
-      return annotation.textContent.trim();
-    }
-
-    // 2. data-latex / data-expression on element or container
-    const container = (element.querySelector('.katex-expression') as HTMLElement | null) || element;
-    const dataLatex =
-      container.getAttribute('data-latex') ||
-      container.getAttribute('data-expression') ||
-      element.getAttribute('data-latex') ||
-      element.getAttribute('data-expression');
-    if (dataLatex?.trim()) {
-      return dataLatex.trim();
-    }
-
-    // 3. Walk katex-html children to extract visible text (best-effort fallback)
-    const katexHtml = element.querySelector('.katex-html');
-    if (katexHtml) {
-      const text = this.extractKatexHtmlText(katexHtml as HTMLElement);
-      if (text.trim()) return text.trim();
-    }
-
-    return '';
-  }
-
-  /**
-   * Best-effort text extraction from KaTeX's rendered HTML.
-   * Walks `.katex-html > .base` children, extracting text from `.mord`, `.mbin`,
-   * `.mrel`, `.mop`, `.mpunct`, `.minner` spans while skipping invisible elements.
-   */
-  private static extractKatexHtmlText(element: HTMLElement): string {
-    const parts: string[] = [];
-    const walk = (node: Node): void => {
-      if (node.nodeType === Node.TEXT_NODE) {
-        const t = node.textContent || '';
-        if (t) parts.push(t);
-        return;
-      }
-      if (node.nodeType !== Node.ELEMENT_NODE) return;
-      const el = node as HTMLElement;
-      // Skip invisible elements (struts, sizing spans)
-      if (el.classList.contains('strut') || el.classList.contains('pstrut')) return;
-      if (el.classList.contains('katex-mathml')) return; // hidden MathML
-      // Recurse into children
-      for (const child of Array.from(el.childNodes)) {
-        walk(child);
-      }
-    };
-    walk(element);
-    return parts.join('');
   }
 
   /**

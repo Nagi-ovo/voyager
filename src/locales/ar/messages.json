@@ -1067,6 +1067,14 @@
     "message": "جارٍ التحميل...",
     "description": "Loading message"
   },
+  "export_collecting_title": {
+    "message": "جارٍ جمع المحادثة",
+    "description": "لافتة تُعرض أثناء التمرير لجمع DOM محادثة ChatGPT"
+  },
+  "export_collecting_desc": {
+    "message": "يرجى الانتظار…",
+    "description": "وصف اللافتة أثناء جمع DOM محادثة ChatGPT"
+  },
   "keyboardShortcuts": {
     "message": "اختصارات لوحة المفاتيح",
     "description": "Keyboard shortcuts section title"

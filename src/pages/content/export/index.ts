@@ -37,6 +37,7 @@ import {
   injectConversationMenuExportButton,
   injectResponseMenuExportButton,
 } from './conversationMenuInjection';
+import { withExportCollectingBanner } from './exportCollectingBanner';
 import { resolveExportLogoAnchor } from './exportLogoAnchor';
 import { mountPersistentExportToolbar } from './persistentExportToolbar';
 import { injectResponseActionCopyImageButtons } from './responseActionImageButton';
@@ -679,7 +680,7 @@ function resolveSelectionMessages(pairsInput: ChatTurn[]): ExportMessage[] {
     // ChatGPT retains these top-level virtual-list items even when it unloads
     // their inner message DOM. Their DOM order and data-turn-id-container value
     // are consequently the only reliable source for selection identity/order.
-    return turnContainers.map((turn) => ({
+    return turnContainers.slice(1).map((turn) => ({
       messageId: turn.id,
       role: turn.role,
       hostElement: turn.container,
@@ -1847,8 +1848,16 @@ async function performFinalExport(
     finish();
     await captureGeneratedUiScreenshots();
 
-    const turnsForExport = exportAdapter.buildTurnsForSelection
-      ? await exportAdapter.buildTurnsForSelection(selectedIdsForExport)
+    const buildTurnsForSelection = exportAdapter.buildTurnsForSelection;
+    const turnsForExport = buildTurnsForSelection
+      ? await withExportCollectingBanner(
+          () =>
+            showExportProgressOverlay(t, {
+              title: t('export_collecting_title'),
+              desc: t('export_collecting_desc'),
+            }),
+          () => buildTurnsForSelection(selectedIdsForExport),
+        )
       : buildTurnsForSelectedMessageIds(selectedIdsForExport, collectChatPairs());
     if (turnsForExport.length === 0) {
       alert(t('export_select_mode_empty'));
@@ -1938,7 +1947,16 @@ async function performFinalExport(
   updateBottomBar(bar);
 }
 
-function showExportProgressOverlay(t: (key: TranslationKey) => string): () => void {
+function showExportProgressOverlay(
+  t: (key: TranslationKey) => string,
+  options?: { title?: string; desc?: string },
+): () => void {
+  // Never stack duplicate progress pills (e.g. export dialog progress followed
+  // by the scroll-collection banner) on top of each other.
+  document
+    .querySelectorAll<HTMLElement>('.gv-export-progress-overlay')
+    .forEach((overlay) => overlay.remove());
+
   const overlay = document.createElement('div');
   overlay.className = 'gv-export-progress-overlay';
 
@@ -1950,11 +1968,11 @@ function showExportProgressOverlay(t: (key: TranslationKey) => string): () => vo
 
   const title = document.createElement('div');
   title.className = 'gv-export-progress-title';
-  title.textContent = `${t('pm_export')}...`;
+  title.textContent = options?.title ?? `${t('pm_export')}...`;
 
   const desc = document.createElement('div');
   desc.className = 'gv-export-progress-desc';
-  desc.textContent = t('loading');
+  desc.textContent = options?.desc ?? t('loading');
 
   card.appendChild(spinner);
   card.appendChild(title);

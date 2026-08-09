@@ -1067,6 +1067,14 @@
     "message": "加载中...",
     "description": "加载消息"
   },
+  "export_collecting_title": {
+    "message": "收集对话中",
+    "description": "滚动收集 ChatGPT 对话 DOM 时显示的横幅"
+  },
+  "export_collecting_desc": {
+    "message": "请稍候…",
+    "description": "ChatGPT 对话 DOM 收集期间横幅的描述"
+  },
   "keyboardShortcuts": {
     "message": "键盘快捷键",
     "description": "键盘快捷键部分标题"

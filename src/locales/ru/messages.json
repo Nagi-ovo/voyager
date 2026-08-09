@@ -1067,6 +1067,14 @@
     "message": "Загрузка...",
     "description": "Loading message"
   },
+  "export_collecting_title": {
+    "message": "Собираем диалог",
+    "description": "Баннер, показываемый во время прокрутки для сбора DOM диалога ChatGPT"
+  },
+  "export_collecting_desc": {
+    "message": "Пожалуйста, подождите…",
+    "description": "Описание баннера во время сбора DOM диалога ChatGPT"
+  },
   "keyboardShortcuts": {
     "message": "Горячие клавиши",
     "description": "Keyboard shortcuts section title"
