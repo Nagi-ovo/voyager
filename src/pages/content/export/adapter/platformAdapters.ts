@@ -16,8 +16,12 @@ import { SiteRegistry } from '@/features/plugins/sites/registry';
 import type { SiteAdapter } from '@/features/plugins/types';
 
 import { resolveConversationRoot } from '../conversationDom';
-import { buildChatGptTurnsForSelection, chatgptCollectTurnContainers } from './chatgpt';
-import type { ChatGptTurnContainer } from './type';
+import {
+  buildChatGptTurnsForSelection,
+  chatgptCollectTurnContainers,
+  resolveChatGptSelectionRoles,
+} from './chatgpt';
+import type { ChatGptTurnContainer, ChatGptTurnRole, ExportSelectionOptions } from './type';
 
 // ---------------------------------------------------------------------------
 // Interface
@@ -68,7 +72,7 @@ export interface ExportPlatformAdapter {
     flags: Pick<ExtractedContent, 'hasImages' | 'hasFormulas' | 'hasTables' | 'hasCode'>,
     tagName?: string,
     DEBUG?: boolean,
-    processedImageSrcs?: ReadonlySet<string>,
+    processedImageSrcs?: Set<string>,
   ) => boolean | undefined;
 
   extractFormula: (
@@ -104,7 +108,16 @@ export interface ExportPlatformAdapter {
    * Builds export-ready turns from stable platform message IDs. Virtualized
    * platforms may scroll and extract each selected message before returning.
    */
-  buildTurnsForSelection?: (selectedMessageIds: ReadonlySet<string>) => Promise<ChatTurn[]>;
+  buildTurnsForSelection?: (
+    selectedMessageIds: ReadonlySet<string>,
+    options?: ExportSelectionOptions,
+  ) => Promise<ChatTurn[]>;
+
+  /** Resolve roles for virtualized message shells before applying role filters. */
+  resolveSelectionRoles?: (
+    selectedMessageIds: ReadonlySet<string>,
+    options?: ExportSelectionOptions,
+  ) => Promise<ReadonlyMap<string, ChatGptTurnRole>>;
 }
 
 // ---------------------------------------------------------------------------
@@ -249,7 +262,7 @@ function geminiExtractAssistantImage(
   flags: Pick<ExtractedContent, 'hasImages' | 'hasFormulas' | 'hasTables' | 'hasCode'>,
   tagName?: string,
   DEBUG?: boolean,
-  _processedImageSrcs?: ReadonlySet<string>,
+  _processedImageSrcs?: Set<string>,
 ): boolean | undefined {
   {
     const searchImageContainers = child.querySelectorAll(
@@ -538,7 +551,7 @@ function chatgptExtractAssistantImage(
   flags: Pick<ExtractedContent, 'hasImages' | 'hasFormulas' | 'hasTables' | 'hasCode'>,
   tagName?: string,
   DEBUG?: boolean,
-  processedImageSrcs?: ReadonlySet<string>,
+  processedImageSrcs?: Set<string>,
 ): boolean | undefined {
   if (tagName === 'img') {
     const img = child as HTMLImageElement;
@@ -546,6 +559,7 @@ function chatgptExtractAssistantImage(
 
     const src = img.getAttribute('src') || img.src || '';
     if (src && src !== 'about:blank' && !processedImageSrcs?.has(src)) {
+      processedImageSrcs?.add(src);
       flags.hasImages = true;
       const altRaw = img.getAttribute('alt') || '';
       const alt = altRaw.trim() || 'Image';
@@ -559,7 +573,7 @@ function chatgptExtractAssistantImage(
   }
 }
 
-function chatgptExtractFormula(
+export function chatgptExtractFormula(
   child: Element,
   flags: Pick<ExtractedContent, 'hasImages' | 'hasFormulas' | 'hasTables' | 'hasCode'>,
   htmlParts: string[],
@@ -575,7 +589,7 @@ function chatgptExtractFormula(
     if (latex) {
       flags.hasFormulas = true;
       htmlParts.push(
-        `<div class="math-block" data-math="${DOMContentExtractor.escapeHtml(latex)}">${child.outerHTML}</div>`,
+        `<div class="math-block" data-math="${DOMContentExtractor.escapeHtmlAttribute(latex)}">${child.outerHTML}</div>`,
       );
       textParts.push(`\n$$\n${latex}\n$$\n`);
       return true;
@@ -613,12 +627,12 @@ function chatgptExtractCodeBlock(
   }
 }
 
-function chatgptExtractInlineFormula(
+export function chatgptExtractInlineFormula(
   el: Element,
   htmlParts: string[],
   textParts: string[],
 ): boolean | undefined {
-  if (el.classList.contains('katex')) {
+  if (el.classList.contains('katex-display') || el.classList.contains('katex')) {
     const source = el.closest('[data-math-source]') ?? el.closest('[role="math"]');
     const latex = (
       source?.getAttribute('data-math-source') ||
@@ -626,10 +640,12 @@ function chatgptExtractInlineFormula(
       ''
     ).trim();
     if (latex) {
+      const display =
+        el.classList.contains('katex-display') || el.closest('.katex-display') != null;
       htmlParts.push(
-        `<span class="math-inline" data-math="${DOMContentExtractor.escapeHtml(latex)}">${el.outerHTML}</span>`,
+        `<span class="${display ? 'math-block' : 'math-inline'}" data-math="${DOMContentExtractor.escapeHtmlAttribute(latex)}">${el.outerHTML}</span>`,
       );
-      textParts.push(`$${latex}$`);
+      textParts.push(display ? `\n$$\n${latex}\n$$\n` : `$${latex}$`);
       return true;
     }
   }
@@ -654,6 +670,7 @@ function buildChatGptAdapter(site: SiteAdapter): ExportPlatformAdapter {
     extractInlineFormula: chatgptExtractInlineFormula,
     collectTurnContainers: chatgptCollectTurnContainers,
     buildTurnsForSelection: buildChatGptTurnsForSelection,
+    resolveSelectionRoles: resolveChatGptSelectionRoles,
   };
 }
 

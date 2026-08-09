@@ -12,6 +12,13 @@ import {
   type ExportSpeakerLabels,
 } from '../types/export';
 import { DOMContentExtractor } from './DOMContentExtractor';
+import {
+  EXPORT_IMAGE_FETCH_CONCURRENCY,
+  MAX_EXPORT_IMAGE_COUNT,
+  MAX_EXPORT_IMAGE_TOTAL_BYTES,
+  fetchBoundedExportImage,
+  mapWithConcurrency,
+} from './boundedImageFetch';
 import { buildKatexExportStyles } from './katexExportStyles';
 import { buildMermaidExportStyles } from './mermaidExportStyles';
 import { isolateMermaidSvgImages, rasterizeMermaidSvgImages } from './mermaidSvgImage';
@@ -44,9 +51,16 @@ export class PDFPrintService {
   static async export(
     turns: ChatTurn[],
     metadata: ConversationMetadata,
-    options?: { fontSize?: number; speakerLabels?: ExportSpeakerLabels },
+    options?: { fontSize?: number; speakerLabels?: ExportSpeakerLabels; signal?: AbortSignal },
   ): Promise<void> {
-    await this.exportInternal(turns, metadata, false, options?.fontSize, options?.speakerLabels);
+    await this.exportInternal(
+      turns,
+      metadata,
+      false,
+      options?.fontSize,
+      options?.speakerLabels,
+      options?.signal,
+    );
   }
 
   static async exportDocument(content: PrintableDocumentContent): Promise<void> {
@@ -81,7 +95,9 @@ export class PDFPrintService {
     preferMetadataTitle: boolean,
     fontSize?: number,
     speakerLabels: ExportSpeakerLabels = DEFAULT_EXPORT_SPEAKER_LABELS,
+    signal?: AbortSignal,
   ): Promise<void> {
+    this.assertNotAborted(signal);
     // Ensure we don't leave a previous export container around (e.g. if a prior export failed)
     this.cleanup();
 
@@ -99,6 +115,7 @@ export class PDFPrintService {
     } else {
       await rasterizeMermaidSvgImages(container);
     }
+    this.assertNotAborted(signal);
     document.body.appendChild(container);
 
     // Remove existing print styles so we can re-inject with new font size
@@ -119,11 +136,12 @@ export class PDFPrintService {
     // Inline images as data URLs (best-effort) to avoid auth-bound links failing in print.
     // Safari is very strict about `window.print()` being called with a user gesture; awaiting here
     // may cause the print dialog to be blocked. So on Safari we do not await.
-    const inlineImagesPromise = this.inlineImages(container).catch(() => {
+    const inlineImagesPromise = this.inlineImages(container, signal).catch(() => {
       /* ignore */
     });
 
     if (safari) {
+      this.assertNotAborted(signal);
       this.forceStyleFlush(container);
       this.triggerPrint();
       this.registerCleanupHandlers();
@@ -133,8 +151,16 @@ export class PDFPrintService {
 
     await inlineImagesPromise;
     await this.delay(100);
+    this.assertNotAborted(signal);
     this.triggerPrint();
     this.registerCleanupHandlers();
+  }
+
+  private static assertNotAborted(signal?: AbortSignal): void {
+    if (signal?.aborted) {
+      this.cleanup();
+      throw new DOMException('Export cancelled', 'AbortError');
+    }
   }
 
   private static triggerPrint(): void {
@@ -239,84 +265,72 @@ export class PDFPrintService {
   /**
    * Convert <img src> links in container to data URLs (best-effort)
    */
-  private static async inlineImages(container: HTMLElement): Promise<void> {
-    const imgs = Array.from(container.querySelectorAll('img')) as HTMLImageElement[];
+  private static async inlineImages(container: HTMLElement, signal?: AbortSignal): Promise<void> {
+    const allImages = Array.from(container.querySelectorAll('img')) as HTMLImageElement[];
+    allImages.slice(MAX_EXPORT_IMAGE_COUNT).forEach((image) => image.remove());
+    const imgs = allImages.slice(0, MAX_EXPORT_IMAGE_COUNT);
     if (imgs.length === 0) return;
+    const budget = { remainingBytes: MAX_EXPORT_IMAGE_TOTAL_BYTES };
+
     const toDataUrl = async (url: string): Promise<string | null> => {
-      const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-      const timeoutHandle = this.setTimeoutUnref(() => {
-        try {
-          controller?.abort();
-        } catch {
-          /* ignore */
-        }
-      }, this.INLINE_FETCH_TIMEOUT_MS);
-
       try {
-        const init: RequestInit = { credentials: 'include', mode: 'cors' as RequestMode };
-        if (controller) init.signal = controller.signal;
-
-        const resp = await fetch(url, init);
-        if (!resp.ok) return null;
-        const blob = await resp.blob();
-        const data = await new Promise<string>((resolve, reject) => {
+        const fetched = await fetchBoundedExportImage(
+          url,
+          budget,
+          signal,
+          this.INLINE_FETCH_TIMEOUT_MS,
+        );
+        if (!fetched) return null;
+        return await new Promise<string>((resolve, reject) => {
           try {
             const reader = new FileReader();
             reader.onerror = () => reject(new Error('readAsDataURL failed'));
             reader.onload = () => resolve(String(reader.result || ''));
-            reader.readAsDataURL(blob);
-          } catch (e) {
-            reject(e);
+            reader.readAsDataURL(fetched.blob);
+          } catch (error) {
+            reject(error);
           }
         });
-        return data;
       } catch {
         return null;
-      } finally {
-        clearTimeout(timeoutHandle);
       }
     };
 
-    await Promise.all(
-      imgs.map(async (img) => {
-        let src = img.getAttribute('src') || '';
-        // Handle both http(s) and blob: URLs (watermark-removed images use blob: URLs)
-        if (!/^(https?:\/\/|blob:)/i.test(src)) return;
-        // For Google images, request original size (=s0) instead of thumbnail
-        if (
-          (src.includes('googleusercontent.com') || src.includes('ggpht.com')) &&
-          !src.startsWith('blob:')
-        ) {
-          const sizePattern = /=[swh]\d+[^?#]*/;
-          src = sizePattern.test(src) ? src.replace(sizePattern, '=s0') : src + '=s0';
-        }
-        const data = await toDataUrl(src);
-        if (data) {
-          try {
-            img.src = data;
-          } catch {}
-        }
-      }),
-    );
+    await mapWithConcurrency(imgs, EXPORT_IMAGE_FETCH_CONCURRENCY, async (img) => {
+      this.assertNotAborted(signal);
+      let src = img.getAttribute('src') || '';
+      if (
+        (src.includes('googleusercontent.com') || src.includes('ggpht.com')) &&
+        !src.startsWith('blob:')
+      ) {
+        const sizePattern = /=[swh]\d+[^?#]*/;
+        src = sizePattern.test(src) ? src.replace(sizePattern, '=s0') : src + '=s0';
+      }
+      const data = await toDataUrl(src);
+      if (data) img.src = data;
+      else img.remove();
+    });
 
-    // Attempt to wait for image decoding
+    this.assertNotAborted(signal);
     type DecodableImage = HTMLImageElement & { decode?: () => Promise<void> };
     await Promise.all(
-      imgs.map(async (img) => {
-        const decode = (img as DecodableImage).decode;
-        if (typeof decode !== 'function') return;
+      imgs
+        .filter((img) => img.isConnected)
+        .map(async (img) => {
+          const decode = (img as DecodableImage).decode;
+          if (typeof decode !== 'function') return;
 
-        try {
-          await Promise.race([
-            decode.call(img).catch(() => {
-              /* ignore */
-            }),
-            this.delay(this.INLINE_DECODE_TIMEOUT_MS),
-          ]);
-        } catch {
-          /* ignore */
-        }
-      }),
+          try {
+            await Promise.race([
+              decode.call(img).catch(() => {
+                /* ignore */
+              }),
+              this.delay(this.INLINE_DECODE_TIMEOUT_MS),
+            ]);
+          } catch {
+            /* ignore */
+          }
+        }),
     );
   }
 

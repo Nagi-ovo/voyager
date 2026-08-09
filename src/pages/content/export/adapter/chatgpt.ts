@@ -1,16 +1,26 @@
 import { DOMContentExtractor } from '@/features/export/services/DOMContentExtractor';
 import type { ChatTurn } from '@/features/export/types/export';
 
-import {
-  computeConversationFingerprint,
-  waitForConversationFingerprintChangeOrTimeout,
-} from '../topNodePreload';
-import type { ChatGptTurnContainer, ChatGptTurnRole } from './type';
+import { computeConversationFingerprint } from '../topNodePreload';
+import type { ChatGptTurnContainer, ChatGptTurnRole, ExportSelectionOptions } from './type';
 
 const TURN_CONTAINER_SELECTOR = '[data-turn-id-container]';
 const USER_MESSAGE_SELECTOR = '[data-message-author-role="user"]';
 const ASSISTANT_MESSAGE_SELECTOR = '[data-message-author-role="assistant"]';
 const IMAGEGEN_SELECTOR = '[class*="group/imagegen-image"]';
+const STOP_GENERATING_SELECTOR = [
+  '[data-testid="stop-button"]',
+  'button[aria-label*="stop generating" i]',
+  'button[aria-label*="停止生成"]',
+].join(',');
+const STREAMING_TURN_SELECTOR = [
+  '[data-message-streaming="true"]',
+  '[data-is-streaming="true"]',
+  '.result-streaming',
+].join(',');
+const MATERIALIZATION_TIMEOUT_MS = 3000;
+const MATERIALIZATION_POLL_MS = 80;
+const MATERIALIZATION_IDLE_MS = 240;
 
 function resolveTurnRole(container: HTMLElement): ChatGptTurnRole {
   if (container.querySelector(USER_MESSAGE_SELECTOR)) {
@@ -68,34 +78,185 @@ export function chatgptCollectTurnContainers(root: ParentNode = document): ChatG
 /*
   物化单条，确定角色
  */
+function normalizedConversationUrl(url = location.href): string {
+  const parsed = new URL(url, location.href);
+  return `${parsed.origin}${parsed.pathname}${parsed.search}`;
+}
+
+function abortError(): DOMException {
+  return new DOMException('ChatGPT export cancelled', 'AbortError');
+}
+
+function assertSelectionActive(options: ExportSelectionOptions): void {
+  if (options.signal?.aborted) throw abortError();
+  if (
+    options.expectedUrl &&
+    normalizedConversationUrl(options.expectedUrl) !== normalizedConversationUrl()
+  ) {
+    throw new Error('chatgpt_export_conversation_changed');
+  }
+}
+
+function wait(ms: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) return Promise.reject(abortError());
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(done, ms);
+    function done(): void {
+      signal?.removeEventListener('abort', cancel);
+      resolve();
+    }
+    function cancel(): void {
+      window.clearTimeout(timer);
+      signal?.removeEventListener('abort', cancel);
+      reject(abortError());
+    }
+    signal?.addEventListener('abort', cancel, { once: true });
+  });
+}
+
+function findTurnContainer(id: string): ChatGptTurnContainer | null {
+  return chatgptCollectTurnContainers().find((turn) => turn.id === id) ?? null;
+}
+
+function hasMountedContent(turn: ChatGptTurnContainer): boolean {
+  const root =
+    turn.role === 'user'
+      ? turn.container.querySelector(USER_MESSAGE_SELECTOR)
+      : (turn.container.querySelector(ASSISTANT_MESSAGE_SELECTOR) ??
+        turn.container.querySelector(IMAGEGEN_SELECTOR));
+  if (!root) return false;
+  return (
+    (root.textContent?.trim().length ?? 0) > 0 ||
+    root.querySelector('img, svg, canvas, pre, table, [data-math-source], [role="math"]') != null
+  );
+}
+
+function isGeneratingTurn(turn: ChatGptTurnContainer): boolean {
+  if (
+    turn.container.matches(STREAMING_TURN_SELECTOR) ||
+    turn.container.querySelector(STREAMING_TURN_SELECTOR)
+  ) {
+    return true;
+  }
+  if (!document.querySelector(STOP_GENERATING_SELECTOR)) return false;
+  const ordered = chatgptCollectTurnContainers();
+  return ordered.at(-1)?.id === turn.id && turn.role === 'assistant';
+}
+
+/**
+ * Materialize a virtualized ChatGPT turn. Already-mounted, completed turns use
+ * a zero-wait fast path; empty shells wait for a positive role/content signal.
+ */
 export async function materializeChatGptTurnContainer(
   turn: ChatGptTurnContainer,
+  options: ExportSelectionOptions = {},
 ): Promise<ChatGptTurnContainer> {
-  turn.container.scrollIntoView({
-    block: 'center',
-    behavior: 'auto',
-  });
+  assertSelectionActive(options);
+  let current = findTurnContainer(turn.id) ?? turn;
+  current = { ...current, role: resolveTurnRole(current.container) };
+  if (current.role !== 'unknown' && hasMountedContent(current) && !isGeneratingTurn(current)) {
+    return current;
+  }
 
-  // 等待角色确定
+  current.container.scrollIntoView({ block: 'center', behavior: 'auto' });
+
   const contentSelectors = [USER_MESSAGE_SELECTOR, ASSISTANT_MESSAGE_SELECTOR, IMAGEGEN_SELECTOR];
+  const startedAt = Date.now();
+  let stableSignature = '';
+  let stableSince = 0;
 
-  const before = computeConversationFingerprint(turn.container, contentSelectors, 10);
+  while (Date.now() - startedAt < MATERIALIZATION_TIMEOUT_MS) {
+    assertSelectionActive(options);
+    const latest = findTurnContainer(turn.id);
+    if (latest) current = { ...latest, role: resolveTurnRole(latest.container) };
 
-  await waitForConversationFingerprintChangeOrTimeout(turn.container, contentSelectors, before, {
-    minWaitMs: 200,
-    idleMs: 250,
-    pollIntervalMs: 80,
-    timeoutMs: 3000,
-    maxSamples: 10,
-  });
+    if (current.role !== 'unknown' && hasMountedContent(current) && !isGeneratingTurn(current)) {
+      const fingerprint = computeConversationFingerprint(current.container, contentSelectors, 10);
+      const signature = `${fingerprint.signature}:${fingerprint.count}`;
+      if (signature !== stableSignature) {
+        stableSignature = signature;
+        stableSince = Date.now();
+      } else if (Date.now() - stableSince >= MATERIALIZATION_IDLE_MS) {
+        return current;
+      }
+    } else {
+      stableSignature = '';
+      stableSince = 0;
+    }
 
-  return {
-    ...turn,
-    // DOM stabilization may have replaced the inner message subtree, so read
-    // the role again from the final rendered state rather than retaining a
-    // potentially stale pre-stabilization value.
-    role: resolveTurnRole(turn.container),
-  };
+    await wait(MATERIALIZATION_POLL_MS, options.signal);
+  }
+
+  if (isGeneratingTurn(current)) throw new Error('chatgpt_export_response_still_generating');
+  throw new Error(`chatgpt_export_message_unavailable:${turn.id}`);
+}
+
+function resolveSelectedContainers(
+  selectedContainerIds: ReadonlySet<string>,
+): ChatGptTurnContainer[] {
+  const allContainers = chatgptCollectTurnContainers();
+  const knownIds = new Set(allContainers.map((turn) => turn.id));
+  const missingIds = Array.from(selectedContainerIds).filter((id) => !knownIds.has(id));
+  if (missingIds.length > 0) {
+    throw new Error(`chatgpt_export_messages_missing:${missingIds.join(',')}`);
+  }
+  return allContainers.filter((turn) => selectedContainerIds.has(turn.id));
+}
+
+type ScrollSnapshot = {
+  readonly element: HTMLElement;
+  readonly top: number;
+  readonly left: number;
+};
+
+function captureScrollState(container: HTMLElement | undefined): {
+  readonly elements: ScrollSnapshot[];
+  readonly windowX: number;
+  readonly windowY: number;
+} {
+  const elements: ScrollSnapshot[] = [];
+  for (let current = container?.parentElement ?? null; current; current = current.parentElement) {
+    if (current.scrollHeight > current.clientHeight || current.scrollWidth > current.clientWidth) {
+      elements.push({ element: current, top: current.scrollTop, left: current.scrollLeft });
+    }
+  }
+  return { elements, windowX: window.scrollX, windowY: window.scrollY };
+}
+
+function restoreScrollState(snapshot: ReturnType<typeof captureScrollState>): void {
+  for (const { element, top, left } of snapshot.elements) {
+    element.scrollTop = top;
+    element.scrollLeft = left;
+  }
+  try {
+    window.scrollTo(snapshot.windowX, snapshot.windowY);
+  } catch {
+    // jsdom and locked-down pages may not implement scrolling.
+  }
+}
+
+export async function resolveChatGptSelectionRoles(
+  selectedContainerIds: ReadonlySet<string>,
+  options: ExportSelectionOptions = {},
+): Promise<ReadonlyMap<string, ChatGptTurnRole>> {
+  assertSelectionActive(options);
+  const selectedContainers = resolveSelectedContainers(selectedContainerIds);
+  const scrollState = captureScrollState(selectedContainers[0]?.container);
+  const roles = new Map<string, ChatGptTurnRole>();
+  try {
+    for (const turn of selectedContainers) {
+      assertSelectionActive(options);
+      const resolved =
+        turn.role === 'unknown' ? await materializeChatGptTurnContainer(turn, options) : turn;
+      if (resolved.role === 'unknown') {
+        throw new Error(`chatgpt_export_role_unavailable:${turn.id}`);
+      }
+      roles.set(turn.id, resolved.role);
+    }
+    return roles;
+  } finally {
+    restoreScrollState(scrollState);
+  }
 }
 
 /**
@@ -119,81 +280,93 @@ export async function materializeChatGptTurnContainer(
  */
 export async function buildChatGptTurnsForSelection(
   selectedContainerIds: ReadonlySet<string>,
+  options: ExportSelectionOptions = {},
 ): Promise<ChatTurn[]> {
   // querySelectorAll returns ChatGPT's retained virtual-list order. Filtering
   // this registry, rather than sorting visual coordinates, prevents image cards
   // and independently positioned DOM wrappers from changing export order.
-  const selectedContainers = chatgptCollectTurnContainers().filter((turn) =>
-    selectedContainerIds.has(turn.id),
-  );
+  assertSelectionActive(options);
+  const selectedContainers = resolveSelectedContainers(selectedContainerIds);
+  const scrollState = captureScrollState(selectedContainers[0]?.container);
 
   const turns: ChatTurn[] = [];
-  let pendingUser: ChatTurn | null = null;
+  let pendingUser: { readonly turn: ChatTurn; readonly sequence: number } | null = null;
+  const extractedIds = new Set<string>();
 
-  for (const turn of selectedContainers) {
-    const materialized = await materializeChatGptTurnContainer(turn);
-    const { container, role } = materialized;
+  try {
+    for (const turn of selectedContainers) {
+      assertSelectionActive(options);
+      const materialized = await materializeChatGptTurnContainer(turn, options);
+      const { container, role, sequence } = materialized;
 
-    if (role === 'user') {
-      // A second user message closes an earlier selected user-only turn.
-      if (pendingUser) {
-        turns.push(pendingUser);
-      }
+      if (role === 'user') {
+        // A second user message closes an earlier selected user-only turn.
+        if (pendingUser) turns.push(pendingUser.turn);
 
-      const userElement = container.querySelector<HTMLElement>(USER_MESSAGE_SELECTOR);
-      if (!userElement) {
-        // The virtualized node did not finish mounting before the timeout. Do
-        // not invent content or bind it to another message; keep processing
-        // the remaining selected IDs.
-        pendingUser = null;
+        const userElement = container.querySelector<HTMLElement>(USER_MESSAGE_SELECTOR);
+        if (!userElement) throw new Error(`chatgpt_export_message_unavailable:${turn.id}`);
+
+        const userContent = DOMContentExtractor.extractUserContent(userElement);
+        if (!userContent.text && !userContent.html && userContent.attachments.length === 0) {
+          throw new Error(`chatgpt_export_message_empty:${turn.id}`);
+        }
+        pendingUser = {
+          sequence,
+          turn: {
+            user: userContent.text,
+            assistant: '',
+            starred: false,
+            attachments: userContent.attachments,
+            omitEmptySections: true,
+            userContent,
+          },
+        };
+        extractedIds.add(turn.id);
         continue;
       }
 
-      const userContent = DOMContentExtractor.extractUserContent(userElement);
-      pendingUser = {
-        user: userContent.text,
-        assistant: '',
-        starred: false,
-        attachments: userContent.attachments,
-        omitEmptySections: true,
-        userContent,
-      };
-      continue;
-    }
+      if (role === 'assistant') {
+        // Image-generation replies can be identified by IMAGEGEN_SELECTOR before
+        // ChatGPT exposes a conventional assistant root.
+        const assistantElement =
+          container.querySelector<HTMLElement>(ASSISTANT_MESSAGE_SELECTOR) ?? container;
+        const assistantContent = DOMContentExtractor.extractAssistantContent(assistantElement);
+        if (!assistantContent.text && !assistantContent.html) {
+          throw new Error(`chatgpt_export_message_empty:${turn.id}`);
+        }
 
-    if (role === 'assistant') {
-      // Image-generation replies can be identified by IMAGEGEN_SELECTOR before
-      // ChatGPT exposes a conventional assistant root. In that case the top
-      // container remains the correct extraction root: it contains the image
-      // card and belongs to exactly this stable virtual-list item.
-      const assistantElement =
-        container.querySelector<HTMLElement>(ASSISTANT_MESSAGE_SELECTOR) ?? container;
-      const assistantContent = DOMContentExtractor.extractAssistantContent(assistantElement);
-
-      if (pendingUser) {
-        pendingUser.assistant = assistantContent.text;
-        pendingUser.assistantContent = assistantContent;
-        turns.push(pendingUser);
-        pendingUser = null;
-      } else {
-        // The user selected only this assistant reply, or its paired user was
-        // not selected. Export it as an intentionally assistant-only turn.
-        turns.push({
-          user: '',
-          assistant: assistantContent.text,
-          starred: false,
-          omitEmptySections: true,
-          assistantContent,
-        });
+        if (pendingUser?.sequence === sequence - 1) {
+          pendingUser.turn.assistant = assistantContent.text;
+          pendingUser.turn.assistantContent = assistantContent;
+          turns.push(pendingUser.turn);
+          pendingUser = null;
+        } else {
+          if (pendingUser) {
+            turns.push(pendingUser.turn);
+            pendingUser = null;
+          }
+          turns.push({
+            user: '',
+            assistant: assistantContent.text,
+            starred: false,
+            omitEmptySections: true,
+            assistantContent,
+          });
+        }
+        extractedIds.add(turn.id);
+        continue;
       }
+
+      throw new Error(`chatgpt_export_role_unavailable:${turn.id}`);
     }
-  }
 
-  // Preserve a selected user message even when its assistant reply was not
-  // selected or was unavailable during this export.
-  if (pendingUser) {
-    turns.push(pendingUser);
-  }
+    if (pendingUser) turns.push(pendingUser.turn);
+    if (extractedIds.size !== selectedContainerIds.size) {
+      throw new Error('chatgpt_export_incomplete_selection');
+    }
 
-  return turns;
+    return turns;
+  } finally {
+    restoreScrollState(scrollState);
+  }
 }

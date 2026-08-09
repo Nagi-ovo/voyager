@@ -5,7 +5,6 @@
  * Uses DOM-to-image rendering and inlines remote images (best-effort).
  */
 import { isSafari } from '@/core/utils/browser';
-import { fetchImageViaExtensionRuntime } from '@/core/utils/runtimeImageFetch';
 
 import { isEventLikeImageRenderError } from '../types/errors';
 import {
@@ -17,6 +16,13 @@ import {
 } from '../types/export';
 import { DOMContentExtractor } from './DOMContentExtractor';
 import { renderElementToImageBlob } from './ImageRenderService';
+import {
+  EXPORT_IMAGE_FETCH_CONCURRENCY,
+  MAX_EXPORT_IMAGE_COUNT,
+  MAX_EXPORT_IMAGE_TOTAL_BYTES,
+  fetchBoundedExportImage,
+  mapWithConcurrency,
+} from './boundedImageFetch';
 import { buildKatexExportStyles } from './katexExportStyles';
 import { buildMermaidExportStyles } from './mermaidExportStyles';
 import { rasterizeMermaidSvgImages } from './mermaidSvgImage';
@@ -42,6 +48,7 @@ export class ImageExportService {
       fontSize?: number;
       imageWidth?: number;
       speakerLabels?: ExportSpeakerLabels;
+      signal?: AbortSignal;
     },
   ): Promise<void> {
     const filename = options.filename.toLowerCase().endsWith('.png')
@@ -49,18 +56,25 @@ export class ImageExportService {
       : `${options.filename}.png`;
 
     const blob = await this.renderConversationBlob(turns, metadata, options);
+    this.assertNotAborted(options.signal);
     this.downloadBlob(blob, filename);
   }
 
   static async exportDocument(
     content: RenderableDocumentContent,
-    options: { filename: string; fontSize?: number; imageWidth?: number },
+    options: { filename: string; fontSize?: number; imageWidth?: number; signal?: AbortSignal },
   ): Promise<void> {
     const filename = options.filename.toLowerCase().endsWith('.png')
       ? options.filename
       : `${options.filename}.png`;
 
-    const blob = await this.renderDocumentBlob(content, options.imageWidth, options.fontSize);
+    const blob = await this.renderDocumentBlob(
+      content,
+      options.imageWidth,
+      options.fontSize,
+      options.signal,
+    );
+    this.assertNotAborted(options.signal);
     this.downloadBlob(blob, filename);
   }
 
@@ -71,6 +85,7 @@ export class ImageExportService {
       fontSize?: number;
       imageWidth?: number;
       speakerLabels?: ExportSpeakerLabels;
+      signal?: AbortSignal;
     },
   ): Promise<Blob> {
     const container = this.createRenderContainer(
@@ -80,16 +95,17 @@ export class ImageExportService {
       options.imageWidth,
       options.speakerLabels,
     );
-    return await this.renderContainerToBlob(container);
+    return await this.renderContainerToBlob(container, options.signal);
   }
 
   static async renderDocumentBlob(
     content: RenderableDocumentContent,
     imageWidth?: number,
     fontSize?: number,
+    signal?: AbortSignal,
   ): Promise<Blob> {
     const container = this.createDocumentRenderContainer(content, imageWidth, fontSize);
-    return await this.renderContainerToBlob(container);
+    return await this.renderContainerToBlob(container, signal);
   }
 
   private static createRenderContainer(
@@ -465,8 +481,14 @@ export class ImageExportService {
     return outer;
   }
 
-  private static async inlineImages(container: HTMLElement): Promise<void> {
-    const imgs = Array.from(container.querySelectorAll('img')) as HTMLImageElement[];
+  private static assertNotAborted(signal?: AbortSignal): void {
+    if (signal?.aborted) throw new DOMException('Export cancelled', 'AbortError');
+  }
+
+  private static async inlineImages(container: HTMLElement, signal?: AbortSignal): Promise<void> {
+    const allImages = Array.from(container.querySelectorAll('img')) as HTMLImageElement[];
+    allImages.slice(MAX_EXPORT_IMAGE_COUNT).forEach((image) => image.remove());
+    const imgs = allImages.slice(0, MAX_EXPORT_IMAGE_COUNT);
     if (imgs.length === 0) return;
 
     const blobToDataUrl = async (blob: Blob): Promise<string | null> => {
@@ -483,74 +505,35 @@ export class ImageExportService {
     };
 
     const toDataUrl = async (url: string): Promise<string | null> => {
-      if (/^data:/i.test(url)) return url;
+      const fetched = await fetchBoundedExportImage(url, budget, signal);
+      return fetched ? await blobToDataUrl(fetched.blob) : null;
+    };
 
-      // Blob URLs are document-scoped — fetch them directly from this context,
-      // they can't be reached from the background script.
-      if (/^blob:/i.test(url)) {
+    const budget = { remainingBytes: MAX_EXPORT_IMAGE_TOTAL_BYTES };
+    await mapWithConcurrency(imgs, EXPORT_IMAGE_FETCH_CONCURRENCY, async (img) => {
+      this.assertNotAborted(signal);
+      let src = img.getAttribute('src') || '';
+      // For Google images, request original size (=s0) instead of thumbnail
+      if (
+        /^https?:\/\//i.test(src) &&
+        (src.includes('googleusercontent.com') || src.includes('ggpht.com'))
+      ) {
+        const sizePattern = /=[swh]\d+[^?#]*/;
+        src = sizePattern.test(src) ? src.replace(sizePattern, '=s0') : src + '=s0';
+      }
+      const data = await toDataUrl(src);
+      if (data) {
         try {
-          const resp = await fetch(url);
-          if (resp.ok) {
-            const blob = await resp.blob();
-            return await blobToDataUrl(blob);
-          }
+          img.src = data;
         } catch {
           /* ignore */
         }
-        return null;
+      } else {
+        img.remove();
       }
+    });
 
-      if (!/^https?:\/\//i.test(url)) return null;
-
-      // Try content-script fetch first
-      try {
-        const resp = await fetch(url, {
-          credentials: 'include',
-          mode: 'cors' as RequestMode,
-        });
-        if (resp.ok) {
-          const blob = await resp.blob();
-          const data = await blobToDataUrl(blob);
-          if (data) return data;
-        }
-      } catch {
-        /* ignore */
-      }
-
-      // Fall back to the extension fetch chain. On Safari this ends in a
-      // MAIN-world fetch, which retains the page's Google authentication.
-      try {
-        const data = await fetchImageViaExtensionRuntime(url);
-        if (data) return `data:${data.contentType};base64,${data.base64}`;
-      } catch {
-        /* ignore */
-      }
-
-      return null;
-    };
-
-    await Promise.all(
-      imgs.map(async (img) => {
-        let src = img.getAttribute('src') || '';
-        // For Google images, request original size (=s0) instead of thumbnail
-        if (
-          /^https?:\/\//i.test(src) &&
-          (src.includes('googleusercontent.com') || src.includes('ggpht.com'))
-        ) {
-          const sizePattern = /=[swh]\d+[^?#]*/;
-          src = sizePattern.test(src) ? src.replace(sizePattern, '=s0') : src + '=s0';
-        }
-        const data = await toDataUrl(src);
-        if (data) {
-          try {
-            img.src = data;
-          } catch {
-            /* ignore */
-          }
-        }
-      }),
-    );
-
+    this.assertNotAborted(signal);
     await Promise.all(
       imgs.map((img) =>
         (img as HTMLImageElement & { decode?: () => Promise<void> }).decode?.().catch(() => {
@@ -574,12 +557,17 @@ export class ImageExportService {
     });
   }
 
-  private static async renderContainerToBlob(container: HTMLElement): Promise<Blob> {
+  private static async renderContainerToBlob(
+    container: HTMLElement,
+    signal?: AbortSignal,
+  ): Promise<Blob> {
     document.body.appendChild(container);
 
     try {
       await rasterizeMermaidSvgImages(container);
-      await this.inlineImages(container);
+      this.assertNotAborted(signal);
+      await this.inlineImages(container, signal);
+      this.assertNotAborted(signal);
       return await this.renderWithSafariFallback(container);
     } finally {
       try {

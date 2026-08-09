@@ -143,6 +143,8 @@ export interface ExportFormatInfo {
  */
 export interface ExportOptions {
   format: ExportFormat;
+  /** Cancels long-running collection/render work before it downloads or prints. */
+  signal?: AbortSignal;
   layout?: ExportLayout;
   includeMetadata?: boolean;
   includeStarred?: boolean;

@@ -148,6 +148,7 @@ export function exportPendingConversation(
   turns: ChatTurn[],
   metadata: ConversationMetadata,
   includeImageSource: boolean,
+  signal?: AbortSignal,
 ) {
   return ConversationExportService.export(turns, metadata, {
     format: state.format,
@@ -156,5 +157,6 @@ export function exportPendingConversation(
     imageWidth: state.imageWidth,
     usePromptAsTurnHeading: state.usePromptAsTurnHeading,
     speakerLabels: state.speakerLabels,
+    signal,
   });
 }

@@ -2,7 +2,7 @@
  * DOM Content Extractor
  * Extracts rich content from Gemini's DOM structure preserving formatting
  */
-import { ExportPlatformAdapter } from '../../../pages/content/export/adapter/platformAdapters';
+import type { ExportPlatformAdapter } from '../../../pages/content/export/adapter/platformAdapters';
 import type { ExportAttachment } from '../types/export';
 
 export interface ExtractedContent {
@@ -84,7 +84,6 @@ export class DOMContentExtractor {
     };
 
     const images = this.exportAdapter.extractUserImage(element) ?? [];
-    console.log('[DOMContentExtractor] images:', images);
     result.hasImages = images.length > 0;
 
     const attachments = this.extractUserAttachments(element);
@@ -107,7 +106,9 @@ export class DOMContentExtractor {
     images.forEach((img, index) => {
       const src = (img as HTMLImageElement).src;
       const alt = (img as HTMLImageElement).alt || `Uploaded image ${index + 1}`;
-      htmlParts.push(`<img src="${src}" alt="${alt}" />`);
+      htmlParts.push(
+        `<img src="${this.escapeHtmlAttribute(src)}" alt="${this.escapeHtmlAttribute(alt)}" />`,
+      );
       imageMarkdown.push(`![${alt}](${src})`);
     });
 
@@ -366,25 +367,26 @@ export class DOMContentExtractor {
    * Process DOM nodes recursively
    */
   private static processNodes(
-    container: Element,
+    container: Element | ShadowRoot,
     htmlParts: string[],
     textParts: string[],
     flags: Pick<ExtractedContent, 'hasImages' | 'hasFormulas' | 'hasTables' | 'hasCode'>,
-    processedImageSrcs: ReadonlySet<string> = new Set<string>(),
+    processedImageSrcs: Set<string> = new Set<string>(),
   ): void {
     const children = Array.from(container.children);
     if (this.DEBUG)
       console.log(
         `[DOMContentExtractor] processNodes: ${children.length} children in`,
-        container.tagName,
-        container.className,
+        container instanceof Element ? container.tagName : '#shadow-root',
+        container instanceof Element ? container.className : '',
       );
 
     // Check for Shadow DOM
-    const shadowRoot = container.shadowRoot;
+    const shadowRoot = container instanceof Element ? container.shadowRoot : null;
     if (shadowRoot) {
       if (this.DEBUG)
         console.log('[DOMContentExtractor] Found Shadow DOM! Processing shadow children');
+      this.processNodes(shadowRoot, htmlParts, textParts, flags, processedImageSrcs);
     }
 
     for (const child of children) {
@@ -395,6 +397,11 @@ export class DOMContentExtractor {
       // Skip certain elements
       if (this.shouldSkipElement(child)) {
         if (this.DEBUG) console.log('[DOMContentExtractor] Skipping element:', tagName);
+        continue;
+      }
+
+      if (child.shadowRoot && child.children.length === 0) {
+        this.processNodes(child.shadowRoot, htmlParts, textParts, flags, processedImageSrcs);
         continue;
       }
 
@@ -520,7 +527,20 @@ export class DOMContentExtractor {
       if (child.children.length > 0) {
         if (this.DEBUG)
           console.log('[DOMContentExtractor] Recursing into container:', tagName, child.className);
-        this.processNodes(child, htmlParts, textParts, flags, processedImageSrcs);
+        const hasDirectText = Array.from(child.childNodes).some(
+          (node) => node.nodeType === Node.TEXT_NODE && this.normalizeText(node.textContent || ''),
+        );
+        const onlyInlineChildren = Array.from(child.children).every((element) =>
+          /^(?:A|B|CODE|EM|I|IMG|SPAN|STRONG|SUB|SUP)$/.test(element.tagName),
+        );
+        if (hasDirectText && onlyInlineChildren) {
+          const processed = this.processInlineContent(child as HTMLElement);
+          if (processed.hasFormulas) flags.hasFormulas = true;
+          htmlParts.push(`<span>${processed.html}</span>`);
+          textParts.push(processed.text);
+        } else {
+          this.processNodes(child, htmlParts, textParts, flags, processedImageSrcs);
+        }
         continue;
       }
 

@@ -100,6 +100,37 @@ let responseActionObserver: MutationObserver | null = null;
 let cachedCanvasDocs: CanvasDoc[] | null = null;
 
 let activeExportDialog: ExportDialog | null = null;
+let activeExportController: AbortController | null = null;
+let activeExportSelectionCleanup: (() => void) | null = null;
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === 'AbortError';
+}
+
+function throwIfExportCancelled(signal?: AbortSignal): void {
+  if (signal?.aborted) throw new DOMException('Export cancelled', 'AbortError');
+}
+
+function exportRouteKey(url: string): string {
+  const parsed = new URL(url, location.href);
+  return `${parsed.origin}${parsed.pathname}${parsed.search}`;
+}
+
+function beginExportOperation(): AbortController {
+  activeExportController?.abort();
+  activeExportSelectionCleanup?.();
+  activeExportSelectionCleanup = null;
+  const controller = new AbortController();
+  activeExportController = controller;
+  return controller;
+}
+
+function cancelActiveExportOperation(): void {
+  activeExportController?.abort();
+  activeExportController = null;
+  activeExportSelectionCleanup?.();
+  activeExportSelectionCleanup = null;
+}
 
 /** Remove all injected Canvas export sections from the DOM after export completes */
 function removeCanvasExportSections(): void {
@@ -686,7 +717,7 @@ function resolveSelectionMessages(pairsInput: ChatTurn[]): ExportMessage[] {
     // ChatGPT retains these top-level virtual-list items even when it unloads
     // their inner message DOM. Their DOM order and data-turn-id-container value
     // are consequently the only reliable source for selection identity/order.
-    return turnContainers.slice(1).map((turn) => ({
+    return turnContainers.map((turn) => ({
       messageId: turn.id,
       role: turn.role,
       hostElement: turn.container,
@@ -1367,6 +1398,8 @@ async function executeExportSequence(
   usePromptAsTurnHeading?: boolean,
   speakerLabels?: ExportSpeakerLabels,
 ): Promise<void> {
+  const signal = activeExportController?.signal;
+  throwIfExportCancelled(signal);
   // Cache Canvas documents at the very start of the export sequence,
   // before we click the top node or cause any DOM updates/scrolling.
   if (!paramState && isAnyCanvasOpen()) {
@@ -1388,6 +1421,7 @@ async function executeExportSequence(
   // containers render their topmost nodes before we walk the DOM.
   if (!exportAdapter.shouldPreloadHistory()) {
     await scrollToTopAndRender(getUserSelectors());
+    throwIfExportCancelled(signal);
     await performFinalExport(state, dict, lang);
     return;
   }
@@ -1451,6 +1485,7 @@ async function executeExportSequence(
     beforeFingerprint,
     EXPORT_PRELOAD_WAIT_OPTIONS,
   );
+  throwIfExportCancelled(signal);
 
   if (changed) {
     console.log('[Gemini Voyager] History expanded (soft refresh). Clicking top node again...');
@@ -1505,9 +1540,13 @@ async function performFinalExport(
   lang: AppLanguage,
 ) {
   const t = (key: TranslationKey) => dict[lang]?.[key] ?? dict.en?.[key] ?? key;
+  const signal = activeExportController?.signal;
+  throwIfExportCancelled(signal);
 
   await new Promise((r) => setTimeout(r, FINAL_EXPORT_PREPARE_DELAY_MS));
+  throwIfExportCancelled(signal);
   await captureGeneratedUiScreenshots();
+  throwIfExportCancelled(signal);
 
   const pairs = collectChatPairs();
   const messages = resolveSelectionMessages(pairs);
@@ -1515,25 +1554,62 @@ async function performFinalExport(
     alert(t('export_dialog_warning'));
     return;
   }
+  document
+    .querySelectorAll<HTMLElement>('.gv-export-progress-overlay')
+    .forEach((overlay) => overlay.remove());
 
   const selectedIds = new Set<string>();
   let allMessageIds: string[] = [];
   const cleanupTasks: Array<() => void> = [];
   const idToHost = new Map<string, HTMLElement>();
   const idToCheckbox = new Map<string, HTMLButtonElement>();
-  const knownIds = new Set<string>();
+  const selectorBindings = new Map<
+    string,
+    { readonly host: HTMLElement; readonly cleanup: () => void }
+  >();
   const messageRoles = new Map<string, ExportMessageRole>();
   let pendingInitialSelectionId: string | null = state.initialSelectedMessageId || null;
+  let refreshTimer: number | null = null;
+  let uiCleaned = false;
+  let sessionSettled = false;
+  let resolveSession: () => void = () => {};
+  const sessionPromise = new Promise<void>((resolve) => {
+    resolveSession = resolve;
+  });
+  const selectionUrl = location.href;
+  const selectionTitle = getConversationTitleForExport();
 
   let autoSelectAll = false;
 
   const cleanup = () => {
+    if (uiCleaned) return;
+    uiCleaned = true;
+    if (refreshTimer !== null) {
+      window.clearTimeout(refreshTimer);
+      refreshTimer = null;
+    }
+    selectorBindings.forEach(({ cleanup: cleanupBinding }) => cleanupBinding());
+    selectorBindings.clear();
+    idToHost.clear();
+    idToCheckbox.clear();
     cleanupTasks.forEach((fn) => {
       try {
         fn();
       } catch {}
     });
     cleanupTasks.length = 0;
+  };
+
+  const settleSession = () => {
+    if (sessionSettled) return;
+    sessionSettled = true;
+    if (activeExportSelectionCleanup === cancelSession) activeExportSelectionCleanup = null;
+    resolveSession();
+  };
+
+  const cancelSession = () => {
+    cleanup();
+    settleSession();
   };
 
   const setSelected = (id: string, next: boolean) => {
@@ -1605,13 +1681,13 @@ async function performFinalExport(
 
   const attachSelectorIfNeeded = (msg: ExportMessage) => {
     messageRoles.set(msg.messageId, msg.role);
-    if (knownIds.has(msg.messageId)) return;
-    knownIds.add(msg.messageId);
+    const previousBinding = selectorBindings.get(msg.messageId);
+    if (previousBinding?.host === msg.hostElement) return;
+    previousBinding?.cleanup();
 
     const host = msg.hostElement;
     idToHost.set(msg.messageId, host);
     host.classList.add('gv-export-msg-host');
-    cleanupTasks.push(() => host.classList.remove('gv-export-msg-host'));
 
     const selector = document.createElement('div');
     selector.className = 'gv-export-msg-selector';
@@ -1652,13 +1728,21 @@ async function performFinalExport(
     });
 
     host.addEventListener('click', toggleSelection);
-    cleanupTasks.push(() => host.removeEventListener('click', toggleSelection));
 
     selector.appendChild(checkbox);
     host.appendChild(selector);
-    cleanupTasks.push(() => selector.remove());
 
     idToCheckbox.set(msg.messageId, checkbox);
+    setSelected(msg.messageId, selectedIds.has(msg.messageId));
+
+    const cleanupBinding = () => {
+      host.removeEventListener('click', toggleSelection);
+      host.classList.remove('gv-export-msg-host', 'gv-export-msg-selected');
+      selector.remove();
+      if (idToHost.get(msg.messageId) === host) idToHost.delete(msg.messageId);
+      if (idToCheckbox.get(msg.messageId) === checkbox) idToCheckbox.delete(msg.messageId);
+    };
+    selectorBindings.set(msg.messageId, { host, cleanup: cleanupBinding });
   };
 
   const syncMessages = (pairsInput: ChatTurn[]) => {
@@ -1745,48 +1829,59 @@ async function performFinalExport(
     } catch {}
   };
 
-  selectUserBtn.addEventListener('click', (ev) => {
-    swallow(ev);
+  const selectOnlyRole = async (role: Exclude<ExportMessageRole, 'unknown'>) => {
     autoSelectAll = false;
-
-    const userMessageIds = allMessageIds.filter((id) => messageRoles.get(id) === 'user');
-    const isOnlyUserSelected =
-      userMessageIds.length > 0 &&
-      selectedIds.size === userMessageIds.length &&
-      userMessageIds.every((id) => selectedIds.has(id));
-
-    if (isOnlyUserSelected) {
-      for (const id of allMessageIds) {
-        setSelected(id, false);
+    selectUserBtn.disabled = true;
+    selectAIBtn.disabled = true;
+    try {
+      throwIfExportCancelled(signal);
+      if (
+        exportAdapter.resolveSelectionRoles &&
+        allMessageIds.some((id) => messageRoles.get(id) === 'unknown')
+      ) {
+        const resolved = await withExportCollectingBanner(
+          () =>
+            showExportProgressOverlay(t, {
+              title: t('export_collecting_title'),
+              desc: t('export_collecting_desc'),
+            }),
+          () =>
+            exportAdapter.resolveSelectionRoles!(new Set(allMessageIds), {
+              signal,
+              expectedUrl: selectionUrl,
+            }),
+        );
+        resolved.forEach((resolvedRole, id) => messageRoles.set(id, resolvedRole));
       }
-    } else {
+
+      throwIfExportCancelled(signal);
+      const roleMessageIds = allMessageIds.filter((id) => messageRoles.get(id) === role);
+      const isOnlyRoleSelected =
+        roleMessageIds.length > 0 &&
+        selectedIds.size === roleMessageIds.length &&
+        roleMessageIds.every((id) => selectedIds.has(id));
       for (const id of allMessageIds) {
-        setSelected(id, messageRoles.get(id) === 'user');
+        setSelected(id, isOnlyRoleSelected ? false : messageRoles.get(id) === role);
+      }
+      updateBottomBar(bar);
+    } catch (error) {
+      if (!isAbortError(error)) alert(resolveExportErrorMessage(error, t));
+    } finally {
+      if (!signal?.aborted && !uiCleaned) {
+        selectUserBtn.disabled = false;
+        selectAIBtn.disabled = false;
       }
     }
-    updateBottomBar(bar);
+  };
+
+  selectUserBtn.addEventListener('click', (ev) => {
+    swallow(ev);
+    void selectOnlyRole('user');
   });
 
   selectAIBtn.addEventListener('click', (ev) => {
     swallow(ev);
-    autoSelectAll = false;
-
-    const aiMessageIds = allMessageIds.filter((id) => messageRoles.get(id) === 'assistant');
-    const isOnlyAISelected =
-      aiMessageIds.length > 0 &&
-      selectedIds.size === aiMessageIds.length &&
-      aiMessageIds.every((id) => selectedIds.has(id));
-
-    if (isOnlyAISelected) {
-      for (const id of allMessageIds) {
-        setSelected(id, false);
-      }
-    } else {
-      for (const id of allMessageIds) {
-        setSelected(id, messageRoles.get(id) === 'assistant');
-      }
-    }
-    updateBottomBar(bar);
+    void selectOnlyRole('assistant');
   });
   cleanupTasks.push(() => bar.remove());
   cleanupTasks.push(alignElementToConversationTitleCenter(bar));
@@ -1806,7 +1901,7 @@ async function performFinalExport(
     updateBottomBar(bar);
   });
 
-  const finish = () => {
+  const finishUi = () => {
     allMessageIds.forEach((id) => setSelected(id, false));
     selectedIds.clear();
     autoSelectAll = false;
@@ -1815,7 +1910,9 @@ async function performFinalExport(
 
   cancelBtn.addEventListener('click', (ev) => {
     swallow(ev);
-    finish();
+    activeExportController?.abort();
+    finishUi();
+    settleSession();
   });
 
   exportBtn.addEventListener('click', async (ev) => {
@@ -1825,58 +1922,66 @@ async function performFinalExport(
       return;
     }
 
-    await ensureGeneratedUiScreenshotPermission();
-    const selectedIdsForExport = new Set(selectedIds);
-    // Cleanup before capture/export so selection UI is not included in screenshots.
-    finish();
-    await captureGeneratedUiScreenshots();
-
-    const buildTurnsForSelection = exportAdapter.buildTurnsForSelection;
-    const turnsForExport = buildTurnsForSelection
-      ? await withExportCollectingBanner(
-          () =>
-            showExportProgressOverlay(t, {
-              title: t('export_collecting_title'),
-              desc: t('export_collecting_desc'),
-            }),
-          () => buildTurnsForSelection(selectedIdsForExport),
-        )
-      : buildTurnsForSelectedMessageIds(selectedIdsForExport, collectChatPairs());
-    if (turnsForExport.length === 0) {
-      alert(t('export_select_mode_empty'));
-      return;
-    }
-
-    const metadata: ConversationMetadata = {
-      url: location.href,
-      exportedAt: new Date().toISOString(),
-      count: turnsForExport.length,
-      title: getConversationTitleForExport(),
-      platform: exportAdapter.site.label,
-    };
-
-    let includeImageSource = true;
-    if (state.format === 'markdown') {
-      const hasSearchImages = turnsForExport.some(
-        (turn) =>
-          turn.assistantContent?.html.includes('attachment-container.search-images') ||
-          turn.assistantElement?.querySelector('.attachment-container.search-images') != null,
-      );
-      if (hasSearchImages) {
-        includeImageSource = confirm(t('export_md_include_source_confirm'));
-      }
-    }
-
-    const hideProgress = showExportProgressOverlay(t);
+    let hideProgress: (() => void) | null = null;
     try {
+      throwIfExportCancelled(signal);
+      await ensureGeneratedUiScreenshotPermission();
+      const selectedIdsForExport = new Set(selectedIds);
+      // Cleanup before capture/export so selection UI is not included in screenshots.
+      finishUi();
+      await captureGeneratedUiScreenshots();
+      throwIfExportCancelled(signal);
+
+      const buildTurnsForSelection = exportAdapter.buildTurnsForSelection;
+      const turnsForExport = buildTurnsForSelection
+        ? await withExportCollectingBanner(
+            () =>
+              showExportProgressOverlay(t, {
+                title: t('export_collecting_title'),
+                desc: t('export_collecting_desc'),
+              }),
+            () =>
+              buildTurnsForSelection(selectedIdsForExport, {
+                signal,
+                expectedUrl: selectionUrl,
+              }),
+          )
+        : buildTurnsForSelectedMessageIds(selectedIdsForExport, collectChatPairs());
+      throwIfExportCancelled(signal);
+      if (exportRouteKey(location.href) !== exportRouteKey(selectionUrl)) {
+        throw new Error('export_conversation_changed');
+      }
+      if (turnsForExport.length === 0) throw new Error('export_empty_selection');
+
+      const metadata: ConversationMetadata = {
+        url: selectionUrl,
+        exportedAt: new Date().toISOString(),
+        count: turnsForExport.length,
+        title: selectionTitle,
+        platform: exportAdapter.site.label,
+      };
+
+      let includeImageSource = true;
+      if (state.format === 'markdown') {
+        const hasSearchImages = turnsForExport.some(
+          (turn) =>
+            turn.assistantContent?.html.includes('attachment-container.search-images') ||
+            turn.assistantElement?.querySelector('.attachment-container.search-images') != null,
+        );
+        if (hasSearchImages) includeImageSource = confirm(t('export_md_include_source_confirm'));
+      }
+
+      hideProgress = showExportProgressOverlay(t);
       const resultPromise = exportPendingConversation(
         state,
         turnsForExport,
         metadata,
         includeImageSource,
+        signal,
       );
       const minVisiblePromise = new Promise((resolve) => setTimeout(resolve, 420));
       const [result] = await Promise.all([resultPromise, minVisiblePromise]);
+      throwIfExportCancelled(signal);
 
       if (!result.success) {
         alert(resolveExportErrorMessage(result.error, t));
@@ -1885,23 +1990,31 @@ async function performFinalExport(
           autoDismissMs: 5000,
         });
       }
-    } catch (err) {
-      console.error('[Gemini Voyager] Export error:', err);
-      alert('Export error occurred.');
+    } catch (error) {
+      if (!isAbortError(error)) {
+        console.error('[Gemini Voyager] Export error:', error);
+        alert(resolveExportErrorMessage(error, t));
+      }
     } finally {
-      hideProgress();
+      hideProgress?.();
       removeCanvasExportSections();
       removeGeneratedUiScreenshotSections();
+      settleSession();
     }
   });
 
   // Observe new lazy-loaded messages while selection mode is active.
   const root = getConversationRoot(getUserSelectors());
-  let refreshTimer: number | null = null;
   const scheduleRefresh = () => {
     if (refreshTimer) return;
     refreshTimer = window.setTimeout(() => {
       refreshTimer = null;
+      if (signal?.aborted || uiCleaned) return;
+      if (exportRouteKey(location.href) !== exportRouteKey(selectionUrl)) {
+        activeExportController?.abort();
+        cancelSession();
+        return;
+      }
       try {
         syncMessages(collectChatPairs());
         updateBottomBar(bar);
@@ -1918,16 +2031,19 @@ async function performFinalExport(
   // Escape to cancel
   const onKeyDown = (e: KeyboardEvent) => {
     if (e.key === 'Escape') {
-      finish();
-      document.removeEventListener('keydown', onKeyDown);
+      activeExportController?.abort();
+      finishUi();
+      settleSession();
     }
   };
   document.addEventListener('keydown', onKeyDown);
   cleanupTasks.push(() => document.removeEventListener('keydown', onKeyDown));
 
   // Initial sync
+  activeExportSelectionCleanup = cancelSession;
   syncMessages(pairs);
   updateBottomBar(bar);
+  await sessionPromise;
 }
 
 function showExportProgressOverlay(
@@ -2440,6 +2556,7 @@ export async function startExportButton(): Promise<() => void> {
       chrome.storage?.onChanged?.addListener(onStorageChange);
     } catch {}
     return () => {
+      cancelActiveExportOperation();
       toolbarHandle.remove();
       try {
         chrome.storage?.onChanged?.removeListener(onStorageChange);
@@ -2742,8 +2859,10 @@ async function showExportDialog(
 
   dialog.show({
     onExport: async (format, fontSize, imageWidth, usePromptAsTurnHeading, speakerLabels) => {
+      const controller = beginExportOperation();
       try {
         await speakerLabelPreferenceSaver.flush();
+        throwIfExportCancelled(controller.signal);
         await ensureGeneratedUiScreenshotPermission();
         if (format === 'image') {
           await saveImageExportWidth(imageWidth);
@@ -2760,7 +2879,12 @@ async function showExportDialog(
           speakerLabels,
         );
       } catch (err) {
-        console.error('[Gemini Voyager] Export error:', err);
+        if (!isAbortError(err)) console.error('[Gemini Voyager] Export error:', err);
+      } finally {
+        if (activeExportController === controller) {
+          activeExportController = null;
+          activeExportSelectionCleanup = null;
+        }
       }
     },
 

@@ -36,6 +36,7 @@ DOMContentExtractor.setExportAdapter({
     const image = child as HTMLImageElement;
     const src = image.src || image.getAttribute('src') || '';
     if (src && src !== 'about:blank' && !processedImageSrcs?.has(src)) {
+      processedImageSrcs?.add(src);
       const alt = image.getAttribute('alt')?.trim() || 'Image';
       flags.hasImages = true;
       htmlParts.push(
@@ -157,6 +158,59 @@ describe('DOMContentExtractor', () => {
     expect(extracted.attachments).toEqual([]);
     expect(extracted.text).toContain('![Photo](https://example.com/photo.png)');
     expect(extracted.text).not.toContain('📎 photo.png');
+  });
+
+  it('escapes user image attributes in exported HTML', () => {
+    const user = document.createElement('div');
+    user.innerHTML = `<img class="preview-image" src="https://example.com/photo.png" alt="&quot; onload=&quot;alert(1)" />`;
+
+    const extracted = DOMContentExtractor.extractUserContent(user);
+
+    expect(extracted.html).toContain('alt="&quot; onload=&quot;alert(1)"');
+    expect(extracted.html).not.toContain('alt="" onload=');
+  });
+
+  it('preserves direct text around nested inline elements', () => {
+    const assistant = document.createElement('div');
+    assistant.innerHTML = `
+      <message-content>
+        <div class="markdown"><div>Amount: <strong>42</strong> total</div></div>
+      </message-content>
+    `;
+
+    const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+
+    expect(extracted.text).toContain('Amount: **42** total');
+    expect(extracted.html).toContain('Amount:');
+    expect(extracted.html).toContain('total');
+  });
+
+  it('exports ordinary prose rendered inside an open shadow root', () => {
+    const assistant = document.createElement('div');
+    assistant.innerHTML = `<message-content><div class="markdown"><shadow-answer></shadow-answer></div></message-content>`;
+    const host = assistant.querySelector('shadow-answer');
+    const shadow = host?.attachShadow({ mode: 'open' });
+    if (shadow) shadow.innerHTML = '<p>Shadow response text</p>';
+
+    const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+
+    expect(extracted.text).toContain('Shadow response text');
+    expect(extracted.html).toContain('<p>Shadow response text</p>');
+  });
+
+  it('deduplicates repeated assistant image sources', () => {
+    const assistant = document.createElement('div');
+    assistant.innerHTML = `
+      <message-content><div class="markdown">
+        <img src="https://example.com/repeated.png" alt="One" />
+        <img src="https://example.com/repeated.png" alt="Two" />
+      </div></message-content>
+    `;
+
+    const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+
+    expect(extracted.text.split('repeated.png')).toHaveLength(2);
+    expect(extracted.html.split('repeated.png')).toHaveLength(2);
   });
 
   it('exports rendered Mermaid SVG in HTML while preserving Mermaid source in text', () => {

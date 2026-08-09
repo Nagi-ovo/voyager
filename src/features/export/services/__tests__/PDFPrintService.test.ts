@@ -346,7 +346,7 @@ describe('PDFPrintService', () => {
       '.gv-print-turn-assistant .gv-export-mermaid',
     );
     const image = wrapper?.querySelector<HTMLImageElement>('img.gv-export-mermaid-image');
-    expect(image?.src).toMatch(/^data:image\/svg\+xml;charset=utf-8,/);
+    expect(image?.src).toMatch(/^data:image\/svg\+xml(?:;charset=utf-8,|;base64,)/);
     expect(image?.alt).toBe('Workflow diagram');
     expect(wrapper?.querySelector('svg')).toBeNull();
     expect(wrapper?.getAttribute('data-gv-mermaid-theme')).toBe('light');

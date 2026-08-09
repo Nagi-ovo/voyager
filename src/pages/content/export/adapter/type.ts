@@ -13,3 +13,11 @@ export interface ChatGptTurnContainer {
   /** 顶层 [data-turn-id-container] 容器。 */
   container: HTMLElement;
 }
+
+export interface ExportSelectionOptions {
+  /** Cancels virtual-list scrolling when the plugin is disabled or the user cancels. */
+  readonly signal?: AbortSignal;
+
+  /** Route captured before collection; changing conversations invalidates the export. */
+  readonly expectedUrl?: string;
+}
