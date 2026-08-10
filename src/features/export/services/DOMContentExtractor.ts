@@ -2,6 +2,8 @@
  * DOM Content Extractor
  * Extracts rich content from Gemini's DOM structure preserving formatting
  */
+import { FormulaCopyService } from '@/features/formulaCopy/FormulaCopyService';
+
 import type { ExportAttachment } from '../types/export';
 
 export interface ExtractedContent {
@@ -481,24 +483,34 @@ export class DOMContentExtractor {
         continue;
       }
 
-      // Math block (display formula) - check both class and data-math attribute
-      if (child.classList.contains('math-block') || child.hasAttribute('data-math')) {
-        const latex = child.getAttribute('data-math') || '';
-        if (latex) {
-          if (this.DEBUG) console.log('[DOMContentExtractor] Found math-block, latex:', latex);
-          flags.hasFormulas = true;
-          // For HTML output: preserve the rendered formula HTML for PDF export
-          // Clone the element to preserve its rendered content
-          const clonedFormula = (child as HTMLElement).cloneNode(true) as HTMLElement;
-          // Ensure data-math attribute is preserved for potential re-rendering
-          if (!clonedFormula.hasAttribute('data-math')) {
-            clonedFormula.setAttribute('data-math', latex);
-          }
-          htmlParts.push(clonedFormula.outerHTML);
-          // For text output: use Markdown format
-          textParts.push(`\n$$\n${latex}\n$$\n`);
-          continue;
+      // Preserve Gemini, AI Studio, and ChatGPT formulas as semantic LaTeX.
+      // ChatGPT keeps its source on a wrapper via data-math-source while the
+      // visible .katex tree contains layout text that must not be flattened.
+      const latex = FormulaCopyService.extractLatexSource(child as HTMLElement);
+      if (
+        latex &&
+        (child.classList.contains('math-block') ||
+          child.classList.contains('katex-display') ||
+          child.hasAttribute('data-math') ||
+          child.hasAttribute('data-math-source'))
+      ) {
+        if (this.DEBUG) console.log('[DOMContentExtractor] Found math-block, latex:', latex);
+        flags.hasFormulas = true;
+        // For HTML output: preserve the rendered formula HTML for PDF export
+        // Clone the element to preserve its rendered content
+        const clonedFormula = (child as HTMLElement).cloneNode(true) as HTMLElement;
+        // Ensure data-math attribute is preserved for potential re-rendering
+        if (!clonedFormula.hasAttribute('data-math')) {
+          clonedFormula.setAttribute('data-math', latex);
         }
+        htmlParts.push(clonedFormula.outerHTML);
+        // For text output: use Markdown format
+        const isDisplay =
+          child.classList.contains('math-block') ||
+          child.classList.contains('katex-display') ||
+          child.querySelector('.katex-display') !== null;
+        textParts.push(isDisplay ? `\n$$\n${latex}\n$$\n` : `$${latex}$`);
+        continue;
       }
 
       // Standard Markdown renderers, including ChatGPT, emit bare <pre><code>
@@ -873,22 +885,27 @@ export class DOMContentExtractor {
           return;
         }
 
-        // Inline formula - check both class and data-math attribute
-        if (el.classList.contains('math-inline') || el.hasAttribute('data-math')) {
-          const latex = el.getAttribute('data-math') || '';
-          if (latex) {
-            hasFormulas = true;
-            // For HTML output: preserve the rendered formula HTML for PDF export
-            const clonedFormula = (el as HTMLElement).cloneNode(true) as HTMLElement;
-            // Ensure data-math attribute is preserved
-            if (!clonedFormula.hasAttribute('data-math')) {
-              clonedFormula.setAttribute('data-math', latex);
-            }
-            htmlParts.push(clonedFormula.outerHTML);
-            // For text output: use Markdown format
-            textParts.push(`$${latex}$`);
-            return;
+        // Inline formula. ChatGPT stores the source on data-math-source rather
+        // than inside the visual KaTeX subtree.
+        const latex = FormulaCopyService.extractLatexSource(el as HTMLElement);
+        if (
+          latex &&
+          (el.classList.contains('math-inline') ||
+            el.classList.contains('katex') ||
+            el.hasAttribute('data-math') ||
+            el.hasAttribute('data-math-source'))
+        ) {
+          hasFormulas = true;
+          // For HTML output: preserve the rendered formula HTML for PDF export
+          const clonedFormula = (el as HTMLElement).cloneNode(true) as HTMLElement;
+          // Ensure data-math attribute is preserved
+          if (!clonedFormula.hasAttribute('data-math')) {
+            clonedFormula.setAttribute('data-math', latex);
           }
+          htmlParts.push(clonedFormula.outerHTML);
+          // For text output: use Markdown format
+          textParts.push(`$${latex}$`);
+          return;
         }
 
         // Emphasis

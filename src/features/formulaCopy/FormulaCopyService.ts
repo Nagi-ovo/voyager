@@ -165,7 +165,7 @@ export class FormulaCopyService {
     }
 
     // Try to extract LaTeX: first from data-math (Gemini), then from annotation (AI Studio)
-    const latexSource = this.extractLatexSource(mathElement);
+    const latexSource = FormulaCopyService.extractLatexSource(mathElement);
     if (!latexSource) {
       this.logger.warn('Math element found but no LaTeX source available');
       return;
@@ -183,7 +183,7 @@ export class FormulaCopyService {
    * Extract LaTeX source from a math element
    * Supports both Gemini (data-math attribute) and AI Studio (annotation element)
    */
-  private extractLatexSource(element: HTMLElement): string | null {
+  public static extractLatexSource(element: HTMLElement): string | null {
     // 1. Try Gemini's data-math attribute
     const dataMath = element.getAttribute('data-math');
     if (dataMath) {

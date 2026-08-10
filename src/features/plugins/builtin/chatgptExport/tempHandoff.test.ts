@@ -324,6 +324,33 @@ describe('temporary chat handoff', () => {
     await scope.dispose();
   });
 
+  it('retries only the directive when the pending attachment is already visible', async () => {
+    const scope = new PluginScope();
+    const composer = addComposer('Existing draft');
+    const preview = document.createElement('div');
+    preview.dataset.testid = 'file-attachment';
+    preview.textContent = 'recovered-transcript.md';
+    document.body.appendChild(preview);
+    sessionStorage.setItem(
+      PENDING_KEY,
+      JSON.stringify({
+        delivery: {
+          mode: 'attachment',
+          directive: 'Read the recovered attachment',
+          attachment: '# Transcript',
+          filename: 'recovered-transcript.md',
+        },
+        storedAt: Date.now(),
+        accountScope: 'route:default',
+      }),
+    );
+
+    await expect(resumePendingHandoff(scope)).resolves.toBe('ready');
+    expect(composer.textContent).toBe('Existing draft\n\nRead the recovered attachment');
+    expect(sessionStorage.getItem(PENDING_KEY)).toBeNull();
+    await scope.dispose();
+  });
+
   it('resumes a matching pending handoff and preserves an existing draft', async () => {
     vi.stubGlobal('DataTransfer', undefined);
     vi.stubGlobal('ClipboardEvent', undefined);

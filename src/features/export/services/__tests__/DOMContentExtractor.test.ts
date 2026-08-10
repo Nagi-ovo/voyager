@@ -107,6 +107,28 @@ describe('DOMContentExtractor', () => {
     expect(extracted.text).toContain('```ts');
   });
 
+  it('preserves current ChatGPT inline and display KaTeX as semantic formulas', () => {
+    const assistant = document.createElement('div');
+    assistant.innerHTML = `
+      <div class="markdown">
+        <p>Inline <span data-math-source="E = mc^2"><span class="katex">visual inline math</span></span>.</p>
+        <div data-math-source="\\int_0^1 x\\,dx">
+          <span class="katex-display"><span class="katex">visual display math</span></span>
+        </div>
+      </div>
+    `;
+
+    const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+
+    expect(extracted.hasFormulas).toBe(true);
+    expect(extracted.text).toContain('$E = mc^2$');
+    expect(extracted.text).toContain('$$\n\\int_0^1 x\\,dx\n$$');
+    expect(extracted.text).not.toContain('visual inline math');
+    expect(extracted.text).not.toContain('visual display math');
+    expect(extracted.html).toContain('data-math-source="E = mc^2"');
+    expect(extracted.html).toContain('class="katex-display"');
+  });
+
   it('keeps a bare code block inside a list item exactly once', () => {
     const assistant = document.createElement('div');
     assistant.innerHTML = `

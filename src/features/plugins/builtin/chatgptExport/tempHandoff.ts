@@ -256,13 +256,14 @@ function hasAttachmentPreview(input: HTMLElement, filename: string): boolean {
 
 async function dispatchAttachmentAndVerify(input: HTMLElement, file: File): Promise<boolean> {
   const alreadyVisible = hasAttachmentPreview(input, file.name);
+  if (alreadyVisible) return true;
   if (!dispatchPaste(input, null, file)) return false;
-  if (!alreadyVisible && hasAttachmentPreview(input, file.name)) return true;
+  if (hasAttachmentPreview(input, file.name)) return true;
 
   const deadline = Date.now() + 1_200;
   while (Date.now() < deadline) {
     await new Promise((resolve) => window.setTimeout(resolve, 60));
-    if (!alreadyVisible && hasAttachmentPreview(input, file.name)) return true;
+    if (hasAttachmentPreview(input, file.name)) return true;
   }
   return false;
 }

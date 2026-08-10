@@ -212,6 +212,25 @@ describe('ChatGPT conversation snapshots', () => {
     expect(completed.text).toBe('Partial response completed');
   });
 
+  it('waits for an active ChatGPT response before completing collection', async () => {
+    const assistant = turn(0, 'a-streaming', 'assistant', 'Partial response');
+    const stop = document.createElement('button');
+    stop.dataset.testid = 'stop-button';
+    document.body.append(assistant, stop);
+    window.setTimeout(() => {
+      assistant.querySelector('p')!.textContent = 'Completed response';
+      stop.remove();
+    }, 30);
+
+    const messages = await collectChatGptConversation({
+      signal: new AbortController().signal,
+      settleMs: 10,
+    });
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0].text).toBe('Completed response');
+  });
+
   it('orders fallback messages by global virtual position when bottom is discovered first', () => {
     const scroller = document.createElement('main');
     scroller.style.overflowY = 'auto';

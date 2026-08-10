@@ -43,7 +43,10 @@ const TURN_SELECTOR = '[data-testid^="conversation-turn-"]';
 const DEFAULT_SETTLE_MS = 120;
 const DEFAULT_MAX_STEPS = 240;
 const TOP_STABLE_SAMPLES = 10;
+const BOTTOM_STABLE_SAMPLES = 3;
 const TOP_LOADING_SELECTOR = '[aria-busy="true"], [data-testid*="loading"]';
+const GENERATION_ACTIVE_SELECTOR =
+  '[data-testid="stop-button"], button[data-testid*="stop" i], button[aria-label*="stop generating" i]';
 let fallbackIdentitySequence = 0;
 const fallbackIdentities = new WeakMap<HTMLElement, { role: ChatGptMessageRole; id: string }>();
 
@@ -263,6 +266,41 @@ function emitProgress(
   });
 }
 
+async function waitForStableBottom(
+  root: ParentNode,
+  target: HTMLElement | null,
+  collected: Map<string, ChatGptMessageSnapshot>,
+  options: ConversationCollectionOptions,
+  settleMs: number,
+): Promise<void> {
+  const requiredSamples = settleMs === 0 ? 3 : BOTTOM_STABLE_SAMPLES;
+  const maximumSamples =
+    settleMs === 0 ? 50 : Math.max(requiredSamples, Math.ceil(120_000 / settleMs));
+  let stableSamples = 0;
+  let samples = 0;
+  let previousSignature = '';
+
+  while (stableSamples < requiredSamples) {
+    await wait(settleMs, options.signal);
+    assertNotAborted(options.signal);
+    if (target) target.scrollTop = Math.max(0, target.scrollHeight - target.clientHeight);
+    const mounted = collectMountedChatGptMessages(root);
+    mergeSnapshots(collected, mounted);
+    emitProgress(options, collected.size, target);
+    const signature = `${target?.scrollHeight ?? 0}:${mounted
+      .map(({ id, text }) => `${id}:${text}`)
+      .join('|')}`;
+    const generationActive = root.querySelector(GENERATION_ACTIVE_SELECTOR) !== null;
+    if (!generationActive && signature === previousSignature) stableSamples += 1;
+    else stableSamples = 0;
+    previousSignature = signature;
+    samples += 1;
+    if (samples >= maximumSamples && stableSamples < requiredSamples) {
+      throw new IncompleteConversationCollectionError(collected.size);
+    }
+  }
+}
+
 /**
  * Materialise a virtualised ChatGPT conversation from top to bottom, keeping a
  * detached snapshot of every stable message id and restoring the user's scroll
@@ -280,6 +318,7 @@ export async function collectChatGptConversation(
   if (!target || target.scrollHeight <= target.clientHeight + 4) {
     mergeSnapshots(collected, collectMountedChatGptMessages(root));
     emitProgress(options, collected.size, null);
+    await waitForStableBottom(root, null, collected, options, settleMs);
     return [...collected.values()].sort((left, right) => left.order - right.order);
   }
 
@@ -337,11 +376,14 @@ export async function collectChatGptConversation(
     // Always merge the window produced by the final scroll assignment. If the
     // safety limit or a stalled scroller stops us above the bottom, fail
     // explicitly instead of presenting a partial export as complete.
-    await wait(settleMs, options.signal);
-    assertNotAborted(options.signal);
     mergeSnapshots(collected, collectMountedChatGptMessages(root));
     emitProgress(options, collected.size, target);
-    const finalMaximum = Math.max(0, target.scrollHeight - target.clientHeight);
+    let finalMaximum = Math.max(0, target.scrollHeight - target.clientHeight);
+    if (target.scrollTop < finalMaximum - 2) {
+      throw new IncompleteConversationCollectionError(collected.size);
+    }
+    await waitForStableBottom(root, target, collected, options, settleMs);
+    finalMaximum = Math.max(0, target.scrollHeight - target.clientHeight);
     if (target.scrollTop < finalMaximum - 2) {
       throw new IncompleteConversationCollectionError(collected.size);
     }
