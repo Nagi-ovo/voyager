@@ -11,6 +11,10 @@ import { StorageKeys } from '@/core/types/common';
 import type { ILogger } from '@/core/types/common';
 import { getTranslationSyncUnsafe } from '@/utils/i18n';
 
+import { extractLatexSource } from './extractLatexSource';
+
+export { extractLatexSource } from './extractLatexSource';
+
 /**
  * Formula copy format options
  */
@@ -184,32 +188,7 @@ export class FormulaCopyService {
    * Supports both Gemini (data-math attribute) and AI Studio (annotation element)
    */
   public static extractLatexSource(element: HTMLElement): string | null {
-    // 1. Try Gemini's data-math attribute
-    const dataMath = element.getAttribute('data-math');
-    if (dataMath) {
-      return dataMath;
-    }
-
-    // 2. ChatGPT's client-side KaTeX layout omits the MathML annotation and
-    // keeps the original TeX on the semantic wrapper around .katex-display.
-    const dataMathSource = element.closest('[data-math-source]')?.getAttribute('data-math-source');
-    if (dataMathSource?.trim()) {
-      return dataMathSource.trim();
-    }
-
-    // 3. Try AI Studio's annotation element with encoding="application/x-tex"
-    const annotation = element.querySelector('annotation[encoding="application/x-tex"]');
-    if (annotation?.textContent) {
-      return annotation.textContent.trim();
-    }
-
-    // 4. Fallback: try any annotation element
-    const anyAnnotation = element.querySelector('annotation');
-    if (anyAnnotation?.textContent) {
-      return anyAnnotation.textContent.trim();
-    }
-
-    return null;
+    return extractLatexSource(element);
   }
 
   /**

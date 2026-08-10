@@ -13,6 +13,13 @@ import {
 } from './tempHandoff';
 
 const PENDING_KEY = 'gv-chatgpt-export-pending-handoff';
+const scopes: PluginScope[] = [];
+
+function createScope(): PluginScope {
+  const scope = new PluginScope();
+  scopes.push(scope);
+  return scope;
+}
 
 class FakeDataTransfer {
   readonly files: File[] = [];
@@ -84,7 +91,8 @@ function addTemporaryExit(
   return () => replacement;
 }
 
-afterEach(() => {
+afterEach(async () => {
+  await Promise.all(scopes.splice(0).map((scope) => scope.dispose()));
   document.body.replaceChildren();
   history.replaceState({}, '', '/');
   sessionStorage.clear();
@@ -150,7 +158,7 @@ describe('temporary chat handoff', () => {
   });
 
   it('hands an inline temporary transcript to the normal-chat composer and clears pending state', async () => {
-    const scope = new PluginScope();
+    const scope = createScope();
     addComposer();
     const getComposer = addTemporaryExit();
 
@@ -160,11 +168,10 @@ describe('temporary chat handoff', () => {
 
     expect(getComposer()?.textContent).toContain('Continue this transcript');
     expect(sessionStorage.getItem(PENDING_KEY)).toBeNull();
-    await scope.dispose();
   });
 
   it('waits for the replacement composer after the temporary flag clears', async () => {
-    const scope = new PluginScope();
+    const scope = createScope();
     history.replaceState({}, '', '/?temporary-chat=true');
     const staleComposer = addComposer('Temporary draft');
     const normalComposer: { current: HTMLElement | null } = { current: null };
@@ -187,11 +194,10 @@ describe('temporary chat handoff', () => {
 
     expect(staleComposer.textContent).toBe('Temporary draft');
     expect(normalComposer.current?.textContent).toContain('Deliver after transition');
-    await scope.dispose();
   });
 
   it('serializes observer resumption with an active handoff', async () => {
-    const scope = new PluginScope();
+    const scope = createScope();
     addComposer();
     const getComposer = addTemporaryExit();
 
@@ -204,11 +210,10 @@ describe('temporary chat handoff', () => {
     await expect(active).resolves.toBe('ready');
     await expect(resumed).resolves.toBeNull();
     expect(getComposer()?.textContent?.match(/Insert this transcript once/g)).toHaveLength(1);
-    await scope.dispose();
   });
 
   it('rejects an immediate handoff when temporary-chat exit switches accounts', async () => {
-    const scope = new PluginScope();
+    const scope = createScope();
     history.replaceState({}, '', '/u/0/?temporary-chat=true');
     const composer = addComposer('Existing draft');
     const toggle = document.createElement('button');
@@ -228,11 +233,10 @@ describe('temporary chat handoff', () => {
 
     expect(composer.textContent).toBe('Existing draft');
     expect(sessionStorage.getItem(PENDING_KEY)).toBeNull();
-    await scope.dispose();
   });
 
   it('expires pending entries before touching the composer', async () => {
-    const scope = new PluginScope();
+    const scope = createScope();
     const composer = addComposer('Existing draft');
     vi.spyOn(Date, 'now').mockReturnValue(120_000);
     sessionStorage.setItem(
@@ -247,11 +251,10 @@ describe('temporary chat handoff', () => {
     await expect(resumePendingHandoff(scope)).resolves.toBeNull();
     expect(composer.textContent).toBe('Existing draft');
     expect(sessionStorage.getItem(PENDING_KEY)).toBeNull();
-    await scope.dispose();
   });
 
   it('clears a pending handoff when the ChatGPT route account changes', async () => {
-    const scope = new PluginScope();
+    const scope = createScope();
     const composer = addComposer('Existing draft');
     history.replaceState({}, '', '/u/1/');
     sessionStorage.setItem(
@@ -266,13 +269,12 @@ describe('temporary chat handoff', () => {
     await expect(resumePendingHandoff(scope)).resolves.toBe('account-mismatch');
     expect(composer.textContent).toBe('Existing draft');
     expect(sessionStorage.getItem(PENDING_KEY)).toBeNull();
-    await scope.dispose();
   });
 
   it('preserves the composer draft when attachment delivery is rejected', async () => {
     vi.stubGlobal('DataTransfer', undefined);
     vi.stubGlobal('ClipboardEvent', undefined);
-    const scope = new PluginScope();
+    const scope = createScope();
     addComposer('Existing draft');
     const getComposer = addTemporaryExit();
 
@@ -287,12 +289,11 @@ describe('temporary chat handoff', () => {
 
     expect(getComposer()?.textContent).toBe('Existing draft');
     expect(sessionStorage.getItem(PENDING_KEY)).not.toBeNull();
-    await scope.dispose();
   });
 
   it('does not report success when ChatGPT ignores a synthetic attachment paste', async () => {
     enableSyntheticPaste();
-    const scope = new PluginScope();
+    const scope = createScope();
     addComposer('Existing draft');
     const getComposer = addTemporaryExit();
 
@@ -307,12 +308,11 @@ describe('temporary chat handoff', () => {
 
     expect(getComposer()?.textContent).toBe('Existing draft');
     expect(sessionStorage.getItem(PENDING_KEY)).not.toBeNull();
-    await scope.dispose();
   });
 
   it('reports attachment handoff success only after a file preview appears', async () => {
     enableSyntheticPaste();
-    const scope = new PluginScope();
+    const scope = createScope();
     addComposer();
     const getComposer = addTemporaryExit((composer) => {
       composer.addEventListener('paste', (event) => {
@@ -336,11 +336,10 @@ describe('temporary chat handoff', () => {
 
     expect(getComposer()?.textContent).toContain('Read the attachment');
     expect(sessionStorage.getItem(PENDING_KEY)).toBeNull();
-    await scope.dispose();
   });
 
   it('retries only the directive when the pending attachment is already visible', async () => {
-    const scope = new PluginScope();
+    const scope = createScope();
     const composer = addComposer('Existing draft');
     const preview = document.createElement('div');
     preview.dataset.testid = 'file-attachment';
@@ -363,13 +362,12 @@ describe('temporary chat handoff', () => {
     await expect(resumePendingHandoff(scope)).resolves.toBe('ready');
     expect(composer.textContent).toBe('Existing draft\n\nRead the recovered attachment');
     expect(sessionStorage.getItem(PENDING_KEY)).toBeNull();
-    await scope.dispose();
   });
 
   it('resumes a matching pending handoff and preserves an existing draft', async () => {
     vi.stubGlobal('DataTransfer', undefined);
     vi.stubGlobal('ClipboardEvent', undefined);
-    const scope = new PluginScope();
+    const scope = createScope();
     const composer = addComposer('Existing draft');
     sessionStorage.setItem(
       PENDING_KEY,
@@ -383,6 +381,5 @@ describe('temporary chat handoff', () => {
     await expect(resumePendingHandoff(scope)).resolves.toBe('ready');
     expect(composer.textContent).toBe('Existing draft\n\nRecovered handoff');
     expect(sessionStorage.getItem(PENDING_KEY)).toBeNull();
-    await scope.dispose();
   });
 });

@@ -2,7 +2,7 @@
  * DOM Content Extractor
  * Extracts rich content from Gemini's DOM structure preserving formatting
  */
-import { FormulaCopyService } from '@/features/formulaCopy/FormulaCopyService';
+import { extractLatexSource } from '@/features/formulaCopy/extractLatexSource';
 
 import type { ExportAttachment } from '../types/export';
 
@@ -499,14 +499,13 @@ export class DOMContentExtractor {
       // Preserve Gemini, AI Studio, and ChatGPT formulas as semantic LaTeX.
       // ChatGPT keeps its source on a wrapper via data-math-source while the
       // visible .katex tree contains layout text that must not be flattened.
-      const latex = FormulaCopyService.extractLatexSource(child as HTMLElement);
-      if (
-        latex &&
-        (child.classList.contains('math-block') ||
-          child.classList.contains('katex-display') ||
-          child.hasAttribute('data-math') ||
-          child.hasAttribute('data-math-source'))
-      ) {
+      const isFormula =
+        child.classList.contains('math-block') ||
+        child.classList.contains('katex-display') ||
+        child.hasAttribute('data-math') ||
+        child.hasAttribute('data-math-source');
+      const latex = isFormula ? extractLatexSource(child as HTMLElement) : null;
+      if (latex) {
         if (this.DEBUG) console.log('[DOMContentExtractor] Found math-block, latex:', latex);
         flags.hasFormulas = true;
         // For HTML output: preserve the rendered formula HTML for PDF export
@@ -900,14 +899,13 @@ export class DOMContentExtractor {
 
         // Inline formula. ChatGPT stores the source on data-math-source rather
         // than inside the visual KaTeX subtree.
-        const latex = FormulaCopyService.extractLatexSource(el as HTMLElement);
-        if (
-          latex &&
-          (el.classList.contains('math-inline') ||
-            el.classList.contains('katex') ||
-            el.hasAttribute('data-math') ||
-            el.hasAttribute('data-math-source'))
-        ) {
+        const isFormula =
+          el.classList.contains('math-inline') ||
+          el.classList.contains('katex') ||
+          el.hasAttribute('data-math') ||
+          el.hasAttribute('data-math-source');
+        const latex = isFormula ? extractLatexSource(el as HTMLElement) : null;
+        if (latex) {
           hasFormulas = true;
           // For HTML output: preserve the rendered formula HTML for PDF export
           const clonedFormula = (el as HTMLElement).cloneNode(true) as HTMLElement;
