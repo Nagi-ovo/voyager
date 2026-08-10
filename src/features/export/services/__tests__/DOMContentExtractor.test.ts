@@ -68,6 +68,22 @@ describe('DOMContentExtractor', () => {
     expect(extracted.attachments).toEqual([{ name: 'notes.pdf', type: 'pdf' }]);
   });
 
+  it('appends ChatGPT attachment pills outside a nested Markdown prompt', () => {
+    const user = document.createElement('div');
+    user.innerHTML = `
+      <div class="markdown"><p>Review the attached notes.</p></div>
+      <div data-testid="file-attachment">meeting-notes.pdf</div>
+    `;
+
+    const extracted = DOMContentExtractor.extractUserContent(user);
+
+    expect(extracted.attachments).toEqual([{ name: 'meeting-notes.pdf', type: 'pdf' }]);
+    expect(extracted.text).toContain('Review the attached notes.');
+    expect(extracted.text.match(/meeting-notes\.pdf/g)).toHaveLength(1);
+    expect(extracted.html).toContain('class="gv-export-attachment"');
+    expect(extracted.html).toContain('meeting-notes.pdf');
+  });
+
   it('preserves mixed text and rich link children with safe absolute destinations', () => {
     const user = document.createElement('div');
     const resolved = new URL('/docs', document.baseURI).href;

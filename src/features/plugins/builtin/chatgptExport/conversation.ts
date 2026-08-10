@@ -335,6 +335,10 @@ export async function collectChatGptConversation(
       await wait(settleMs, options.signal);
       assertNotAborted(options.signal);
       const mounted = collectMountedChatGptMessages(root);
+      // A history prepend can shift position-based fallback IDs. Until the top
+      // window is stable, retain only its latest representation so shifted
+      // copies of the same messages cannot leak into the final collection.
+      collected.clear();
       mergeSnapshots(collected, mounted);
       emitProgress(options, collected.size, target);
       const topSignature = `${target.scrollHeight}:${mounted

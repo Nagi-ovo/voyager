@@ -91,6 +91,18 @@ export class DOMContentExtractor {
       // fallback so paragraphs, links, images, and file pills are retained.
       const extracted = this.extractAssistantContent(element);
       extracted.attachments = attachments;
+      const missingAttachments = attachments.filter(({ name }) => !extracted.text.includes(name));
+      if (missingAttachments.length > 0) {
+        const attachmentText = missingAttachments.map(({ name }) => `\u{1f4ce} ${name}`).join('\n');
+        const attachmentHtml = missingAttachments
+          .map(
+            ({ name }) =>
+              `<div class="gv-export-attachment"><span class="gv-export-attachment-icon" aria-hidden="true">&#128206;</span><span class="gv-export-attachment-name">${this.escapeHtml(name)}</span></div>`,
+          )
+          .join('\n');
+        extracted.text = [extracted.text, attachmentText].filter(Boolean).join('\n\n');
+        extracted.html = [extracted.html, attachmentHtml].filter(Boolean).join('\n');
+      }
       return extracted;
     }
     const textParts: string[] = [];

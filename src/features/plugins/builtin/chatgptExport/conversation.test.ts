@@ -148,6 +148,75 @@ describe('ChatGPT conversation snapshots', () => {
     expect(currentTop).toBe(400);
   });
 
+  it('does not retain shifted fallback ids while history prepends at the top', async () => {
+    const scroller = document.createElement('main');
+    scroller.style.overflowY = 'auto';
+    let currentTop = 400;
+    let scrollHeight = 800;
+    let currentGlobalTop = 0;
+    let preloadScheduled = false;
+    const current = fallbackTurn('user', 'Current oldest message');
+    const currentHost = current.querySelector<HTMLElement>('[data-message-author-role]')!;
+    currentHost.getBoundingClientRect = () =>
+      ({
+        top: currentGlobalTop - currentTop,
+        bottom: currentGlobalTop - currentTop + 40,
+        left: 0,
+        right: 200,
+        width: 200,
+        height: 40,
+        x: 0,
+        y: currentGlobalTop - currentTop,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    scroller.appendChild(current);
+    Object.defineProperties(scroller, {
+      clientHeight: { configurable: true, value: 400 },
+      scrollHeight: { configurable: true, get: () => scrollHeight },
+      scrollTop: {
+        configurable: true,
+        get: () => currentTop,
+        set: (value: number) => {
+          currentTop = value;
+          if (value > 1 || preloadScheduled) return;
+          preloadScheduled = true;
+          window.setTimeout(() => {
+            currentGlobalTop = 400;
+            const older = fallbackTurn('user', 'Preloaded oldest message');
+            const olderHost = older.querySelector<HTMLElement>('[data-message-author-role]')!;
+            olderHost.getBoundingClientRect = () =>
+              ({
+                top: -currentTop,
+                bottom: -currentTop + 40,
+                left: 0,
+                right: 200,
+                width: 200,
+                height: 40,
+                x: 0,
+                y: -currentTop,
+                toJSON: () => ({}),
+              }) as DOMRect;
+            scroller.prepend(older);
+            scrollHeight = 1_200;
+          }, 30);
+        },
+      },
+    });
+    document.body.appendChild(scroller);
+
+    const messages = await collectChatGptConversation({
+      signal: new AbortController().signal,
+      settleMs: 10,
+    });
+
+    expect(messages.map(({ text }) => text)).toEqual([
+      'Preloaded oldest message',
+      'Current oldest message',
+    ]);
+    expect(new Set(messages.map(({ id }) => id))).toHaveLength(2);
+    expect(currentTop).toBe(400);
+  });
+
   it('retains repeated role and text messages across fallback-id window swaps', async () => {
     const scroller = document.createElement('main');
     scroller.style.overflowY = 'auto';
