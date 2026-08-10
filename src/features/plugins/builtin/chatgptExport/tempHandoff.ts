@@ -88,9 +88,12 @@ export function buildHandoffTranscript(messages: readonly ChatGptMessageSnapshot
     .join('\n\n');
 }
 
-export function planHandoff(messages: readonly ChatGptMessageSnapshot[]): HandoffDelivery {
+export function planHandoff(
+  messages: readonly ChatGptMessageSnapshot[],
+  language = navigator.language,
+): HandoffDelivery {
   const transcript = buildHandoffTranscript(messages);
-  const chinese = /^zh(?:-|_|$)/i.test(navigator.language);
+  const chinese = /^zh(?:-|_|$)/i.test(language);
   const title = chinese ? '[从临时对话继续]' : '[Continue from a temporary chat]';
   const inlineInstruction = chinese
     ? '下面是刚才临时对话的完整记录。请把它当作当前对话的既有上下文，保持原来的语气、约束和任务状态，从最后一条消息自然继续。'

@@ -106,6 +106,22 @@ describe('DOMContentExtractor', () => {
     expect(extracted.html).not.toContain('javascript:');
   });
 
+  it('collapses multiline ChatGPT link labels in Markdown output', () => {
+    const assistant = document.createElement('div');
+    assistant.innerHTML = `
+      <div class="markdown">
+        <p>Open <a href="https://example.com/notes.pdf">
+          notes.pdf
+        </a>.</p>
+      </div>
+    `;
+
+    const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+
+    expect(extracted.text).toContain('[notes.pdf](https://example.com/notes.pdf)');
+    expect(extracted.text).not.toContain('[\n');
+  });
+
   it('extracts standard ChatGPT code blocks exactly once', () => {
     const assistant = document.createElement('div');
     assistant.innerHTML = `

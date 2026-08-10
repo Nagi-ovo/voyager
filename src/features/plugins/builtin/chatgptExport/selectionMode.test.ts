@@ -85,6 +85,31 @@ describe('ChatGPT progressive inline message selection', () => {
     await scope.dispose();
   });
 
+  it('waits for a selected assistant response to finish streaming', async () => {
+    const assistant = turn(0, 'a-1', 'assistant', 'Partial response');
+    const stop = document.createElement('button');
+    stop.dataset.testid = 'stop-button';
+    document.body.append(assistant, stop);
+    const scope = new PluginScope();
+    const copy = getChatGptExportCopy();
+    const result = showInlineMessageSelection(scope, copy);
+
+    document.querySelector<HTMLButtonElement>('[data-gv-chatgpt-export-message-id="a-1"]')!.click();
+    const next = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(
+      (candidate) => candidate.textContent === copy.next,
+    )!;
+    expect(next.disabled).toBe(true);
+
+    assistant.querySelector<HTMLElement>('[data-message-author-role="assistant"]')!.textContent =
+      'Completed response';
+    stop.remove();
+    await expect.poll(() => next.disabled).toBe(false);
+    next.click();
+
+    await expect(result).resolves.toMatchObject([{ id: 'a-1', text: 'Completed response' }]);
+    await scope.dispose();
+  });
+
   it('cleans every checkbox, class, observer and toolbar when disabled', async () => {
     document.body.append(turn(0, 'u-1', 'user', 'Question'));
     const scope = new PluginScope();

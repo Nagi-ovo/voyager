@@ -410,7 +410,8 @@ export class DOMContentExtractor {
     text: string;
   } {
     const inline = this.processInlineContent(link);
-    const text = inline.text || this.normalizeText(link.textContent || '') || fallback;
+    const text =
+      this.normalizeText(inline.text) || this.normalizeText(link.textContent || '') || fallback;
     return {
       html: inline.html || this.escapeHtml(text),
       text,

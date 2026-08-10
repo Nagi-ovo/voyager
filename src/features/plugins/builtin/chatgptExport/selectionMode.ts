@@ -3,6 +3,7 @@ import { type Dispose, PluginScope } from '@/features/plugins/runtime/pluginScop
 import {
   type ChatGptMessageSnapshot,
   collectMountedChatGptMessagesWithHosts,
+  isChatGptGenerationActive,
 } from './conversation';
 import type { ChatGptExportCopy } from './i18n';
 
@@ -85,7 +86,10 @@ export function showInlineMessageSelection(
 
     const update = (): void => {
       count.textContent = `${copy.selectedCount(selected.size)} · ${copy.loadedCount(discovered.size)}`;
-      next.disabled = selected.size === 0;
+      const selectedResponseIsStreaming =
+        isChatGptGenerationActive() &&
+        [...selected.values()].some((message) => message.role === 'assistant');
+      next.disabled = selected.size === 0 || selectedResponseIsStreaming;
       for (const [id, { checkbox, host }] of controls) {
         const isSelected = selected.has(id);
         checkbox.dataset.selected = isSelected ? 'true' : 'false';
@@ -112,6 +116,12 @@ export function showInlineMessageSelection(
     scope.on(onlyAssistant, 'click', () => selectLoaded((message) => message.role === 'assistant'));
     scope.on(next, 'click', () => {
       if (selected.size === 0) return;
+      if (
+        isChatGptGenerationActive() &&
+        [...selected.values()].some((message) => message.role === 'assistant')
+      ) {
+        return;
+      }
       finish([...selected.values()].sort((left, right) => left.order - right.order));
     });
     scope.on(cancel, 'click', () => finish(null));

@@ -266,6 +266,10 @@ function emitProgress(
   });
 }
 
+export function isChatGptGenerationActive(root: ParentNode = document): boolean {
+  return root.querySelector(GENERATION_ACTIVE_SELECTOR) !== null;
+}
+
 async function waitForStableBottom(
   root: ParentNode,
   target: HTMLElement | null,
@@ -290,7 +294,7 @@ async function waitForStableBottom(
     const signature = `${target?.scrollHeight ?? 0}:${mounted
       .map(({ id, text }) => `${id}:${text}`)
       .join('|')}`;
-    const generationActive = root.querySelector(GENERATION_ACTIVE_SELECTOR) !== null;
+    const generationActive = isChatGptGenerationActive(root);
     if (!generationActive && signature === previousSignature) stableSamples += 1;
     else stableSamples = 0;
     previousSignature = signature;

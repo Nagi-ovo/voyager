@@ -123,6 +123,21 @@ describe('temporary chat handoff', () => {
     if (delivery.mode === 'inline') expect(delivery.text).toContain('TRANSCRIPT START');
   });
 
+  it('uses the resolved Voyager language for handoff instructions', () => {
+    addMessage('u-1', 'user', 'Question');
+    const messages = collectMountedChatGptMessages();
+
+    const chinese = planHandoff(messages, 'zh');
+    const english = planHandoff(messages, 'en');
+
+    expect(chinese.mode).toBe('inline');
+    expect(english.mode).toBe('inline');
+    if (chinese.mode === 'inline' && english.mode === 'inline') {
+      expect(chinese.text).not.toContain('[Continue from a temporary chat]');
+      expect(english.text).toContain('[Continue from a temporary chat]');
+    }
+  });
+
   it('uses an attachment plan for a long temporary transcript', () => {
     addMessage('u-long', 'user', 'x'.repeat(5_100));
     const delivery = planHandoff(collectMountedChatGptMessages());

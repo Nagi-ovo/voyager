@@ -108,6 +108,7 @@ class ChatGptExportPlugin {
   constructor(
     private readonly scope: PluginScope,
     private readonly copy: ReturnType<typeof getChatGptExportCopy>,
+    private readonly language: string,
   ) {}
 
   start(): void {
@@ -385,7 +386,10 @@ class ChatGptExportPlugin {
         metadata,
         selected: false,
       });
-      const result = await handoffTemporaryChat(operationScope, planHandoff(messages));
+      const result = await handoffTemporaryChat(
+        operationScope,
+        planHandoff(messages, this.language),
+      );
       if (result === 'ready') showExportToast(this.scope, this.copy.tempReady);
       else if (result === 'leave-failed') {
         showExportToast(this.scope, this.copy.tempLeaveFailed, 'error');
@@ -423,7 +427,8 @@ export async function activateChatGptExport(
   scope: PluginScope,
   _settings: PluginSettings = {},
 ): Promise<void> {
-  const copy = getChatGptExportCopy(await getCurrentLanguage());
+  const language = await getCurrentLanguage();
+  const copy = getChatGptExportCopy(language);
   if (scope.isDisposed) return;
-  new ChatGptExportPlugin(scope, copy).start();
+  new ChatGptExportPlugin(scope, copy, language).start();
 }
