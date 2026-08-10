@@ -172,4 +172,29 @@ describe('ChatGPT export native plugin lifecycle', () => {
     await vi.waitFor(() => expect(downloaded).toMatch(/-selected-\d{8}-\d{4}\.json$/));
     await scope.dispose();
   });
+
+  it('finishes old selection cleanup before mounting its replacement', async () => {
+    addConversation();
+    const scope = new PluginScope();
+    await activateChatGptExport(scope);
+
+    clickButton('Export conversation');
+    clickButton('Select messages to export');
+    await vi.waitFor(() =>
+      expect(document.querySelector('.gv-chatgpt-export-pick-bar')).not.toBeNull(),
+    );
+    const oldBar = document.querySelector<HTMLElement>('.gv-chatgpt-export-pick-bar')!;
+
+    clickButton('Export conversation');
+    clickButton('Select messages to export');
+
+    await vi.waitFor(() => expect(oldBar.isConnected).toBe(false));
+    await vi.waitFor(() =>
+      expect(document.querySelectorAll('.gv-chatgpt-export-pick-bar')).toHaveLength(1),
+    );
+    expect(document.body.classList.contains('gv-chatgpt-export-pick-active')).toBe(true);
+    expect(document.querySelectorAll('.gv-chatgpt-export-pick-host')).toHaveLength(2);
+    expect(document.querySelectorAll('.gv-chatgpt-export-pick-checkbox')).toHaveLength(2);
+    await scope.dispose();
+  });
 });

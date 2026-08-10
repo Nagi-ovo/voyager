@@ -101,6 +101,7 @@ class ChatGptExportPlugin {
   private stopButton: Dispose | null = null;
   private stopMenu: Dispose | null = null;
   private stopOperation: Dispose | null = null;
+  private operationRequest = 0;
   private stopReinjectTimer: Dispose | null = null;
   private resumeHandoffInFlight: Promise<void> | null = null;
   private resumeHandoffRequested = false;
@@ -324,25 +325,30 @@ class ChatGptExportPlugin {
   }
 
   private runOperation(action: (scope: PluginScope) => Promise<void>): void {
-    void this.stopOperation?.();
-    const operationScope = new PluginScope();
-    const stop = this.scope.child(
-      { destroy: () => operationScope.dispose() },
-      'chatgpt-export-operation',
-    );
-    this.stopOperation = stop;
-    void action(operationScope)
-      .catch((error: unknown) => {
+    const request = ++this.operationRequest;
+    void (async () => {
+      await this.stopOperation?.();
+      if (this.scope.isDisposed || request !== this.operationRequest) return;
+
+      const operationScope = new PluginScope();
+      const stop = this.scope.child(
+        { destroy: () => operationScope.dispose() },
+        'chatgpt-export-operation',
+      );
+      this.stopOperation = stop;
+      try {
+        await action(operationScope);
+      } catch (error: unknown) {
         if (error instanceof DOMException && error.name === 'AbortError') return;
         logger.error('ChatGPT export plugin operation failed', { error: String(error) });
         if (!this.scope.isDisposed) {
           showExportToast(this.scope, `${this.copy.exportFailed}: ${String(error)}`, 'error');
         }
-      })
-      .finally(() => {
+      } finally {
+        await stop();
         if (this.stopOperation === stop) this.stopOperation = null;
-        void stop();
-      });
+      }
+    })();
   }
 
   private startExport(selectMessages: boolean): void {

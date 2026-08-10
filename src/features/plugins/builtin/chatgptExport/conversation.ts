@@ -163,6 +163,7 @@ function readVirtualPosition(host: HTMLElement): { key: string; order?: number }
 function readStableIdentity(
   element: HTMLElement,
   role: ChatGptMessageRole,
+  claimedFallbackIds: Map<string, HTMLElement>,
 ): { id: string; synthetic: boolean } {
   const turn = element.closest<HTMLElement>(TURN_SELECTOR);
   const nativeId =
@@ -174,18 +175,29 @@ function readStableIdentity(
   if (nativeId) return { id: nativeId, synthetic: false };
 
   const host = turn || element;
-  const virtualPosition = readVirtualPosition(host);
-  if (virtualPosition) {
-    return { id: `fallback-${role}-${virtualPosition.key}`, synthetic: true };
+  const previous = fallbackIdentities.get(host);
+  if (previous?.role === role) {
+    const claimedBy = claimedFallbackIds.get(previous.id);
+    if (!claimedBy || claimedBy === host) {
+      claimedFallbackIds.set(previous.id, host);
+      return { id: previous.id, synthetic: true };
+    }
   }
 
-  // Outside a measurable virtual scroller, keep an identity only for this
-  // concrete DOM host. The ID must not change while a response is streaming.
-  const previous = fallbackIdentities.get(host);
-  if (previous?.role === role) return { id: previous.id, synthetic: true };
-  fallbackIdentitySequence += 1;
-  const id = `fallback-${role}-${fallbackIdentitySequence}`;
+  const virtualPosition = readVirtualPosition(host);
+  let id: string;
+  if (virtualPosition) id = `fallback-${role}-${virtualPosition.key}`;
+  else id = '';
+  if (!id || claimedFallbackIds.has(id)) {
+    fallbackIdentitySequence += 1;
+    id = `fallback-${role}-${fallbackIdentitySequence}`;
+  }
+
+  // Keep the first observed identity for this concrete host. Virtual position
+  // still reconciles replacement hosts, while layout shifts cannot duplicate a
+  // host that remains mounted.
   fallbackIdentities.set(host, { role, id });
+  claimedFallbackIds.set(id, host);
   return { id, synthetic: true };
 }
 
@@ -198,6 +210,7 @@ export function collectMountedChatGptMessagesWithHosts(
   root: ParentNode = document,
 ): MountedChatGptMessage[] {
   const messages = new Map<string, MountedChatGptMessage>();
+  const claimedFallbackIds = new Map<string, HTMLElement>();
   const candidates = Array.from(root.querySelectorAll<HTMLElement>(MESSAGE_SELECTOR));
   candidates.forEach((candidate, index) => {
     const element = getMessageElement(candidate);
@@ -207,7 +220,7 @@ export function collectMountedChatGptMessagesWithHosts(
     const text = normalizePlainText(element);
     if (!text && !element.querySelector('img, video, audio, pre, code, table, .katex')) return;
     const order = readOrder(element, index);
-    const identity = readStableIdentity(element, role);
+    const identity = readStableIdentity(element, role, claimedFallbackIds);
     const { id } = identity;
     const previous = messages.get(id);
     if (previous?.snapshot.element.hasAttribute('data-message-author-role')) return;

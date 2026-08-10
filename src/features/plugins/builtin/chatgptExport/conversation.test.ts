@@ -281,6 +281,47 @@ describe('ChatGPT conversation snapshots', () => {
     expect(completed.text).toBe('Partial response completed');
   });
 
+  it('keeps a mounted fallback id stable across virtual-scroller layout shifts', () => {
+    const scroller = document.createElement('main');
+    scroller.style.overflowY = 'auto';
+    let currentTop = 200;
+    let globalTop = 320;
+    Object.defineProperties(scroller, {
+      clientHeight: { configurable: true, value: 400 },
+      scrollHeight: { configurable: true, value: 1_000 },
+      scrollTop: {
+        configurable: true,
+        get: () => currentTop,
+        set: (value: number) => {
+          currentTop = value;
+        },
+      },
+    });
+    const message = fallbackTurn('assistant', 'Stable message');
+    const host = message.querySelector<HTMLElement>('[data-message-author-role]')!;
+    host.getBoundingClientRect = () =>
+      ({
+        top: globalTop - currentTop,
+        bottom: globalTop - currentTop + 40,
+        left: 0,
+        right: 200,
+        width: 200,
+        height: 40,
+        x: 0,
+        y: globalTop - currentTop,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    scroller.appendChild(message);
+    document.body.appendChild(scroller);
+
+    const beforeLayout = collectMountedChatGptMessages()[0];
+    globalTop = 440;
+    const afterLayout = collectMountedChatGptMessages()[0];
+
+    expect(afterLayout.id).toBe(beforeLayout.id);
+    expect(afterLayout.order).toBe(440);
+  });
+
   it('waits for an active ChatGPT response before completing collection', async () => {
     const assistant = turn(0, 'a-streaming', 'assistant', 'Partial response');
     const stop = document.createElement('button');
