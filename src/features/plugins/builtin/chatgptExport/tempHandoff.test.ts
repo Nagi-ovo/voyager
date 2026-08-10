@@ -417,4 +417,28 @@ describe('temporary chat handoff', () => {
     expect(composer.textContent).toBe('Existing draft\n\nRecovered handoff');
     expect(sessionStorage.getItem(PENDING_KEY)).toBeNull();
   });
+
+  it('preserves formatted composer DOM when fallback insertion appends a pending handoff', async () => {
+    vi.stubGlobal('DataTransfer', undefined);
+    vi.stubGlobal('ClipboardEvent', undefined);
+    const scope = createScope();
+    const composer = addComposer();
+    composer.innerHTML = '<p><strong>First paragraph</strong></p><p>Second paragraph</p>';
+    const originalDraft = composer.innerHTML;
+    sessionStorage.setItem(
+      PENDING_KEY,
+      JSON.stringify({
+        delivery: { mode: 'inline', text: 'Recovered handoff' },
+        storedAt: Date.now(),
+        accountScope: 'route:default',
+      }),
+    );
+
+    await expect(resumePendingHandoff(scope)).resolves.toBe('ready');
+    expect(composer.innerHTML.startsWith(originalDraft)).toBe(true);
+    expect(composer.querySelector('strong')?.textContent).toBe('First paragraph');
+    expect(composer.querySelectorAll('p')).toHaveLength(2);
+    expect(composer.textContent).toContain('Recovered handoff');
+    expect(sessionStorage.getItem(PENDING_KEY)).toBeNull();
+  });
 });

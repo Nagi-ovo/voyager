@@ -220,7 +220,7 @@ function insertComposerText(input: HTMLElement, text: string): boolean {
   const existing = readComposerText(input).trim();
   const next = existing ? `${existing}\n\n${text}` : text;
   if (input instanceof HTMLTextAreaElement || input instanceof HTMLInputElement) input.value = next;
-  else input.textContent = next;
+  else input.appendChild(document.createTextNode(existing ? `\n\n${text}` : text));
   input.dispatchEvent(
     new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }),
   );

@@ -68,6 +68,23 @@ describe('DOMContentExtractor', () => {
     expect(extracted.attachments).toEqual([{ name: 'notes.pdf', type: 'pdf' }]);
   });
 
+  it('preserves a semantic ChatGPT prompt beside an uploaded image preview', () => {
+    const user = document.createElement('div');
+    user.innerHTML = `
+      <div class="markdown"><p>Describe the uploaded diagram.</p></div>
+      <img class="preview-image" src="https://example.com/diagram.png" alt="Diagram" />
+    `;
+
+    const extracted = DOMContentExtractor.extractUserContent(user);
+
+    expect(extracted.text).toContain('Describe the uploaded diagram.');
+    expect(extracted.text).toContain('![Diagram](https://example.com/diagram.png)');
+    expect(extracted.html).toContain('<p>Describe the uploaded diagram.</p>');
+    expect(extracted.html).toContain('<img src="https://example.com/diagram.png" alt="Diagram" />');
+    expect(extracted.text.match(/diagram\.png/g)).toHaveLength(1);
+    expect(extracted.hasImages).toBe(true);
+  });
+
   it('appends ChatGPT attachment pills outside a nested Markdown prompt', () => {
     const user = document.createElement('div');
     user.innerHTML = `
