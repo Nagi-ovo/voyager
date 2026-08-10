@@ -96,6 +96,7 @@ afterEach(async () => {
   document.body.replaceChildren();
   history.replaceState({}, '', '/');
   sessionStorage.clear();
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -194,6 +195,40 @@ describe('temporary chat handoff', () => {
 
     expect(staleComposer.textContent).toBe('Temporary draft');
     expect(normalComposer.current?.textContent).toContain('Deliver after transition');
+  });
+
+  it('preserves pending delivery when the normal-chat composer mounts after the wait budget', async () => {
+    vi.useFakeTimers();
+    const scope = createScope();
+    history.replaceState({}, '', '/?temporary-chat=true');
+    const staleComposer = addComposer('Temporary draft');
+    const toggle = document.createElement('button');
+    toggle.dataset.testid = 'temporary-chat-toggle';
+    toggle.setAttribute('aria-label', 'Close temporary chat');
+    toggle.addEventListener('click', () => {
+      history.replaceState({}, '', '/');
+      toggle.remove();
+      staleComposer.remove();
+    });
+    const newChat = document.createElement('a');
+    newChat.dataset.testid = 'create-new-chat-button';
+    newChat.href = '/';
+    newChat.addEventListener('click', (event) => event.preventDefault());
+    document.body.append(toggle, newChat);
+
+    const handoff = handoffTemporaryChat(scope, {
+      mode: 'inline',
+      text: 'Deliver after a slow mount',
+    });
+    await vi.advanceTimersByTimeAsync(4_700);
+
+    await expect(handoff).resolves.toBe('composer-missing');
+    expect(sessionStorage.getItem(PENDING_KEY)).not.toBeNull();
+
+    const normalComposer = addComposer();
+    await expect(resumePendingHandoff(scope)).resolves.toBe('ready');
+    expect(normalComposer.textContent).toContain('Deliver after a slow mount');
+    expect(sessionStorage.getItem(PENDING_KEY)).toBeNull();
   });
 
   it('serializes observer resumption with an active handoff', async () => {

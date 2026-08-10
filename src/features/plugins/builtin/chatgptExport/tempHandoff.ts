@@ -346,6 +346,10 @@ export async function handoffTemporaryChat(
     }
     const input = await leaveTemporaryChat(scope);
     if (!input) {
+      // Once temporary mode has been left, a missing composer can simply mean
+      // the SPA is still mounting the new-chat editor. Keep the pending payload
+      // so the plugin's composer observer can resume delivery later.
+      if (!isTemporaryChat()) return 'composer-missing';
       clearPending();
       return 'leave-failed';
     }

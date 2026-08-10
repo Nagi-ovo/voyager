@@ -5,6 +5,7 @@ export type ChatGptMessageRole = 'user' | 'assistant';
 
 export interface ChatGptMessageSnapshot {
   readonly id: string;
+  readonly syntheticId: boolean;
   readonly role: ChatGptMessageRole;
   readonly text: string;
   readonly element: HTMLElement;
@@ -159,7 +160,10 @@ function readVirtualPosition(host: HTMLElement): { key: string; order?: number }
   return null;
 }
 
-function readStableId(element: HTMLElement, role: ChatGptMessageRole): string {
+function readStableIdentity(
+  element: HTMLElement,
+  role: ChatGptMessageRole,
+): { id: string; synthetic: boolean } {
   const turn = element.closest<HTMLElement>(TURN_SELECTOR);
   const nativeId =
     element.getAttribute('data-message-id') ||
@@ -167,20 +171,22 @@ function readStableId(element: HTMLElement, role: ChatGptMessageRole): string {
     turn?.getAttribute('data-message-id') ||
     turn?.getAttribute('data-testid') ||
     element.getAttribute('id');
-  if (nativeId) return nativeId;
+  if (nativeId) return { id: nativeId, synthetic: false };
 
   const host = turn || element;
   const virtualPosition = readVirtualPosition(host);
-  if (virtualPosition) return `fallback-${role}-${virtualPosition.key}`;
+  if (virtualPosition) {
+    return { id: `fallback-${role}-${virtualPosition.key}`, synthetic: true };
+  }
 
   // Outside a measurable virtual scroller, keep an identity only for this
   // concrete DOM host. The ID must not change while a response is streaming.
   const previous = fallbackIdentities.get(host);
-  if (previous?.role === role) return previous.id;
+  if (previous?.role === role) return { id: previous.id, synthetic: true };
   fallbackIdentitySequence += 1;
   const id = `fallback-${role}-${fallbackIdentitySequence}`;
   fallbackIdentities.set(host, { role, id });
-  return id;
+  return { id, synthetic: true };
 }
 
 /**
@@ -201,13 +207,15 @@ export function collectMountedChatGptMessagesWithHosts(
     const text = normalizePlainText(element);
     if (!text && !element.querySelector('img, video, audio, pre, code, table, .katex')) return;
     const order = readOrder(element, index);
-    const id = readStableId(element, role);
+    const identity = readStableIdentity(element, role);
+    const { id } = identity;
     const previous = messages.get(id);
     if (previous?.snapshot.element.hasAttribute('data-message-author-role')) return;
 
     messages.set(id, {
       snapshot: {
         id,
+        syntheticId: identity.synthetic,
         role,
         text,
         element: element.cloneNode(true) as HTMLElement,
