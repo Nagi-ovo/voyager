@@ -45,10 +45,6 @@ export function showInlineMessageSelection(
     const controls = new Map<string, MountedControl>();
     const touchedHosts = new Set<HTMLElement>();
     const fallbackIdByHost = new WeakMap<HTMLElement, string>();
-    const fallbackRecords = new Map<
-      string,
-      { readonly host: HTMLElement; readonly snapshot: ChatGptMessageSnapshot }
-    >();
     let fallbackIdSequence = 0;
     let stopSyncTimer: Dispose | null = null;
     let settled = false;
@@ -162,9 +158,9 @@ export function showInlineMessageSelection(
 
     // Offset-derived collector IDs are useful for walking detached virtual
     // windows, but a history prepend changes every following offset. Selection
-    // mode gives fallback hosts a local, position-independent identity. If
-    // React remounts a uniquely matching fallback message during the prepend,
-    // carry that identity to the replacement host as well.
+    // mode therefore gives each concrete fallback host a local identity. A
+    // remounted host gets a new identity because role and text cannot prove it
+    // represents the same turn.
     const resolveSelectionSnapshot = (
       snapshot: ChatGptMessageSnapshot,
       host: HTMLElement,
@@ -172,23 +168,11 @@ export function showInlineMessageSelection(
       if (!snapshot.syntheticId) return snapshot;
       let id = fallbackIdByHost.get(host);
       if (!id) {
-        const remounted = [...fallbackRecords].filter(
-          ([, previous]) =>
-            !previous.host.isConnected &&
-            previous.snapshot.role === snapshot.role &&
-            previous.snapshot.text === snapshot.text,
-        );
-        if (remounted.length === 1) {
-          id = remounted[0][0];
-        } else {
-          fallbackIdSequence += 1;
-          id = `selection-fallback-${fallbackIdSequence}`;
-        }
+        fallbackIdSequence += 1;
+        id = `selection-fallback-${fallbackIdSequence}`;
         fallbackIdByHost.set(host, id);
       }
-      const resolved = { ...snapshot, id };
-      fallbackRecords.set(id, { host, snapshot: resolved });
-      return resolved;
+      return { ...snapshot, id };
     };
 
     const sync = (): void => {

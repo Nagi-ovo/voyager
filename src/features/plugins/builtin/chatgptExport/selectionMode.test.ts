@@ -98,18 +98,19 @@ describe('ChatGPT progressive inline message selection', () => {
     const scroller = document.createElement('main');
     scroller.style.overflowY = 'auto';
     let currentTop = 0;
+    let currentGlobalTop = 0;
     const current = fallbackTurn('user', 'Current message');
     const currentMessage = current.querySelector<HTMLElement>('[data-message-author-role]')!;
     currentMessage.getBoundingClientRect = () =>
       ({
-        top: -currentTop,
-        bottom: -currentTop + 40,
+        top: currentGlobalTop - currentTop,
+        bottom: currentGlobalTop - currentTop + 40,
         left: 0,
         right: 200,
         width: 200,
         height: 40,
         x: 0,
-        y: -currentTop,
+        y: currentGlobalTop - currentTop,
         toJSON: () => ({}),
       }) as DOMRect;
     Object.defineProperties(scroller, {
@@ -145,31 +146,16 @@ describe('ChatGPT progressive inline message selection', () => {
         y: -currentTop,
         toJSON: () => ({}),
       }) as DOMRect;
-    const remountedCurrent = fallbackTurn('user', 'Current message');
-    const remountedMessage = remountedCurrent.querySelector<HTMLElement>(
-      '[data-message-author-role]',
-    )!;
-    remountedMessage.getBoundingClientRect = () =>
-      ({
-        top: 400 - currentTop,
-        bottom: 440 - currentTop,
-        left: 0,
-        right: 200,
-        width: 200,
-        height: 40,
-        x: 0,
-        y: 400 - currentTop,
-        toJSON: () => ({}),
-      }) as DOMRect;
-    scroller.replaceChildren(older, remountedCurrent);
+    currentGlobalTop = 400;
+    scroller.prepend(older);
 
     await expect
       .poll(() => document.querySelectorAll('.gv-chatgpt-export-pick-checkbox').length)
       .toBe(2);
-    expect(current.isConnected).toBe(false);
-    expect(remountedCurrent.querySelectorAll('.gv-chatgpt-export-pick-checkbox')).toHaveLength(1);
+    expect(current.isConnected).toBe(true);
+    expect(current.querySelectorAll('.gv-chatgpt-export-pick-checkbox')).toHaveLength(1);
     expect(
-      remountedCurrent
+      current
         .querySelector<HTMLButtonElement>('.gv-chatgpt-export-pick-checkbox')
         ?.getAttribute('aria-pressed'),
     ).toBe('true');
@@ -180,6 +166,39 @@ describe('ChatGPT progressive inline message selection', () => {
       { text: 'Older prepended message' },
       { text: 'Current message' },
     ]);
+    await scope.dispose();
+  });
+
+  it('does not transfer a fallback selection to a remounted message with identical text', async () => {
+    const scroller = document.createElement('main');
+    const original = fallbackTurn('user', 'Repeated message');
+    original.querySelector<HTMLElement>('[data-message-author-role]')!.dataset.instance =
+      'original';
+    scroller.append(original);
+    document.body.appendChild(scroller);
+    const scope = new PluginScope();
+    const copy = getChatGptExportCopy();
+    const result = showInlineMessageSelection(scope, copy);
+
+    original.querySelector<HTMLButtonElement>('.gv-chatgpt-export-pick-checkbox')!.click();
+    const replacement = fallbackTurn('user', 'Repeated message');
+    replacement.querySelector<HTMLElement>('[data-message-author-role]')!.dataset.instance =
+      'replacement';
+    scroller.replaceChildren(replacement);
+
+    await expect
+      .poll(() => replacement.querySelector<HTMLButtonElement>('.gv-chatgpt-export-pick-checkbox'))
+      .not.toBeNull();
+    expect(
+      replacement
+        .querySelector<HTMLButtonElement>('.gv-chatgpt-export-pick-checkbox')
+        ?.getAttribute('aria-pressed'),
+    ).toBe('false');
+    clickButton(copy.next);
+
+    const exported = await result;
+    expect(exported).toHaveLength(1);
+    expect(exported?.[0].element.dataset.instance).toBe('original');
     await scope.dispose();
   });
 
