@@ -1,0 +1,131 @@
+name: Approve Command
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  approve-contributor:
+    if: github.repository == 'Nagi-ovo/voyager' && startsWith(github.event.comment.body, '/approve')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Handle /approve command
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        with:
+          github-token: ${{ secrets.ANON_AGENT_TOKEN }}
+          script: |
+            const APPROVED_PATH = '.github/APPROVED_CONTRIBUTORS';
+            const MAINTAINERS_PATH = '.github/MAINTAINERS';
+
+            const commentBody = context.payload.comment.body.trim();
+            const match = commentBody.match(/^\/approve(?:\s+@?([A-Za-z0-9][A-Za-z0-9-]*))?\s*$/);
+            if (!match) {
+              core.info('Comment starts with /approve but does not match the command format; ignoring');
+              return;
+            }
+
+            const commenter = context.payload.comment.user.login;
+            const issueNumber = context.payload.issue.number;
+            const defaultBranch = context.payload.repository.default_branch;
+
+            async function getPermission(username) {
+              try {
+                const { data } = await github.rest.repos.getCollaboratorPermissionLevel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  username,
+                });
+                return data.permission;
+              } catch {
+                return null;
+              }
+            }
+
+            async function getFile(path) {
+              const { data } = await github.rest.repos.getContent({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                path,
+                ref: defaultBranch,
+              });
+              if (!('content' in data) || typeof data.content !== 'string') {
+                throw new Error(`Expected file content for ${path}`);
+              }
+              return { text: Buffer.from(data.content, 'base64').toString('utf8'), sha: data.sha };
+            }
+
+            function parseUserList(content) {
+              return new Set(content
+                .split('\n')
+                .map(line => line.trim().toLowerCase())
+                .filter(line => line && !line.startsWith('#')));
+            }
+
+            async function reply(message) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNumber,
+                body: message,
+              });
+            }
+
+            const maintainers = parseUserList((await getFile(MAINTAINERS_PATH)).text);
+            const isMaintainer = maintainers.has(commenter.toLowerCase()) &&
+              ['admin', 'maintain', 'write'].includes(await getPermission(commenter));
+            if (!isMaintainer) {
+              core.info(`${commenter} is not a verified maintainer; ignoring /approve`);
+              return;
+            }
+
+            let target = match[1] ?? null;
+            if (!target) {
+              if (!context.payload.issue.pull_request) {
+                await reply(`@${commenter} \`/approve\` without a username only works on a pull request (it approves the PR author). Use \`/approve @username\` here.`);
+                return;
+              }
+              const { data: pr } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: issueNumber,
+              });
+              target = pr.user.login;
+            }
+
+            try {
+              await github.rest.users.getByUsername({ username: target });
+            } catch {
+              await reply(`@${commenter} GitHub user \`${target}\` was not found; nothing changed.`);
+              return;
+            }
+
+            const approvedFile = await getFile(APPROVED_PATH);
+            if (parseUserList(approvedFile.text).has(target.toLowerCase())) {
+              await reply(`\`${target}\` is already in \`${APPROVED_PATH}\`; nothing changed.`);
+              return;
+            }
+
+            const newContent = approvedFile.text.replace(/\n*$/, '\n') + `${target}\n`;
+            await github.rest.repos.createOrUpdateFileContents({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              path: APPROVED_PATH,
+              branch: defaultBranch,
+              message: `chore: approve contributor ${target}`,
+              content: Buffer.from(newContent, 'utf8').toString('base64'),
+              sha: approvedFile.sha,
+            });
+
+            await github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: context.payload.comment.id,
+              content: '+1',
+            });
+            await reply([
+              `\`${target}\` has been added to \`${APPROVED_PATH}\` and can now submit any PR, including features.`,
+              '',
+              'If this was in response to a gate-closed pull request, a maintainer still needs to reopen that PR to admit it.',
+            ].join('\n'));
