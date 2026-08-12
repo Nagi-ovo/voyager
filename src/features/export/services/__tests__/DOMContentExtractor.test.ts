@@ -1,6 +1,8 @@
 /**
  * DOMContentExtractor unit tests
  */
+import { Marked, marked } from 'marked';
+import markedKatex from 'marked-katex-extension';
 import { describe, expect, it } from 'vitest';
 
 import { resolveExportAdapter } from '@/pages/content/export/adapter/platformAdapters';
@@ -701,6 +703,264 @@ describe('DOMContentExtractor', () => {
     expect(extracted.html).toMatch(/<li[^>]*>\s*Item 2/i);
     expect(extracted.html).not.toContain('sources-carousel-inline');
     expect(extracted.html).not.toContain('mat-icon');
+  });
+
+  describe('Gemini Notebook table exports', () => {
+    it('preserves inline LaTeX and removes source chips from tables with a thead', () => {
+      const assistant = document.createElement('div');
+      assistant.innerHTML = `
+        <message-content>
+          <div class="markdown">
+            <table-block>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Case</th>
+                    <th>Statistic</th>
+                    <th>Notes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>
+                      Text before <span class="math-inline" data-math="X \\sim B(15, 0.9)">
+                        <span class="katex"><span class="katex-html"><span class="vlist">X∼B(15, 0.9)</span></span></span>
+                      </span> text after
+                      <sources-carousel-inline>
+                        <source-inline-chips>
+                          <source-inline-chip>
+                            <div class="source-inline-chip-container"><span>PDF</span></div>
+                          </source-inline-chip>
+                        </source-inline-chips>
+                      </sources-carousel-inline>
+                    </td>
+                    <td><span data-math="p = 0.9"><span class="katex">p=0.9</span></span></td>
+                    <td><em>Emphasis</em> and <code>inline code</code></td>
+                  </tr>
+                  <tr>
+                    <td>Multiple formulas</td>
+                    <td>
+                      <span class="math-inline" data-math="\\mu = 90">μ=90</span>
+                      and
+                      <span class="math-inline" data-math="\\sigma = 3">σ=3</span>
+                    </td>
+                    <td>
+                      Kept text
+                      <span>
+                        <sources-carousel-inline>
+                          <source-inline-chip><span>PDF+1</span></source-inline-chip>
+                        </sources-carousel-inline>
+                      </span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </table-block>
+          </div>
+        </message-content>
+      `;
+
+      const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+
+      expect(extracted.hasTables).toBe(true);
+      expect(extracted.hasFormulas).toBe(true);
+      expect(extracted.text).toBe(
+        [
+          '| Case | Statistic | Notes |',
+          '| --- | --- | --- |',
+          '| Text before $X \\sim B(15, 0.9)$ text after | $p = 0.9$ | *Emphasis* and `inline code` |',
+          '| Multiple formulas | $\\mu = 90$ and $\\sigma = 3$ | Kept text |',
+        ].join('\n'),
+      );
+      expect(extracted.text).not.toContain('PDF');
+      expect(extracted.text).not.toContain('PDF+1');
+      expect(extracted.html).toContain('data-math="X \\sim B(15, 0.9)"');
+      expect(extracted.html).toContain('class="katex"');
+      expect(extracted.html).toContain('class="vlist"');
+      expect(extracted.html).not.toContain('sources-carousel-inline');
+      expect(extracted.html).not.toContain('source-inline-chip');
+    });
+
+    it('uses the same inline serialization when a tbody first row is the header', () => {
+      const assistant = document.createElement('div');
+      assistant.innerHTML = `
+        <message-content>
+          <div class="markdown">
+            <table-block>
+              <table>
+                <tbody>
+                  <tr>
+                    <th>
+                      Parameter <span class="math-inline" data-math="\\theta">θ</span>
+                      <source-inline-chip><span>PDF</span></source-inline-chip>
+                    </th>
+                    <th>Value</th>
+                  </tr>
+                  <tr>
+                    <td>
+                      Mean <span><span data-math="\\mu">μ</span></span>
+                      <span><source-inline-chip><span>PDF+1</span></source-inline-chip></span>
+                    </td>
+                    <td>
+                      <span class="math-inline" data-math="\\bar{x} = 356.5">x̄=356.5</span>
+                      and <span class="math-inline" data-math="s = 5">s=5</span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </table-block>
+          </div>
+        </message-content>
+      `;
+
+      const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+
+      expect(extracted.hasTables).toBe(true);
+      expect(extracted.hasFormulas).toBe(true);
+      expect(extracted.text).toBe(
+        [
+          '| Parameter $\\theta$ | Value |',
+          '| --- | --- |',
+          '| Mean $\\mu$ | $\\bar{x} = 356.5$ and $s = 5$ |',
+        ].join('\n'),
+      );
+      expect(extracted.text).not.toContain('PDF');
+      expect(extracted.text).not.toContain('PDF+1');
+      expect(extracted.html).toContain('data-math="\\bar{x} = 356.5"');
+      expect(extracted.html).not.toContain('source-inline-chip');
+    });
+
+    it('preserves whitespace between adjacent formatted nodes', () => {
+      const assistant = document.createElement('div');
+      assistant.innerHTML = `
+        <message-content>
+          <div class="markdown">
+            <table-block>
+              <table>
+                <tbody>
+                  <tr><th>Assessment</th></tr>
+                  <tr><td><strong>high</strong> <em>risk</em></td></tr>
+                </tbody>
+              </table>
+            </table-block>
+          </div>
+        </message-content>
+      `;
+
+      const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+
+      expect(extracted.text).toBe(['| Assessment |', '| --- |', '| **high** *risk* |'].join('\n'));
+    });
+
+    it('escapes table delimiters in formulas, text, and inline code', () => {
+      const assistant = document.createElement('div');
+      assistant.innerHTML = `
+        <message-content>
+          <div class="markdown">
+            <table-block>
+              <table>
+                <tbody>
+                  <tr><th>Formula</th><th>Text</th><th>Code</th></tr>
+                  <tr>
+                    <td><span class="math-inline" data-math="P(A|B)">P(A|B)</span></td>
+                    <td>left | right</td>
+                    <td><code>a|b</code></td>
+                  </tr>
+                </tbody>
+              </table>
+            </table-block>
+          </div>
+        </message-content>
+      `;
+
+      const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+
+      expect(extracted.text).toContain('| $P(A\\|B)$ | left \\| right | `a\\|b` |');
+
+      const rendered = document.createElement('div');
+      rendered.innerHTML = marked.parse(extracted.text) as string;
+      const cells = rendered.querySelectorAll('tbody tr:first-child td');
+      expect(cells).toHaveLength(3);
+      expect(Array.from(cells, (cell) => cell.textContent)).toEqual([
+        '$P(A|B)$',
+        'left | right',
+        'a|b',
+      ]);
+    });
+
+    it('preserves LaTeX vertical-bar commands through Markdown table rendering', () => {
+      const assistant = document.createElement('div');
+      assistant.innerHTML = `
+        <message-content>
+          <div class="markdown">
+            <table-block>
+              <table>
+                <tbody>
+                  <tr><th>Norm</th></tr>
+                  <tr>
+                    <td><span class="math-inline" data-math="\\|x\\|">‖x‖</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </table-block>
+          </div>
+        </message-content>
+      `;
+
+      const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+      const parser = new Marked(
+        markedKatex({
+          throwOnError: false,
+          output: 'html',
+          trust: true,
+          strict: false,
+        }),
+      );
+      const rendered = document.createElement('div');
+      rendered.innerHTML = parser.parse(extracted.text) as string;
+
+      expect(rendered.querySelector('.katex-html')?.textContent).toBe('∥x∥');
+      expect(rendered.querySelector('.katex-html .newline')).toBeNull();
+    });
+
+    it('recursively serializes formulas and filters sources inside formatting tags', () => {
+      const assistant = document.createElement('div');
+      assistant.innerHTML = `
+        <message-content>
+          <div class="markdown">
+            <table-block>
+              <table>
+                <tbody>
+                  <tr><th>Strong</th><th>Emphasis</th><th>Code</th></tr>
+                  <tr>
+                    <td>
+                      <strong>
+                        <span class="math-inline" data-math="\\theta">θ</span>
+                        <source-inline-chip><span>PDF</span></source-inline-chip>
+                      </strong>
+                    </td>
+                    <td>
+                      <em>
+                        value <span data-math="\\alpha">α</span>
+                        <source-inline-chip><span>PDF+1</span></source-inline-chip>
+                      </em>
+                    </td>
+                    <td><code>x<source-inline-chip><span>PDF</span></source-inline-chip></code></td>
+                  </tr>
+                </tbody>
+              </table>
+            </table-block>
+          </div>
+        </message-content>
+      `;
+
+      const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+
+      expect(extracted.hasFormulas).toBe(true);
+      expect(extracted.text).toContain('| **$\\theta$** | *value $\\alpha$* | `x` |');
+      expect(extracted.text).not.toContain('PDF');
+      expect(extracted.text).not.toContain('PDF+1');
+    });
   });
 
   it('preserves Gemini KaTeX radical image nodes nested in lists', () => {

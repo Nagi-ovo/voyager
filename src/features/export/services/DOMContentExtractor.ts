@@ -55,6 +55,16 @@ type ExportCodeBlock =
   | { kind: 'mermaid'; element: HTMLElement }
   | { kind: 'code'; element: HTMLElement };
 
+interface SerializedTableCell {
+  text: string;
+  hasFormulas: boolean;
+}
+
+interface SerializedTable {
+  rows: string[][];
+  hasFormulas: boolean;
+}
+
 export class DOMContentExtractor {
   private static DEBUG = false;
   private static exportAdapter: ExportPlatformAdapter;
@@ -467,6 +477,7 @@ export class DOMContentExtractor {
         const elementToExtract = (tableBlock || child) as HTMLElement;
         const tableContent = this.extractTable(elementToExtract);
         if (this.DEBUG) console.log('[DOMContentExtractor] Table content:', tableContent.text);
+        if (tableContent.hasFormulas) flags.hasFormulas = true;
         if (tableContent.text) {
           // Only add if table was successfully extracted
           flags.hasTables = true;
@@ -701,7 +712,10 @@ export class DOMContentExtractor {
   /**
    * Process inline content (text with inline formulas)
    */
-  private static processInlineContent(element: HTMLElement): {
+  private static processInlineContent(
+    element: HTMLElement,
+    forMarkdownTable = false,
+  ): {
     html: string;
     text: string;
     hasFormulas: boolean;
@@ -717,6 +731,11 @@ export class DOMContentExtractor {
         if (text.trim()) {
           htmlParts.push(this.escapeHtml(text));
           textParts.push(text);
+        } else if (text && (htmlParts.length > 0 || textParts.length > 0)) {
+          // Whitespace-only nodes can be the only separator between adjacent
+          // inline elements, for example <strong>high</strong> <em>risk</em>.
+          htmlParts.push(' ');
+          textParts.push(' ');
         }
       } else if (node.nodeType === Node.ELEMENT_NODE) {
         const el = node as Element;
@@ -725,32 +744,52 @@ export class DOMContentExtractor {
           return;
         }
 
-        if (this.exportAdapter.extractInlineFormula(el, htmlParts, textParts)) {
+        const formulaHtmlParts: string[] = [];
+        const formulaTextParts: string[] = [];
+
+        if (this.exportAdapter.extractInlineFormula(el, formulaHtmlParts, formulaTextParts)) {
           hasFormulas = true;
+          htmlParts.push(...formulaHtmlParts);
+
+          const formulaMarkdown = formulaTextParts.join('');
+          textParts.push(
+            forMarkdownTable
+              ? this.preserveLatexPipeCommandsInMarkdownTable(formulaMarkdown)
+              : formulaMarkdown,
+          );
           return;
         }
 
         // Emphasis
         if (el.tagName === 'I' || el.tagName === 'EM') {
-          const text = this.normalizeText(el.textContent || '');
-          htmlParts.push(`<em>${this.escapeHtml(text)}</em>`);
-          textParts.push(`*${text}*`);
+          const processed = this.processInlineContent(el as HTMLElement, forMarkdownTable);
+          if (processed.hasFormulas) hasFormulas = true;
+          if (processed.html || processed.text) {
+            htmlParts.push(`<em>${processed.html}</em>`);
+            textParts.push(`*${processed.text}*`);
+          }
           return;
         }
 
         // Strong
         if (el.tagName === 'B' || el.tagName === 'STRONG') {
-          const text = this.normalizeText(el.textContent || '');
-          htmlParts.push(`<strong>${this.escapeHtml(text)}</strong>`);
-          textParts.push(`**${text}**`);
+          const processed = this.processInlineContent(el as HTMLElement, forMarkdownTable);
+          if (processed.hasFormulas) hasFormulas = true;
+          if (processed.html || processed.text) {
+            htmlParts.push(`<strong>${processed.html}</strong>`);
+            textParts.push(`**${processed.text}**`);
+          }
           return;
         }
 
         // Code
         if (el.tagName === 'CODE' && !el.closest('pre')) {
-          const text = this.normalizeText(el.textContent || '');
-          htmlParts.push(`<code>${this.escapeHtml(text)}</code>`);
-          textParts.push(`\`${text}\``);
+          const processed = this.processInlineContent(el as HTMLElement, forMarkdownTable);
+          if (processed.hasFormulas) hasFormulas = true;
+          if (processed.html || processed.text) {
+            htmlParts.push(`<code>${processed.html}</code>`);
+            textParts.push(`\`${processed.text}\``);
+          }
           return;
         }
 
@@ -777,8 +816,8 @@ export class DOMContentExtractor {
     Array.from(element.childNodes).forEach(processNode);
 
     return {
-      html: htmlParts.join(''),
-      text: textParts.join(''),
+      html: htmlParts.join('').trim(),
+      text: textParts.join('').trim(),
       hasFormulas,
     };
   }
@@ -898,7 +937,11 @@ export class DOMContentExtractor {
   /**
    * Extract table content
    */
-  private static extractTable(element: HTMLElement): { html: string; text: string } {
+  private static extractTable(element: HTMLElement): {
+    html: string;
+    text: string;
+    hasFormulas: boolean;
+  } {
     // Accept either a container that holds a <table>, or a <table> element itself
     let table: HTMLTableElement | null = null;
     if (element.tagName && element.tagName.toLowerCase() === 'table') {
@@ -907,7 +950,7 @@ export class DOMContentExtractor {
       table = element.querySelector('table') as HTMLTableElement | null;
     }
     if (!table) {
-      return { html: '', text: '' };
+      return { html: '', text: '', hasFormulas: false };
     }
 
     // Extract HTML (clean version)
@@ -915,51 +958,78 @@ export class DOMContentExtractor {
     this.stripExportArtifacts(cleanTable);
 
     // Convert to Markdown
-    const normalizeCell = (cell: Element): string =>
-      this.normalizeText(cell.textContent || '').replace(/\|/g, '\\|');
-    const rows: string[][] = [];
+    const rowCells: Element[][] = [];
     const headerCells = Array.from(table.querySelectorAll('thead tr td, thead tr th'));
     if (headerCells.length > 0) {
-      rows.push(headerCells.map(normalizeCell));
+      rowCells.push(headerCells);
     }
 
     const bodyRows = table.querySelectorAll('tbody tr');
     bodyRows.forEach((row) => {
-      const cells = Array.from(row.querySelectorAll('td, th'));
-      rows.push(cells.map(normalizeCell));
+      rowCells.push(Array.from(row.querySelectorAll('td, th')));
     });
+    const serializedTable = this.serializeTableRows(rowCells);
 
     // Build Markdown table
     const markdownLines: string[] = [];
-    if (rows.length > 0) {
+    if (serializedTable.rows.length > 0) {
       // Header
-      markdownLines.push('| ' + rows[0].join(' | ') + ' |');
-      markdownLines.push('| ' + rows[0].map(() => '---').join(' | ') + ' |');
+      markdownLines.push('| ' + serializedTable.rows[0].join(' | ') + ' |');
+      markdownLines.push('| ' + serializedTable.rows[0].map(() => '---').join(' | ') + ' |');
       // Body
-      for (let i = 1; i < rows.length; i++) {
-        markdownLines.push('| ' + rows[i].join(' | ') + ' |');
-      }
-    } else {
-      // Fallback: treat first tbody row as header if no thead present
-      const firstBodyRow = table.querySelector('tbody tr');
-      if (firstBodyRow) {
-        const header = Array.from(firstBodyRow.querySelectorAll('td, th')).map(normalizeCell);
-        if (header.length > 0) {
-          markdownLines.push('| ' + header.join(' | ') + ' |');
-          markdownLines.push('| ' + header.map(() => '---').join(' | ') + ' |');
-          const rest = Array.from(table.querySelectorAll('tbody tr')).slice(1);
-          rest.forEach((row) => {
-            const cells = Array.from(row.querySelectorAll('td, th')).map(normalizeCell);
-            markdownLines.push('| ' + cells.join(' | ') + ' |');
-          });
-        }
+      for (let i = 1; i < serializedTable.rows.length; i++) {
+        markdownLines.push('| ' + serializedTable.rows[i].join(' | ') + ' |');
       }
     }
 
     return {
       html: cleanTable.outerHTML,
       text: markdownLines.join('\n'),
+      hasFormulas: serializedTable.hasFormulas,
     };
+  }
+
+  private static serializeTableRows(rowCells: Element[][]): SerializedTable {
+    let hasFormulas = false;
+    const rows = rowCells.map((cells) =>
+      cells.map((cell) => {
+        const serializedCell = this.serializeTableCell(cell as HTMLElement);
+        if (serializedCell.hasFormulas) hasFormulas = true;
+        return serializedCell.text;
+      }),
+    );
+
+    return { rows, hasFormulas };
+  }
+
+  private static serializeTableCell(cell: HTMLElement): SerializedTableCell {
+    const processed = this.processInlineContent(cell, true);
+
+    return {
+      text: this.escapeMarkdownTableCell(this.normalizeText(processed.text)),
+      hasFormulas: processed.hasFormulas,
+    };
+  }
+
+  /**
+   * Escape pipes before joining cells into a Markdown table row.
+   * Existing backslashes are doubled so the rendered cell preserves them while
+   * the final odd backslash still prevents the pipe from becoming a delimiter.
+   */
+  private static escapeMarkdownTableCell(text: string): string {
+    return text.replace(/(\\*)\|/g, (_match, backslashes: string) => {
+      return `${'\\'.repeat(backslashes.length * 2 + 1)}|`;
+    });
+  }
+
+  /**
+   * Keep LaTeX's `\|` double-vertical-bar command intact when the formula is
+   * embedded in a Markdown table. The table parser consumes backslashes used
+   * to escape pipes before the KaTeX extension receives the formula, so use
+   * the equivalent pipe-free command instead.
+   */
+  private static preserveLatexPipeCommandsInMarkdownTable(latex: string): string {
+    return latex.replace(/(?<!\\)\\\|/g, '\\Vert{}');
   }
 
   /**
