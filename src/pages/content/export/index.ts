@@ -64,7 +64,12 @@ import {
   renderResponseImageBlob,
 } from './responseImageCopy';
 import { resolveUniqueExportTurnIds } from './selectionIds';
-import { groupSelectedMessagesByTurn, resolveInitialSelectedMessageIds } from './selectionUtils';
+import {
+  groupSelectedMessagesByTurn,
+  reconcileExistingSelectionHost,
+  resolveInitialSelectedMessageIds,
+  shouldRefreshSelectionUi,
+} from './selectionUtils';
 import { resolveSidebarConversationTarget } from './sidebarConversationTarget';
 import {
   computeConversationFingerprint,
@@ -1682,7 +1687,16 @@ async function performFinalExport(
   const attachSelectorIfNeeded = (msg: ExportMessage) => {
     messageRoles.set(msg.messageId, msg.role);
     const previousBinding = selectorBindings.get(msg.messageId);
-    if (previousBinding?.host === msg.hostElement) return;
+    if (
+      reconcileExistingSelectionHost(
+        previousBinding?.host,
+        msg.hostElement,
+        selectedIds.has(msg.messageId),
+      )
+    ) {
+      setSelected(msg.messageId, selectedIds.has(msg.messageId));
+      return;
+    }
     previousBinding?.cleanup();
 
     const host = msg.hostElement;
@@ -2022,9 +2036,16 @@ async function performFinalExport(
     }, 250);
   };
 
-  const obs = new MutationObserver(() => scheduleRefresh());
+  const obs = new MutationObserver((mutations) => {
+    if (shouldRefreshSelectionUi(mutations)) scheduleRefresh();
+  });
   try {
-    obs.observe(root, { childList: true, subtree: true });
+    obs.observe(root, {
+      attributes: true,
+      attributeFilter: ['class'],
+      childList: true,
+      subtree: true,
+    });
     cleanupTasks.push(() => obs.disconnect());
   } catch {}
 

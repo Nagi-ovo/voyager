@@ -169,6 +169,9 @@ describe('chatgptCollectTurnContainers', () => {
         <section data-turn-id="assistant-image-1">
           <div class="group/imagegen-image">
             <img src="https://example.com/generated.png" alt="Generated poster" />
+            <style>
+              .cc440d50ba-express-entrypoint-button { display: flex; height: 32px; }
+            </style>
           </div>
         </section>
       </div>
@@ -178,6 +181,8 @@ describe('chatgptCollectTurnContainers', () => {
 
     expect(turns[0]?.assistantContent).toMatchObject({ hasImages: true });
     expect(turns[0]?.assistant).toContain('https://example.com/generated.png');
+    expect(turns[0]?.assistant).not.toContain('cc440d50ba-express-entrypoint-button');
+    expect(turns[0]?.assistantContent?.html).not.toContain('cc440d50ba-express-entrypoint-button');
     expect(HTMLElement.prototype.scrollIntoView).not.toHaveBeenCalled();
   });
 

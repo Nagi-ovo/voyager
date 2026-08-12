@@ -630,8 +630,14 @@ export class DOMContentExtractor {
    * Check if element should be skipped
    */
   private static shouldSkipElement(element: Element): boolean {
-    // Skip buttons, tooltips, and action elements
+    // Skip non-content HTML nodes and interactive/action elements. Some hosts
+    // colocate component styles inside message cards; their textContent is CSS,
+    // not conversation text.
     if (
+      element.tagName === 'STYLE' ||
+      element.tagName === 'SCRIPT' ||
+      element.tagName === 'NOSCRIPT' ||
+      element.tagName === 'TEMPLATE' ||
       element.tagName === 'BUTTON' ||
       element.tagName === 'MAT-ICON' ||
       // Gemini inline sources/citation chips (appear as link icons in export/print)
@@ -1078,6 +1084,10 @@ export class DOMContentExtractor {
    */
   private static stripExportArtifacts(root: HTMLElement): void {
     const selector = [
+      'style',
+      'script',
+      'noscript',
+      'template',
       'button',
       'mat-icon',
       'model-thoughts',
