@@ -37,10 +37,52 @@ export class FormulaCopyService {
   private static readonly MATHML_NS = 'http://www.w3.org/1998/Math/MathML';
   private static readonly ACTIVE_ROOT_CLASS = 'gv-formula-copy-enabled';
   private static readonly IGNORED_INTERACTION_CLASS = 'gv-formula-copy-ignored';
-  // Issue #902 only demonstrates Gemini turning an ordinary right arrow into
-  // an inline data-math formula. Keep this intentionally narrow so explicit
-  // KaTeX/MathML arrows on other sites and display equations remain copyable.
-  private static readonly PRESENTATIONAL_INLINE_ARROW_SOURCES = new Set(['\\rightarrow', '→']);
+  // Gemini renders prose arrows as inline data-math elements. Treat an
+  // arrow-only token as presentation, while formulas containing operands stay
+  // copyable. The surrounding checks keep this Gemini- and inline-specific.
+  private static readonly PRESENTATIONAL_INLINE_ARROW_COMMANDS = new Set([
+    '\\leftarrow',
+    '\\gets',
+    '\\rightarrow',
+    '\\to',
+    '\\leftrightarrow',
+    '\\Leftarrow',
+    '\\Rightarrow',
+    '\\Leftrightarrow',
+    '\\longleftarrow',
+    '\\longrightarrow',
+    '\\longleftrightarrow',
+    '\\Longleftarrow',
+    '\\Longrightarrow',
+    '\\Longleftrightarrow',
+    '\\mapsto',
+    '\\longmapsto',
+    '\\hookleftarrow',
+    '\\hookrightarrow',
+    '\\leftharpoonup',
+    '\\leftharpoondown',
+    '\\rightharpoonup',
+    '\\rightharpoondown',
+    '\\rightleftharpoons',
+    '\\leftrightharpoons',
+    '\\uparrow',
+    '\\downarrow',
+    '\\updownarrow',
+    '\\Uparrow',
+    '\\Downarrow',
+    '\\Updownarrow',
+    '\\nearrow',
+    '\\searrow',
+    '\\swarrow',
+    '\\nwarrow',
+    '\\implies',
+    '\\impliedby',
+    '\\iff',
+  ]);
+  private static readonly PRESENTATIONAL_INLINE_ARROW_GLYPH =
+    /^[\u2190-\u21ff\u27f0-\u27ff\u2900-\u297f]$/u;
+  private static readonly PRESENTATIONAL_INLINE_EXTENSIBLE_ARROW =
+    /^\\x(?:left|right|leftright)arrow(?:\[[^\]]*\])?\{(?:[^{}]|\{[^{}]*\})*\}$/;
   private readonly logger: ILogger;
   private readonly config: Required<Omit<FormulaCopyConfig, 'format'>>;
   private currentFormat: FormulaCopyFormat = 'latex';
@@ -912,7 +954,11 @@ export class FormulaCopyService {
     // Explicit delimiters are evidence that this is an intentional formula,
     // even when its entire mathematical content is an arrow.
     const normalized = formula.trim();
-    return FormulaCopyService.PRESENTATIONAL_INLINE_ARROW_SOURCES.has(normalized);
+    return (
+      FormulaCopyService.PRESENTATIONAL_INLINE_ARROW_COMMANDS.has(normalized) ||
+      FormulaCopyService.PRESENTATIONAL_INLINE_ARROW_GLYPH.test(normalized) ||
+      FormulaCopyService.PRESENTATIONAL_INLINE_EXTENSIBLE_ARROW.test(normalized)
+    );
   }
 
   /**

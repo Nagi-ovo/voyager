@@ -115,8 +115,24 @@ describe('FormulaCopyService', () => {
     expect(document.documentElement.classList.contains('gv-formula-copy-enabled')).toBe(false);
   });
 
-  it.each(['\\rightarrow', '→'])(
-    'ignores the demonstrated Gemini inline arrow source before first hover: %s',
+  it.each([
+    '\\rightarrow',
+    '\\to',
+    '\\longrightarrow',
+    '\\Rightarrow',
+    '\\Longrightarrow',
+    '\\leftrightarrow',
+    '\\rightleftharpoons',
+    '\\xrightarrow{\\text{step 1}}',
+    '\\xrightarrow{f(x)}',
+    '→',
+    '⟶',
+    '⇒',
+    '⟹',
+    '↔',
+    '⇌',
+  ])(
+    'ignores an isolated Gemini inline arrow source before first hover: %s',
     async (arrowSource) => {
       const wrapper = document.createElement('span');
       wrapper.classList.add('math-inline');
@@ -412,6 +428,23 @@ describe('FormulaCopyService', () => {
     await Promise.resolve();
 
     expect(writeTextMock).toHaveBeenCalledWith('$A \\rightarrow B$');
+  });
+
+  it('keeps a real formula containing an extensible arrow copyable', async () => {
+    const clipboard = navigator.clipboard as unknown as { write?: unknown };
+    clipboard.write = undefined;
+    const mathElement = document.createElement('span');
+    mathElement.setAttribute('data-math', 'A \\xrightarrow{\\text{process}} B');
+    mathElement.classList.add('math-inline');
+    document.body.appendChild(mathElement);
+
+    service.initialize();
+    mathElement.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+    expect(mathElement.classList.contains('gv-formula-copy-ignored')).toBe(false);
+    mathElement.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await Promise.resolve();
+
+    expect(writeTextMock).toHaveBeenCalledWith('$A \\xrightarrow{\\text{process}} B$');
   });
 
   it.each([
