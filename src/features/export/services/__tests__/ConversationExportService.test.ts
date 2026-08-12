@@ -6,9 +6,12 @@ import { JSDOM } from 'jsdom';
 import JSZip from 'jszip';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { resolveExportAdapter } from '@/pages/content/export/adapter/platformAdapters';
+
 import type { ChatTurn, ConversationMetadata, ExportLayout } from '../../types/export';
 import { ExportFormat } from '../../types/export';
 import { ConversationExportService } from '../ConversationExportService';
+import { DOMContentExtractor } from '../DOMContentExtractor';
 import { DeepResearchPDFPrintService } from '../DeepResearchPDFPrintService';
 import { ImageExportService } from '../ImageExportService';
 import { MarkdownFormatter } from '../MarkdownFormatter';
@@ -25,6 +28,7 @@ vi.mock('html-to-image', () => {
 const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>');
 global.document = dom.window.document as unknown as Document;
 global.window = dom.window as unknown as Window & typeof globalThis;
+DOMContentExtractor.setExportAdapter(resolveExportAdapter());
 
 function setUserAgentVendor(userAgent: string, vendor: string): void {
   Object.defineProperty(global.navigator, 'userAgent', {
@@ -402,6 +406,24 @@ describe('ConversationExportService', () => {
       JSON.stringify = originalStringify;
     });
 
+    it('does not download after the export is cancelled', async () => {
+      const downloadSpy = vi.spyOn(
+        ConversationExportService as unknown as { downloadJSON: (...args: unknown[]) => unknown },
+        'downloadJSON',
+      );
+      const controller = new AbortController();
+      controller.abort();
+
+      const result = await ConversationExportService.export(mockTurns, mockMetadata, {
+        format: ExportFormat.JSON,
+        signal: controller.signal,
+      });
+
+      expect(result).toMatchObject({ success: false });
+      expect(result.error).toContain('Export cancelled');
+      expect(downloadSpy).not.toHaveBeenCalled();
+    });
+
     it('normalizes image export Event errors for UI handling', async () => {
       const imageExportSpy = vi
         .spyOn(ImageExportService as unknown as { export: () => Promise<void> }, 'export')
@@ -561,7 +583,10 @@ describe('ConversationExportService', () => {
       expect(result.success).toBe(true);
       expect(result.filename).toMatch(/\.zip$/);
       expect(downloadSpy).not.toHaveBeenCalled();
-      expect(fetchSpy).toHaveBeenCalledWith('https://example.com/chart.png');
+      expect(fetchSpy).toHaveBeenCalledWith(
+        'https://example.com/chart.png',
+        expect.objectContaining({ remainingBytes: expect.any(Number) }),
+      );
     });
 
     it('should assign image filenames in source order even when fetch resolves out of order', async () => {
@@ -721,7 +746,7 @@ describe('ConversationExportService', () => {
       );
     });
 
-    it('should skip gv.fetchImageViaPage for blob urls', async () => {
+    it('should skip extension-runtime fetching for blob urls', async () => {
       const blobUrl = 'blob:https://gemini.google.com/abc-123';
       vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('blob fetch blocked'));
 
@@ -744,14 +769,7 @@ describe('ConversationExportService', () => {
       ).fetchImageForMarkdownPackaging(blobUrl);
 
       expect(fetched).toBeNull();
-      expect(sendMessageMock).toHaveBeenCalledWith(
-        { type: 'gv.fetchImage', url: blobUrl },
-        expect.any(Function),
-      );
-      expect(sendMessageMock).not.toHaveBeenCalledWith(
-        { type: 'gv.fetchImageViaPage', url: blobUrl },
-        expect.any(Function),
-      );
+      expect(sendMessageMock).not.toHaveBeenCalled();
     });
   });
 });

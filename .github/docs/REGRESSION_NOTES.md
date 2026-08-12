@@ -26,6 +26,119 @@ Regression test:
 Commit:
 ```
 
+## ChatGPT virtual shells must be repositioned after height reconciliation
+
+Symptom:
+
+Exporting a cold, long ChatGPT conversation could fail with
+`chatgpt_export_message_unavailable:<turn-id>` even though the selected message
+was present and became exportable after manually scrolling to it.
+
+Root cause:
+
+The materializer called `scrollIntoView()` only once. Mounting nearby turns made
+ChatGPT replace estimated virtual-shell heights with measured heights, which
+could move the requested shell several viewports away before it mounted. The
+remaining timeout loop only polled the offscreen shell and never corrected its
+position.
+
+Fix:
+
+While a requested shell remains unmounted, re-anchor it at a throttled interval
+only when height reconciliation has moved it outside the viewport.
+
+Regression test:
+
+`src/pages/content/export/adapter/__tests__/chatgpt.test.ts`
+(`repositions a virtual shell that moves offscreen after height reconciliation`).
+
+Commit:
+
+`fix(export): re-anchor shifted ChatGPT shells`
+
+## ChatGPT export UI must belong to the active plugin lifecycle
+
+Symptom:
+
+Rapidly disabling and re-enabling the ChatGPT exporter could let a stale startup
+remove the replacement toolbar. Disabling while export preferences were still
+loading could also show a dialog after the plugin was already off.
+
+Root cause:
+
+Asynchronous startup and dialog loading were not tied to an abortable plugin
+lifecycle, while repeated toolbar mounts shared one DOM root without ownership.
+
+Fix:
+
+Pass the plugin lifecycle signal through startup and dialog loading, replace the
+shared toolbar's click handler on remount, and allow only the current owner to
+remove the shared root.
+
+Regression test:
+
+`src/features/plugins/builtin/chatgptExport/runtime.test.ts` (`aborts the stale
+lifecycle before starting a replacement`) and
+`src/pages/content/export/__tests__/persistentExportToolbar.test.ts` (`does not
+duplicate-mount; second call updates text on existing instance`).
+
+Commit:
+
+`fix(export): address ChatGPT export review findings`
+
+## Temporary-chat handoff attachments need unique names
+
+Symptom:
+
+A second long temporary-chat handoff could reuse the first attachment preview
+and insert only the new instruction, silently handing the old transcript to the
+new chat.
+
+Root cause:
+
+Attachment recovery treats a visible matching filename as proof that the file
+was already delivered, while the original filename contained only the date.
+
+Fix:
+
+Give every handoff a timestamp plus nonce and reuse that identity for both the
+downloaded backup and the composer attachment.
+
+Regression test:
+
+`src/features/plugins/builtin/chatgptTemporaryHandoff/handoff.test.ts`
+(`gives separate handoffs unique filenames even at the same instant`).
+
+Commit:
+
+`feat(plugins): add ChatGPT temporary chat handoff`
+
+## Export fetch limits must not delete rendered content
+
+Symptom:
+
+PDF and PNG exports silently omitted images after the first 40.
+
+Root cause:
+
+The image fetch cap was implemented by removing later image nodes from the
+render tree, conflating bounded network inlining with content preservation.
+
+Fix:
+
+Inline at most 40 images, but leave every remaining rendered image and its
+original source intact for the browser renderer.
+
+Regression test:
+
+`src/features/export/services/__tests__/ImageExportService.test.ts` and
+`src/features/export/services/__tests__/PDFPrintService.test.ts` (`preserves
+images beyond the inlining fetch cap`).
+
+Commit:
+
+`fix(export): preserve bounded export content`
+
 ## Timeline navigation must validate the live scroll viewport
 
 Symptom:

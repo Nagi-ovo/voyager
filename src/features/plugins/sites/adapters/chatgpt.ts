@@ -13,7 +13,7 @@ export const chatgptAdapter: SiteAdapter = {
   matches: ['https://chatgpt.com/*', 'https://chat.openai.com/*'],
   selectors: {
     userTurn: '[data-message-author-role="user"]',
-    assistantTurn: '[data-message-author-role="assistant"]',
+    assistantTurn: '[data-message-author-role="assistant"], [class*="group/imagegen-image"]',
     composer: '#prompt-textarea, div[contenteditable="true"]',
     sidebar: 'nav[aria-label], #stage-slideover-sidebar',
   },

@@ -3,8 +3,13 @@
  */
 import { describe, expect, it } from 'vitest';
 
+import { resolveExportAdapter } from '@/pages/content/export/adapter/platformAdapters';
+
 import type { ChatTurn, ConversationMetadata } from '../../types/export';
+import { DOMContentExtractor } from '../DOMContentExtractor';
 import { MarkdownFormatter } from '../MarkdownFormatter';
+
+DOMContentExtractor.setExportAdapter(resolveExportAdapter());
 
 describe('MarkdownFormatter', () => {
   const mockMetadata: ConversationMetadata = {
@@ -78,6 +83,34 @@ describe('MarkdownFormatter', () => {
       );
 
       expect(markdown).toContain('## Turn 1: Review this diagram: Architecture Be \\*brief\\*\\.');
+      expect(markdown).toContain('### 👤 User');
+      expect(markdown).toContain('https://example.com/diagram.png');
+    });
+
+    it('keeps uploaded media from a materialized user snapshot when using prompt headings', () => {
+      const markdown = MarkdownFormatter.format(
+        [
+          {
+            user: 'Review this diagram',
+            assistant: 'Done.',
+            starred: false,
+            omitEmptySections: true,
+            userContent: {
+              text: '![Architecture](https://example.com/diagram.png)\n\nReview this diagram',
+              html: '<img src="https://example.com/diagram.png" /><p>Review this diagram</p>',
+              attachments: [],
+              hasImages: true,
+              hasFormulas: false,
+              hasTables: false,
+              hasCode: false,
+            },
+          },
+        ],
+        mockMetadata,
+        { usePromptAsTurnHeading: true },
+      );
+
+      expect(markdown).toContain('## Turn 1: Architecture Review this diagram');
       expect(markdown).toContain('### 👤 User');
       expect(markdown).toContain('https://example.com/diagram.png');
     });

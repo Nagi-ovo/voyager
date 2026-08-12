@@ -9,7 +9,6 @@ import {
 } from '@/core/utils/extensionContext';
 import { isGeminiEnterpriseEnvironment } from '@/core/utils/gemini';
 import { WATERMARK_STORAGE_KEYS } from '@/core/utils/watermarkSettings';
-import { startFormulaCopy } from '@/features/formulaCopy';
 import { startPluginHost } from '@/features/plugins';
 import { resolvePluginPlatformId } from '@/features/plugins/sites/registry';
 import { initI18n } from '@/utils/i18n';
@@ -41,6 +40,7 @@ import { startFolderProject } from './folderProject/index';
 import { startFolderSpacingAdjuster } from './folderSpacing/index';
 import { isForkFeatureEnabledValue } from './fork/featureFlag';
 import { startFork } from './fork/index';
+import { startNativeFormulaCopyForContent } from './formulaCopyStartup';
 import { startGemsHider } from './gemsHider/index';
 import { startGemsSidebar } from './gemsSidebar/index';
 import { startInputCollapse } from './inputCollapse/index';
@@ -308,7 +308,10 @@ async function initializeFeatures(): Promise<void> {
         CleanupPositions.CleanupSendBehavior,
       );
       startPreventAutoScroll();
-      startFormulaCopy();
+      await startNativeFormulaCopyForContent({
+        registerCleanup: (cleanup) =>
+          cleanupManager.registerCleanupFunction(cleanup, CleanupPositions.CleanupFormulaCopy),
+      });
       await delay(LIGHT_FEATURE_INIT_DELAY);
 
       // Quote Reply - conditionally start based on storage setting
@@ -470,7 +473,10 @@ async function initializeFeatures(): Promise<void> {
       await delay(LIGHT_FEATURE_INIT_DELAY);
 
       // Formula copy support for AI Studio
-      startFormulaCopy();
+      await startNativeFormulaCopyForContent({
+        registerCleanup: (cleanup) =>
+          cleanupManager.registerCleanupFunction(cleanup, CleanupPositions.CleanupFormulaCopy),
+      });
       await delay(LIGHT_FEATURE_INIT_DELAY);
 
       // Send behavior (Enter to send)
@@ -660,6 +666,11 @@ function handleVisibilityChange(): void {
       );
     }
 
+    // Initialize i18n for plugin platforms (Claude/ChatGPT) so export translations load
+    if (pluginPlatformId && !isSupportedSite) {
+      initI18n().catch((e) => console.error('[Gemini Voyager] i18n init error:', e));
+    }
+
     // If not a known site, check if it's a custom website (async)
     if (!isSupportedSite) {
       // Third-party plugin platforms (Claude / ChatGPT / Grok …): the plugin
@@ -684,6 +695,8 @@ function handleVisibilityChange(): void {
           .catch((error) => {
             console.error('[Gemini Voyager] Prompt Manager init error on plugin platform:', error);
           });
+        // ChatGPT export is driven by PluginHost via the voyager.chatgpt-export
+        // builtin plugin (opt-in), not started unconditionally here.
         // Formula copy here is driven by PluginHost via the voyager.formula-copy
         // builtin plugin (opt-in), not started unconditionally.
         return;

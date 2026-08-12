@@ -1,0 +1,367 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { DOMContentExtractor } from '@/features/export/services/DOMContentExtractor';
+
+import {
+  buildChatGptTurnsForSelection,
+  chatgptCollectTurnContainers,
+  resolveChatGptSelectionRoles,
+} from '../chatgpt';
+import type { ExportPlatformAdapter } from '../platformAdapters';
+
+const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
+
+function setImageExportAdapter(): void {
+  DOMContentExtractor.setExportAdapter({
+    extractUserImage: (element: HTMLElement) => element.querySelectorAll('img'),
+    extractUserText: () => undefined,
+    getUserAttachmentCandidates: () => [],
+    extractAssistantImage: ((child, htmlParts, textParts, flags, tagName) => {
+      if (tagName !== 'img') return undefined;
+      const image = child as HTMLImageElement;
+      flags.hasImages = true;
+      htmlParts.push(`<img src="${image.src}" alt="${image.alt}" />`);
+      textParts.push(`![${image.alt}](${image.src})`);
+      return true;
+    }) as ExportPlatformAdapter['extractAssistantImage'],
+    extractFormula: () => undefined,
+    extractCodeBlock: () => undefined,
+    extractInlineFormula: () => undefined,
+  } as unknown as ExportPlatformAdapter);
+}
+
+beforeEach(() => {
+  document.body.replaceChildren();
+  Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+    configurable: true,
+    value: vi.fn(),
+  });
+  vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+  DOMContentExtractor.setExportAdapter({
+    extractUserImage: (element: HTMLElement) => element.querySelectorAll('img'),
+    extractUserText: (
+      _lines: NodeListOf<HTMLElement>,
+      textParts: string[],
+      element: HTMLElement,
+    ) => {
+      const text = DOMContentExtractor.normalizeText(element.textContent || '');
+      if (text) textParts.push(text);
+    },
+    getUserAttachmentCandidates: () => [],
+    extractAssistantImage: () => undefined,
+    extractFormula: () => undefined,
+    extractCodeBlock: () => undefined,
+    extractInlineFormula: () => undefined,
+  } as unknown as ExportPlatformAdapter);
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+  if (originalScrollIntoView) {
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: originalScrollIntoView,
+    });
+  } else {
+    delete (HTMLElement.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+  }
+});
+
+describe('chatgptCollectTurnContainers', () => {
+  it('ignores ChatGPT virtual-list root without dropping the first real turn', () => {
+    document.body.innerHTML = `
+      <div data-turn-id-container="client-created-root"></div>
+      <div data-turn-id-container="user-1">
+        <div data-message-author-role="user">First prompt</div>
+      </div>
+      <div data-turn-id-container="assistant-1">
+        <div data-message-author-role="assistant">First answer</div>
+      </div>
+    `;
+
+    const turns = chatgptCollectTurnContainers();
+
+    expect(turns.map((turn) => turn.id)).toEqual(['user-1', 'assistant-1']);
+    expect(turns.map((turn) => turn.sequence)).toEqual([0, 1]);
+  });
+
+  it('keeps only the first container for each stable turn id', () => {
+    document.body.innerHTML = `
+      <div data-turn-id-container="user-1">
+        <div data-message-author-role="user">你好</div>
+      </div>
+      <div data-turn-id-container="user-1">
+        <div data-message-author-role="user">你好</div>
+      </div>
+      <div data-turn-id-container="assistant-1">
+        <div data-message-author-role="assistant">你好！</div>
+      </div>
+      <div data-turn-id-container="assistant-1">
+        <div data-message-author-role="assistant">你好！</div>
+      </div>
+    `;
+
+    const turns = chatgptCollectTurnContainers();
+
+    expect(turns.map((turn) => turn.id)).toEqual(['user-1', 'assistant-1']);
+    expect(turns.map((turn) => turn.role)).toEqual(['user', 'assistant']);
+    expect(turns.map((turn) => turn.sequence)).toEqual([0, 1]);
+  });
+
+  it('uses a mounted duplicate when the first container is an empty virtualized shell', () => {
+    document.body.innerHTML = `
+      <div data-turn-id-container="assistant-1"></div>
+      <div data-turn-id-container="assistant-1">
+        <div data-message-author-role="assistant">已加载回复</div>
+      </div>
+    `;
+
+    const [turn] = chatgptCollectTurnContainers();
+
+    expect(turn.role).toBe('assistant');
+    expect(turn.container.textContent).toContain('已加载回复');
+    expect(turn.sequence).toBe(0);
+  });
+
+  it('uses the zero-wait path for already mounted messages', async () => {
+    document.body.innerHTML = `
+      <div data-turn-id-container="user-1">
+        <div data-message-author-role="user">First prompt</div>
+      </div>
+      <div data-turn-id-container="assistant-1">
+        <div data-message-author-role="assistant">First answer</div>
+      </div>
+    `;
+
+    const turns = await buildChatGptTurnsForSelection(new Set(['user-1', 'assistant-1']));
+
+    expect(turns).toHaveLength(1);
+    expect(turns[0]).toMatchObject({ user: 'First prompt', assistant: 'First answer' });
+    expect(HTMLElement.prototype.scrollIntoView).not.toHaveBeenCalled();
+  });
+
+  it('does not treat image-generation controls as loaded image content', async () => {
+    vi.useFakeTimers();
+    document.body.innerHTML = `
+      <div data-turn-id-container="assistant-image-1">
+        <section data-turn-id="assistant-image-1">
+          <h4>ChatGPT said:</h4>
+          <div class="group/imagegen-image">
+            <div role="button" aria-label="Generated image: Poster">
+              <button aria-label="Edit image">Edit</button>
+              <button aria-label="Share this image">Share</button>
+            </div>
+          </div>
+        </section>
+      </div>
+    `;
+
+    const exportPromise = buildChatGptTurnsForSelection(new Set(['assistant-image-1']));
+    const assertion = expect(exportPromise).rejects.toThrow(
+      'chatgpt_export_message_unavailable:assistant-image-1',
+    );
+    await vi.advanceTimersByTimeAsync(3200);
+    await assertion;
+    expect(HTMLElement.prototype.scrollIntoView).toHaveBeenCalled();
+  });
+
+  it('exports a mounted generated image without waiting', async () => {
+    setImageExportAdapter();
+    document.body.innerHTML = `
+      <div data-turn-id-container="assistant-image-1">
+        <section data-turn-id="assistant-image-1">
+          <div class="group/imagegen-image">
+            <img src="https://example.com/generated.png" alt="Generated poster" />
+            <style>
+              .cc440d50ba-express-entrypoint-button { display: flex; height: 32px; }
+            </style>
+          </div>
+        </section>
+      </div>
+    `;
+
+    const turns = await buildChatGptTurnsForSelection(new Set(['assistant-image-1']));
+
+    expect(turns[0]?.assistantContent).toMatchObject({ hasImages: true });
+    expect(turns[0]?.assistant).toContain('https://example.com/generated.png');
+    expect(turns[0]?.assistant).not.toContain('cc440d50ba-express-entrypoint-button');
+    expect(turns[0]?.assistantContent?.html).not.toContain('cc440d50ba-express-entrypoint-button');
+    expect(HTMLElement.prototype.scrollIntoView).not.toHaveBeenCalled();
+  });
+
+  it('exports a generated image rendered beside assistant markdown', async () => {
+    setImageExportAdapter();
+    document.body.innerHTML = `
+      <div data-turn-id-container="assistant-image-1">
+        <div data-message-author-role="assistant">
+          <div class="markdown"><p>Here is the requested image.</p></div>
+        </div>
+        <div class="group/imagegen-image">
+          <img src="https://example.com/generated.png" alt="Generated poster" />
+        </div>
+      </div>
+    `;
+
+    const turns = await buildChatGptTurnsForSelection(new Set(['assistant-image-1']));
+
+    expect(turns[0]?.assistant).toContain('Here is the requested image.');
+    expect(turns[0]?.assistant).toContain('https://example.com/generated.png');
+    expect(turns[0]?.assistantContent).toMatchObject({ hasImages: true });
+    expect(turns[0]?.assistantContent?.html).toContain('https://example.com/generated.png');
+  });
+
+  it('preserves assistant text when an image-generation card has no usable image', async () => {
+    document.body.innerHTML = `
+      <div data-turn-id-container="assistant-image-1">
+        <div data-message-author-role="assistant"><p>The image request was rejected.</p></div>
+        <div class="group/imagegen-image"><button>Edit</button></div>
+      </div>
+    `;
+
+    const turns = await buildChatGptTurnsForSelection(new Set(['assistant-image-1']));
+
+    expect(turns).toMatchObject([{ assistant: 'The image request was rejected.' }]);
+    expect(HTMLElement.prototype.scrollIntoView).not.toHaveBeenCalled();
+  });
+
+  it('does not pair non-adjacent selected messages', async () => {
+    document.body.innerHTML = `
+      <div data-turn-id-container="user-1"><div data-message-author-role="user">U1</div></div>
+      <div data-turn-id-container="assistant-1"><div data-message-author-role="assistant">A1</div></div>
+      <div data-turn-id-container="user-2"><div data-message-author-role="user">U2</div></div>
+      <div data-turn-id-container="assistant-2"><div data-message-author-role="assistant">A2</div></div>
+    `;
+
+    const turns = await buildChatGptTurnsForSelection(new Set(['user-1', 'assistant-2']));
+
+    expect(turns).toHaveLength(2);
+    expect(turns[0]).toMatchObject({ user: 'U1', assistant: '' });
+    expect(turns[1]).toMatchObject({ user: '', assistant: 'A2' });
+  });
+
+  it('keeps initial adjacency when ChatGPT inserts a virtual item during extraction', async () => {
+    let inserted = false;
+    DOMContentExtractor.setExportAdapter({
+      extractUserImage: () => [],
+      extractUserText: (
+        _lines: NodeListOf<HTMLElement>,
+        textParts: string[],
+        element: HTMLElement,
+      ) => {
+        textParts.push(element.textContent || '');
+        if (!inserted) {
+          inserted = true;
+          const extra = document.createElement('div');
+          extra.dataset.turnIdContainer = 'inserted';
+          extra.innerHTML = '<div data-message-author-role="assistant">Inserted</div>';
+          document.body.prepend(extra);
+        }
+      },
+      getUserAttachmentCandidates: () => [],
+      extractAssistantImage: () => undefined,
+      extractFormula: () => undefined,
+      extractCodeBlock: () => undefined,
+      extractInlineFormula: () => undefined,
+    } as unknown as ExportPlatformAdapter);
+    document.body.innerHTML = `
+      <div data-turn-id-container="user-1"><div data-message-author-role="user">U1</div></div>
+      <div data-turn-id-container="assistant-1"><div data-message-author-role="assistant">A1</div></div>
+    `;
+
+    const turns = await buildChatGptTurnsForSelection(new Set(['user-1', 'assistant-1']));
+
+    expect(turns).toMatchObject([{ user: 'U1', assistant: 'A1' }]);
+  });
+
+  it('fails instead of silently exporting a partial selection', async () => {
+    document.body.innerHTML = `
+      <div data-turn-id-container="user-1"><div data-message-author-role="user">U1</div></div>
+    `;
+
+    await expect(
+      buildChatGptTurnsForSelection(new Set(['user-1', 'missing-assistant'])),
+    ).rejects.toThrow('chatgpt_export_messages_missing:missing-assistant');
+  });
+
+  it('fails when a selected virtual shell never mounts', async () => {
+    vi.useFakeTimers();
+    document.body.innerHTML = `<div data-turn-id-container="assistant-1"></div>`;
+
+    const exportPromise = buildChatGptTurnsForSelection(new Set(['assistant-1']));
+    const assertion = expect(exportPromise).rejects.toThrow(
+      'chatgpt_export_message_unavailable:assistant-1',
+    );
+    await vi.advanceTimersByTimeAsync(3200);
+    await assertion;
+  });
+
+  it('repositions a virtual shell that moves offscreen after height reconciliation', async () => {
+    vi.useFakeTimers();
+    document.body.innerHTML = `<div data-turn-id-container="user-1"></div>`;
+    const shell = document.querySelector<HTMLElement>('[data-turn-id-container="user-1"]')!;
+    vi.spyOn(shell, 'getBoundingClientRect').mockReturnValue({
+      bottom: -100,
+      height: 50,
+      left: 0,
+      right: 100,
+      top: -150,
+      width: 100,
+      x: 0,
+      y: -150,
+      toJSON: () => ({}),
+    });
+    (HTMLElement.prototype.scrollIntoView as ReturnType<typeof vi.fn>).mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      if (
+        (HTMLElement.prototype.scrollIntoView as ReturnType<typeof vi.fn>).mock.calls.length === 2
+      ) {
+        this.innerHTML = '<div data-message-author-role="user">Recovered prompt</div>';
+      }
+    });
+
+    const exportPromise = buildChatGptTurnsForSelection(new Set(['user-1']));
+    await vi.advanceTimersByTimeAsync(1000);
+
+    await expect(exportPromise).resolves.toMatchObject([{ user: 'Recovered prompt' }]);
+    expect(HTMLElement.prototype.scrollIntoView).toHaveBeenCalledTimes(2);
+  });
+
+  it('refuses to snapshot a response that is still streaming', async () => {
+    vi.useFakeTimers();
+    document.body.innerHTML = `
+      <div data-turn-id-container="assistant-1" data-message-streaming="true">
+        <div data-message-author-role="assistant">Partial answer</div>
+      </div>
+    `;
+
+    const exportPromise = buildChatGptTurnsForSelection(new Set(['assistant-1']));
+    const assertion = expect(exportPromise).rejects.toThrow(
+      'chatgpt_export_response_still_generating',
+    );
+    await vi.advanceTimersByTimeAsync(3200);
+    await assertion;
+  });
+
+  it('resolves all mounted roles used by role-only selection', async () => {
+    document.body.innerHTML = `
+      <div data-turn-id-container="user-1"><div data-message-author-role="user">U1</div></div>
+      <div data-turn-id-container="assistant-1"><div data-message-author-role="assistant">A1</div></div>
+    `;
+
+    const roles = await resolveChatGptSelectionRoles(new Set(['user-1', 'assistant-1']));
+
+    expect(Object.fromEntries(roles)).toEqual({ 'user-1': 'user', 'assistant-1': 'assistant' });
+    expect(HTMLElement.prototype.scrollIntoView).not.toHaveBeenCalled();
+  });
+
+  it('honors cancellation before collection starts', async () => {
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      buildChatGptTurnsForSelection(new Set(), { signal: controller.signal }),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+  });
+});

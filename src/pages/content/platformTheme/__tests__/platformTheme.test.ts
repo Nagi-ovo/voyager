@@ -213,12 +213,14 @@ describe('platform theme CSS', () => {
     const css = readFileSync(resolve(process.cwd(), 'public/contentStyle.css'), 'utf8');
     const formulaHover =
       css.match(
-        /\.math-inline:hover,\s*\.math-display:hover,\s*\[data-math\]:hover\s*{([\s\S]*?)}/,
+        /:root\.gv-formula-copy-enabled \.math-inline:not\(\.gv-formula-copy-ignored\):hover,\s*:root\.gv-formula-copy-enabled \.math-display:not\(\.gv-formula-copy-ignored\):hover,\s*:root\.gv-formula-copy-enabled \[data-math\]:not\(\.gv-formula-copy-ignored\):hover\s*{([\s\S]*?)}/,
       )?.[1] ?? '';
 
     expect(formulaHover).toContain('var(--gv-pm-brand-soft)');
     expect(formulaHover).toContain('var(--gv-pm-brand, var(--gv-pm-brand-default))');
     expect(formulaHover).not.toContain('rgba(66, 133, 244');
-    expect(css).toContain(':root.gv-platform-themed .math-inline .katex:hover');
+    expect(css).toContain(
+      ':root.gv-platform-themed.gv-formula-copy-enabled .math-inline .katex:hover',
+    );
   });
 });

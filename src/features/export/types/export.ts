@@ -2,6 +2,7 @@
  * Export feature type definitions
  * Supports multiple export formats with extensible architecture
  */
+import type { ExtractedContent } from '@/features/export/services/DOMContentExtractor';
 
 /**
  * Canvas document content extracted from immersive-editor
@@ -34,6 +35,10 @@ export interface ChatTurn {
   // Optional DOM elements for rich content extraction
   userElement?: HTMLElement;
   assistantElement?: HTMLElement;
+
+  // 预先固化的内容（针对激进的虚拟加载）
+  userContent?: ExtractedContent;
+  assistantContent?: ExtractedContent;
 }
 
 /**
@@ -44,6 +49,8 @@ export interface ConversationMetadata {
   exportedAt: string;
   title?: string;
   count: number;
+  /** Platform display name, e.g. "ChatGPT", "Claude", "Gemini". */
+  platform?: string;
 }
 
 /**
@@ -136,6 +143,8 @@ export interface ExportFormatInfo {
  */
 export interface ExportOptions {
   format: ExportFormat;
+  /** Cancels long-running collection/render work before it downloads or prints. */
+  signal?: AbortSignal;
   layout?: ExportLayout;
   includeMetadata?: boolean;
   includeStarred?: boolean;

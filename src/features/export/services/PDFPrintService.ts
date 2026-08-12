@@ -12,7 +12,15 @@ import {
   type ExportSpeakerLabels,
 } from '../types/export';
 import { DOMContentExtractor } from './DOMContentExtractor';
+import {
+  EXPORT_IMAGE_FETCH_CONCURRENCY,
+  MAX_EXPORT_IMAGE_COUNT,
+  MAX_EXPORT_IMAGE_TOTAL_BYTES,
+  fetchBoundedExportImage,
+  mapWithConcurrency,
+} from './boundedImageFetch';
 import { buildKatexExportStyles } from './katexExportStyles';
+import { buildListExportStyles } from './listExportStyles';
 import { buildMermaidExportStyles } from './mermaidExportStyles';
 import { isolateMermaidSvgImages, rasterizeMermaidSvgImages } from './mermaidSvgImage';
 
@@ -22,15 +30,6 @@ export interface PrintableDocumentContent {
   exportedAt: string;
   markdown: string;
   html: string;
-}
-
-export type PDFPrintAppearance = 'default' | 'chatgpt';
-
-export interface PDFPrintOptions {
-  fontSize?: number;
-  speakerLabels?: ExportSpeakerLabels;
-  appearance?: PDFPrintAppearance;
-  documentTitle?: string;
 }
 
 /**
@@ -53,7 +52,7 @@ export class PDFPrintService {
   static async export(
     turns: ChatTurn[],
     metadata: ConversationMetadata,
-    options?: PDFPrintOptions,
+    options?: { fontSize?: number; speakerLabels?: ExportSpeakerLabels; signal?: AbortSignal },
   ): Promise<void> {
     await this.exportInternal(
       turns,
@@ -61,8 +60,7 @@ export class PDFPrintService {
       false,
       options?.fontSize,
       options?.speakerLabels,
-      options?.appearance,
-      options?.documentTitle,
+      options?.signal,
     );
   }
 
@@ -72,6 +70,7 @@ export class PDFPrintService {
       exportedAt: content.exportedAt,
       count: 1,
       title: content.title,
+      platform: 'web',
     };
 
     const htmlContainer = document.createElement('div');
@@ -97,27 +96,22 @@ export class PDFPrintService {
     preferMetadataTitle: boolean,
     fontSize?: number,
     speakerLabels: ExportSpeakerLabels = DEFAULT_EXPORT_SPEAKER_LABELS,
-    appearance: PDFPrintAppearance = 'default',
-    documentTitle?: string,
+    signal?: AbortSignal,
   ): Promise<void> {
+    this.assertNotAborted(signal);
     // Ensure we don't leave a previous export container around (e.g. if a prior export failed)
     this.cleanup();
 
     const safari = isSafari();
 
     // Create print container
-    const container = this.createPrintContainer(
-      turns,
-      metadata,
-      preferMetadataTitle,
-      speakerLabels,
-      appearance,
-    );
+    const container = this.createPrintContainer(turns, metadata, speakerLabels);
     if (safari) {
       isolateMermaidSvgImages(container);
     } else {
       await rasterizeMermaidSvgImages(container);
     }
+    this.assertNotAborted(signal);
     document.body.appendChild(container);
 
     // Remove existing print styles so we can re-inject with new font size
@@ -125,13 +119,12 @@ export class PDFPrintService {
     if (existingStyles) existingStyles.remove();
 
     // Inject print styles
-    this.injectPrintStyles(fontSize, appearance);
+    this.injectPrintStyles(fontSize);
     document.body.classList.add(this.PRINT_BODY_CLASS);
 
     // Keep print header/footer title aligned with conversation title in print dialog output.
     this.originalDocumentTitle = document.title;
-    const printDialogTitle =
-      documentTitle?.trim() || this.getPrintDialogTitle(metadata, preferMetadataTitle, appearance);
+    const printDialogTitle = this.getPrintDialogTitle(metadata, preferMetadataTitle);
     if (printDialogTitle) {
       document.title = printDialogTitle;
     }
@@ -139,11 +132,12 @@ export class PDFPrintService {
     // Inline images as data URLs (best-effort) to avoid auth-bound links failing in print.
     // Safari is very strict about `window.print()` being called with a user gesture; awaiting here
     // may cause the print dialog to be blocked. So on Safari we do not await.
-    const inlineImagesPromise = this.inlineImages(container).catch(() => {
+    const inlineImagesPromise = this.inlineImages(container, signal).catch(() => {
       /* ignore */
     });
 
     if (safari) {
+      this.assertNotAborted(signal);
       this.forceStyleFlush(container);
       this.triggerPrint();
       this.registerCleanupHandlers();
@@ -153,8 +147,16 @@ export class PDFPrintService {
 
     await inlineImagesPromise;
     await this.delay(100);
+    this.assertNotAborted(signal);
     this.triggerPrint();
     this.registerCleanupHandlers();
+  }
+
+  private static assertNotAborted(signal?: AbortSignal): void {
+    if (signal?.aborted) {
+      this.cleanup();
+      throw new DOMException('Export cancelled', 'AbortError');
+    }
   }
 
   private static triggerPrint(): void {
@@ -221,9 +223,7 @@ export class PDFPrintService {
   private static createPrintContainer(
     turns: ChatTurn[],
     metadata: ConversationMetadata,
-    preferMetadataTitle: boolean,
     speakerLabels: ExportSpeakerLabels,
-    appearance: PDFPrintAppearance,
   ): HTMLElement {
     const container = document.createElement('div');
     container.id = this.PRINT_CONTAINER_ID;
@@ -231,8 +231,8 @@ export class PDFPrintService {
 
     // Build HTML content
     container.innerHTML = `
-      <div class="gv-print-document${appearance === 'chatgpt' ? ' gv-print-document--chatgpt' : ''}">
-        ${this.renderHeader(metadata, preferMetadataTitle, appearance)}
+      <div class="gv-print-document">
+        ${this.renderHeader(metadata)}
         ${this.renderContent(turns, speakerLabels)}
         ${this.renderFooter(metadata)}
       </div>
@@ -260,84 +260,70 @@ export class PDFPrintService {
   /**
    * Convert <img src> links in container to data URLs (best-effort)
    */
-  private static async inlineImages(container: HTMLElement): Promise<void> {
-    const imgs = Array.from(container.querySelectorAll('img')) as HTMLImageElement[];
+  private static async inlineImages(container: HTMLElement, signal?: AbortSignal): Promise<void> {
+    const allImages = Array.from(container.querySelectorAll('img')) as HTMLImageElement[];
+    const imgs = allImages.slice(0, MAX_EXPORT_IMAGE_COUNT);
     if (imgs.length === 0) return;
+    const budget = { remainingBytes: MAX_EXPORT_IMAGE_TOTAL_BYTES };
+
     const toDataUrl = async (url: string): Promise<string | null> => {
-      const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-      const timeoutHandle = this.setTimeoutUnref(() => {
-        try {
-          controller?.abort();
-        } catch {
-          /* ignore */
-        }
-      }, this.INLINE_FETCH_TIMEOUT_MS);
-
       try {
-        const init: RequestInit = { credentials: 'include', mode: 'cors' as RequestMode };
-        if (controller) init.signal = controller.signal;
-
-        const resp = await fetch(url, init);
-        if (!resp.ok) return null;
-        const blob = await resp.blob();
-        const data = await new Promise<string>((resolve, reject) => {
+        const fetched = await fetchBoundedExportImage(
+          url,
+          budget,
+          signal,
+          this.INLINE_FETCH_TIMEOUT_MS,
+        );
+        if (!fetched) return null;
+        return await new Promise<string>((resolve, reject) => {
           try {
             const reader = new FileReader();
             reader.onerror = () => reject(new Error('readAsDataURL failed'));
             reader.onload = () => resolve(String(reader.result || ''));
-            reader.readAsDataURL(blob);
-          } catch (e) {
-            reject(e);
+            reader.readAsDataURL(fetched.blob);
+          } catch (error) {
+            reject(error);
           }
         });
-        return data;
       } catch {
         return null;
-      } finally {
-        clearTimeout(timeoutHandle);
       }
     };
 
-    await Promise.all(
-      imgs.map(async (img) => {
-        let src = img.getAttribute('src') || '';
-        // Handle both http(s) and blob: URLs (watermark-removed images use blob: URLs)
-        if (!/^(https?:\/\/|blob:)/i.test(src)) return;
-        // For Google images, request original size (=s0) instead of thumbnail
-        if (
-          (src.includes('googleusercontent.com') || src.includes('ggpht.com')) &&
-          !src.startsWith('blob:')
-        ) {
-          const sizePattern = /=[swh]\d+[^?#]*/;
-          src = sizePattern.test(src) ? src.replace(sizePattern, '=s0') : src + '=s0';
-        }
-        const data = await toDataUrl(src);
-        if (data) {
-          try {
-            img.src = data;
-          } catch {}
-        }
-      }),
-    );
+    await mapWithConcurrency(imgs, EXPORT_IMAGE_FETCH_CONCURRENCY, async (img) => {
+      this.assertNotAborted(signal);
+      let src = img.getAttribute('src') || '';
+      if (
+        (src.includes('googleusercontent.com') || src.includes('ggpht.com')) &&
+        !src.startsWith('blob:')
+      ) {
+        const sizePattern = /=[swh]\d+[^?#]*/;
+        src = sizePattern.test(src) ? src.replace(sizePattern, '=s0') : src + '=s0';
+      }
+      const data = await toDataUrl(src);
+      if (data) img.src = data;
+    });
 
-    // Attempt to wait for image decoding
+    this.assertNotAborted(signal);
     type DecodableImage = HTMLImageElement & { decode?: () => Promise<void> };
     await Promise.all(
-      imgs.map(async (img) => {
-        const decode = (img as DecodableImage).decode;
-        if (typeof decode !== 'function') return;
+      imgs
+        .filter((img) => img.isConnected)
+        .map(async (img) => {
+          const decode = (img as DecodableImage).decode;
+          if (typeof decode !== 'function') return;
 
-        try {
-          await Promise.race([
-            decode.call(img).catch(() => {
-              /* ignore */
-            }),
-            this.delay(this.INLINE_DECODE_TIMEOUT_MS),
-          ]);
-        } catch {
-          /* ignore */
-        }
-      }),
+          try {
+            await Promise.race([
+              decode.call(img).catch(() => {
+                /* ignore */
+              }),
+              this.delay(this.INLINE_DECODE_TIMEOUT_MS),
+            ]);
+          } catch {
+            /* ignore */
+          }
+        }),
     );
   }
 
@@ -416,19 +402,12 @@ export class PDFPrintService {
       t === 'Untitled Conversation' ||
       t === 'Gemini' ||
       t === 'Google Gemini' ||
-      t === 'ChatGPT' ||
       t === 'Google AI Studio' ||
       t === 'New chat'
     ) {
       return false;
     }
-    if (
-      t.startsWith('Gemini -') ||
-      t.startsWith('ChatGPT -') ||
-      t.startsWith('Google AI Studio -')
-    ) {
-      return false;
-    }
+    if (t.startsWith('Gemini -') || t.startsWith('Google AI Studio -')) return false;
     return true;
   }
 
@@ -537,21 +516,16 @@ export class PDFPrintService {
   /**
    * Render document header with cover page
    */
-  private static renderHeader(
-    metadata: ConversationMetadata,
-    preferMetadataTitle: boolean,
-    appearance: PDFPrintAppearance,
-  ): string {
-    const metadataTitle = this.normalizeConversationTitle(metadata.title);
-    const pageConversationTitle = this.normalizeConversationTitle(this.getConversationTitle());
-    const conversationTitle =
-      preferMetadataTitle || appearance === 'chatgpt'
-        ? metadataTitle || pageConversationTitle || 'Untitled Conversation'
-        : pageConversationTitle || metadataTitle || 'Untitled Conversation';
+  private static renderHeader(metadata: ConversationMetadata): string {
+    const metadataTitle = this.normalizeConversationTitle(metadata.title, metadata.platform);
+    const pageConversationTitle = this.normalizeConversationTitle(
+      this.getConversationTitle(),
+      metadata.platform,
+    );
+    const conversationTitle = metadataTitle || pageConversationTitle || 'Untitled Conversation';
     // For PDF, avoid repeating the same title in smaller text under the H1.
     // Always derive a neutral "source" label from the URL instead of using metadata.title.
-    const urlTitle =
-      appearance === 'chatgpt' ? 'ChatGPT conversation' : this.extractTitleFromURL(metadata.url);
+    const urlTitle = this.extractTitleFromURL(metadata.url, metadata.platform);
     const date = this.formatDate(metadata.exportedAt);
     const turnsCount = metadata.count;
 
@@ -590,17 +564,20 @@ export class PDFPrintService {
   ): string {
     const starredClass = turn.starred ? 'gv-print-turn-starred' : '';
 
-    const userContent = turn.userElement
-      ? DOMContentExtractor.extractUserContent(turn.userElement).html ||
-        this.formatContent(turn.user) ||
-        '<em>No content</em>'
-      : this.formatContent(turn.user) || '<em>No content</em>';
+    // Virtualized-platform content is captured before subsequent scrolling can
+    // unmount the original DOM subtree; use it before falling back to live DOM.
+    const userContent =
+      turn.userContent?.html ||
+      (turn.userElement
+        ? DOMContentExtractor.extractUserContent(turn.userElement).html || '<em>No content</em>'
+        : this.formatContent(turn.user) || '<em>No content</em>');
 
-    const assistantContent = turn.assistantElement
-      ? DOMContentExtractor.extractAssistantContent(turn.assistantElement).html ||
-        this.formatContent(turn.assistant) ||
-        '<em>No content</em>'
-      : this.formatContent(turn.assistant) || '<em>No content</em>';
+    const assistantContent =
+      turn.assistantContent?.html ||
+      (turn.assistantElement
+        ? DOMContentExtractor.extractAssistantContent(turn.assistantElement).html ||
+          '<em>No content</em>'
+        : this.formatContent(turn.assistant) || '<em>No content</em>');
 
     if (!turn.omitEmptySections) {
       return `
@@ -623,8 +600,9 @@ export class PDFPrintService {
     `;
     }
 
-    const hasUser = !!turn.userElement || !!turn.user.trim();
-    const hasAssistant = !!turn.assistantElement || !!turn.assistant.trim();
+    const hasUser = !!turn.userContent || !!turn.userElement || !!turn.user.trim();
+    const hasAssistant =
+      !!turn.assistantContent || !!turn.assistantElement || !!turn.assistant.trim();
 
     return `
       <div class="gv-print-turn ${starredClass}">
@@ -691,18 +669,13 @@ export class PDFPrintService {
   /**
    * Inject print-optimized styles
    */
-  private static injectPrintStyles(
-    fontSize?: number,
-    appearance: PDFPrintAppearance = 'default',
-  ): void {
+  private static injectPrintStyles(fontSize?: number): void {
     // Check if already injected
     if (document.getElementById(this.PRINT_STYLES_ID)) return;
 
     const basePt = fontSize ?? 11;
     const codePt = Math.max(basePt - 2, 6);
     const footerPt = Math.max(basePt - 2, 6);
-    const appearanceStyles =
-      appearance === 'chatgpt' ? this.buildChatGptPrintStyles(basePt, codePt, footerPt) : '';
 
     const style = document.createElement('style');
     style.id = this.PRINT_STYLES_ID;
@@ -974,6 +947,8 @@ export class PDFPrintService {
           diagramMaxHeight: '160mm',
         })}
 
+        ${buildListExportStyles('.gv-print-turn-text', true)}
+
         .gv-print-turn-assistant .gv-print-turn-text {
           border-left-color: #93c5fd;
         }
@@ -1060,323 +1035,10 @@ export class PDFPrintService {
         strong {
           font-weight: 600;
         }
-
-        ${appearanceStyles}
       }
     `;
 
     document.head.appendChild(style);
-  }
-
-  private static buildChatGptPrintStyles(basePt: number, codePt: number, footerPt: number): string {
-    const root = `body.${this.PRINT_BODY_CLASS} #${this.PRINT_CONTAINER_ID} .gv-print-document--chatgpt`;
-    return `
-      @page {
-        margin: 16mm 18mm 18mm;
-        size: A4;
-      }
-
-      ${root} {
-        width: 100%;
-        max-width: 760px;
-        margin: 0 auto;
-        color: #0d0d0d;
-        background: #fff;
-        font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-          Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
-        font-size: ${basePt}pt;
-        line-height: 1.55;
-        text-rendering: optimizeLegibility;
-      }
-
-      ${root} .gv-print-cover-page {
-        min-height: 0 !important;
-        display: block !important;
-        margin: 0 0 2.2em;
-        padding: 0 0 1.15em;
-        border-bottom: 1px solid #e5e5e5;
-        page-break-after: auto;
-        break-after: auto;
-      }
-
-      ${root} .gv-print-cover-content {
-        max-width: none;
-        text-align: left;
-      }
-
-      ${root} .gv-print-cover-title {
-        margin: 0 0 0.45em;
-        color: #0d0d0d;
-        font-size: 24pt;
-        font-weight: 700;
-        letter-spacing: -0.025em;
-        line-height: 1.18;
-        overflow-wrap: anywhere;
-      }
-
-      ${root} .gv-print-cover-title::before,
-      ${root} .gv-print-cover-title::after {
-        content: none !important;
-        display: none !important;
-      }
-
-      ${root} .gv-print-meta {
-        display: flex !important;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 0.35em 0.7em;
-        margin: 0;
-        color: #6e6e80;
-        font-size: ${footerPt}pt;
-        line-height: 1.4;
-      }
-
-      ${root} .gv-print-meta p {
-        display: inline-flex !important;
-        align-items: center;
-        margin: 0;
-      }
-
-      ${root} .gv-print-meta p + p::before {
-        content: "·";
-        margin-right: 0.7em;
-        color: #b4b4b4;
-      }
-
-      ${root} .gv-print-meta a,
-      ${root} .gv-print-meta a:visited {
-        color: inherit;
-      }
-
-      ${root} .gv-print-content {
-        margin: 0;
-      }
-
-      ${root} .gv-print-turn {
-        margin: 0 0 2em;
-        page-break-inside: auto;
-        break-inside: auto;
-      }
-
-      ${root} .gv-print-turn-header,
-      ${root} .gv-print-turn-label {
-        display: none !important;
-      }
-
-      ${root} .gv-print-turn-user {
-        display: flex !important;
-        justify-content: flex-end;
-        margin: 0 0 1.25em;
-        page-break-inside: avoid;
-        break-inside: avoid;
-      }
-
-      ${root} .gv-print-turn-user .gv-print-turn-text {
-        width: fit-content;
-        max-width: 78%;
-        padding: 0.7em 1em;
-        border: 0;
-        border-radius: 18px 18px 4px 18px;
-        color: #0d0d0d;
-        background: #f4f4f4;
-        line-height: 1.5;
-        print-color-adjust: exact;
-        -webkit-print-color-adjust: exact;
-      }
-
-      ${root} .gv-print-turn-assistant {
-        margin: 0;
-      }
-
-      ${root} .gv-print-turn-assistant .gv-print-turn-text {
-        max-width: 100%;
-        padding: 0;
-        border: 0;
-        color: #0d0d0d;
-      }
-
-      ${root} .gv-print-turn-text p {
-        margin: 0 0 0.85em;
-        orphans: 3;
-        widows: 3;
-      }
-
-      ${root} .gv-print-turn-text > :first-child {
-        margin-top: 0;
-      }
-
-      ${root} .gv-print-turn-text > :last-child {
-        margin-bottom: 0;
-      }
-
-      ${root} .gv-print-turn-text h1,
-      ${root} .gv-print-turn-text h2,
-      ${root} .gv-print-turn-text h3,
-      ${root} .gv-print-turn-text h4 {
-        margin: 1.35em 0 0.55em;
-        color: #0d0d0d;
-        font-weight: 650;
-        line-height: 1.25;
-        page-break-after: avoid;
-        break-after: avoid;
-      }
-
-      ${root} .gv-print-turn-text h1 { font-size: 1.55em; }
-      ${root} .gv-print-turn-text h2 { font-size: 1.35em; }
-      ${root} .gv-print-turn-text h3 { font-size: 1.16em; }
-      ${root} .gv-print-turn-text h4 { font-size: 1em; }
-
-      ${root} .gv-print-turn-text ul,
-      ${root} .gv-print-turn-text ol {
-        margin: 0.45em 0 0.9em;
-        padding-left: 1.45em;
-      }
-
-      ${root} .gv-print-turn-text ul {
-        list-style: disc outside !important;
-      }
-
-      ${root} .gv-print-turn-text ol {
-        list-style: decimal outside !important;
-      }
-
-      ${root} .gv-print-turn-text li {
-        display: list-item !important;
-        margin: 0.25em 0;
-        padding-left: 0.1em;
-      }
-
-      ${root} .gv-print-turn-text blockquote {
-        margin: 1em 0;
-        padding: 0.1em 0 0.1em 1em;
-        border-left: 3px solid #d1d1d1;
-        color: #565869;
-      }
-
-      ${root} .gv-print-turn-text hr {
-        margin: 1.5em 0;
-        border: 0;
-        border-top: 1px solid #e5e5e5;
-      }
-
-      ${root} .gv-print-turn-text code {
-        padding: 0.14em 0.36em;
-        border-radius: 5px;
-        color: #242424;
-        background: #ececec;
-        font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-        font-size: ${codePt}pt;
-        print-color-adjust: exact;
-        -webkit-print-color-adjust: exact;
-      }
-
-      ${root} .gv-print-turn-text pre {
-        margin: 1em 0;
-        padding: 1em 1.1em;
-        border: 1px solid #d1d5db;
-        border-radius: 10px;
-        color: #1f1f1f;
-        background: #f7f7f8;
-        font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-        font-size: ${codePt}pt;
-        line-height: 1.5;
-        white-space: pre-wrap;
-        overflow-wrap: anywhere;
-        print-color-adjust: exact;
-        -webkit-print-color-adjust: exact;
-      }
-
-      ${root} .gv-print-turn-text pre code {
-        padding: 0;
-        color: inherit;
-        background: transparent;
-        font-size: inherit;
-      }
-
-      ${root} .gv-print-turn-text table {
-        display: table !important;
-        width: 100%;
-        margin: 1em 0;
-        border-collapse: collapse;
-        border-spacing: 0;
-        font-size: 0.94em;
-      }
-
-      ${root} .gv-print-turn-text thead {
-        display: table-header-group !important;
-      }
-
-      ${root} .gv-print-turn-text tr {
-        display: table-row !important;
-        page-break-inside: avoid;
-        break-inside: avoid;
-      }
-
-      ${root} .gv-print-turn-text th,
-      ${root} .gv-print-turn-text td {
-        display: table-cell !important;
-        padding: 0.6em 0.7em;
-        border: 1px solid #dedede;
-        text-align: left;
-        vertical-align: top;
-        overflow-wrap: anywhere;
-      }
-
-      ${root} .gv-print-turn-text th {
-        background: #f7f7f8;
-        font-weight: 600;
-        print-color-adjust: exact;
-        -webkit-print-color-adjust: exact;
-      }
-
-      ${root} .gv-print-turn-text img {
-        max-width: 100%;
-        max-height: 160mm;
-        height: auto;
-        margin: 1em auto;
-        border-radius: 8px;
-        object-fit: contain;
-        page-break-inside: avoid;
-        break-inside: avoid;
-      }
-
-      ${root} .gv-print-turn-text .gv-export-attachment {
-        border-color: #dedede;
-        border-radius: 10px;
-        background: #f7f7f8;
-        print-color-adjust: exact;
-        -webkit-print-color-adjust: exact;
-      }
-
-      ${root} .gv-print-footer {
-        display: flex !important;
-        flex-wrap: wrap;
-        justify-content: space-between;
-        gap: 0.35em 1em;
-        margin-top: 2.5em;
-        padding-top: 0.9em;
-        border-top: 1px solid #e5e5e5;
-        color: #8e8ea0;
-        font-size: ${footerPt}pt;
-        text-align: left;
-      }
-
-      ${root} .gv-print-footer p {
-        margin: 0;
-      }
-
-      ${root} a,
-      ${root} a:visited {
-        color: #2f6feb;
-        text-decoration: underline;
-        text-decoration-color: #b7cdf7;
-        text-underline-offset: 0.12em;
-      }
-
-      ${root} a[href]::after {
-        content: none !important;
-      }
-    `;
   }
 
   /**
@@ -1428,18 +1090,19 @@ export class PDFPrintService {
   /**
    * Helper: Extract title from URL
    */
-  private static extractTitleFromURL(url: string): string {
+  private static extractTitleFromURL(url: string, platform?: string): string {
+    const name = platform || 'Gemini';
     try {
       const urlObj = new URL(url);
       const pathname = urlObj.pathname;
-      const match = pathname.match(/\/(app|chat)\/([^/]+)/);
+      const match = pathname.match(/\/(app|chat|c)\/([^/]+)/);
       if (match) {
         const id = match[2];
-        return `Gemini Conversation ${id.substring(0, 8)}`;
+        return `${name} Conversation ${id.substring(0, 8)}`;
       }
-      return 'Gemini Conversation';
+      return `${name} Conversation`;
     } catch {
-      return 'Gemini Conversation';
+      return `${name} Conversation`;
     }
   }
 
@@ -1461,35 +1124,44 @@ export class PDFPrintService {
     }
   }
 
-  private static normalizeConversationTitle(rawTitle: string | undefined): string {
+  private static normalizeConversationTitle(
+    rawTitle: string | undefined,
+    platform?: string,
+  ): string {
     if (!rawTitle) return '';
-    const normalized = rawTitle
+    let normalized = rawTitle
       .trim()
       .replace(/\s+-\s+Gemini$/i, '')
       .replace(/\s+-\s+Google Gemini$/i, '')
-      .replace(/\s+-\s+ChatGPT$/i, '')
       .replace(/\s+/g, ' ')
       .trim();
+    if (platform && platform !== 'Gemini') {
+      const escaped = platform.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      normalized = normalized.replace(new RegExp(`\\s+-\\s+${escaped}$`, 'i'), '').trim();
+    }
+    if (platform && normalized.toLocaleLowerCase() === platform.trim().toLocaleLowerCase()) {
+      return '';
+    }
     return this.isMeaningfulConversationTitle(normalized) ? normalized : '';
   }
 
   private static getPrintDialogTitle(
     metadata: ConversationMetadata,
     preferMetadataTitle: boolean,
-    appearance: PDFPrintAppearance = 'default',
   ): string {
-    const metadataTitle = this.normalizeConversationTitle(metadata.title);
-    const conversationTitle = this.normalizeConversationTitle(this.getConversationTitle());
+    const platform = metadata.platform || 'Gemini';
+    const metadataTitle = this.normalizeConversationTitle(metadata.title, platform);
+    const conversationTitle = this.normalizeConversationTitle(
+      this.getConversationTitle(),
+      platform,
+    );
 
-    const platform = appearance === 'chatgpt' ? 'ChatGPT' : 'Gemini';
-    const fallback = `${platform} Conversation`;
-    if (preferMetadataTitle) return metadataTitle || conversationTitle || fallback;
+    if (preferMetadataTitle) {
+      return metadataTitle || conversationTitle || `${platform} Conversation`;
+    }
 
-    const base =
-      appearance === 'chatgpt'
-        ? metadataTitle || conversationTitle
-        : conversationTitle || metadataTitle;
-    if (!base) return fallback;
+    const base = metadataTitle || conversationTitle;
+    if (!base) return `${platform} Conversation`;
     return `${base} - ${platform}`;
   }
 

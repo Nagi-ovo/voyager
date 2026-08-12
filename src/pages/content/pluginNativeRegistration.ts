@@ -6,7 +6,11 @@
  */
 import { activateFormulaCopy } from '@/features/formulaCopy';
 import { NATIVE_BUILTIN_PLUGIN_IDS } from '@/features/plugins/builtin';
-import { activateChatGptExport } from '@/features/plugins/builtin/chatgptExport';
+import {
+  startChatGptExportPlugin,
+  stopChatGptExportPlugin,
+} from '@/features/plugins/builtin/chatgptExport/runtime';
+import { activateChatGptTemporaryHandoff } from '@/features/plugins/builtin/chatgptTemporaryHandoff';
 import {
   activateClaudeTimeline,
   updateClaudeTimelineSettings,
@@ -30,7 +34,11 @@ export const NATIVE_HANDLER_BINDINGS: Readonly<Record<string, NativeHandler>> = 
     updateSettings: updateClaudeTimelineSettings,
   },
   'voyager.chatgpt-export': {
-    activate: activateChatGptExport,
+    start: startChatGptExportPlugin,
+    stop: stopChatGptExportPlugin,
+  },
+  'voyager.chatgpt-temporary-handoff': {
+    activate: activateChatGptTemporaryHandoff,
   },
 };
 

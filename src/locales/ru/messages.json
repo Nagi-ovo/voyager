@@ -565,6 +565,14 @@
     "message": "✗ Не удалось скопировать",
     "description": "Formula copy failed message"
   },
+  "enableFormulaCopy": {
+    "message": "Включить копирование формул",
+    "description": "Formula copy enable toggle"
+  },
+  "enableFormulaCopyHint": {
+    "message": "Копирует формулу в выбранном формате при нажатии на неё.",
+    "description": "Formula copy enable toggle hint"
+  },
   "formulaCopyFormat": {
     "message": "Формат копирования формулы",
     "description": "Formula copy format setting label"
@@ -1144,6 +1152,14 @@
   "loading": {
     "message": "Загрузка...",
     "description": "Loading message"
+  },
+  "export_collecting_title": {
+    "message": "Собираем диалог",
+    "description": "Баннер, показываемый во время прокрутки для сбора DOM диалога ChatGPT"
+  },
+  "export_collecting_desc": {
+    "message": "Пожалуйста, подождите…",
+    "description": "Описание баннера во время сбора DOM диалога ChatGPT"
   },
   "keyboardShortcuts": {
     "message": "Горячие клавиши",

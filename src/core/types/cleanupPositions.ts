@@ -13,6 +13,7 @@ export enum CleanupPositions {
   CleanupGemsSidebar,
   CleanupResponseCompleteNotification,
   CleanupEdgeFinalVersionNotice,
+  CleanupFormulaCopy,
   CleanupPluginHost,
   CleanupBrandTheme,
   CleanupRemoteAnnouncements,

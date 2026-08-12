@@ -141,6 +141,7 @@ describe('willCleanUp tests module', () => {
       'CleanupGemsSidebar',
       'CleanupResponseCompleteNotification',
       'CleanupEdgeFinalVersionNotice',
+      'CleanupFormulaCopy',
       'CleanupPluginHost',
       'CleanupBrandTheme',
       'CleanupRemoteAnnouncements',

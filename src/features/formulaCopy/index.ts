@@ -3,6 +3,13 @@ import type { PluginScope } from '@/features/plugins/runtime/pluginScope';
 
 import { getFormulaCopyService } from './FormulaCopyService';
 
+export { startNativeFormulaCopy } from './nativeFeature';
+export type {
+  FormulaCopyLifecycleService,
+  NativeFormulaCopyController,
+  StartNativeFormulaCopyOptions,
+} from './nativeFeature';
+
 /**
  * Formula Copy Feature Entry Point
  * Exports the service and provides a simple initialization function
@@ -11,15 +18,12 @@ import { getFormulaCopyService } from './FormulaCopyService';
 export { FormulaCopyService, getFormulaCopyService } from './FormulaCopyService';
 export type { FormulaCopyConfig } from './FormulaCopyService';
 
-/** Direct entry point for the Gemini core feature lifecycle. */
-export function startFormulaCopy(): void {
-  const service = getFormulaCopyService();
-  service.initialize();
-}
+let pluginActivationGeneration = 0;
 
 export function stopFormulaCopy(): void {
+  pluginActivationGeneration += 1;
   const service = getFormulaCopyService();
-  service.destroy();
+  service.dispose();
 }
 
 /**
@@ -28,9 +32,20 @@ export function stopFormulaCopy(): void {
  * never overlap because the plugin's `matches` exclude Gemini hosts.
  */
 export function activateFormulaCopy(scope: PluginScope): void {
-  scope.effect(() => {
+  const activationGeneration = ++pluginActivationGeneration;
+  scope.effect(async () => {
     const service = getFormulaCopyService();
+    await service.prepare();
+    if (scope.signal.aborted) {
+      // A rapid remount may already be preparing/using the singleton. An old
+      // scope is only allowed to release the generation it owns.
+      if (activationGeneration === pluginActivationGeneration) service.dispose();
+      return () => {};
+    }
+    if (activationGeneration !== pluginActivationGeneration) return () => {};
     service.initialize();
-    return () => service.destroy();
+    return () => {
+      if (activationGeneration === pluginActivationGeneration) service.dispose();
+    };
   }, 'formula-copy');
 }

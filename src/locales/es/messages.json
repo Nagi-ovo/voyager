@@ -565,6 +565,14 @@
     "message": "✗ Error al copiar",
     "description": "Formula copy failed message"
   },
+  "enableFormulaCopy": {
+    "message": "Activar la copia de fórmulas",
+    "description": "Formula copy enable toggle"
+  },
+  "enableFormulaCopyHint": {
+    "message": "Copia una fórmula en el formato seleccionado al hacer clic en ella.",
+    "description": "Formula copy enable toggle hint"
+  },
   "formulaCopyFormat": {
     "message": "Formato de copia de fórmula",
     "description": "Formula copy format setting label"
@@ -1144,6 +1152,14 @@
   "loading": {
     "message": "Cargando...",
     "description": "Loading message"
+  },
+  "export_collecting_title": {
+    "message": "Recopilando la conversación",
+    "description": "Banner que se muestra mientras se desplaza para recopilar el DOM de la conversación de ChatGPT"
+  },
+  "export_collecting_desc": {
+    "message": "Espere, por favor…",
+    "description": "Descripción del banner durante la recopilación del DOM de la conversación de ChatGPT"
   },
   "keyboardShortcuts": {
     "message": "Atajos de Teclado",

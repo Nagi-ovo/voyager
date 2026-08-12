@@ -20,6 +20,7 @@ import { type AppLanguage, normalizeLanguage } from '@/utils/language';
 import { extractMessageDictionary } from '@/utils/localeMessages';
 import type { TranslationKey } from '@/utils/translations';
 
+import { resolveExportAdapter } from '../export/adapter/platformAdapters';
 import {
   createMenuItemFromNativeTemplate,
   updateMenuItemTemplateLabel,
@@ -28,6 +29,10 @@ import { downloadMarkdown } from './download';
 import { extractThinkingPanels } from './extractor';
 import { formatToMarkdown } from './formatter';
 import { extractDeepResearchReportTitle, findDeepResearchReportRoot } from './reportExtractor';
+
+// Deep Research is a Gemini-only surface; reuse the Gemini export adapter's
+// formula extraction so PDF/Markdown/Image export can render $$ formulas.
+ConversationExportService.setExportAdapter(resolveExportAdapter());
 
 type Dictionaries = Record<AppLanguage, Record<string, string>>;
 const DOWNLOAD_BUTTON_CLASS = 'gv-deep-research-download';

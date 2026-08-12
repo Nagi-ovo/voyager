@@ -30,6 +30,7 @@ describe('SettingsBackupService', () => {
         [StorageKeys.COACHMARKS_SEEN]: [],
         [StorageKeys.EXPORT_IMAGE_WIDTH]: 620,
         [StorageKeys.SLASH_PROMPT_ENABLED]: true,
+        [StorageKeys.FORMULA_COPY_ENABLED]: true,
         [StorageKeys.EXPORT_SPEAKER_LABELS]: {},
       }),
     );
@@ -111,6 +112,28 @@ describe('SettingsBackupService', () => {
     expect(storageArea.set).toHaveBeenCalledWith({
       [StorageKeys.CHAT_WIDTH]: 92,
       [StorageKeys.CONTEXT_SYNC_PORT]: 4040,
+    });
+  });
+
+  it('backs up and restores an explicitly disabled formula-copy preference', async () => {
+    const storageArea = {
+      get: vi.fn().mockResolvedValue({
+        ...BACKUPABLE_SYNC_SETTINGS_DEFAULTS,
+        [StorageKeys.FORMULA_COPY_ENABLED]: false,
+      }),
+      set: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const payload = await exportBackupableSyncSettings(storageArea);
+    expect(payload.data[StorageKeys.FORMULA_COPY_ENABLED]).toBe(false);
+
+    const restored = await restoreBackupableSyncSettings(
+      { [StorageKeys.FORMULA_COPY_ENABLED]: false },
+      storageArea,
+    );
+    expect(restored).toEqual({ [StorageKeys.FORMULA_COPY_ENABLED]: false });
+    expect(storageArea.set).toHaveBeenCalledWith({
+      [StorageKeys.FORMULA_COPY_ENABLED]: false,
     });
   });
 

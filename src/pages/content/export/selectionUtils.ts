@@ -107,3 +107,40 @@ export function resolveInitialSelectedMessageIds(
   if (!allMessageIds.includes(preferredMessageId)) return new Set<string>();
   return new Set<string>([preferredMessageId]);
 }
+
+export function pruneMissingSelectionIds(
+  selectedIds: Set<string>,
+  liveMessageIds: ReadonlySet<string>,
+): string[] {
+  const removed: string[] = [];
+  for (const id of selectedIds) {
+    if (liveMessageIds.has(id)) continue;
+    selectedIds.delete(id);
+    removed.push(id);
+  }
+  return removed;
+}
+
+export function reconcileExistingSelectionHost(
+  boundHost: HTMLElement | null | undefined,
+  currentHost: HTMLElement,
+  selected: boolean,
+): boolean {
+  if (boundHost !== currentHost) return false;
+  const selector = currentHost.querySelector<HTMLElement>(':scope > .gv-export-msg-selector');
+  if (!selector?.isConnected) return false;
+
+  currentHost.classList.add('gv-export-msg-host');
+  currentHost.classList.toggle('gv-export-msg-selected', selected);
+  return true;
+}
+
+export function shouldRefreshSelectionUi(mutations: readonly MutationRecord[]): boolean {
+  return mutations.some((mutation) => {
+    if (mutation.type === 'childList') return true;
+    if (mutation.type !== 'attributes' || mutation.attributeName !== 'class') return false;
+    if (!(mutation.target instanceof HTMLElement)) return false;
+
+    return mutation.target.querySelector(':scope > .gv-export-msg-selector') !== null;
+  });
+}

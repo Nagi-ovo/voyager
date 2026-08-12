@@ -4,8 +4,11 @@ import {
   filterItemsBySelectedIds,
   findSelectionStartIdAtLine,
   groupSelectedMessagesByTurn,
+  pruneMissingSelectionIds,
+  reconcileExistingSelectionHost,
   resolveInitialSelectedMessageIds,
   selectBelowIds,
+  shouldRefreshSelectionUi,
 } from '../selectionUtils';
 
 describe('selectionUtils', () => {
@@ -136,6 +139,77 @@ describe('selectionUtils', () => {
       const selected = resolveInitialSelectedMessageIds(allIds, null);
 
       expect(selected.size).toBe(0);
+    });
+  });
+
+  it('prunes selected ids that disappeared during same-route reconciliation', () => {
+    const selectedIds = new Set(['user-1', 'assistant-old']);
+
+    expect(pruneMissingSelectionIds(selectedIds, new Set(['user-1', 'assistant-new']))).toEqual([
+      'assistant-old',
+    ]);
+    expect(Array.from(selectedIds)).toEqual(['user-1']);
+  });
+
+  describe('selection host reconciliation', () => {
+    it('restores Voyager classes when ChatGPT rewrites the same host class list', () => {
+      const host = document.createElement('div');
+      host.className = 'gv-export-msg-host gv-export-msg-selected';
+      const selector = document.createElement('div');
+      selector.className = 'gv-export-msg-selector';
+      host.appendChild(selector);
+      document.body.appendChild(host);
+
+      // ChatGPT can reconcile the existing node in place and overwrite className.
+      host.className = 'chatgpt-turn';
+
+      expect(reconcileExistingSelectionHost(host, host, true)).toBe(true);
+      expect(host.classList.contains('chatgpt-turn')).toBe(true);
+      expect(host.classList.contains('gv-export-msg-host')).toBe(true);
+      expect(host.classList.contains('gv-export-msg-selected')).toBe(true);
+    });
+
+    it('rebuilds a binding when ChatGPT removes its selector from the same host', () => {
+      const host = document.createElement('div');
+      host.className = 'chatgpt-turn';
+      document.body.appendChild(host);
+
+      expect(reconcileExistingSelectionHost(host, host, true)).toBe(false);
+      expect(host.className).toBe('chatgpt-turn');
+    });
+
+    it('does not reuse a binding when ChatGPT replaces the host node', () => {
+      const previousHost = document.createElement('div');
+      const replacementHost = document.createElement('div');
+
+      expect(reconcileExistingSelectionHost(previousHost, replacementHost, true)).toBe(false);
+      expect(replacementHost.className).toBe('');
+    });
+
+    it('refreshes selection UI when a bound host class changes', async () => {
+      const root = document.createElement('div');
+      const host = document.createElement('div');
+      const selector = document.createElement('div');
+      selector.className = 'gv-export-msg-selector';
+      host.appendChild(selector);
+      root.appendChild(host);
+
+      let records: MutationRecord[] = [];
+      const observer = new MutationObserver((mutations) => {
+        records = mutations;
+      });
+      observer.observe(root, {
+        attributes: true,
+        attributeFilter: ['class'],
+        childList: true,
+        subtree: true,
+      });
+
+      host.className = 'chatgpt-turn';
+      await Promise.resolve();
+      observer.disconnect();
+
+      expect(shouldRefreshSelectionUi(records)).toBe(true);
     });
   });
 });

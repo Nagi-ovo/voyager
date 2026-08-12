@@ -516,6 +516,14 @@
     "message": "✗ 複製失敗",
     "description": "公式複製失敗訊息"
   },
+  "enableFormulaCopy": {
+    "message": "啟用公式複製",
+    "description": "公式複製啟用開關"
+  },
+  "enableFormulaCopyHint": {
+    "message": "點擊公式時依所選格式複製。",
+    "description": "公式複製啟用開關提示"
+  },
   "formulaCopyFormat": {
     "message": "公式複製格式",
     "description": "公式複製格式設定標籤"
@@ -1095,6 +1103,14 @@
   "loading": {
     "message": "載入中...",
     "description": "載入訊息"
+  },
+  "export_collecting_title": {
+    "message": "收集對話中",
+    "description": "滾動收集 ChatGPT 對話 DOM 時顯示的橫幅"
+  },
+  "export_collecting_desc": {
+    "message": "請稍候…",
+    "description": "ChatGPT 對話 DOM 收集期間橫幅的描述"
   },
   "keyboardShortcuts": {
     "message": "鍵盤快速鍵",

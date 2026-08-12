@@ -10,6 +10,7 @@ import { type AppLanguage, normalizeLanguage } from '@/utils/language';
 import { extractMessageDictionary } from '@/utils/localeMessages';
 import type { TranslationKey } from '@/utils/translations';
 
+import { ConversationExportService } from '../../../features/export/services/ConversationExportService';
 import {
   getSavedImageExportWidth,
   saveImageExportWidth,
@@ -18,29 +19,31 @@ import {
   SpeakerLabelPreferenceSaver,
   getSavedSpeakerLabelOverrides,
 } from '../../../features/export/services/SpeakerLabelPreferenceService';
-import {
-  DEFAULT_IMAGE_EXPORT_WIDTH,
-  type ExportFormat,
-  type ExportSpeakerLabels,
-} from '../../../features/export/types/export';
 import type {
   CanvasDoc,
   ConversationMetadata,
   ChatTurn as ExportChatTurn,
+} from '../../../features/export/types/export';
+import {
+  DEFAULT_IMAGE_EXPORT_WIDTH,
+  type ExportFormat,
+  type ExportSpeakerLabels,
 } from '../../../features/export/types/export';
 import { ExportDialog } from '../../../features/export/ui/ExportDialog';
 import { resolveExportErrorMessage } from '../../../features/export/ui/ExportErrorMessage';
 import { showExportToast } from '../../../features/export/ui/ExportToast';
 import { isServerTurnId } from '../fork/turnId';
 import { historyTimestampStore } from '../timestamp/historyTimestamps';
+import { ExportPlatformAdapter, resolveExportAdapter } from './adapter/platformAdapters';
 import { assistantHasCanvasDoc, extractAllCanvasDocs, isAnyCanvasOpen } from './canvasDocExtractor';
-import { filterOutDeepResearchImmersiveNodes, resolveConversationRoot } from './conversationDom';
+import { filterOutDeepResearchImmersiveNodes } from './conversationDom';
 import {
   getConversationMenuContext,
   getResponseMenuContext,
   injectConversationMenuExportButton,
   injectResponseMenuExportButton,
 } from './conversationMenuInjection';
+import { withExportCollectingBanner } from './exportCollectingBanner';
 import { resolveExportLogoAnchor } from './exportLogoAnchor';
 import {
   type PendingExportState,
@@ -61,7 +64,13 @@ import {
   renderResponseImageBlob,
 } from './responseImageCopy';
 import { resolveUniqueExportTurnIds } from './selectionIds';
-import { groupSelectedMessagesByTurn, resolveInitialSelectedMessageIds } from './selectionUtils';
+import {
+  groupSelectedMessagesByTurn,
+  pruneMissingSelectionIds,
+  reconcileExistingSelectionHost,
+  resolveInitialSelectedMessageIds,
+  shouldRefreshSelectionUi,
+} from './selectionUtils';
 import { resolveSidebarConversationTarget } from './sidebarConversationTarget';
 import {
   computeConversationFingerprint,
@@ -88,9 +97,46 @@ const GENERATED_UI_FRAME_SELECTOR = 'iframe[src*="gemini-code-immersive"]';
 const GENERATED_UI_SCREENSHOT_MESSAGE_TYPE = 'gv.generatedUi.captureVisibleTab';
 const GENERATED_UI_CAPTURE_PERMISSION_MESSAGE_TYPE = 'gv.generatedUi.ensureCapturePermission';
 const GENERATED_UI_SCREENSHOT_SECTION_CLASS = 'gv-generated-ui-screenshot-section';
+// Platform adapter — resolved once per page load
+const exportAdapter: ExportPlatformAdapter = resolveExportAdapter();
+ConversationExportService.setExportAdapter(exportAdapter);
+
 let conversationMenuObserver: MutationObserver | null = null;
 let responseActionObserver: MutationObserver | null = null;
 let cachedCanvasDocs: CanvasDoc[] | null = null;
+
+let activeExportDialog: ExportDialog | null = null;
+let activeExportController: AbortController | null = null;
+let activeExportSelectionCleanup: (() => void) | null = null;
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === 'AbortError';
+}
+
+function throwIfExportCancelled(signal?: AbortSignal): void {
+  if (signal?.aborted) throw new DOMException('Export cancelled', 'AbortError');
+}
+
+function exportRouteKey(url: string): string {
+  const parsed = new URL(url, location.href);
+  return `${parsed.origin}${parsed.pathname}${parsed.search}`;
+}
+
+function beginExportOperation(): AbortController {
+  activeExportController?.abort();
+  activeExportSelectionCleanup?.();
+  activeExportSelectionCleanup = null;
+  const controller = new AbortController();
+  activeExportController = controller;
+  return controller;
+}
+
+function cancelActiveExportOperation(): void {
+  activeExportController?.abort();
+  activeExportController = null;
+  activeExportSelectionCleanup?.();
+  activeExportSelectionCleanup = null;
+}
 
 /** Remove all injected Canvas export sections from the DOM after export completes */
 function removeCanvasExportSections(): void {
@@ -355,53 +401,21 @@ function filterTopLevel(elements: Element[]): HTMLElement[] {
 }
 
 function getConversationRoot(userSelectors: string[]): HTMLElement {
-  return resolveConversationRoot({ userSelectors, doc: document });
+  return exportAdapter.resolveConversationRoot(userSelectors, document);
 }
 
 function computeConversationId(): string {
-  return buildConversationIdFromUrl(window.location.href);
+  return (
+    exportAdapter.extractConversationIdFromUrl() || buildConversationIdFromUrl(window.location.href)
+  );
 }
 
 function getUserSelectors(): string[] {
-  const configured = (() => {
-    try {
-      return (
-        localStorage.getItem('geminiTimelineUserTurnSelector') ||
-        localStorage.getItem('geminiTimelineUserTurnSelectorAuto') ||
-        ''
-      );
-    } catch {
-      return '';
-    }
-  })();
-  const defaults = [
-    '.user-query-bubble-with-background',
-    '.user-query-bubble-container',
-    '.user-query-container',
-    'user-query-content .user-query-bubble-with-background',
-    'div[aria-label="User message"]',
-    'article[data-author="user"]',
-    'article[data-turn="user"]',
-    '[data-message-author-role="user"]',
-    'div[role="listitem"][data-user="true"]',
-  ];
-  return configured ? [configured, ...defaults.filter((s) => s !== configured)] : defaults;
+  return exportAdapter.getUserSelectors();
 }
 
 function getAssistantSelectors(): string[] {
-  return [
-    // Attribute-based roles
-    '[aria-label="Gemini response"]',
-    '[data-message-author-role="assistant"]',
-    '[data-message-author-role="model"]',
-    'article[data-author="assistant"]',
-    'article[data-turn="assistant"]',
-    'article[data-turn="model"]',
-    // Common Gemini containers
-    '.model-response, model-response',
-    '.response-container',
-    'div[role="listitem"]:not([data-user="true"])',
-  ];
+  return exportAdapter.getAssistantSelectors();
 }
 
 function dedupeByTextAndOffset(elements: HTMLElement[], firstTurnOffset: number): HTMLElement[] {
@@ -663,7 +677,7 @@ function collectChatPairs(): ChatTurn[] {
   return pairs;
 }
 
-type ExportMessageRole = 'user' | 'assistant';
+type ExportMessageRole = 'user' | 'assistant' | 'unknown';
 
 type ExportMessage = {
   messageId: string;
@@ -703,24 +717,43 @@ function buildExportMessagesFromPairs(pairs: ChatTurn[]): ExportMessage[] {
   return out;
 }
 
-function computeSortedMessages(pairsInput: ChatTurn[]): Array<ExportMessage & { absTop: number }> {
-  const msgs = buildExportMessagesFromPairs(pairsInput);
-  const withPos = msgs.map((message) => {
-    const rect = message.hostElement.getBoundingClientRect();
-    return {
-      ...message,
-      absTop: rect.top + window.scrollY,
-    };
-  });
+function resolveSelectionMessages(pairsInput: ChatTurn[]): ExportMessage[] {
+  const turnContainers = exportAdapter.collectTurnContainers?.();
+  if (turnContainers) {
+    // ChatGPT retains these top-level virtual-list items even when it unloads
+    // their inner message DOM. Their DOM order and data-turn-id-container value
+    // are consequently the only reliable source for selection identity/order.
+    return turnContainers.map((turn) => ({
+      messageId: turn.id,
+      role: turn.role,
+      hostElement: turn.container,
+      exportElement: turn.container,
+      text: '',
+      starred: false,
+    }));
+  }
 
-  withPos.sort((a, b) => a.absTop - b.absTop);
-  return withPos;
+  const messages = buildExportMessagesFromPairs(pairsInput);
+  return messages
+    .map((message) => {
+      const rect = message.hostElement.getBoundingClientRect();
+      return {
+        ...message,
+        absTop: rect.top + window.scrollY,
+      };
+    })
+    .sort((a, b) => a.absTop - b.absTop);
 }
 
 function buildTurnsForSelectedMessages(
   selectedMessages: readonly ExportMessage[],
 ): ExportChatTurn[] {
-  const groupedTurns = groupSelectedMessagesByTurn(selectedMessages);
+  const groupedTurns = groupSelectedMessagesByTurn(
+    selectedMessages.filter(
+      (message): message is ExportMessage & { role: Exclude<ExportMessageRole, 'unknown'> } =>
+        message.role !== 'unknown',
+    ),
+  );
   return groupedTurns
     .map((turn) => ({
       user: turn.user?.text || '',
@@ -744,7 +777,7 @@ function buildTurnsForSelectedMessageIds(
   pairsInput: ChatTurn[] = collectChatPairs(),
 ): ExportChatTurn[] {
   if (selectedMessageIds.size === 0) return [];
-  const selectedMessages = computeSortedMessages(pairsInput).filter((message) =>
+  const selectedMessages = resolveSelectionMessages(pairsInput).filter((message) =>
     selectedMessageIds.has(message.messageId),
   );
   return buildTurnsForSelectedMessages(selectedMessages);
@@ -1003,73 +1036,7 @@ function escapeCssAttributeValue(value: string): string {
 }
 
 function getConversationTitleForExport(): string {
-  // Strategy 1: Get from active conversation in Gemini Voyager Folder UI (most accurate)
-  try {
-    const activeFolderTitle =
-      document.querySelector(
-        '.gv-folder-conversation.gv-folder-conversation-selected .gv-conversation-title',
-      ) || document.querySelector('.gv-folder-conversation-selected .gv-conversation-title');
-
-    if (activeFolderTitle?.textContent?.trim()) {
-      return activeFolderTitle.textContent.trim();
-    }
-  } catch (error) {
-    try {
-      console.debug('[Export] Failed to get title from Folder Manager:', error);
-    } catch {}
-  }
-
-  // Strategy 1b: Get from Gemini native sidebar via current conversation ID
-  try {
-    const conversationId = extractConversationIdFromUrl();
-    if (conversationId) {
-      const title = extractTitleFromNativeSidebarByConversationId(conversationId);
-      if (title) return title;
-    }
-  } catch (error) {
-    try {
-      console.debug('[Export] Failed to get title from native sidebar by conversation id:', error);
-    } catch {}
-  }
-
-  // Strategy 2: Try to get from page title
-  const titleElement = document.querySelector('title');
-  if (titleElement) {
-    const title = titleElement.textContent?.trim();
-    if (isMeaningfulConversationTitle(title)) {
-      return title;
-    }
-  }
-
-  // Strategy 3: Try to get from sidebar conversation list (Gemini / AI Studio)
-  try {
-    const selectors = [
-      'mat-list-item.mdc-list-item--activated [mat-line]',
-      'mat-list-item[aria-current="page"] [mat-line]',
-      '.conversation-list-item.active .conversation-title',
-      '.active-conversation .title',
-    ];
-
-    for (const selector of selectors) {
-      const element = document.querySelector(selector);
-      const title = element?.textContent?.trim();
-      if (isMeaningfulConversationTitle(title)) {
-        return title;
-      }
-    }
-  } catch (error) {
-    try {
-      console.debug('[Export] Failed to get title from sidebar:', error);
-    } catch {}
-  }
-
-  // Strategy 4: URL fallback
-  const conversationId = extractConversationIdFromUrl();
-  if (conversationId) {
-    return `Conversation ${conversationId.slice(0, 8)}`;
-  }
-
-  return 'Untitled Conversation';
+  return exportAdapter.extractConversationTitle();
 }
 
 function findSidebarConversationLinkById(conversationId: string): HTMLAnchorElement | null {
@@ -1216,6 +1183,45 @@ function getTopUserElement(selectors: string[]): HTMLElement | null {
   if (!all.length) return null;
   const topLevel = filterTopLevel(all);
   return topLevel.length > 0 ? topLevel[0] : null;
+}
+
+/**
+ * Scroll the conversation to the very top so virtual-scroll containers
+ * render their topmost nodes, then wait for the DOM to settle.
+ */
+async function scrollToTopAndRender(userSelectors: string[]): Promise<void> {
+  const topEl = getTopUserElement(userSelectors);
+  if (topEl) {
+    topEl.scrollIntoView({ behavior: 'auto', block: 'start' });
+  }
+  // Give virtual scroll frameworks time to render the newly-visible nodes.
+  await new Promise<void>((resolve) => {
+    let settled = false;
+    let idleTimer: ReturnType<typeof setTimeout> | null = null;
+    const done = () => {
+      if (settled) return;
+      settled = true;
+      try {
+        obs?.disconnect();
+      } catch {}
+      if (idleTimer != null) clearTimeout(idleTimer);
+      resolve();
+    };
+    const obs = new MutationObserver(() => {
+      if (idleTimer != null) clearTimeout(idleTimer);
+      idleTimer = setTimeout(done, 400);
+    });
+    try {
+      obs.observe(document.body, { childList: true, subtree: true });
+    } catch {
+      done();
+      return;
+    }
+    // Also set a hard cap so we don't hang forever.
+    setTimeout(done, 3000);
+    // Kick the idle timer in case no mutations fire at all.
+    idleTimer = setTimeout(done, 400);
+  });
 }
 
 function isElementVisibleForAlignment(el: HTMLElement): boolean {
@@ -1398,6 +1404,8 @@ async function executeExportSequence(
   usePromptAsTurnHeading?: boolean,
   speakerLabels?: ExportSpeakerLabels,
 ): Promise<void> {
+  const signal = activeExportController?.signal;
+  throwIfExportCancelled(signal);
   // Cache Canvas documents at the very start of the export sequence,
   // before we click the top node or cause any DOM updates/scrolling.
   if (!paramState && isAnyCanvasOpen()) {
@@ -1413,6 +1421,16 @@ async function executeExportSequence(
       speakerLabels,
       initialSelectedMessageId,
     });
+
+  // Platforms that don't lazy-load history skip the preload loop,
+  // but scroll the conversation to the top first so virtual-scroll
+  // containers render their topmost nodes before we walk the DOM.
+  if (!exportAdapter.shouldPreloadHistory()) {
+    await scrollToTopAndRender(getUserSelectors());
+    throwIfExportCancelled(signal);
+    await performFinalExport(state, dict, lang);
+    return;
+  }
 
   if (state.attempt > 25) {
     console.warn('[Gemini Voyager] Export aborted: too many attempts.');
@@ -1473,6 +1491,7 @@ async function executeExportSequence(
     beforeFingerprint,
     EXPORT_PRELOAD_WAIT_OPTIONS,
   );
+  throwIfExportCancelled(signal);
 
   if (changed) {
     console.log('[Gemini Voyager] History expanded (soft refresh). Clicking top node again...');
@@ -1527,34 +1546,77 @@ async function performFinalExport(
   lang: AppLanguage,
 ) {
   const t = (key: TranslationKey) => dict[lang]?.[key] ?? dict.en?.[key] ?? key;
+  const signal = activeExportController?.signal;
+  throwIfExportCancelled(signal);
 
   await new Promise((r) => setTimeout(r, FINAL_EXPORT_PREPARE_DELAY_MS));
+  throwIfExportCancelled(signal);
   await captureGeneratedUiScreenshots();
+  throwIfExportCancelled(signal);
 
   const pairs = collectChatPairs();
-  const messages = buildExportMessagesFromPairs(pairs);
+  const messages = resolveSelectionMessages(pairs);
   if (messages.length === 0) {
     alert(t('export_dialog_warning'));
     return;
   }
+  document
+    .querySelectorAll<HTMLElement>('.gv-export-progress-overlay')
+    .forEach((overlay) => overlay.remove());
 
   const selectedIds = new Set<string>();
   let allMessageIds: string[] = [];
   const cleanupTasks: Array<() => void> = [];
   const idToHost = new Map<string, HTMLElement>();
   const idToCheckbox = new Map<string, HTMLButtonElement>();
-  const knownIds = new Set<string>();
+  const selectorBindings = new Map<
+    string,
+    { readonly host: HTMLElement; readonly cleanup: () => void }
+  >();
+  const messageRoles = new Map<string, ExportMessageRole>();
   let pendingInitialSelectionId: string | null = state.initialSelectedMessageId || null;
+  let refreshTimer: number | null = null;
+  let uiCleaned = false;
+  let sessionSettled = false;
+  let resolveSession: () => void = () => {};
+  const sessionPromise = new Promise<void>((resolve) => {
+    resolveSession = resolve;
+  });
+  const selectionUrl = location.href;
+  const selectionTitle = getConversationTitleForExport();
 
   let autoSelectAll = false;
+  let selectionBusy = false;
 
   const cleanup = () => {
+    if (uiCleaned) return;
+    uiCleaned = true;
+    if (refreshTimer !== null) {
+      window.clearTimeout(refreshTimer);
+      refreshTimer = null;
+    }
+    selectorBindings.forEach(({ cleanup: cleanupBinding }) => cleanupBinding());
+    selectorBindings.clear();
+    idToHost.clear();
+    idToCheckbox.clear();
     cleanupTasks.forEach((fn) => {
       try {
         fn();
       } catch {}
     });
     cleanupTasks.length = 0;
+  };
+
+  const settleSession = () => {
+    if (sessionSettled) return;
+    sessionSettled = true;
+    if (activeExportSelectionCleanup === cancelSession) activeExportSelectionCleanup = null;
+    resolveSession();
+  };
+
+  const cancelSession = () => {
+    cleanup();
+    settleSession();
   };
 
   const setSelected = (id: string, next: boolean) => {
@@ -1588,13 +1650,14 @@ async function performFinalExport(
       '[data-gv-export-action="export"]',
     ) as HTMLButtonElement | null;
     if (exportBtn) {
-      exportBtn.disabled = selectedIds.size === 0;
+      exportBtn.disabled = selectionBusy || selectedIds.size === 0;
     }
 
     const selectAllBtn = bar.querySelector(
       '[data-gv-export-action="selectAll"]',
     ) as HTMLButtonElement | null;
     if (selectAllBtn) {
+      selectAllBtn.disabled = selectionBusy;
       const isAllSelected = allMessageIds.length > 0 && selectedIds.size === allMessageIds.length;
       selectAllBtn.dataset.checked = isAllSelected ? 'true' : 'false';
     }
@@ -1603,7 +1666,8 @@ async function performFinalExport(
       '[data-gv-export-action="selectUser"]',
     ) as HTMLButtonElement | null;
     if (selectUserBtn) {
-      const userMessageIds = allMessageIds.filter((id) => id.endsWith(':u'));
+      selectUserBtn.disabled = selectionBusy;
+      const userMessageIds = allMessageIds.filter((id) => messageRoles.get(id) === 'user');
       const isOnlyUserSelected =
         userMessageIds.length > 0 &&
         selectedIds.size === userMessageIds.length &&
@@ -1615,23 +1679,38 @@ async function performFinalExport(
       '[data-gv-export-action="selectAI"]',
     ) as HTMLButtonElement | null;
     if (selectAIBtn) {
-      const aiMessageIds = allMessageIds.filter((id) => id.endsWith(':a'));
+      selectAIBtn.disabled = selectionBusy;
+      const aiMessageIds = allMessageIds.filter((id) => messageRoles.get(id) === 'assistant');
       const isOnlyAISelected =
         aiMessageIds.length > 0 &&
         selectedIds.size === aiMessageIds.length &&
         aiMessageIds.every((id) => selectedIds.has(id));
       selectAIBtn.dataset.checked = isOnlyAISelected ? 'true' : 'false';
     }
+
+    idToCheckbox.forEach((checkbox) => {
+      checkbox.disabled = selectionBusy;
+    });
   };
 
   const attachSelectorIfNeeded = (msg: ExportMessage) => {
-    if (knownIds.has(msg.messageId)) return;
-    knownIds.add(msg.messageId);
+    messageRoles.set(msg.messageId, msg.role);
+    const previousBinding = selectorBindings.get(msg.messageId);
+    if (
+      reconcileExistingSelectionHost(
+        previousBinding?.host,
+        msg.hostElement,
+        selectedIds.has(msg.messageId),
+      )
+    ) {
+      setSelected(msg.messageId, selectedIds.has(msg.messageId));
+      return;
+    }
+    previousBinding?.cleanup();
 
     const host = msg.hostElement;
     idToHost.set(msg.messageId, host);
     host.classList.add('gv-export-msg-host');
-    cleanupTasks.push(() => host.classList.remove('gv-export-msg-host'));
 
     const selector = document.createElement('div');
     selector.className = 'gv-export-msg-selector';
@@ -1657,6 +1736,7 @@ async function performFinalExport(
     };
 
     const toggleSelection = () => {
+      if (selectionBusy) return;
       autoSelectAll = false;
       const next = !selectedIds.has(msg.messageId);
       setSelected(msg.messageId, next);
@@ -1672,20 +1752,37 @@ async function performFinalExport(
     });
 
     host.addEventListener('click', toggleSelection);
-    cleanupTasks.push(() => host.removeEventListener('click', toggleSelection));
 
     selector.appendChild(checkbox);
     host.appendChild(selector);
-    cleanupTasks.push(() => selector.remove());
 
     idToCheckbox.set(msg.messageId, checkbox);
+    setSelected(msg.messageId, selectedIds.has(msg.messageId));
+
+    const cleanupBinding = () => {
+      host.removeEventListener('click', toggleSelection);
+      host.classList.remove('gv-export-msg-host', 'gv-export-msg-selected');
+      selector.remove();
+      if (idToHost.get(msg.messageId) === host) idToHost.delete(msg.messageId);
+      if (idToCheckbox.get(msg.messageId) === checkbox) idToCheckbox.delete(msg.messageId);
+    };
+    selectorBindings.set(msg.messageId, { host, cleanup: cleanupBinding });
   };
 
   const syncMessages = (pairsInput: ChatTurn[]) => {
-    const sorted = computeSortedMessages(pairsInput);
-    allMessageIds = sorted.map((m) => m.messageId);
+    const selectionMessages = resolveSelectionMessages(pairsInput);
+    allMessageIds = selectionMessages.map((m) => m.messageId);
+    const liveMessageIds = new Set(allMessageIds);
+    const removedSelectionIds = pruneMissingSelectionIds(selectedIds, liveMessageIds);
+    removedSelectionIds.forEach((id) => setSelected(id, false));
+    for (const [id, binding] of selectorBindings) {
+      if (liveMessageIds.has(id)) continue;
+      binding.cleanup();
+      selectorBindings.delete(id);
+      messageRoles.delete(id);
+    }
 
-    sorted.forEach((m) => attachSelectorIfNeeded(m));
+    selectionMessages.forEach((m) => attachSelectorIfNeeded(m));
 
     // Auto-select new messages when a policy is active.
     if (autoSelectAll) {
@@ -1765,54 +1862,67 @@ async function performFinalExport(
     } catch {}
   };
 
-  selectUserBtn.addEventListener('click', (ev) => {
-    swallow(ev);
+  const selectOnlyRole = async (role: Exclude<ExportMessageRole, 'unknown'>) => {
+    if (selectionBusy) return;
     autoSelectAll = false;
-
-    const userMessageIds = allMessageIds.filter((id) => id.endsWith(':u'));
-    const isOnlyUserSelected =
-      userMessageIds.length > 0 &&
-      selectedIds.size === userMessageIds.length &&
-      userMessageIds.every((id) => selectedIds.has(id));
-
-    if (isOnlyUserSelected) {
-      for (const id of allMessageIds) {
-        setSelected(id, false);
+    selectionBusy = true;
+    updateBottomBar(bar);
+    try {
+      throwIfExportCancelled(signal);
+      if (
+        exportAdapter.resolveSelectionRoles &&
+        allMessageIds.some((id) => messageRoles.get(id) === 'unknown')
+      ) {
+        const resolved = await withExportCollectingBanner(
+          () =>
+            showExportProgressOverlay(t, {
+              title: t('export_collecting_title'),
+              desc: t('export_collecting_desc'),
+            }),
+          () =>
+            exportAdapter.resolveSelectionRoles!(new Set(allMessageIds), {
+              signal,
+              expectedUrl: selectionUrl,
+            }),
+        );
+        resolved.forEach((resolvedRole, id) => messageRoles.set(id, resolvedRole));
       }
-    } else {
+
+      throwIfExportCancelled(signal);
+      const roleMessageIds = allMessageIds.filter((id) => messageRoles.get(id) === role);
+      const isOnlyRoleSelected =
+        roleMessageIds.length > 0 &&
+        selectedIds.size === roleMessageIds.length &&
+        roleMessageIds.every((id) => selectedIds.has(id));
       for (const id of allMessageIds) {
-        setSelected(id, id.endsWith(':u'));
+        setSelected(id, isOnlyRoleSelected ? false : messageRoles.get(id) === role);
+      }
+      updateBottomBar(bar);
+    } catch (error) {
+      if (!isAbortError(error)) alert(resolveExportErrorMessage(error, t));
+    } finally {
+      if (!signal?.aborted && !uiCleaned) {
+        selectionBusy = false;
+        updateBottomBar(bar);
       }
     }
-    updateBottomBar(bar);
+  };
+
+  selectUserBtn.addEventListener('click', (ev) => {
+    swallow(ev);
+    void selectOnlyRole('user');
   });
 
   selectAIBtn.addEventListener('click', (ev) => {
     swallow(ev);
-    autoSelectAll = false;
-
-    const aiMessageIds = allMessageIds.filter((id) => id.endsWith(':a'));
-    const isOnlyAISelected =
-      aiMessageIds.length > 0 &&
-      selectedIds.size === aiMessageIds.length &&
-      aiMessageIds.every((id) => selectedIds.has(id));
-
-    if (isOnlyAISelected) {
-      for (const id of allMessageIds) {
-        setSelected(id, false);
-      }
-    } else {
-      for (const id of allMessageIds) {
-        setSelected(id, id.endsWith(':a'));
-      }
-    }
-    updateBottomBar(bar);
+    void selectOnlyRole('assistant');
   });
   cleanupTasks.push(() => bar.remove());
   cleanupTasks.push(alignElementToConversationTitleCenter(bar));
 
   selectAllBtn.addEventListener('click', (ev) => {
     swallow(ev);
+    if (selectionBusy) return;
     const isAllSelected = allMessageIds.length > 0 && selectedIds.size === allMessageIds.length;
     if (isAllSelected) {
       selectedIds.clear();
@@ -1826,7 +1936,7 @@ async function performFinalExport(
     updateBottomBar(bar);
   });
 
-  const finish = () => {
+  const finishUi = () => {
     allMessageIds.forEach((id) => setSelected(id, false));
     selectedIds.clear();
     autoSelectAll = false;
@@ -1835,59 +1945,79 @@ async function performFinalExport(
 
   cancelBtn.addEventListener('click', (ev) => {
     swallow(ev);
-    finish();
+    activeExportController?.abort();
+    finishUi();
+    settleSession();
   });
 
   exportBtn.addEventListener('click', async (ev) => {
     swallow(ev);
+    if (selectionBusy) return;
     if (selectedIds.size === 0) {
       alert(t('export_select_mode_empty'));
       return;
     }
 
-    await ensureGeneratedUiScreenshotPermission();
-    const selectedIdsForExport = new Set(selectedIds);
-    // Cleanup before capture/export so selection UI is not included in screenshots.
-    finish();
-    await captureGeneratedUiScreenshots();
-
-    const turnsForExport = buildTurnsForSelectedMessageIds(
-      selectedIdsForExport,
-      collectChatPairs(),
-    );
-    if (turnsForExport.length === 0) {
-      alert(t('export_select_mode_empty'));
-      return;
-    }
-
-    const metadata: ConversationMetadata = {
-      url: location.href,
-      exportedAt: new Date().toISOString(),
-      count: turnsForExport.length,
-      title: getConversationTitleForExport(),
-    };
-
-    let includeImageSource = true;
-    if (state.format === 'markdown') {
-      const hasSearchImages = turnsForExport.some(
-        (turn) =>
-          turn.assistantElement?.querySelector('.attachment-container.search-images') != null,
-      );
-      if (hasSearchImages) {
-        includeImageSource = confirm(t('export_md_include_source_confirm'));
-      }
-    }
-
-    const hideProgress = showExportProgressOverlay(t);
+    let hideProgress: (() => void) | null = null;
     try {
+      throwIfExportCancelled(signal);
+      await ensureGeneratedUiScreenshotPermission();
+      const selectedIdsForExport = new Set(selectedIds);
+      // Cleanup before capture/export so selection UI is not included in screenshots.
+      finishUi();
+      await captureGeneratedUiScreenshots();
+      throwIfExportCancelled(signal);
+
+      const buildTurnsForSelection = exportAdapter.buildTurnsForSelection;
+      const turnsForExport = buildTurnsForSelection
+        ? await withExportCollectingBanner(
+            () =>
+              showExportProgressOverlay(t, {
+                title: t('export_collecting_title'),
+                desc: t('export_collecting_desc'),
+              }),
+            () =>
+              buildTurnsForSelection(selectedIdsForExport, {
+                signal,
+                expectedUrl: selectionUrl,
+              }),
+          )
+        : buildTurnsForSelectedMessageIds(selectedIdsForExport, collectChatPairs());
+      throwIfExportCancelled(signal);
+      if (exportRouteKey(location.href) !== exportRouteKey(selectionUrl)) {
+        throw new Error('export_conversation_changed');
+      }
+      if (turnsForExport.length === 0) throw new Error('export_empty_selection');
+
+      const metadata: ConversationMetadata = {
+        url: selectionUrl,
+        exportedAt: new Date().toISOString(),
+        count: turnsForExport.length,
+        title: selectionTitle,
+        platform: exportAdapter.site.label,
+      };
+
+      let includeImageSource = true;
+      if (state.format === 'markdown') {
+        const hasSearchImages = turnsForExport.some(
+          (turn) =>
+            turn.assistantContent?.html.includes('attachment-container.search-images') ||
+            turn.assistantElement?.querySelector('.attachment-container.search-images') != null,
+        );
+        if (hasSearchImages) includeImageSource = confirm(t('export_md_include_source_confirm'));
+      }
+
+      hideProgress = showExportProgressOverlay(t);
       const resultPromise = exportPendingConversation(
         state,
         turnsForExport,
         metadata,
         includeImageSource,
+        signal,
       );
       const minVisiblePromise = new Promise((resolve) => setTimeout(resolve, 420));
       const [result] = await Promise.all([resultPromise, minVisiblePromise]);
+      throwIfExportCancelled(signal);
 
       if (!result.success) {
         alert(resolveExportErrorMessage(result.error, t));
@@ -1896,23 +2026,31 @@ async function performFinalExport(
           autoDismissMs: 5000,
         });
       }
-    } catch (err) {
-      console.error('[Gemini Voyager] Export error:', err);
-      alert('Export error occurred.');
+    } catch (error) {
+      if (!isAbortError(error)) {
+        console.error('[Gemini Voyager] Export error:', error);
+        alert(resolveExportErrorMessage(error, t));
+      }
     } finally {
-      hideProgress();
+      hideProgress?.();
       removeCanvasExportSections();
       removeGeneratedUiScreenshotSections();
+      settleSession();
     }
   });
 
   // Observe new lazy-loaded messages while selection mode is active.
   const root = getConversationRoot(getUserSelectors());
-  let refreshTimer: number | null = null;
   const scheduleRefresh = () => {
     if (refreshTimer) return;
     refreshTimer = window.setTimeout(() => {
       refreshTimer = null;
+      if (signal?.aborted || uiCleaned) return;
+      if (exportRouteKey(location.href) !== exportRouteKey(selectionUrl)) {
+        activeExportController?.abort();
+        cancelSession();
+        return;
+      }
       try {
         syncMessages(collectChatPairs());
         updateBottomBar(bar);
@@ -1920,28 +2058,47 @@ async function performFinalExport(
     }, 250);
   };
 
-  const obs = new MutationObserver(() => scheduleRefresh());
+  const obs = new MutationObserver((mutations) => {
+    if (shouldRefreshSelectionUi(mutations)) scheduleRefresh();
+  });
   try {
-    obs.observe(root, { childList: true, subtree: true });
+    obs.observe(root, {
+      attributes: true,
+      attributeFilter: ['class'],
+      childList: true,
+      subtree: true,
+    });
     cleanupTasks.push(() => obs.disconnect());
   } catch {}
 
   // Escape to cancel
   const onKeyDown = (e: KeyboardEvent) => {
     if (e.key === 'Escape') {
-      finish();
-      document.removeEventListener('keydown', onKeyDown);
+      activeExportController?.abort();
+      finishUi();
+      settleSession();
     }
   };
   document.addEventListener('keydown', onKeyDown);
   cleanupTasks.push(() => document.removeEventListener('keydown', onKeyDown));
 
   // Initial sync
+  activeExportSelectionCleanup = cancelSession;
   syncMessages(pairs);
   updateBottomBar(bar);
+  await sessionPromise;
 }
 
-function showExportProgressOverlay(t: (key: TranslationKey) => string): () => void {
+function showExportProgressOverlay(
+  t: (key: TranslationKey) => string,
+  options?: { title?: string; desc?: string },
+): () => void {
+  // Never stack duplicate progress pills (e.g. export dialog progress followed
+  // by the scroll-collection banner) on top of each other.
+  document
+    .querySelectorAll<HTMLElement>('.gv-export-progress-overlay')
+    .forEach((overlay) => overlay.remove());
+
   const overlay = document.createElement('div');
   overlay.className = 'gv-export-progress-overlay';
 
@@ -1953,11 +2110,11 @@ function showExportProgressOverlay(t: (key: TranslationKey) => string): () => vo
 
   const title = document.createElement('div');
   title.className = 'gv-export-progress-title';
-  title.textContent = `${t('pm_export')}...`;
+  title.textContent = options?.title ?? `${t('pm_export')}...`;
 
   const desc = document.createElement('div');
   desc.className = 'gv-export-progress-desc';
-  desc.textContent = t('loading');
+  desc.textContent = options?.desc ?? t('loading');
 
   card.appendChild(spinner);
   card.appendChild(title);
@@ -2151,6 +2308,7 @@ async function handleResponseCopyImageClick(
       exportedAt: new Date().toISOString(),
       count: turnsForExport.length,
       title: getConversationTitleForExport(),
+      platform: exportAdapter.site.label,
     };
 
     const blob = await renderResponseImageBlob(turnsForExport, metadata, {
@@ -2397,13 +2555,67 @@ function setupConversationMenuExportObserver({
   );
 }
 
-export async function startExportButton(): Promise<void> {
+/**
+ * Mount the export entry point for the current platform.
+ *
+ * The returned cleanup is intentionally platform-agnostic. Native plugins own
+ * their lifecycle and retain this callback; Gemini's native caller may ignore it
+ * because its content script owns the page lifetime.
+ */
+export async function startExportButton(
+  options: { signal?: AbortSignal } = {},
+): Promise<() => void> {
+  const noCleanup = () => {};
+  if (options.signal?.aborted) return noCleanup;
   // Check for pending export immediately
-  checkPendingExport();
+  if (exportAdapter.shouldPreloadHistory()) {
+    checkPendingExport();
+  }
 
-  // i18n setup for tooltip and label
   const dict = await loadDictionaries();
+  if (options.signal?.aborted) return noCleanup;
   let lang = await getLanguage();
+  if (options.signal?.aborted) return noCleanup;
+  const t = (key: TranslationKey) => dict[lang]?.[key] ?? dict.en?.[key] ?? key;
+
+  // Platforms without Gemini's logo/menu UI: mount the persistent toolbar directly.
+  if (!exportAdapter.shouldPreloadHistory()) {
+    const toolbarHandle = mountPersistentExportToolbar({
+      label: t('pm_export'),
+      tooltip: t('exportChatJson'),
+      onClick: () => void showExportDialog(dict, lang, { signal: options.signal }),
+    });
+    toolbarHandle.root.setAttribute('data-gv-platform', exportAdapter.site.id);
+    const onStorageChange = (
+      changes: Record<string, chrome.storage.StorageChange>,
+      area: string,
+    ) => {
+      if (area !== 'sync') return;
+      const nextRaw = changes[StorageKeys.LANGUAGE]?.newValue;
+      if (typeof nextRaw === 'string') {
+        const next = normalizeLang(nextRaw);
+        lang = next;
+        toolbarHandle.setText(
+          dict[next]?.['pm_export'] ?? dict.en?.['pm_export'] ?? 'Export',
+          dict[next]?.['exportChatJson'] ?? dict.en?.['exportChatJson'] ?? 'Export chat history',
+        );
+      }
+    };
+    try {
+      chrome.storage?.onChanged?.addListener(onStorageChange);
+    } catch {}
+    return () => {
+      cancelActiveExportOperation();
+      toolbarHandle.remove();
+      try {
+        chrome.storage?.onChanged?.removeListener(onStorageChange);
+      } catch {}
+      activeExportDialog?.hide();
+      activeExportDialog = null;
+    };
+  }
+
+  // --- Gemini path: logo anchor + menu injection ---
 
   setupConversationMenuExportObserver({
     dict,
@@ -2426,7 +2638,6 @@ export async function startExportButton(): Promise<void> {
     dict,
   });
 
-  const t0 = (key: TranslationKey) => dict[lang]?.[key] ?? dict.en?.[key] ?? key;
   // The lr26 UI removed the logo entirely; resolveExportLogoAnchor short-circuits
   // there instead of waiting out the full timeout (which delayed this fallback
   // toolbar by several seconds on every conversation load).
@@ -2459,8 +2670,8 @@ export async function startExportButton(): Promise<void> {
     const ensureToolbarVisibility = (enabled: boolean) => {
       if (enabled && !toolbarHandle) {
         toolbarHandle = mountPersistentExportToolbar({
-          label: t0('pm_export'),
-          tooltip: t0('exportChatJson'),
+          label: t('pm_export'),
+          tooltip: t('exportChatJson'),
           onClick: () => showExportDialog(dict, lang),
         });
       } else if (!enabled && toolbarHandle) {
@@ -2503,11 +2714,11 @@ export async function startExportButton(): Promise<void> {
         { once: true },
       );
     } catch {}
-    return;
+    return () => {};
   }
   const btn = ensureDropdownInjected(logo);
-  if (!btn) return;
-  if ((btn as Element & { _gvBound?: boolean })._gvBound) return;
+  if (!btn) return () => {};
+  if ((btn as Element & { _gvBound?: boolean })._gvBound) return () => {};
   (btn as Element & { _gvBound?: boolean })._gvBound = true;
 
   // Swallow events on the button to avoid parent navigation (logo click -> /app)
@@ -2526,7 +2737,6 @@ export async function startExportButton(): Promise<void> {
     } catch {}
   });
 
-  const t = (key: TranslationKey) => dict[lang]?.[key] ?? dict.en?.[key] ?? key;
   const title = t('exportChatJson');
   const labelText = t('pm_export');
   btn.title = title;
@@ -2661,6 +2871,16 @@ export async function startExportButton(): Promise<void> {
   window.addEventListener('resize', reinjectExportButtonIfNeeded);
   window.addEventListener('gv-print-cleanup', reinjectExportButtonIfNeeded);
   window.addEventListener('afterprint', reinjectExportButtonIfNeeded);
+
+  return () => {
+    if (reinjectTimer !== null) clearTimeout(reinjectTimer);
+    window.removeEventListener('resize', reinjectExportButtonIfNeeded);
+    window.removeEventListener('gv-print-cleanup', reinjectExportButtonIfNeeded);
+    window.removeEventListener('afterprint', reinjectExportButtonIfNeeded);
+    try {
+      chrome.storage?.onChanged?.removeListener(storageChangeHandler);
+    } catch {}
+  };
 }
 
 async function showExportDialog(
@@ -2668,8 +2888,10 @@ async function showExportDialog(
   lang: AppLanguage,
   options?: {
     initialSelectedMessageId?: string | null;
+    signal?: AbortSignal;
   },
 ): Promise<void> {
+  if (options?.signal?.aborted) return;
   const t = (key: TranslationKey) => dict[lang]?.[key] ?? dict.en?.[key] ?? key;
   const speakerDefaults: ExportSpeakerLabels = {
     user: t('export_speaker_user_default'),
@@ -2679,16 +2901,20 @@ async function showExportDialog(
     getSavedImageExportWidth(),
     getSavedSpeakerLabelOverrides(),
   ]);
+  if (options?.signal?.aborted) return;
 
   // We defer collection until after the export sequence (scrolling/refresh checks)
 
   const dialog = new ExportDialog();
   const speakerLabelPreferenceSaver = new SpeakerLabelPreferenceSaver();
+  activeExportDialog = dialog;
 
   dialog.show({
     onExport: async (format, fontSize, imageWidth, usePromptAsTurnHeading, speakerLabels) => {
+      const controller = beginExportOperation();
       try {
         await speakerLabelPreferenceSaver.flush();
+        throwIfExportCancelled(controller.signal);
         await ensureGeneratedUiScreenshotPermission();
         if (format === 'image') {
           await saveImageExportWidth(imageWidth);
@@ -2705,12 +2931,18 @@ async function showExportDialog(
           speakerLabels,
         );
       } catch (err) {
-        console.error('[Gemini Voyager] Export error:', err);
+        if (!isAbortError(err)) console.error('[Gemini Voyager] Export error:', err);
+      } finally {
+        if (activeExportController === controller) {
+          activeExportController = null;
+          activeExportSelectionCleanup = null;
+        }
       }
     },
 
     onCancel: () => {
       void speakerLabelPreferenceSaver.flush();
+      if (activeExportDialog === dialog) activeExportDialog = null;
     },
     onSpeakerLabelOverridesChange: (speakerLabelOverrides) => {
       speakerLabelPreferenceSaver.schedule(speakerLabelOverrides);

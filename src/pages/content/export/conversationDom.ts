@@ -3,7 +3,7 @@ type ResolveConversationRootOptions = {
   doc?: Document;
 };
 
-const CONVERSATION_ROOT_CANDIDATES = [
+export const CONVERSATION_ROOT_CANDIDATES = [
   '#chat-history',
   'infinite-scroller.chat-history',
   'chat-window-content',

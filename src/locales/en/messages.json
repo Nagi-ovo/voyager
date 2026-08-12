@@ -568,6 +568,14 @@
     "message": "✗ Failed to copy",
     "description": "Formula copy failed message"
   },
+  "enableFormulaCopy": {
+    "message": "Enable formula copying",
+    "description": "Formula copy enable toggle"
+  },
+  "enableFormulaCopyHint": {
+    "message": "Copy a formula in the selected format when you click it.",
+    "description": "Formula copy enable toggle hint"
+  },
   "formulaCopyFormat": {
     "message": "Formula copy format",
     "description": "Formula copy format setting label"
@@ -1147,6 +1155,14 @@
   "loading": {
     "message": "Loading...",
     "description": "Loading message"
+  },
+  "export_collecting_title": {
+    "message": "Collecting conversation",
+    "description": "Banner shown while the page is scrolled to collect ChatGPT conversation DOM"
+  },
+  "export_collecting_desc": {
+    "message": "Please wait…",
+    "description": "Banner description shown during ChatGPT conversation DOM collection"
   },
   "keyboardShortcuts": {
     "message": "Keyboard Shortcuts",

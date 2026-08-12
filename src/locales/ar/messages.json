@@ -559,6 +559,14 @@
     "message": "✗ فشل النسخ",
     "description": "Formula copy failed message"
   },
+  "enableFormulaCopy": {
+    "message": "تفعيل نسخ الصيغ",
+    "description": "Formula copy enable toggle"
+  },
+  "enableFormulaCopyHint": {
+    "message": "ينسخ الصيغة بالتنسيق المحدد عند النقر عليها.",
+    "description": "Formula copy enable toggle hint"
+  },
   "formulaCopyFormat": {
     "message": "تنسيق نسخ الصيغة",
     "description": "Formula copy format setting label"
@@ -1138,6 +1146,14 @@
   "loading": {
     "message": "جارٍ التحميل...",
     "description": "Loading message"
+  },
+  "export_collecting_title": {
+    "message": "جارٍ جمع المحادثة",
+    "description": "لافتة تُعرض أثناء التمرير لجمع DOM محادثة ChatGPT"
+  },
+  "export_collecting_desc": {
+    "message": "يرجى الانتظار…",
+    "description": "وصف اللافتة أثناء جمع DOM محادثة ChatGPT"
   },
   "keyboardShortcuts": {
     "message": "اختصارات لوحة المفاتيح",

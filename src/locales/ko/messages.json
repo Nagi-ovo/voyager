@@ -556,6 +556,14 @@
     "message": "✗ 복사 실패",
     "description": "Formula copy failed message"
   },
+  "enableFormulaCopy": {
+    "message": "수식 복사 사용",
+    "description": "Formula copy enable toggle"
+  },
+  "enableFormulaCopyHint": {
+    "message": "수식을 클릭하면 선택한 형식으로 복사합니다.",
+    "description": "Formula copy enable toggle hint"
+  },
   "formulaCopyFormat": {
     "message": "수식 복사 형식",
     "description": "Formula copy format setting label"
@@ -1135,6 +1143,14 @@
   "loading": {
     "message": "로드 중...",
     "description": "Loading message"
+  },
+  "export_collecting_title": {
+    "message": "대화를 수집하는 중입니다",
+    "description": "ChatGPT 대화 DOM 수집을 위해 페이지를 스크롤하는 동안 표시되는 배너"
+  },
+  "export_collecting_desc": {
+    "message": "잠시만 기다려 주세요…",
+    "description": "ChatGPT 대화 DOM 수집 중 배너 설명"
   },
   "keyboardShortcuts": {
     "message": "키보드 단축키",

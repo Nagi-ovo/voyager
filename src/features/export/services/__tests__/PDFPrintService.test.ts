@@ -1,11 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { resolveExportAdapter } from '@/pages/content/export/adapter/platformAdapters';
+
+import { DOMContentExtractor } from '../DOMContentExtractor';
 import { renderElementToImageBlob } from '../ImageRenderService';
 import { PDFPrintService } from '../PDFPrintService';
 
 vi.mock('../ImageRenderService', () => ({
   renderElementToImageBlob: vi.fn(async () => new Blob(['png'], { type: 'image/png' })),
 }));
+
+DOMContentExtractor.setExportAdapter(resolveExportAdapter());
 
 describe('PDFPrintService', () => {
   afterEach(() => {
@@ -92,83 +97,6 @@ describe('PDFPrintService', () => {
     expect(styleText).toContain('background: #fff !important;');
   });
 
-  it('uses a compact ChatGPT-like conversation layout when requested', async () => {
-    document.title = 'Stale page title';
-    window.print = vi.fn();
-
-    await PDFPrintService.export(
-      [{ user: 'A short question', assistant: 'A useful answer', starred: false }],
-      {
-        url: 'https://chatgpt.com/c/abc',
-        exportedAt: new Date().toISOString(),
-        count: 1,
-        title: 'Export test',
-      },
-      { appearance: 'chatgpt' },
-    );
-
-    const documentRoot = document.querySelector('.gv-print-document--chatgpt');
-    const sourceLink = document.querySelector('.gv-print-meta a');
-    const styleText = document.getElementById('gv-pdf-print-styles')?.textContent ?? '';
-
-    expect(documentRoot).toBeTruthy();
-    expect(sourceLink?.textContent).toBe('ChatGPT conversation');
-    expect(document.title).toBe('Export test - ChatGPT');
-    expect(styleText).toContain('.gv-print-document--chatgpt');
-    expect(styleText).toContain('.gv-print-turn-user .gv-print-turn-text');
-    expect(styleText).toContain('border-radius: 18px 18px 4px 18px;');
-    expect(styleText).toContain('.gv-print-turn-text pre');
-    expect(styleText).toContain('border: 1px solid #d1d5db;');
-    expect(styleText).toContain('color: #1f1f1f;');
-    expect(styleText).toContain('display: table-header-group !important;');
-    expect(styleText).toContain('.gv-print-cover-title::before');
-  });
-
-  it('does not use the generic ChatGPT page title as a conversation title', async () => {
-    document.title = 'ChatGPT';
-    window.print = vi.fn();
-
-    await PDFPrintService.export(
-      [{ user: 'Question', assistant: 'Answer', starred: false }],
-      {
-        url: 'https://chatgpt.com/',
-        exportedAt: new Date().toISOString(),
-        count: 1,
-        title: '',
-      },
-      { appearance: 'chatgpt' },
-    );
-
-    expect(document.title).toBe('ChatGPT Conversation');
-  });
-
-  it('falls back to captured text when rich user HTML extraction is empty', async () => {
-    window.print = vi.fn();
-    const userElement = document.createElement('div');
-
-    await PDFPrintService.export(
-      [
-        {
-          user: 'Fallback user message',
-          assistant: 'Answer',
-          starred: false,
-          userElement,
-        },
-      ],
-      {
-        url: 'https://chatgpt.com/c/abc',
-        exportedAt: new Date().toISOString(),
-        count: 1,
-        title: 'Fallback content',
-      },
-      { appearance: 'chatgpt' },
-    );
-
-    expect(document.querySelector('.gv-print-turn-user .gv-print-turn-text')?.textContent).toBe(
-      'Fallback user message',
-    );
-  });
-
   it('injects descendant display override to survive immersive-mode print rules', async () => {
     window.print = vi.fn();
 
@@ -184,6 +112,39 @@ describe('PDFPrintService', () => {
 
     expect(styleText).toMatch(
       /body\.gv-pdf-printing #gv-pdf-print-container \*\s*\{\s*display:\s*revert !important;/,
+    );
+  });
+
+  it('restores ordered-list markers hidden by host page resets', async () => {
+    window.print = vi.fn();
+    const assistantElement = document.createElement('div');
+    assistantElement.innerHTML = `
+      <message-content>
+        <div class="markdown">
+          <ol start="22"><li>今天的空气有些凉。</li><li>一封邮件刚刚到达。</li></ol>
+        </div>
+      </message-content>
+    `;
+
+    await PDFPrintService.export(
+      [{ user: '', assistant: '', assistantElement, starred: false, omitEmptySections: true }],
+      {
+        url: 'https://chatgpt.com/c/x',
+        exportedAt: new Date().toISOString(),
+        count: 1,
+        title: 'Numbered list',
+        platform: 'ChatGPT',
+      },
+    );
+
+    const list = document.querySelector<HTMLOListElement>('.gv-print-turn-text ol');
+    const styleText = document.getElementById('gv-pdf-print-styles')?.textContent || '';
+    expect(list?.start).toBe(22);
+    expect(styleText).toMatch(
+      /\.gv-print-turn-text ol\s*\{[^}]*list-style-type:\s*decimal !important;/s,
+    );
+    expect(styleText).toMatch(
+      /\.gv-print-turn-text ul\s*\{[^}]*list-style-type:\s*disc !important;/s,
     );
   });
 
@@ -418,7 +379,7 @@ describe('PDFPrintService', () => {
       '.gv-print-turn-assistant .gv-export-mermaid',
     );
     const image = wrapper?.querySelector<HTMLImageElement>('img.gv-export-mermaid-image');
-    expect(image?.src).toMatch(/^data:image\/svg\+xml;charset=utf-8,/);
+    expect(image?.src).toMatch(/^data:image\/svg\+xml(?:;charset=utf-8,|;base64,)/);
     expect(image?.alt).toBe('Workflow diagram');
     expect(wrapper?.querySelector('svg')).toBeNull();
     expect(wrapper?.getAttribute('data-gv-mermaid-theme')).toBe('light');
@@ -437,6 +398,106 @@ describe('PDFPrintService', () => {
 
     const coverTitle = document.querySelector('.gv-print-cover-title');
     expect(coverTitle?.textContent).toBe('房贷还款方式对比分析');
+  });
+
+  it('prefers the adapter title over a generic ChatGPT page title', async () => {
+    document.title = 'ChatGPT';
+    window.print = vi.fn();
+
+    await PDFPrintService.export([{ user: 'u', assistant: 'a', starred: false }], {
+      url: 'https://chatgpt.com/c/abc12345',
+      exportedAt: new Date().toISOString(),
+      count: 1,
+      title: 'AI学习设备选择指南',
+      platform: 'ChatGPT',
+    });
+
+    expect(document.querySelector('.gv-print-cover-title')?.textContent).toBe('AI学习设备选择指南');
+    expect(document.title).toBe('AI学习设备选择指南 - ChatGPT');
+  });
+
+  it('keeps an already-rendered image when best-effort inlining fails', async () => {
+    window.print = vi.fn();
+    const originalFetch = global.fetch;
+    global.fetch = vi.fn().mockRejectedValue(new Error('CORS blocked')) as typeof fetch;
+
+    try {
+      await PDFPrintService.export(
+        [
+          {
+            user: '',
+            assistant: 'Image response',
+            starred: false,
+            omitEmptySections: true,
+            assistantContent: {
+              text: 'Image response',
+              html: '<img src="https://blocked.example/image.png" alt="kept" />',
+              attachments: [],
+              hasImages: true,
+              hasFormulas: false,
+              hasTables: false,
+              hasCode: false,
+            },
+          },
+        ],
+        {
+          url: 'https://chatgpt.com/c/x',
+          exportedAt: new Date().toISOString(),
+          count: 1,
+          title: 'Image fallback',
+          platform: 'ChatGPT',
+        },
+      );
+    } finally {
+      global.fetch = originalFetch;
+    }
+
+    expect(
+      document.querySelector<HTMLImageElement>('.gv-print-turn-text img')?.getAttribute('src'),
+    ).toBe('https://blocked.example/image.png');
+  });
+
+  it('preserves images beyond the inlining fetch cap', async () => {
+    window.print = vi.fn();
+    const originalFetch = global.fetch;
+    global.fetch = vi.fn().mockRejectedValue(new Error('CORS blocked')) as typeof fetch;
+    const images = Array.from(
+      { length: 41 },
+      (_, index) => `<img src="https://blocked.example/${index}.png" alt="${index}" />`,
+    ).join('');
+
+    try {
+      await PDFPrintService.export(
+        [
+          {
+            user: '',
+            assistant: 'Image gallery',
+            starred: false,
+            omitEmptySections: true,
+            assistantContent: {
+              text: 'Image gallery',
+              html: images,
+              attachments: [],
+              hasImages: true,
+              hasFormulas: false,
+              hasTables: false,
+              hasCode: false,
+            },
+          },
+        ],
+        {
+          url: 'https://chatgpt.com/c/x',
+          exportedAt: new Date().toISOString(),
+          count: 1,
+          title: 'Image cap',
+          platform: 'ChatGPT',
+        },
+      );
+    } finally {
+      global.fetch = originalFetch;
+    }
+
+    expect(document.querySelectorAll('.gv-print-turn-text img')).toHaveLength(41);
   });
 
   it('extracts title from native sidebar by conversation id and restores page title after print', async () => {

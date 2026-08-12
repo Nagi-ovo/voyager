@@ -1,8 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import browser from 'webextension-polyfill';
 
+import { DOMContentExtractor } from '@/features/export/services/DOMContentExtractor';
+import { resolveExportAdapter } from '@/pages/content/export/adapter/platformAdapters';
+
 import type { ForkNode } from '../forkTypes';
 import { startFork } from '../index';
+
+DOMContentExtractor.setExportAdapter(resolveExportAdapter());
 
 vi.mock('webextension-polyfill', () => ({
   default: {

@@ -1580,6 +1580,10 @@ body.dark-theme .gv-export-dropdown-btn:hover,
   pointer-events: auto;
 }
 
+.gv-persistent-export-toolbar[data-gv-platform='chatgpt'] {
+  top: 50px;
+}
+
 .gv-persistent-export-btn {
   display: inline-flex;
   align-items: center;
@@ -1633,6 +1637,7 @@ body.dark-theme .gv-export-dropdown-btn:hover,
 }
 
 /* Dark theme */
+html.dark .gv-persistent-export-btn,
 html.dark-theme .gv-persistent-export-btn,
 body.dark-theme .gv-persistent-export-btn,
 .theme-host.dark-theme .gv-persistent-export-btn {
@@ -1641,6 +1646,7 @@ body.dark-theme .gv-persistent-export-btn,
   color: #e5e7eb;
 }
 
+html.dark .gv-persistent-export-btn:hover,
 html.dark-theme .gv-persistent-export-btn:hover,
 body.dark-theme .gv-persistent-export-btn:hover,
 .theme-host.dark-theme .gv-persistent-export-btn:hover {
@@ -6432,9 +6438,9 @@ html[data-color-scheme='light'] .gv-tooltip {
 /* ==================== Formula Copy Feature ==================== */
 
 /* Math element hover effect - make formulas clickable */
-.math-inline,
-.math-display,
-[data-math] {
+:root.gv-formula-copy-enabled .math-inline:not(.gv-formula-copy-ignored),
+:root.gv-formula-copy-enabled .math-display:not(.gv-formula-copy-ignored),
+:root.gv-formula-copy-enabled [data-math]:not(.gv-formula-copy-ignored) {
   cursor: pointer !important;
   transition: all 0.2s ease;
   border-radius: 4px;
@@ -6442,18 +6448,21 @@ html[data-color-scheme='light'] .gv-tooltip {
   margin: 0 2px;
 }
 
-.math-inline:hover,
-.math-display:hover,
-[data-math]:hover {
+:root.gv-formula-copy-enabled .math-inline:not(.gv-formula-copy-ignored):hover,
+:root.gv-formula-copy-enabled .math-display:not(.gv-formula-copy-ignored):hover,
+:root.gv-formula-copy-enabled [data-math]:not(.gv-formula-copy-ignored):hover {
   background-color: var(--gv-pm-brand-soft) !important;
   box-shadow: 0 0 0 1px
     color-mix(in srgb, var(--gv-pm-brand, var(--gv-pm-brand-default)) 30%, transparent);
 }
 
 /* Light theme hover */
-html[data-color-scheme='light'] .math-inline:hover,
-html[data-color-scheme='light'] .math-display:hover,
-html[data-color-scheme='light'] [data-math]:hover {
+html.gv-formula-copy-enabled[data-color-scheme='light']
+  .math-inline:not(.gv-formula-copy-ignored):hover,
+html.gv-formula-copy-enabled[data-color-scheme='light']
+  .math-display:not(.gv-formula-copy-ignored):hover,
+html.gv-formula-copy-enabled[data-color-scheme='light']
+  [data-math]:not(.gv-formula-copy-ignored):hover {
   background-color: var(--gv-pm-brand-soft) !important;
 }
 
@@ -6539,31 +6548,32 @@ html[data-color-scheme='light'] .gv-copy-toast-error {
 }
 
 /* AI Studio formula hover effect - make ms-katex elements clickable */
-ms-katex {
+:root.gv-formula-copy-enabled ms-katex:not(.gv-formula-copy-ignored) {
   cursor: pointer !important;
   transition: all 0.2s ease;
   border-radius: 4px;
   display: inline-block;
 }
 
-ms-katex:hover {
+:root.gv-formula-copy-enabled ms-katex:not(.gv-formula-copy-ignored):hover {
   background-color: var(--gv-pm-brand-soft) !important;
   box-shadow: 0 0 0 2px
     color-mix(in srgb, var(--gv-pm-brand, var(--gv-pm-brand-default)) 20%, transparent);
 }
 
 /* AI Studio: Also style .katex elements inside ms-katex for better hit area feedback */
-ms-katex .katex {
+:root.gv-formula-copy-enabled ms-katex:not(.gv-formula-copy-ignored) .katex {
   transition: opacity 0.2s ease;
 }
 
-ms-katex:hover .katex {
+:root.gv-formula-copy-enabled ms-katex:not(.gv-formula-copy-ignored):hover .katex {
   opacity: 0.9;
 }
 
 /* AI Studio light theme formula hover - detect via body background or explicit theme */
-html[data-color-scheme='light'] ms-katex:hover,
-body.light-theme ms-katex:hover {
+html.gv-formula-copy-enabled[data-color-scheme='light']
+  ms-katex:not(.gv-formula-copy-ignored):hover,
+:root.gv-formula-copy-enabled body.light-theme ms-katex:not(.gv-formula-copy-ignored):hover {
   background-color: var(--gv-pm-brand-soft) !important;
 }
 
@@ -6574,7 +6584,7 @@ body.light-theme ms-katex:hover {
    and prompt manager. NB: KaTeX is size-sensitive, so we deliberately add NO
    padding — only border-radius + background + box-shadow, none of which shift
    layout or disturb the maths rendering. */
-:root.gv-platform-themed .katex {
+:root.gv-platform-themed.gv-formula-copy-enabled .katex:not(.gv-formula-copy-ignored) {
   cursor: pointer;
   border-radius: 4px;
   transition:
@@ -6582,15 +6592,15 @@ body.light-theme ms-katex:hover {
     box-shadow 0.15s ease;
 }
 
-:root.gv-platform-themed .katex:hover {
+:root.gv-platform-themed.gv-formula-copy-enabled .katex:not(.gv-formula-copy-ignored):hover {
   background-color: var(--gv-pm-brand-soft);
   box-shadow: 0 0 0 1px var(--gv-pm-brand, var(--gv-pm-brand-default));
 }
 
-:root.gv-platform-themed .math-inline .katex:hover,
-:root.gv-platform-themed .math-display .katex:hover,
-:root.gv-platform-themed [data-math] .katex:hover,
-:root.gv-platform-themed ms-katex .katex:hover {
+:root.gv-platform-themed.gv-formula-copy-enabled .math-inline .katex:hover,
+:root.gv-platform-themed.gv-formula-copy-enabled .math-display .katex:hover,
+:root.gv-platform-themed.gv-formula-copy-enabled [data-math] .katex:hover,
+:root.gv-platform-themed.gv-formula-copy-enabled ms-katex .katex:hover {
   background-color: transparent;
   box-shadow: none;
 }

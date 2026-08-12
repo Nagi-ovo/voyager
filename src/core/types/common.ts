@@ -112,6 +112,7 @@ export const StorageKeys = {
 
   // Global settings
   LANGUAGE: 'language',
+  FORMULA_COPY_ENABLED: 'gvFormulaCopyEnabled',
   FORMULA_COPY_FORMAT: 'gvFormulaCopyFormat',
   // Legacy single-toggle key. Kept for migration: when neither
   // WATERMARK_DOWNLOAD_ENABLED nor WATERMARK_PREVIEW_ENABLED is present, this

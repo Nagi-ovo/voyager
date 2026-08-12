@@ -1,7 +1,7 @@
+import type { ChatTurn } from '@/features/export/types/export';
 import { type Dispose, PluginScope } from '@/features/plugins/runtime/pluginScope';
-
-import type { ChatGptMessageSnapshot } from './conversation';
-import { extractSnapshotMarkdown } from './conversation';
+import { insertTextIntoChatInput } from '@/pages/content/chatInput';
+import type { AppLanguage } from '@/utils/language';
 
 export type HandoffDelivery =
   | { readonly mode: 'inline'; readonly text: string }
@@ -11,6 +11,12 @@ export type HandoffDelivery =
       readonly attachment: string;
       readonly filename: string;
     };
+
+export interface HandoffPlan {
+  readonly delivery: HandoffDelivery;
+  readonly transcript: string;
+  readonly backupFilename: string;
+}
 
 interface PendingHandoff {
   readonly delivery: HandoffDelivery;
@@ -27,7 +33,7 @@ export type HandoffResult =
 
 export type PendingHandoffResult = 'ready' | 'delivery-failed' | 'account-mismatch' | null;
 
-const TEMP_TOGGLE_SELECTOR = [
+export const CHATGPT_TEMP_TOGGLE_SELECTOR = [
   '[data-testid="temporary-chat-toggle"]',
   'button[aria-label*="temporary chat" i]',
   'button[aria-label*="临时聊天"]',
@@ -36,13 +42,22 @@ const TEMP_TOGGLE_SELECTOR = [
 const COMPOSER_SELECTOR = '#prompt-textarea, [contenteditable="true"][role="textbox"]';
 const NEW_CHAT_SELECTOR =
   'a[data-testid="create-new-chat-button"], a[href="/"][data-testid*="new" i]';
-const PENDING_KEY = 'gv-chatgpt-export-pending-handoff';
+export const PENDING_HANDOFF_KEY = 'gv-chatgpt-temporary-handoff-pending';
 const PENDING_TTL_MS = 60_000;
 const INLINE_THRESHOLD = 5_000;
 let activeHandoffOperations = 0;
+let fallbackFilenameSequence = 0;
+
+function abortError(): DOMException {
+  return new DOMException('Temporary chat handoff cancelled', 'AbortError');
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === 'AbortError';
+}
 
 function wait(scope: PluginScope, ms: number): Promise<void> {
-  if (scope.signal.aborted) return Promise.reject(new DOMException('Cancelled', 'AbortError'));
+  if (scope.signal.aborted) return Promise.reject(abortError());
   return new Promise((resolve, reject) => {
     let stopTimer: Dispose | null = null;
     let stopAbort: Dispose | null = null;
@@ -52,9 +67,7 @@ function wait(scope: PluginScope, ms: number): Promise<void> {
       action();
     };
     stopTimer = scope.timer(() => settle(resolve), ms);
-    stopAbort = scope.on(scope.signal, 'abort', () =>
-      settle(() => reject(new DOMException('Cancelled', 'AbortError'))),
-    );
+    stopAbort = scope.on(scope.signal, 'abort', () => settle(() => reject(abortError())));
   });
 }
 
@@ -64,7 +77,7 @@ export function isTemporaryChat(): boolean {
   } catch {
     // A malformed host URL is not evidence of temporary mode.
   }
-  const toggle = document.querySelector<HTMLElement>(TEMP_TOGGLE_SELECTOR);
+  const toggle = document.querySelector<HTMLElement>(CHATGPT_TEMP_TOGGLE_SELECTOR);
   if (!toggle) return false;
   const label =
     `${toggle.getAttribute('aria-label') || ''} ${toggle.textContent || ''}`.toLowerCase();
@@ -78,22 +91,52 @@ export function isTemporaryChat(): boolean {
   );
 }
 
-export function buildHandoffTranscript(messages: readonly ChatGptMessageSnapshot[]): string {
-  return messages
-    .map((message) => {
-      const heading = message.role === 'user' ? '## User' : '## ChatGPT';
-      const content = extractSnapshotMarkdown(message).trim() || '_(empty message)_';
-      return `${heading}\n\n${content}`;
-    })
-    .join('\n\n');
+function turnContent(turn: ChatTurn, role: 'user' | 'assistant'): string {
+  if (role === 'user') return (turn.userContent?.text || turn.user || '').trim();
+  return (turn.assistantContent?.text || turn.assistant || '').trim();
+}
+
+export function buildHandoffTranscript(turns: readonly ChatTurn[]): string {
+  const sections: string[] = [];
+  for (const turn of turns) {
+    const user = turnContent(turn, 'user');
+    const assistant = turnContent(turn, 'assistant');
+    if (user) sections.push(`## User\n\n${user}`);
+    if (assistant) sections.push(`## ChatGPT\n\n${assistant}`);
+  }
+  return sections.join('\n\n');
+}
+
+function randomFilenameNonce(): string {
+  try {
+    if (typeof crypto.randomUUID === 'function') return crypto.randomUUID().slice(0, 12);
+    const values = new Uint32Array(2);
+    crypto.getRandomValues(values);
+    return Array.from(values, (value) => value.toString(36))
+      .join('')
+      .slice(0, 12);
+  } catch {
+    fallbackFilenameSequence += 1;
+    return fallbackFilenameSequence.toString(36).padStart(4, '0');
+  }
+}
+
+export function createHandoffFilename(now = new Date(), nonce = randomFilenameNonce()): string {
+  const timestamp = now
+    .toISOString()
+    .replace(/[-:.TZ]/g, '')
+    .slice(0, 17);
+  const safeNonce = nonce.replace(/[^a-z0-9]/gi, '').slice(0, 12) || randomFilenameNonce();
+  return `chatgpt-temporary-handoff-${timestamp}-${safeNonce}.md`;
 }
 
 export function planHandoff(
-  messages: readonly ChatGptMessageSnapshot[],
-  language = navigator.language,
-): HandoffDelivery {
-  const transcript = buildHandoffTranscript(messages);
-  const chinese = /^zh(?:-|_|$)/i.test(language);
+  turns: readonly ChatTurn[],
+  language: AppLanguage = 'en',
+  filename = createHandoffFilename(),
+): HandoffPlan {
+  const transcript = buildHandoffTranscript(turns);
+  const chinese = language === 'zh' || language === 'zh_TW';
   const title = chinese ? '[从临时对话继续]' : '[Continue from a temporary chat]';
   const inlineInstruction = chinese
     ? '下面是刚才临时对话的完整记录。请把它当作当前对话的既有上下文，保持原来的语气、约束和任务状态，从最后一条消息自然继续。'
@@ -102,19 +145,31 @@ export function planHandoff(
     ? '已附上刚才临时对话的 Markdown 记录。请先完整读取附件，把它当作当前对话的既有上下文，再从最后一条消息自然继续。'
     : 'The attached Markdown file contains the complete temporary chat. Read it first, treat it as the existing context, and continue naturally from its final message.';
 
-  if (transcript.length <= INLINE_THRESHOLD) {
-    return {
-      mode: 'inline',
-      text: `${title}\n\n${inlineInstruction}\n\n--- TRANSCRIPT START ---\n\n${transcript}\n\n--- TRANSCRIPT END ---`,
-    };
-  }
-  const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-  return {
-    mode: 'attachment',
-    directive: `${title}\n\n${attachmentInstruction}`,
-    attachment: transcript,
-    filename: `chatgpt-temporary-handoff-${stamp}.md`,
-  };
+  const delivery: HandoffDelivery =
+    transcript.length <= INLINE_THRESHOLD
+      ? {
+          mode: 'inline',
+          text: `${title}\n\n${inlineInstruction}\n\n--- TRANSCRIPT START ---\n\n${transcript}\n\n--- TRANSCRIPT END ---`,
+        }
+      : {
+          mode: 'attachment',
+          directive: `${title}\n\n${attachmentInstruction}`,
+          attachment: transcript,
+          filename,
+        };
+  return { delivery, transcript, backupFilename: filename };
+}
+
+export function downloadHandoffBackup(transcript: string, filename: string): void {
+  const blob = new Blob([transcript], { type: 'text/markdown;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 function readAccountScope(): string {
@@ -135,23 +190,33 @@ export function getChatGptNewChatPath(): string {
   }
 }
 
+function clearPending(): void {
+  try {
+    sessionStorage.removeItem(PENDING_HANDOFF_KEY);
+  } catch {
+    // Storage can be unavailable in locked-down browsing contexts.
+  }
+}
+
 function writePending(delivery: HandoffDelivery, accountScope: string): void {
   sessionStorage.setItem(
-    PENDING_KEY,
+    PENDING_HANDOFF_KEY,
     JSON.stringify({ delivery, storedAt: Date.now(), accountScope } satisfies PendingHandoff),
   );
 }
 
 function readPending(): PendingHandoff | null {
   try {
-    const raw = sessionStorage.getItem(PENDING_KEY);
+    const raw = sessionStorage.getItem(PENDING_HANDOFF_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<PendingHandoff>;
     if (
       typeof parsed.storedAt !== 'number' ||
+      !Number.isFinite(parsed.storedAt) ||
       typeof parsed.accountScope !== 'string' ||
       !parsed.delivery
     ) {
+      clearPending();
       return null;
     }
     const delivery = parsed.delivery;
@@ -166,17 +231,11 @@ function readPending(): PendingHandoff | null {
     ) {
       return { delivery, storedAt: parsed.storedAt, accountScope: parsed.accountScope };
     }
+    clearPending();
     return null;
   } catch {
+    clearPending();
     return null;
-  }
-}
-
-function clearPending(): void {
-  try {
-    sessionStorage.removeItem(PENDING_KEY);
-  } catch {
-    // Storage can be unavailable in locked-down browsing contexts.
   }
 }
 
@@ -207,24 +266,28 @@ function readComposerText(input: HTMLElement): string {
   return input.textContent || '';
 }
 
+function placeComposerCaretAtEnd(input: HTMLElement): void {
+  if (input instanceof HTMLTextAreaElement || input instanceof HTMLInputElement) {
+    input.setSelectionRange(input.value.length, input.value.length);
+    return;
+  }
+  const selection = window.getSelection();
+  if (!selection) return;
+  const range = document.createRange();
+  range.selectNodeContents(input);
+  range.collapse(false);
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
 function insertComposerText(input: HTMLElement, text: string): boolean {
   input.focus();
-  const inserted = document.execCommand?.('insertText', false, text) === true;
-  if (inserted && readComposerText(input).includes(text)) {
-    input.dispatchEvent(
-      new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }),
-    );
-    return true;
-  }
-
   const existing = readComposerText(input).trim();
-  const next = existing ? `${existing}\n\n${text}` : text;
-  if (input instanceof HTMLTextAreaElement || input instanceof HTMLInputElement) input.value = next;
-  else input.appendChild(document.createTextNode(existing ? `\n\n${text}` : text));
-  input.dispatchEvent(
-    new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }),
+  placeComposerCaretAtEnd(input);
+  return (
+    insertTextIntoChatInput(existing ? `\n\n${text}` : text, input) &&
+    readComposerText(input).includes(text)
   );
-  return readComposerText(input).includes(text);
 }
 
 function hasAttachmentPreview(input: HTMLElement, filename: string): boolean {
@@ -257,26 +320,31 @@ function hasAttachmentPreview(input: HTMLElement, filename: string): boolean {
   return labelledPreview || (root.textContent || '').toLowerCase().includes(normalizedFilename);
 }
 
-async function dispatchAttachmentAndVerify(input: HTMLElement, file: File): Promise<boolean> {
-  const alreadyVisible = hasAttachmentPreview(input, file.name);
-  if (alreadyVisible) return true;
+async function dispatchAttachmentAndVerify(
+  scope: PluginScope,
+  input: HTMLElement,
+  file: File,
+): Promise<boolean> {
+  if (hasAttachmentPreview(input, file.name)) return true;
   if (!dispatchPaste(input, null, file)) return false;
   if (hasAttachmentPreview(input, file.name)) return true;
 
   const deadline = Date.now() + 1_200;
   while (Date.now() < deadline) {
-    await new Promise((resolve) => window.setTimeout(resolve, 60));
+    await wait(scope, 60);
     if (hasAttachmentPreview(input, file.name)) return true;
   }
   return false;
 }
 
-async function deliver(input: HTMLElement, delivery: HandoffDelivery): Promise<boolean> {
-  if (delivery.mode === 'inline') {
-    return insertComposerText(input, delivery.text);
-  }
+async function deliver(
+  scope: PluginScope,
+  input: HTMLElement,
+  delivery: HandoffDelivery,
+): Promise<boolean> {
+  if (delivery.mode === 'inline') return insertComposerText(input, delivery.text);
   const file = new File([delivery.attachment], delivery.filename, { type: 'text/markdown' });
-  if (!(await dispatchAttachmentAndVerify(input, file))) return false;
+  if (!(await dispatchAttachmentAndVerify(scope, input, file))) return false;
   return insertComposerText(input, delivery.directive);
 }
 
@@ -305,7 +373,7 @@ async function findComposer(
 
 export async function leaveTemporaryChat(scope: PluginScope): Promise<HTMLElement | null> {
   const temporaryComposer = currentComposer() || undefined;
-  const toggle = document.querySelector<HTMLElement>(TEMP_TOGGLE_SELECTOR);
+  const toggle = document.querySelector<HTMLElement>(CHATGPT_TEMP_TOGGLE_SELECTOR);
   if (toggle) {
     toggle.click();
     for (let attempt = 0; attempt < 16; attempt += 1) {
@@ -346,9 +414,6 @@ export async function handoffTemporaryChat(
     }
     const input = await leaveTemporaryChat(scope);
     if (!input) {
-      // Once temporary mode has been left, a missing composer can simply mean
-      // the SPA is still mounting the new-chat editor. Keep the pending payload
-      // so the plugin's composer observer can resume delivery later.
       if (!isTemporaryChat()) return 'composer-missing';
       clearPending();
       return 'leave-failed';
@@ -357,10 +422,13 @@ export async function handoffTemporaryChat(
       clearPending();
       return 'account-mismatch';
     }
-    const delivered = await deliver(input, delivery);
+    const delivered = await deliver(scope, input, delivery);
     if (!delivered) return 'delivery-failed';
     clearPending();
     return 'ready';
+  } catch (error) {
+    if (isAbortError(error)) clearPending();
+    throw error;
   } finally {
     activeHandoffOperations -= 1;
   }
@@ -373,7 +441,7 @@ export async function resumePendingHandoff(scope: PluginScope): Promise<PendingH
   }
   const pending = readPending();
   if (!pending) return null;
-  if (Date.now() - pending.storedAt > PENDING_TTL_MS) {
+  if (Date.now() - pending.storedAt > PENDING_TTL_MS || pending.storedAt > Date.now() + 5_000) {
     clearPending();
     return null;
   }
@@ -384,7 +452,7 @@ export async function resumePendingHandoff(scope: PluginScope): Promise<PendingH
   if (isTemporaryChat()) return null;
   const input = await findComposer(scope, 6_000);
   if (!input) return null;
-  const delivered = await deliver(input, pending.delivery);
+  const delivered = await deliver(scope, input, pending.delivery);
   if (!delivered) return 'delivery-failed';
   clearPending();
   return 'ready';

@@ -1,20 +1,27 @@
 import temml from 'temml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import browser from 'webextension-polyfill';
 
 import { setCachedLanguage } from '@/utils/i18n';
 
 import { FormulaCopyService } from './FormulaCopyService';
 
 // Mock dependencies
+const storageMocks = vi.hoisted(() => ({
+  get: vi.fn(),
+  addListener: vi.fn(),
+  removeListener: vi.fn(),
+}));
+
 vi.mock('webextension-polyfill', () => ({
   default: {
     storage: {
       sync: {
-        get: vi.fn().mockResolvedValue({}),
+        get: storageMocks.get,
       },
       onChanged: {
-        addListener: vi.fn(),
-        removeListener: vi.fn(),
+        addListener: storageMocks.addListener,
+        removeListener: storageMocks.removeListener,
       },
     },
     i18n: {
@@ -65,6 +72,9 @@ describe('FormulaCopyService', () => {
   beforeEach(() => {
     // Reset mocks
     vi.clearAllMocks();
+    writeMock.mockReset().mockResolvedValue(undefined);
+    writeTextMock.mockReset().mockResolvedValue(undefined);
+    storageMocks.get.mockResolvedValue({});
 
     // Mock navigator.clipboard
     Object.assign(navigator, {
@@ -80,21 +90,600 @@ describe('FormulaCopyService', () => {
     (globalThis as unknown as { Blob: typeof TestBlob }).Blob = TestBlob;
 
     resetSingleton();
-    service = FormulaCopyService.getInstance();
+    service = FormulaCopyService.getInstance({ observeGeminiArrows: true });
   });
 
   afterEach(() => {
     if (service) {
-      service.destroy();
+      service.dispose();
     }
     document.body.innerHTML = '';
     (globalThis as unknown as { Blob: typeof originalBlob }).Blob = originalBlob;
     vi.clearAllMocks();
   });
 
-  it('should initialize correctly', () => {
+  it('should initialize correctly and retain its active CSS marker', async () => {
     service.initialize();
     expect(service.isServiceInitialized()).toBe(true);
+    expect(document.documentElement.classList.contains('gv-formula-copy-enabled')).toBe(true);
+
+    document.documentElement.classList.remove('gv-formula-copy-enabled');
+    await Promise.resolve();
+    expect(document.documentElement.classList.contains('gv-formula-copy-enabled')).toBe(true);
+
+    service.destroy();
+    expect(document.documentElement.classList.contains('gv-formula-copy-enabled')).toBe(false);
+  });
+
+  it.each([
+    '\\rightarrow',
+    '\\to',
+    '\\longrightarrow',
+    '\\Rightarrow',
+    '\\Longrightarrow',
+    '\\leftrightarrow',
+    '\\rightleftharpoons',
+    '\\xrightarrow{\\text{step 1}}',
+    '\\xrightarrow{f(x)}',
+    '→',
+    '⟶',
+    '⇒',
+    '⟹',
+    '↔',
+    '⇌',
+  ])(
+    'ignores an isolated Gemini inline arrow source before first hover: %s',
+    async (arrowSource) => {
+      const wrapper = document.createElement('span');
+      wrapper.classList.add('math-inline');
+      const mathElement = document.createElement('span');
+      mathElement.setAttribute('data-math', arrowSource);
+      wrapper.appendChild(mathElement);
+      document.body.appendChild(wrapper);
+      const pageClick = vi.fn();
+      mathElement.addEventListener('click', pageClick);
+
+      service.initialize();
+      // Initial scan marks both the real Gemini outer wrapper and inner source,
+      // so formula padding/cursor rules never apply to this ordinary arrow.
+      expect(mathElement.classList.contains('gv-formula-copy-ignored')).toBe(true);
+      expect(wrapper.classList.contains('gv-formula-copy-ignored')).toBe(true);
+      const clickEvent = new MouseEvent('click', { bubbles: true, cancelable: true });
+      mathElement.dispatchEvent(clickEvent);
+      await Promise.resolve();
+
+      expect(writeMock).not.toHaveBeenCalled();
+      expect(writeTextMock).not.toHaveBeenCalled();
+      expect(document.querySelector('.gv-copy-toast')).toBeNull();
+      expect(pageClick).toHaveBeenCalledTimes(1);
+      expect(clickEvent.defaultPrevented).toBe(false);
+
+      service.destroy();
+      expect(mathElement.classList.contains('gv-formula-copy-ignored')).toBe(false);
+      expect(wrapper.classList.contains('gv-formula-copy-ignored')).toBe(false);
+    },
+  );
+
+  it.each([
+    {
+      platform: 'AI Studio',
+      createFixture: () => {
+        const root = document.createElement('ms-katex');
+        root.innerHTML =
+          '<span class="katex"><annotation encoding="application/x-tex">\\rightarrow</annotation></span>';
+        return { root, target: root.querySelector<HTMLElement>('.katex')! };
+      },
+    },
+    {
+      platform: 'Claude / legacy ChatGPT',
+      createFixture: () => {
+        const root = document.createElement('span');
+        root.className = 'katex';
+        root.innerHTML = '<annotation encoding="application/x-tex">\\rightarrow</annotation>';
+        return { root, target: root };
+      },
+    },
+    {
+      platform: 'current ChatGPT',
+      createFixture: () => {
+        const root = document.createElement('span');
+        root.setAttribute('data-math-source', '\\rightarrow');
+        root.innerHTML = '<span class="katex"><span class="katex-html">→</span></span>';
+        return { root, target: root.querySelector<HTMLElement>('.katex-html')! };
+      },
+    },
+  ])(
+    'keeps an explicit arrow-only math source copyable on $platform',
+    async ({ createFixture }) => {
+      const clipboard = navigator.clipboard as unknown as { write?: unknown };
+      clipboard.write = undefined;
+      const { root, target } = createFixture();
+      document.body.appendChild(root);
+
+      service.initialize();
+      target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+
+      expect(writeMock).not.toHaveBeenCalled();
+      expect(writeTextMock).toHaveBeenCalledWith('$\\rightarrow$');
+      expect(root.classList.contains('gv-formula-copy-ignored')).toBe(false);
+      expect(root.querySelector('.gv-formula-copy-ignored')).toBeNull();
+    },
+  );
+
+  it('keeps a Gemini display arrow formula copyable', async () => {
+    const clipboard = navigator.clipboard as unknown as { write?: unknown };
+    clipboard.write = undefined;
+    const wrapper = document.createElement('div');
+    wrapper.className = 'math-block';
+    const mathElement = document.createElement('span');
+    mathElement.setAttribute('data-math', '\\rightarrow');
+    wrapper.appendChild(mathElement);
+    document.body.appendChild(wrapper);
+
+    service.initialize();
+    expect(mathElement.classList.contains('gv-formula-copy-ignored')).toBe(false);
+    mathElement.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await Promise.resolve();
+
+    expect(writeTextMock).toHaveBeenCalledWith('$$\\rightarrow$$');
+  });
+
+  it('marks a dynamically-rendered Gemini inline arrow without waiting for hover', async () => {
+    service.initialize();
+    const wrapper = document.createElement('span');
+    wrapper.className = 'math-inline';
+    const mathElement = document.createElement('span');
+    mathElement.setAttribute('data-math', '\\rightarrow');
+    wrapper.appendChild(mathElement);
+    document.body.appendChild(wrapper);
+
+    await Promise.resolve();
+
+    expect(mathElement.classList.contains('gv-formula-copy-ignored')).toBe(true);
+    expect(wrapper.classList.contains('gv-formula-copy-ignored')).toBe(true);
+  });
+
+  it('coalesces same-wrapper arrow refreshes within one mutation batch', async () => {
+    const wrapper = document.createElement('span');
+    wrapper.className = 'math-inline';
+    document.body.appendChild(wrapper);
+    service.initialize();
+    const refreshSpy = vi.spyOn(
+      service as unknown as { refreshArrowExclusions(root: ParentNode): void },
+      'refreshArrowExclusions',
+    );
+
+    const firstArrow = document.createElement('span');
+    firstArrow.setAttribute('data-math', '\\rightarrow');
+    const secondArrow = document.createElement('span');
+    secondArrow.setAttribute('data-math', '→');
+    wrapper.append(firstArrow, secondArrow);
+    await Promise.resolve();
+
+    expect(refreshSpy).toHaveBeenCalledTimes(1);
+    expect(refreshSpy).toHaveBeenCalledWith(wrapper);
+  });
+
+  it('does not rescan a streaming root when a whole ignored response subtree is removed', async () => {
+    const streamingRoot = document.createElement('main');
+    const response = document.createElement('article');
+    const wrapper = document.createElement('span');
+    wrapper.className = 'math-inline';
+    const arrow = document.createElement('span');
+    arrow.setAttribute('data-math', '\\rightarrow');
+    wrapper.appendChild(arrow);
+    response.appendChild(wrapper);
+    streamingRoot.appendChild(response);
+    document.body.appendChild(streamingRoot);
+    service.initialize();
+    expect(wrapper.classList.contains('gv-formula-copy-ignored')).toBe(true);
+    const refreshSpy = vi.spyOn(
+      service as unknown as { refreshArrowExclusions(root: ParentNode): void },
+      'refreshArrowExclusions',
+    );
+
+    response.remove();
+    await Promise.resolve();
+
+    expect(refreshSpy).not.toHaveBeenCalled();
+  });
+
+  it('keeps explicitly delimited and non-inline Gemini arrows copyable', async () => {
+    const clipboard = navigator.clipboard as unknown as { write?: unknown };
+    clipboard.write = undefined;
+    const explicitInline = document.createElement('span');
+    explicitInline.className = 'math-inline';
+    explicitInline.setAttribute('data-math', '$\\rightarrow$');
+    const display = document.createElement('div');
+    display.className = 'math-display';
+    const displayArrow = document.createElement('span');
+    displayArrow.setAttribute('data-math', '\\rightarrow');
+    display.appendChild(displayArrow);
+    document.body.append(explicitInline, display);
+
+    service.initialize();
+    expect(explicitInline.classList.contains('gv-formula-copy-ignored')).toBe(false);
+    expect(displayArrow.classList.contains('gv-formula-copy-ignored')).toBe(false);
+
+    explicitInline.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    displayArrow.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await Promise.resolve();
+    expect(writeTextMock).toHaveBeenCalledTimes(2);
+    expect(writeTextMock.mock.calls[0]?.[0]).toContain('\\rightarrow');
+    expect(writeTextMock).toHaveBeenNthCalledWith(2, '$$\\rightarrow$$');
+  });
+
+  it('clears ignored arrow state when Gemini reuses or removes the DOM', async () => {
+    const wrapper = document.createElement('span');
+    wrapper.className = 'math-inline';
+    const mathElement = document.createElement('span');
+    mathElement.setAttribute('data-math', '\\rightarrow');
+    wrapper.appendChild(mathElement);
+    document.body.appendChild(wrapper);
+    service.initialize();
+    expect(wrapper.classList.contains('gv-formula-copy-ignored')).toBe(true);
+
+    mathElement.setAttribute('data-math', 'x^2');
+    await Promise.resolve();
+    expect(mathElement.classList.contains('gv-formula-copy-ignored')).toBe(false);
+    expect(wrapper.classList.contains('gv-formula-copy-ignored')).toBe(false);
+
+    mathElement.setAttribute('data-math', '\\rightarrow');
+    await Promise.resolve();
+    mathElement.removeAttribute('data-math');
+    await Promise.resolve();
+    expect(mathElement.classList.contains('gv-formula-copy-ignored')).toBe(false);
+    expect(wrapper.classList.contains('gv-formula-copy-ignored')).toBe(false);
+
+    mathElement.setAttribute('data-math', '\\rightarrow');
+    await Promise.resolve();
+    mathElement.remove();
+    await Promise.resolve();
+    expect(wrapper.classList.contains('gv-formula-copy-ignored')).toBe(false);
+  });
+
+  it('uses the mouseover fallback when an inline wrapper later becomes display math', async () => {
+    const wrapper = document.createElement('span');
+    wrapper.className = 'math-inline';
+    const mathElement = document.createElement('span');
+    mathElement.setAttribute('data-math', '\\rightarrow');
+    wrapper.appendChild(mathElement);
+    document.body.appendChild(wrapper);
+    service.initialize();
+    expect(wrapper.classList.contains('gv-formula-copy-ignored')).toBe(true);
+
+    wrapper.className = 'math-block';
+    mathElement.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+
+    expect(wrapper.classList.contains('gv-formula-copy-ignored')).toBe(false);
+    expect(mathElement.classList.contains('gv-formula-copy-ignored')).toBe(false);
+  });
+
+  it('does not let an arrow candidate hide a real formula in a shared inline wrapper', () => {
+    const wrapper = document.createElement('span');
+    wrapper.className = 'math-inline';
+    const arrow = document.createElement('span');
+    arrow.setAttribute('data-math', '\\rightarrow');
+    const formula = document.createElement('span');
+    formula.setAttribute('data-math', 'x^2');
+    wrapper.append(arrow, formula);
+    document.body.appendChild(wrapper);
+
+    service.initialize();
+
+    expect(arrow.classList.contains('gv-formula-copy-ignored')).toBe(true);
+    expect(formula.classList.contains('gv-formula-copy-ignored')).toBe(false);
+    expect(wrapper.classList.contains('gv-formula-copy-ignored')).toBe(false);
+  });
+
+  it('ignores a shared inline wrapper after its last real formula is removed', async () => {
+    const wrapper = document.createElement('span');
+    wrapper.className = 'math-inline';
+    const arrow = document.createElement('span');
+    arrow.setAttribute('data-math', '\\rightarrow');
+    const formula = document.createElement('span');
+    formula.setAttribute('data-math', 'x^2');
+    wrapper.append(arrow, formula);
+    document.body.appendChild(wrapper);
+    service.initialize();
+    expect(wrapper.classList.contains('gv-formula-copy-ignored')).toBe(false);
+
+    formula.remove();
+    await Promise.resolve();
+
+    expect(arrow.classList.contains('gv-formula-copy-ignored')).toBe(true);
+    expect(wrapper.classList.contains('gv-formula-copy-ignored')).toBe(true);
+  });
+
+  it('stops observing while disabled and scans again when re-enabled', async () => {
+    service.initialize();
+    service.destroy();
+    const wrapper = document.createElement('span');
+    wrapper.className = 'math-inline';
+    const mathElement = document.createElement('span');
+    mathElement.setAttribute('data-math', '\\rightarrow');
+    wrapper.appendChild(mathElement);
+    document.body.appendChild(wrapper);
+    await Promise.resolve();
+    expect(mathElement.classList.contains('gv-formula-copy-ignored')).toBe(false);
+
+    service.initialize();
+    expect(mathElement.classList.contains('gv-formula-copy-ignored')).toBe(true);
+    expect(wrapper.classList.contains('gv-formula-copy-ignored')).toBe(true);
+  });
+
+  it('keeps a real formula containing an arrow copyable', async () => {
+    const clipboard = navigator.clipboard as unknown as { write?: unknown };
+    clipboard.write = undefined;
+    const mathElement = document.createElement('span');
+    mathElement.setAttribute('data-math', 'A \\rightarrow B');
+    mathElement.classList.add('math-inline');
+    document.body.appendChild(mathElement);
+
+    service.initialize();
+    mathElement.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+    expect(mathElement.classList.contains('gv-formula-copy-ignored')).toBe(false);
+    mathElement.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await Promise.resolve();
+
+    expect(writeTextMock).toHaveBeenCalledWith('$A \\rightarrow B$');
+  });
+
+  it('keeps a real formula containing an extensible arrow copyable', async () => {
+    const clipboard = navigator.clipboard as unknown as { write?: unknown };
+    clipboard.write = undefined;
+    const mathElement = document.createElement('span');
+    mathElement.setAttribute('data-math', 'A \\xrightarrow{\\text{process}} B');
+    mathElement.classList.add('math-inline');
+    document.body.appendChild(mathElement);
+
+    service.initialize();
+    mathElement.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+    expect(mathElement.classList.contains('gv-formula-copy-ignored')).toBe(false);
+    mathElement.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await Promise.resolve();
+
+    expect(writeTextMock).toHaveBeenCalledWith('$A \\xrightarrow{\\text{process}} B$');
+  });
+
+  it.each([
+    ['ordinary text and arrow', 'plain-arrow'],
+    ['ordinary text containing a host math-wrapped arrow', 'wrapped-arrow'],
+    ['ordinary text and a real formula', 'formula'],
+  ])('does not intercept native copy events for %s', (_label, fixtureKind) => {
+    const selection = document.createElement('p');
+    if (fixtureKind === 'wrapped-arrow') {
+      selection.append('A ');
+      const wrapper = document.createElement('span');
+      wrapper.className = 'math-inline';
+      const arrow = document.createElement('span');
+      arrow.setAttribute('data-math', '\\rightarrow');
+      arrow.textContent = '→';
+      wrapper.appendChild(arrow);
+      selection.append(wrapper, ' B');
+    } else if (fixtureKind === 'formula') {
+      selection.append('Result: ');
+      const formula = document.createElement('span');
+      formula.className = 'math-inline';
+      formula.setAttribute('data-math', 'x^2');
+      formula.textContent = 'x²';
+      selection.append(formula);
+    } else {
+      selection.textContent = 'A → B';
+    }
+    document.body.appendChild(selection);
+    const range = document.createRange();
+    range.selectNodeContents(selection);
+    window.getSelection()?.removeAllRanges();
+    window.getSelection()?.addRange(range);
+    const setData = vi.fn();
+    const copyEvent = new Event('copy', { bubbles: true, cancelable: true });
+    Object.defineProperty(copyEvent, 'clipboardData', { value: { setData } });
+
+    service.initialize();
+    selection.dispatchEvent(copyEvent);
+
+    expect(copyEvent.defaultPrevented).toBe(false);
+    expect(setData).not.toHaveBeenCalled();
+    expect(writeMock).not.toHaveBeenCalled();
+    expect(writeTextMock).not.toHaveBeenCalled();
+    window.getSelection()?.removeAllRanges();
+  });
+
+  it('leaves right-click behavior native and only copies on a later left click', async () => {
+    const clipboard = navigator.clipboard as unknown as { write?: unknown };
+    clipboard.write = undefined;
+    const mathElement = document.createElement('span');
+    mathElement.setAttribute('data-math', 'x^2');
+    document.body.appendChild(mathElement);
+
+    service.initialize();
+    const contextMenuEvent = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
+    mathElement.dispatchEvent(contextMenuEvent);
+
+    expect(contextMenuEvent.defaultPrevented).toBe(false);
+    expect(writeTextMock).not.toHaveBeenCalled();
+
+    mathElement.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await Promise.resolve();
+    expect(writeTextMock).toHaveBeenCalledWith('$x^2$');
+  });
+
+  it('becomes fully inert after destroy without clearing the selected format', async () => {
+    const clipboard = navigator.clipboard as unknown as { write?: unknown };
+    clipboard.write = undefined;
+    const mathElement = document.createElement('span');
+    mathElement.setAttribute('data-math', 'x^2');
+    document.body.appendChild(mathElement);
+    const pageClick = vi.fn();
+    mathElement.addEventListener('click', pageClick);
+
+    service.initialize();
+    const formatListener = storageMocks.addListener.mock.calls.at(-1)?.[0] as Parameters<
+      typeof browser.storage.onChanged.addListener
+    >[0];
+    formatListener({ gvFormulaCopyFormat: { oldValue: 'latex', newValue: 'notion' } }, 'sync');
+    mathElement.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(writeTextMock).toHaveBeenCalledWith('$$x^2$$');
+    expect(document.querySelector('.gv-copy-toast')).not.toBeNull();
+    expect(pageClick).not.toHaveBeenCalled();
+
+    service.destroy();
+    writeTextMock.mockClear();
+    expect(document.querySelector('.gv-copy-toast')).toBeNull();
+    expect(document.documentElement.classList.contains('gv-formula-copy-enabled')).toBe(false);
+
+    const disabledClick = new MouseEvent('click', { bubbles: true, cancelable: true });
+    mathElement.dispatchEvent(disabledClick);
+    await Promise.resolve();
+
+    expect(writeMock).not.toHaveBeenCalled();
+    expect(writeTextMock).not.toHaveBeenCalled();
+    expect(pageClick).toHaveBeenCalledTimes(1);
+    expect(disabledClick.defaultPrevented).toBe(false);
+
+    service.initialize();
+    mathElement.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await Promise.resolve();
+    expect(writeTextMock).toHaveBeenCalledWith('$$x^2$$');
+  });
+
+  it('keeps format preference updates live while disabled', async () => {
+    const clipboard = navigator.clipboard as unknown as { write?: unknown };
+    clipboard.write = undefined;
+    const mathElement = document.createElement('span');
+    mathElement.setAttribute('data-math', 'x');
+    document.body.appendChild(mathElement);
+
+    service.initialize();
+    const firstListener = storageMocks.addListener.mock.calls.at(-1)?.[0] as Parameters<
+      typeof browser.storage.onChanged.addListener
+    >[0];
+    firstListener({ gvFormulaCopyFormat: { oldValue: 'latex', newValue: 'notion' } }, 'sync');
+    mathElement.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await Promise.resolve();
+    expect(writeTextMock).toHaveBeenLastCalledWith('$$x$$');
+
+    service.destroy();
+    firstListener({ gvFormulaCopyFormat: { oldValue: 'notion', newValue: 'no-dollar' } }, 'sync');
+    service.initialize();
+    mathElement.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await Promise.resolve();
+
+    expect(writeTextMock).toHaveBeenLastCalledWith('x');
+    expect(storageMocks.addListener).toHaveBeenCalledTimes(1);
+    expect(storageMocks.removeListener).not.toHaveBeenCalled();
+
+    service.dispose();
+    expect(storageMocks.removeListener).toHaveBeenCalledWith(firstListener);
+  });
+
+  it('loads the latest format before a caller activates click handling', async () => {
+    let resolveFormatRead!: (value: Record<string, unknown>) => void;
+    storageMocks.get.mockImplementation(
+      () =>
+        new Promise<Record<string, unknown>>((resolve) => {
+          resolveFormatRead = resolve;
+        }),
+    );
+    const clipboard = navigator.clipboard as unknown as { write?: unknown };
+    clipboard.write = undefined;
+    const mathElement = document.createElement('span');
+    mathElement.setAttribute('data-math', 'x');
+    document.body.appendChild(mathElement);
+
+    const preparing = service.prepare();
+    expect(service.isServiceInitialized()).toBe(false);
+    resolveFormatRead({ gvFormulaCopyFormat: 'notion' });
+    await preparing;
+    service.initialize();
+    mathElement.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await Promise.resolve();
+
+    expect(writeTextMock).toHaveBeenCalledWith('$$x$$');
+  });
+
+  it('does not let a stale format read override a newer live format change', async () => {
+    let resolveFormatRead!: (value: Record<string, unknown>) => void;
+    storageMocks.get.mockImplementation(
+      () =>
+        new Promise<Record<string, unknown>>((resolve) => {
+          resolveFormatRead = resolve;
+        }),
+    );
+    const clipboard = navigator.clipboard as unknown as { write?: unknown };
+    clipboard.write = undefined;
+    const mathElement = document.createElement('span');
+    mathElement.setAttribute('data-math', 'x');
+    document.body.appendChild(mathElement);
+
+    service.initialize();
+    const formatListener = storageMocks.addListener.mock.calls.at(-1)?.[0] as Parameters<
+      typeof browser.storage.onChanged.addListener
+    >[0];
+    formatListener({ gvFormulaCopyFormat: { oldValue: 'latex', newValue: 'notion' } }, 'sync');
+    resolveFormatRead({ gvFormulaCopyFormat: 'latex' });
+    await Promise.resolve();
+
+    mathElement.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await Promise.resolve();
+    expect(writeTextMock).toHaveBeenCalledWith('$$x$$');
+  });
+
+  it('does not show a late toast after the service is disabled', async () => {
+    let resolveClipboardWrite!: () => void;
+    writeTextMock.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveClipboardWrite = resolve;
+        }),
+    );
+    const clipboard = navigator.clipboard as unknown as { write?: unknown };
+    clipboard.write = undefined;
+    const mathElement = document.createElement('span');
+    mathElement.setAttribute('data-math', 'x');
+    document.body.appendChild(mathElement);
+
+    service.initialize();
+    mathElement.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    service.destroy();
+    resolveClipboardWrite();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(document.querySelector('.gv-copy-toast')).toBeNull();
+  });
+
+  it('does not let a pre-disable timer hide a toast created after re-enable', async () => {
+    vi.useFakeTimers();
+    try {
+      const mathElement = document.createElement('span');
+      mathElement.setAttribute('data-math', 'x');
+      document.body.appendChild(mathElement);
+
+      service.initialize();
+      mathElement.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(document.querySelector('.gv-copy-toast-show')).not.toBeNull();
+
+      service.destroy();
+      vi.advanceTimersByTime(1000);
+      service.initialize();
+      mathElement.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(document.querySelector('.gv-copy-toast-show')).not.toBeNull();
+
+      vi.advanceTimersByTime(1000);
+      expect(document.querySelector('.gv-copy-toast-show')).not.toBeNull();
+      vi.advanceTimersByTime(1000);
+      expect(document.querySelector('.gv-copy-toast-show')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('shows the success toast in the user-selected language, not the browser UI locale', async () => {

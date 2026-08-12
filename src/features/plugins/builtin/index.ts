@@ -201,26 +201,106 @@ export const BUILTIN_PLUGINS: readonly PluginManifest[] = [
   },
   {
     id: 'voyager.chatgpt-export',
-    name: 'ChatGPT Conversation Export',
+    name: 'ChatGPT · Conversation Export',
     version: '1.0.0',
-    description:
-      'Exports a whole ChatGPT conversation or selected messages as Markdown, JSON, or PDF, and can save and continue a temporary chat.',
+    description: 'Export the current ChatGPT conversation as Markdown, JSON, PDF, or an image.',
     i18n: {
       zh: {
-        name: 'ChatGPT 对话导出',
-        description:
-          '把整个 ChatGPT 对话或选择的消息导出为 Markdown、JSON 或 PDF，也可保存并继续临时对话。',
+        name: 'ChatGPT · 对话导出',
+        description: '将当前 ChatGPT 对话导出为 Markdown、JSON、PDF 或图片。',
       },
       zh_TW: {
-        name: 'ChatGPT 對話匯出',
+        name: 'ChatGPT · 對話匯出',
+        description: '將目前 ChatGPT 對話匯出為 Markdown、JSON、PDF 或圖片。',
+      },
+      ja: {
+        name: 'ChatGPT · 会話エクスポート',
         description:
-          '將完整 ChatGPT 對話或選取的訊息匯出為 Markdown、JSON 或 PDF，也可儲存並繼續暫時對話。',
+          '現在の ChatGPT 会話を Markdown、JSON、PDF、または画像としてエクスポートします。',
+      },
+      ko: {
+        name: 'ChatGPT · 대화 내보내기',
+        description: '현재 ChatGPT 대화를 Markdown, JSON, PDF 또는 이미지로 내보냅니다.',
+      },
+      fr: {
+        name: 'ChatGPT · Export de conversation',
+        description:
+          'Exporte la conversation ChatGPT actuelle au format Markdown, JSON, PDF ou image.',
+      },
+      es: {
+        name: 'ChatGPT · Exportar conversación',
+        description: 'Exporta la conversación actual de ChatGPT como Markdown, JSON, PDF o imagen.',
+      },
+      pt: {
+        name: 'ChatGPT · Exportar conversa',
+        description: 'Exporte a conversa atual do ChatGPT como Markdown, JSON, PDF ou imagem.',
+      },
+      ru: {
+        name: 'ChatGPT · Экспорт диалога',
+        description: 'Экспортирует текущий диалог ChatGPT в Markdown, JSON, PDF или изображение.',
+      },
+      ar: {
+        name: 'ChatGPT · تصدير المحادثة',
+        description: 'يصدّر محادثة ChatGPT الحالية بصيغة Markdown أو JSON أو PDF أو صورة.',
       },
     },
     author: 'voyager-official',
     category: 'productivity',
     license: 'GPL-3.0-or-later',
-    engine: '>=1.1.0',
+    engine: '>=1.2.0',
+    tier: 'declarative',
+    matches: ['https://chatgpt.com/*', 'https://chat.openai.com/*'],
+    contributes: {},
+  },
+  {
+    id: 'voyager.chatgpt-temporary-handoff',
+    name: 'ChatGPT · Temporary Chat Handoff',
+    version: '1.0.0',
+    description: 'Save a temporary ChatGPT conversation and continue it safely in a normal chat.',
+    i18n: {
+      zh: {
+        name: 'ChatGPT · 临时对话续接',
+        description: '保存临时 ChatGPT 对话，并安全地转到普通聊天继续。',
+      },
+      zh_TW: {
+        name: 'ChatGPT · 暫時對話續接',
+        description: '儲存暫時 ChatGPT 對話，並安全地轉到一般聊天繼續。',
+      },
+      ja: {
+        name: 'ChatGPT · 一時チャット引き継ぎ',
+        description: '一時チャットを保存し、通常のチャットへ安全に引き継ぎます。',
+      },
+      ko: {
+        name: 'ChatGPT · 임시 채팅 이어가기',
+        description: '임시 ChatGPT 대화를 저장하고 일반 채팅에서 안전하게 이어갑니다.',
+      },
+      fr: {
+        name: 'ChatGPT · Transfert du chat temporaire',
+        description:
+          'Enregistre une discussion temporaire et la poursuit en toute sécurité dans un chat normal.',
+      },
+      es: {
+        name: 'ChatGPT · Transferir chat temporal',
+        description:
+          'Guarda una conversación temporal y la continúa de forma segura en un chat normal.',
+      },
+      pt: {
+        name: 'ChatGPT · Transferir chat temporário',
+        description: 'Salva uma conversa temporária e continua com segurança em um chat normal.',
+      },
+      ru: {
+        name: 'ChatGPT · Перенос временного чата',
+        description: 'Сохраняет временный диалог и безопасно продолжает его в обычном чате.',
+      },
+      ar: {
+        name: 'ChatGPT · نقل المحادثة المؤقتة',
+        description: 'يحفظ محادثة مؤقتة ويتابعها بأمان في دردشة عادية.',
+      },
+    },
+    author: 'voyager-official',
+    category: 'productivity',
+    license: 'GPL-3.0-or-later',
+    engine: '>=1.2.0',
     tier: 'declarative',
     matches: ['https://chatgpt.com/*', 'https://chat.openai.com/*'],
     contributes: {},

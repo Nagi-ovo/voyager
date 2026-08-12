@@ -3,7 +3,7 @@
  * Unified service for exporting conversations in multiple formats
  * Uses Strategy pattern for format-specific implementations
  */
-import { fetchImageViaExtensionRuntime } from '@/core/utils/runtimeImageFetch';
+import type { ExportPlatformAdapter } from '@pages/content/export/adapter/platformAdapters';
 
 import { IMAGE_RENDER_EVENT_ERROR_CODE, isEventLikeImageRenderError } from '../types/errors';
 import { DEFAULT_EXPORT_SPEAKER_LABELS } from '../types/export';
@@ -20,6 +20,13 @@ import { DeepResearchPDFPrintService } from './DeepResearchPDFPrintService';
 import { ImageExportService } from './ImageExportService';
 import { MarkdownFormatter } from './MarkdownFormatter';
 import { PDFPrintService } from './PDFPrintService';
+import {
+  EXPORT_IMAGE_FETCH_CONCURRENCY,
+  MAX_EXPORT_IMAGE_COUNT,
+  MAX_EXPORT_IMAGE_TOTAL_BYTES,
+  fetchBoundedExportImage,
+  mapWithConcurrency,
+} from './boundedImageFetch';
 
 /**
  * Main export service
@@ -30,6 +37,18 @@ export class ConversationExportService {
 
   private static readonly CHAT_JSON_FORMAT = 'gemini-voyager.chat.v1' as const;
 
+  private static assertNotAborted(signal?: AbortSignal): void {
+    if (signal?.aborted) throw new DOMException('Export cancelled', 'AbortError');
+  }
+
+  /**
+   * Set the export adapter.
+   * @param adapter - The export adapter.
+   */
+  static setExportAdapter(adapter: ExportPlatformAdapter) {
+    DOMContentExtractor.setExportAdapter(adapter);
+  }
+
   /**
    * Export conversation in specified format
    */
@@ -39,6 +58,7 @@ export class ConversationExportService {
     options: ExportOptions,
   ): Promise<ExportResult> {
     try {
+      this.assertNotAborted(options.signal);
       const layout: ExportLayout = options.layout ?? 'conversation';
       if (layout === 'document') {
         return await this.exportDocument(turns, metadata, options);
@@ -79,6 +99,9 @@ export class ConversationExportService {
   }
 
   private static normalizeError(error: unknown): string {
+    if (error instanceof DOMException) {
+      return error.message;
+    }
     if (error instanceof Error) {
       return error.message;
     }
@@ -135,8 +158,12 @@ export class ConversationExportService {
       let assistantContent = turn.assistant;
       let attachments = turn.attachments ?? [];
 
-      // Extract rich content with Markdown formatting from DOM elements if available
-      if (turn.userElement) {
+      // ChatGPT snapshots rich content while its virtual-list item is mounted.
+      // Prefer that stable snapshot over a later DOM read, which may be empty.
+      if (turn.userContent) {
+        userContent = turn.userContent.text || userContent;
+        attachments = turn.userContent.attachments;
+      } else if (turn.userElement) {
         const extracted = DOMContentExtractor.extractUserContent(turn.userElement);
         if (extracted.text) {
           userContent = extracted.text;
@@ -144,7 +171,9 @@ export class ConversationExportService {
         attachments = extracted.attachments;
       }
 
-      if (turn.assistantElement) {
+      if (turn.assistantContent) {
+        assistantContent = turn.assistantContent.text || assistantContent;
+      } else if (turn.assistantElement) {
         const extracted = DOMContentExtractor.extractAssistantContent(turn.assistantElement);
         if (extracted.text) {
           assistantContent = extracted.text;
@@ -168,7 +197,9 @@ export class ConversationExportService {
       items: processedItems,
     };
 
-    const filename = options.filename || this.generateFilename('json', metadata.title);
+    const filename =
+      options.filename || this.generateFilename('json', metadata.title, metadata.platform);
+    this.assertNotAborted(options.signal);
     this.downloadJSON(payload, filename);
 
     return {
@@ -197,8 +228,14 @@ export class ConversationExportService {
       markdown = markdown.replace(/\n\*Source: \[[^\]]*\]\([^)]*\)\*\n/g, '\n');
     }
 
-    const filename = options.filename || this.generateFilename('md', metadata.title);
-    const finalFilename = await this.downloadMarkdownOrZip(markdown, filename, 'chat.md');
+    const filename =
+      options.filename || this.generateFilename('md', metadata.title, metadata.platform);
+    const finalFilename = await this.downloadMarkdownOrZip(
+      markdown,
+      filename,
+      'chat.md',
+      options.signal,
+    );
     return { success: true, format: 'markdown' as ExportFormat, filename: finalFilename };
   }
 
@@ -213,6 +250,7 @@ export class ConversationExportService {
     await PDFPrintService.export(turns, metadata, {
       fontSize: options.fontSize,
       speakerLabels: options.speakerLabels,
+      signal: options.signal,
     });
 
     // Note: We can't get the actual filename from print dialog
@@ -220,7 +258,7 @@ export class ConversationExportService {
     return {
       success: true,
       format: 'pdf' as ExportFormat,
-      filename: options.filename || this.generateFilename('pdf', metadata.title),
+      filename: options.filename || this.generateFilename('pdf', metadata.title, metadata.platform),
     };
   }
 
@@ -232,12 +270,14 @@ export class ConversationExportService {
     metadata: ConversationMetadata,
     options: ExportOptions,
   ): Promise<ExportResult> {
-    const filename = options.filename || this.generateFilename('png', metadata.title);
+    const filename =
+      options.filename || this.generateFilename('png', metadata.title, metadata.platform);
     await ImageExportService.export(turns, metadata, {
       filename,
       fontSize: options.fontSize,
       imageWidth: options.imageWidth,
       speakerLabels: options.speakerLabels,
+      signal: options.signal,
     });
     return { success: true, format: 'image' as ExportFormat, filename };
   }
@@ -258,7 +298,9 @@ export class ConversationExportService {
       },
     };
 
-    const filename = options.filename || this.generateFilename('json', metadata.title);
+    const filename =
+      options.filename || this.generateFilename('json', metadata.title, metadata.platform);
+    this.assertNotAborted(options.signal);
     this.downloadJSON(payload, filename);
     return {
       success: true,
@@ -273,12 +315,18 @@ export class ConversationExportService {
     options: ExportOptions,
   ): Promise<ExportResult> {
     const markdown = this.composeDocumentMarkdown(content.markdown, metadata);
-    const filename = options.filename || this.generateFilename('md', metadata.title);
+    const filename =
+      options.filename || this.generateFilename('md', metadata.title, metadata.platform);
     const mdEntryName = filename.toLowerCase().endsWith('.md')
       ? filename.split('/').pop() || 'report.md'
       : 'report.md';
 
-    const finalFilename = await this.downloadMarkdownOrZip(markdown, filename, mdEntryName);
+    const finalFilename = await this.downloadMarkdownOrZip(
+      markdown,
+      filename,
+      mdEntryName,
+      options.signal,
+    );
     return {
       success: true,
       format: 'markdown' as ExportFormat,
@@ -305,7 +353,7 @@ export class ConversationExportService {
     return {
       success: true,
       format: 'pdf' as ExportFormat,
-      filename: options.filename || this.generateFilename('pdf', metadata.title),
+      filename: options.filename || this.generateFilename('pdf', metadata.title, metadata.platform),
     };
   }
 
@@ -314,7 +362,8 @@ export class ConversationExportService {
     metadata: ConversationMetadata,
     options: ExportOptions,
   ): Promise<ExportResult> {
-    const filename = options.filename || this.generateFilename('png', metadata.title);
+    const filename =
+      options.filename || this.generateFilename('png', metadata.title, metadata.platform);
     await ImageExportService.exportDocument(
       {
         title: metadata.title || 'Deep Research Report',
@@ -327,6 +376,7 @@ export class ConversationExportService {
         filename,
         fontSize: options.fontSize,
         imageWidth: options.imageWidth,
+        signal: options.signal,
       },
     );
 
@@ -406,7 +456,9 @@ export class ConversationExportService {
     markdown: string,
     filename: string,
     markdownEntryName: string,
+    signal?: AbortSignal,
   ): Promise<string> {
+    this.assertNotAborted(signal);
     const normalizedFilename = filename.toLowerCase().endsWith('.md') ? filename : `${filename}.md`;
 
     const imageUrls = MarkdownFormatter.extractImageUrls(markdown);
@@ -423,21 +475,27 @@ export class ConversationExportService {
     const assetsFolder = zip.folder('assets');
     const mapping = new Map<string, string>();
 
-    const fetchedByOrder = await Promise.all(
-      imageUrls.map(async (url) => {
+    const budget = { remainingBytes: MAX_EXPORT_IMAGE_TOTAL_BYTES };
+    const fetchedByOrder = await mapWithConcurrency(
+      imageUrls.slice(0, MAX_EXPORT_IMAGE_COUNT),
+      EXPORT_IMAGE_FETCH_CONCURRENCY,
+      async (url) => {
         // For Google images, request original size (=s0) instead of the display thumbnail
         const fetchUrl = this.toOriginalSizeUrl(url);
-        const fetched = await this.fetchImageForMarkdownPackaging(fetchUrl);
+        const fetched = signal
+          ? await this.fetchImageForMarkdownPackaging(fetchUrl, budget, signal)
+          : await this.fetchImageForMarkdownPackaging(fetchUrl, budget);
         if (!fetched) return null;
         return {
           url,
           blob: fetched.blob,
           contentType: fetched.contentType,
         };
-      }),
+      },
     );
 
     let index = 1;
+    this.assertNotAborted(signal);
     for (const item of fetchedByOrder) {
       if (!item) continue;
       const extension = this.pickImageExtension(item.contentType, item.url);
@@ -452,6 +510,7 @@ export class ConversationExportService {
     zip.file(markdownEntryName, packagedMarkdown);
 
     const zipBlob = await zip.generateAsync({ type: 'blob' });
+    this.assertNotAborted(signal);
     const zipFilename = normalizedFilename.replace(/\.md$/i, '.zip');
     const url = URL.createObjectURL(zipBlob);
     const anchor = document.createElement('a');
@@ -522,84 +581,12 @@ export class ConversationExportService {
     });
   }
 
-  private static decodeDataImageUrl(url: string): { blob: Blob; contentType: string } | null {
-    const commaIndex = url.indexOf(',');
-    if (!url.startsWith('data:image/') || commaIndex < 0) return null;
-
-    const metadata = url.slice('data:'.length, commaIndex);
-    const contentType = metadata.split(';')[0] || 'image/png';
-    const payload = url.slice(commaIndex + 1);
-
-    try {
-      let bytes: Uint8Array;
-      if (metadata.includes(';base64')) {
-        const binary = atob(payload);
-        bytes = new Uint8Array(binary.length);
-        for (let idx = 0; idx < binary.length; idx++) {
-          bytes[idx] = binary.charCodeAt(idx);
-        }
-      } else {
-        bytes = new TextEncoder().encode(decodeURIComponent(payload));
-      }
-
-      const buffer = new ArrayBuffer(bytes.byteLength);
-      new Uint8Array(buffer).set(bytes);
-
-      return {
-        blob: new Blob([buffer], { type: contentType }),
-        contentType,
-      };
-    } catch {
-      return null;
-    }
-  }
-
   private static async fetchImageForMarkdownPackaging(
     url: string,
+    budget = { remainingBytes: MAX_EXPORT_IMAGE_TOTAL_BYTES },
+    signal?: AbortSignal,
   ): Promise<{ blob: Blob; contentType: string | null } | null> {
-    if (url.startsWith('data:image/')) {
-      return this.decodeDataImageUrl(url);
-    }
-
-    try {
-      const response = await fetch(url, { credentials: 'include', mode: 'cors' as RequestMode });
-      if (response.ok) {
-        return {
-          blob: await response.blob(),
-          contentType: response.headers.get('Content-Type'),
-        };
-      }
-    } catch {
-      /* ignore */
-    }
-
-    // Retry without credentials for servers with wildcard CORS
-    // (Access-Control-Allow-Origin: * is incompatible with credentials: 'include')
-    try {
-      const response = await fetch(url, { credentials: 'omit', mode: 'cors' as RequestMode });
-      if (response.ok) {
-        return {
-          blob: await response.blob(),
-          contentType: response.headers.get('Content-Type'),
-        };
-      }
-    } catch {
-      /* ignore */
-    }
-
-    const runtimeImage = await fetchImageViaExtensionRuntime(url);
-    if (runtimeImage) {
-      const binary = atob(runtimeImage.base64);
-      const length = binary.length;
-      const bytes = new Uint8Array(length);
-      for (let idx = 0; idx < length; idx++) bytes[idx] = binary.charCodeAt(idx);
-      return {
-        blob: new Blob([bytes], { type: runtimeImage.contentType }),
-        contentType: runtimeImage.contentType,
-      };
-    }
-
-    return null;
+    return await fetchBoundedExportImage(url, budget, signal);
   }
 
   /**
@@ -628,12 +615,13 @@ export class ConversationExportService {
   /**
    * Generate filename with timestamp
    */
-  private static generateFilename(extension: string, title?: string): string {
+  private static generateFilename(extension: string, title?: string, platform?: string): string {
     const titlePart = this.sanitizeFilenamePart(title);
     if (titlePart) {
       return `${titlePart}.${extension}`;
     }
 
+    const slug = (platform || 'gemini').toLowerCase().replace(/\s+/g, '-');
     const pad = (n: number) => String(n).padStart(2, '0');
     const d = new Date();
     const y = d.getFullYear();
@@ -642,7 +630,7 @@ export class ConversationExportService {
     const hh = pad(d.getHours());
     const mm = pad(d.getMinutes());
     const ss = pad(d.getSeconds());
-    return `gemini-chat-${y}${m}${day}-${hh}${mm}${ss}.${extension}`;
+    return `${slug}-chat-${y}${m}${day}-${hh}${mm}${ss}.${extension}`;
   }
 
   private static sanitizeFilenamePart(title?: string): string {

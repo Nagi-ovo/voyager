@@ -3,9 +3,136 @@
  */
 import { describe, expect, it } from 'vitest';
 
+import { resolveExportAdapter } from '@/pages/content/export/adapter/platformAdapters';
+
 import { DOMContentExtractor } from '../DOMContentExtractor';
 
+// Base the test adapter on the real Gemini adapter, overriding only the
+// image-extraction methods with a generic, platform-agnostic implementation
+// so these tests exercise DOMContentExtractor's own logic (not Gemini's
+// production selectors for search/generated images).
+DOMContentExtractor.setExportAdapter({
+  ...resolveExportAdapter(),
+  extractUserImage: (element) =>
+    element.querySelectorAll<HTMLImageElement>('user-query-file-preview img, .preview-image'),
+  extractAssistantImage: (
+    child,
+    htmlParts,
+    textParts,
+    flags,
+    tagName,
+    _debug,
+    processedImageSrcs,
+  ) => {
+    if (
+      child.querySelector(
+        '.attachment-container.youtube img.thumbnail, youtube-block img.thumbnail, single-video img.thumbnail',
+      )
+    ) {
+      return DOMContentExtractor.processYouTubeCovers(child, htmlParts, textParts, flags);
+    }
+    if (tagName !== 'img') return undefined;
+
+    const image = child as HTMLImageElement;
+    const src = image.src || image.getAttribute('src') || '';
+    if (src && src !== 'about:blank' && !processedImageSrcs?.has(src)) {
+      processedImageSrcs?.add(src);
+      const alt = image.getAttribute('alt')?.trim() || 'Image';
+      flags.hasImages = true;
+      htmlParts.push(
+        `<img src="${DOMContentExtractor.escapeHtmlAttribute(src)}" alt="${DOMContentExtractor.escapeHtmlAttribute(alt)}" />`,
+      );
+      textParts.push(`\n![${alt.replace(/\]/g, '\\]')}](${src})\n`);
+    }
+    return true;
+  },
+  extractFormula: () => undefined,
+  extractCodeBlock: () => undefined,
+  extractUserText: (textLines, textParts, element) => {
+    textLines.forEach((line) => {
+      const text = DOMContentExtractor.normalizeText(line.textContent ?? '');
+      if (text) textParts.push(text);
+    });
+    if (textParts.length === 0) {
+      const contentOnly = element.cloneNode(true) as HTMLElement;
+      Array.from(contentOnly.querySelectorAll<HTMLElement>('[role="group"][aria-label]')).forEach(
+        (candidate) => candidate.remove(),
+      );
+      const fallback = DOMContentExtractor.normalizeText(contentOnly.textContent ?? '');
+      if (fallback) textParts.push(fallback);
+    }
+  },
+  getUserAttachmentCandidates: (element) => {
+    const geminiUploadedFiles = Array.from(
+      element.querySelectorAll<HTMLElement>(
+        'user-query-file-preview [data-test-id="uploaded-file"]',
+      ),
+    );
+    if (geminiUploadedFiles.length > 0) return geminiUploadedFiles;
+
+    const geminiFilePreviews = Array.from(
+      element.querySelectorAll<HTMLElement>('user-query-file-preview .new-file-preview-file'),
+    );
+    if (geminiFilePreviews.length > 0) return geminiFilePreviews;
+
+    return Array.from(element.querySelectorAll<HTMLElement>('[role="group"][aria-label]')).filter(
+      (candidate) => {
+        const name = candidate.getAttribute('aria-label')?.trim();
+        const buttonName = candidate
+          .querySelector<HTMLElement>('[data-default-action] button[aria-label]')
+          ?.getAttribute('aria-label')
+          ?.trim();
+        return !!name && name === buttonName;
+      },
+    );
+  },
+});
+
 describe('DOMContentExtractor', () => {
+  it('escapes literal pipes in Markdown table cells', () => {
+    const assistant = document.createElement('div');
+    assistant.innerHTML = `
+      <message-content><div class="markdown">
+        <table><thead><tr><th>Choice</th><th>Meaning</th></tr></thead>
+        <tbody><tr><td>A | B</td><td>Either</td></tr></tbody></table>
+      </div></message-content>
+    `;
+
+    const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+
+    expect(extracted.text).toContain('| A \\| B | Either |');
+    expect(extracted.html).toContain('A | B');
+  });
+
+  it('preserves ordered-list starting numbers in Markdown', () => {
+    const assistant = document.createElement('div');
+    assistant.innerHTML = `
+      <message-content><div class="markdown">
+        <ol start="22"><li>First retained number</li><li>Next retained number</li></ol>
+      </div></message-content>
+    `;
+
+    const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+
+    expect(extracted.text).toContain('22. First retained number');
+    expect(extracted.text).toContain('23. Next retained number');
+  });
+
+  it('preserves blockquote structure in HTML and Markdown output', () => {
+    const assistant = document.createElement('div');
+    assistant.innerHTML = `
+      <message-content><div class="markdown">
+        <blockquote><p>Quoted line one.</p><p>Quoted line two.</p></blockquote>
+      </div></message-content>
+    `;
+
+    const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+
+    expect(extracted.html).toContain('<blockquote>');
+    expect(extracted.html).toContain('Quoted line one.');
+    expect(extracted.text).toContain('> Quoted line one.');
+    expect(extracted.text).toContain('> Quoted line two.');
+  });
   it('exports non-image user uploads as filename placeholders', () => {
     const user = document.createElement('div');
     user.innerHTML = `
@@ -32,6 +159,32 @@ describe('DOMContentExtractor', () => {
     expect(extracted.hasImages).toBe(false);
   });
 
+  it('exports ChatGPT file tiles as filename placeholders without duplicating tile text', () => {
+    const user = document.createElement('div');
+    user.innerHTML = `
+      <div class="flex gap-2 flex-wrap">
+        <div role="group" aria-label="spring理解.md">
+          <div data-default-action="true">
+            <button type="button" aria-label="spring理解.md"></button>
+          </div>
+          <div class="pointer-events-none">
+            <div class="truncate font-semibold">spring理解.md</div>
+            <div class="truncate text-token-text-secondary">文件</div>
+          </div>
+        </div>
+      </div>
+      <div>请解释这个文件。</div>
+    `;
+
+    const extracted = DOMContentExtractor.extractUserContent(user);
+
+    expect(extracted.attachments).toEqual([{ name: 'spring理解.md', type: 'md' }]);
+    expect(extracted.text).toContain('📎 spring理解.md');
+    expect(extracted.text).toContain('请解释这个文件。');
+    expect(extracted.text).not.toContain('spring理解.md\n文件');
+    expect(extracted.html).toContain('class="gv-export-attachment"');
+  });
+
   it('does not duplicate image uploads as file placeholders', () => {
     const user = document.createElement('div');
     user.innerHTML = `
@@ -51,148 +204,57 @@ describe('DOMContentExtractor', () => {
     expect(extracted.text).not.toContain('📎 photo.png');
   });
 
-  it('preserves standard ChatGPT user links and attachment pills', () => {
+  it('escapes user image attributes in exported HTML', () => {
     const user = document.createElement('div');
-    user.innerHTML = `
-      <div>
-        <p>Review <a href="https://example.com/docs">the docs</a>.</p>
-        <a data-testid="file-attachment" href="https://example.com/notes.pdf">notes.pdf</a>
-      </div>
-    `;
+    user.innerHTML = `<img class="preview-image" src="https://example.com/photo.png" alt="&quot; onload=&quot;alert(1)" />`;
 
     const extracted = DOMContentExtractor.extractUserContent(user);
 
-    expect(extracted.text).toContain('[the docs](https://example.com/docs)');
-    expect(extracted.text).toContain('[notes.pdf](https://example.com/notes.pdf)');
-    expect(extracted.html).toContain('href="https://example.com/notes.pdf"');
-    expect(extracted.attachments).toEqual([{ name: 'notes.pdf', type: 'pdf' }]);
+    expect(extracted.html).toContain('alt="&quot; onload=&quot;alert(1)"');
+    expect(extracted.html).not.toContain('alt="" onload=');
   });
 
-  it('preserves a semantic ChatGPT prompt beside an uploaded image preview', () => {
-    const user = document.createElement('div');
-    user.innerHTML = `
-      <div class="markdown"><p>Describe the uploaded diagram.</p></div>
-      <img class="preview-image" src="https://example.com/diagram.png" alt="Diagram" />
-    `;
-
-    const extracted = DOMContentExtractor.extractUserContent(user);
-
-    expect(extracted.text).toContain('Describe the uploaded diagram.');
-    expect(extracted.text).toContain('![Diagram](https://example.com/diagram.png)');
-    expect(extracted.html).toContain('<p>Describe the uploaded diagram.</p>');
-    expect(extracted.html).toContain('<img src="https://example.com/diagram.png" alt="Diagram" />');
-    expect(extracted.text.match(/diagram\.png/g)).toHaveLength(1);
-    expect(extracted.hasImages).toBe(true);
-  });
-
-  it('appends ChatGPT attachment pills outside a nested Markdown prompt', () => {
-    const user = document.createElement('div');
-    user.innerHTML = `
-      <div class="markdown"><p>Review the attached notes.</p></div>
-      <div data-testid="file-attachment">meeting-notes.pdf</div>
-    `;
-
-    const extracted = DOMContentExtractor.extractUserContent(user);
-
-    expect(extracted.attachments).toEqual([{ name: 'meeting-notes.pdf', type: 'pdf' }]);
-    expect(extracted.text).toContain('Review the attached notes.');
-    expect(extracted.text.match(/meeting-notes\.pdf/g)).toHaveLength(1);
-    expect(extracted.html).toContain('class="gv-export-attachment"');
-    expect(extracted.html).toContain('meeting-notes.pdf');
-  });
-
-  it('preserves mixed text and rich link children with safe absolute destinations', () => {
-    const user = document.createElement('div');
-    const resolved = new URL('/docs', document.baseURI).href;
-    user.innerHTML = `
-      <div>Before <a href="/docs"><strong>rich</strong><img src="https://example.com/icon.png" alt="Icon"></a> after <a href="javascript:alert(1)">unsafe</a></div>
-    `;
-
-    const extracted = DOMContentExtractor.extractUserContent(user);
-
-    expect(extracted.text).toContain('Before ');
-    expect(extracted.text).toContain(' after ');
-    expect(extracted.text).toContain(
-      `[**rich**![Icon](https://example.com/icon.png)](${resolved})`,
-    );
-    expect(extracted.html).toContain(
-      `<a href="${resolved}"><strong>rich</strong><img src="https://example.com/icon.png" alt="Icon" /></a>`,
-    );
-    expect(extracted.text).toContain('unsafe');
-    expect(extracted.text).not.toContain('javascript:');
-    expect(extracted.html).not.toContain('javascript:');
-  });
-
-  it('collapses multiline ChatGPT link labels in Markdown output', () => {
+  it('preserves direct text around nested inline elements', () => {
     const assistant = document.createElement('div');
     assistant.innerHTML = `
-      <div class="markdown">
-        <p>Open <a href="https://example.com/notes.pdf">
-          notes.pdf
-        </a>.</p>
-      </div>
+      <message-content>
+        <div class="markdown"><div>Amount: <strong>42</strong> total</div></div>
+      </message-content>
     `;
 
     const extracted = DOMContentExtractor.extractAssistantContent(assistant);
 
-    expect(extracted.text).toContain('[notes.pdf](https://example.com/notes.pdf)');
-    expect(extracted.text).not.toContain('[\n');
+    expect(extracted.text).toContain('Amount: **42** total');
+    expect(extracted.html).toContain('Amount:');
+    expect(extracted.html).toContain('total');
   });
 
-  it('extracts standard ChatGPT code blocks exactly once', () => {
+  it('exports ordinary prose rendered inside an open shadow root', () => {
+    const assistant = document.createElement('div');
+    assistant.innerHTML = `<message-content><div class="markdown"><shadow-answer></shadow-answer></div></message-content>`;
+    const host = assistant.querySelector('shadow-answer');
+    const shadow = host?.attachShadow({ mode: 'open' });
+    if (shadow) shadow.innerHTML = '<p>Shadow response text</p>';
+
+    const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+
+    expect(extracted.text).toContain('Shadow response text');
+    expect(extracted.html).toContain('<p>Shadow response text</p>');
+  });
+
+  it('deduplicates repeated assistant image sources', () => {
     const assistant = document.createElement('div');
     assistant.innerHTML = `
-      <div class="markdown">
-        <p>Use <a href="https://example.com/api">the API</a>.</p>
-        <pre><code class="language-ts">const once = true;</code></pre>
-      </div>
+      <message-content><div class="markdown">
+        <img src="https://example.com/repeated.png" alt="One" />
+        <img src="https://example.com/repeated.png" alt="Two" />
+      </div></message-content>
     `;
 
     const extracted = DOMContentExtractor.extractAssistantContent(assistant);
 
-    expect(extracted.text).toContain('[the API](https://example.com/api)');
-    expect(extracted.text.match(/const once = true;/g)).toHaveLength(1);
-    expect(extracted.html.match(/const once = true;/g)).toHaveLength(1);
-    expect(extracted.text).toContain('```ts');
-  });
-
-  it('preserves current ChatGPT inline and display KaTeX as semantic formulas', () => {
-    const assistant = document.createElement('div');
-    assistant.innerHTML = `
-      <div class="markdown">
-        <p>Inline <span data-math-source="E = mc^2"><span class="katex">visual inline math</span></span>.</p>
-        <div data-math-source="\\int_0^1 x\\,dx">
-          <span class="katex-display"><span class="katex">visual display math</span></span>
-        </div>
-      </div>
-    `;
-
-    const extracted = DOMContentExtractor.extractAssistantContent(assistant);
-
-    expect(extracted.hasFormulas).toBe(true);
-    expect(extracted.text).toContain('$E = mc^2$');
-    expect(extracted.text).toContain('$$\n\\int_0^1 x\\,dx\n$$');
-    expect(extracted.text).not.toContain('visual inline math');
-    expect(extracted.text).not.toContain('visual display math');
-    expect(extracted.html).toContain('data-math-source="E = mc^2"');
-    expect(extracted.html).toContain('class="katex-display"');
-  });
-
-  it('keeps a bare code block inside a list item exactly once', () => {
-    const assistant = document.createElement('div');
-    assistant.innerHTML = `
-      <div class="markdown">
-        <ul><li>Run this<pre><code class="language-ts">const nested = true;</code></pre><ul><li>Then continue</li></ul></li></ul>
-      </div>
-    `;
-
-    const extracted = DOMContentExtractor.extractAssistantContent(assistant);
-
-    expect(extracted.hasCode).toBe(true);
-    expect(extracted.text.match(/const nested = true;/g)).toHaveLength(1);
-    expect(extracted.html.match(/const nested = true;/g)).toHaveLength(1);
-    expect(extracted.text).toContain('```ts');
-    expect(extracted.text).toContain('Then continue');
+    expect(extracted.text.split('repeated.png')).toHaveLength(2);
+    expect(extracted.html.split('repeated.png')).toHaveLength(2);
   });
 
   it('exports rendered Mermaid SVG in HTML while preserving Mermaid source in text', () => {

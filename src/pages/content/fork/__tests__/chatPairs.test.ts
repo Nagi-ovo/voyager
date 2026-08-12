@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
+import { DOMContentExtractor } from '@/features/export/services/DOMContentExtractor';
+import { resolveExportAdapter } from '@/pages/content/export/adapter/platformAdapters';
+
 import { collectForkChatPairs } from '../chatPairs';
+
+DOMContentExtractor.setExportAdapter(resolveExportAdapter());
 
 describe('collectForkChatPairs', () => {
   it('should collect user and assistant pairs from chat DOM', () => {

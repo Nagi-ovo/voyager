@@ -1,8 +1,46 @@
 import { toBlob } from 'html-to-image';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { resolveExportAdapter } from '@/pages/content/export/adapter/platformAdapters';
+
 import type { ChatTurn, ConversationMetadata } from '../../types/export';
+import { DOMContentExtractor } from '../DOMContentExtractor';
 import { ImageExportService } from '../ImageExportService';
+
+// Base the test adapter on the real Gemini adapter, overriding only the
+// image-extraction methods with a generic, platform-agnostic implementation
+// so these tests exercise ImageExportService's own logic (not Gemini's
+// production selectors for search/generated images).
+DOMContentExtractor.setExportAdapter({
+  ...resolveExportAdapter(),
+  extractUserImage: (element) =>
+    element.querySelectorAll<HTMLImageElement>('user-query-file-preview img, .preview-image'),
+  extractAssistantImage: (
+    child,
+    htmlParts,
+    textParts,
+    flags,
+    tagName,
+    _debug,
+    processedImageSrcs,
+  ) => {
+    if (tagName !== 'img') return undefined;
+
+    const image = child as HTMLImageElement;
+    const src = image.getAttribute('src') || image.src || '';
+    if (src && src !== 'about:blank' && !processedImageSrcs?.has(src)) {
+      const alt = image.getAttribute('alt')?.trim() || 'Image';
+      flags.hasImages = true;
+      htmlParts.push(
+        `<img src="${DOMContentExtractor.escapeHtmlAttribute(src)}" alt="${DOMContentExtractor.escapeHtmlAttribute(alt)}" />`,
+      );
+      textParts.push(`\n![${alt.replace(/\]/g, '\\]')}](${src})\n`);
+    }
+    return true;
+  },
+  extractFormula: () => undefined,
+  extractCodeBlock: () => undefined,
+});
 
 vi.mock('html-to-image', () => {
   return {
@@ -159,6 +197,41 @@ describe('ImageExportService', () => {
     expect(renderedStyles).toContain('.gv-image-export-content .gv-export-attachment');
     expect(renderedStyles).toContain('.gv-image-export-doc a {');
     expect(renderedStyles).toContain('color: #2563eb !important;');
+  });
+
+  it('restores ordered-list markers hidden by host page resets', async () => {
+    let renderedTarget: HTMLElement | null = null;
+    let renderedStyles = '';
+    const assistantElement = document.createElement('div');
+    assistantElement.innerHTML = `
+      <message-content>
+        <div class="markdown">
+          <ol start="22"><li>今天的空气有些凉。</li><li>一封邮件刚刚到达。</li></ol>
+        </div>
+      </message-content>
+    `;
+    (toBlob as unknown as ReturnType<typeof vi.fn>).mockImplementation(
+      async (node: HTMLElement) => {
+        renderedTarget = node;
+        renderedStyles = node.parentElement?.querySelector('style')?.textContent ?? '';
+        return new Blob(['x'], { type: 'image/png' });
+      },
+    );
+
+    await ImageExportService.renderConversationBlob(
+      [{ user: '', assistant: '', assistantElement, starred: false, omitEmptySections: true }],
+      mockMetadata,
+      {},
+    );
+
+    const target = renderedTarget as HTMLElement | null;
+    expect(target?.querySelector<HTMLOListElement>('.gv-image-export-content ol')?.start).toBe(22);
+    expect(renderedStyles).toMatch(
+      /\.gv-image-export-content ol\s*\{[^}]*list-style-type:\s*decimal !important;/s,
+    );
+    expect(renderedStyles).toMatch(
+      /\.gv-image-export-content ul\s*\{[^}]*list-style-type:\s*disc !important;/s,
+    );
   });
 
   it('renders Mermaid SVG with scoped image export styles', async () => {
@@ -455,5 +528,123 @@ describe('ImageExportService', () => {
       .calls[0][0] as HTMLElement;
     const img = capturedContainer.querySelector('img') as HTMLImageElement | null;
     expect(img?.getAttribute('src') || img?.src).toBe('data:image/png;base64,UFJFMQ==');
+  });
+
+  it('falls back to plain text when captured snapshot HTML is empty', async () => {
+    (toBlob as unknown as ReturnType<typeof vi.fn>).mockReset();
+    (toBlob as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
+      new Blob(['x'], { type: 'image/png' }),
+    );
+
+    await ImageExportService.renderConversationBlob(
+      [
+        {
+          user: '',
+          assistant: 'Fallback response',
+          starred: false,
+          omitEmptySections: true,
+          assistantContent: {
+            text: 'Fallback response',
+            html: '',
+            attachments: [],
+            hasImages: false,
+            hasFormulas: false,
+            hasTables: false,
+            hasCode: false,
+          },
+        },
+      ],
+      mockMetadata,
+      {},
+    );
+
+    const capturedContainer = (toBlob as unknown as ReturnType<typeof vi.fn>).mock
+      .calls[0][0] as HTMLElement;
+    expect(capturedContainer.textContent).toContain('Fallback response');
+    expect(capturedContainer.textContent).not.toContain('No content');
+  });
+
+  it('keeps an already-rendered image when best-effort inlining fails', async () => {
+    const originalFetch = global.fetch;
+    global.fetch = vi.fn().mockRejectedValue(new Error('CORS blocked')) as typeof fetch;
+    (toBlob as unknown as ReturnType<typeof vi.fn>).mockReset();
+    (toBlob as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
+      new Blob(['x'], { type: 'image/png' }),
+    );
+
+    try {
+      await ImageExportService.renderConversationBlob(
+        [
+          {
+            user: '',
+            assistant: 'Image response',
+            starred: false,
+            omitEmptySections: true,
+            assistantContent: {
+              text: 'Image response',
+              html: '<img src="https://blocked.example/image.png" alt="kept" />',
+              attachments: [],
+              hasImages: true,
+              hasFormulas: false,
+              hasTables: false,
+              hasCode: false,
+            },
+          },
+        ],
+        mockMetadata,
+        {},
+      );
+    } finally {
+      global.fetch = originalFetch;
+    }
+
+    const capturedContainer = (toBlob as unknown as ReturnType<typeof vi.fn>).mock
+      .calls[0][0] as HTMLElement;
+    expect(capturedContainer.querySelector('img')?.getAttribute('src')).toBe(
+      'https://blocked.example/image.png',
+    );
+  });
+
+  it('preserves images beyond the inlining fetch cap', async () => {
+    const originalFetch = global.fetch;
+    global.fetch = vi.fn().mockRejectedValue(new Error('CORS blocked')) as typeof fetch;
+    (toBlob as unknown as ReturnType<typeof vi.fn>).mockReset();
+    (toBlob as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
+      new Blob(['x'], { type: 'image/png' }),
+    );
+    const images = Array.from(
+      { length: 41 },
+      (_, index) => `<img src="https://blocked.example/${index}.png" alt="${index}" />`,
+    ).join('');
+
+    try {
+      await ImageExportService.renderConversationBlob(
+        [
+          {
+            user: '',
+            assistant: 'Image gallery',
+            starred: false,
+            omitEmptySections: true,
+            assistantContent: {
+              text: 'Image gallery',
+              html: images,
+              attachments: [],
+              hasImages: true,
+              hasFormulas: false,
+              hasTables: false,
+              hasCode: false,
+            },
+          },
+        ],
+        mockMetadata,
+        {},
+      );
+    } finally {
+      global.fetch = originalFetch;
+    }
+
+    const capturedContainer = (toBlob as unknown as ReturnType<typeof vi.fn>).mock
+      .calls[0][0] as HTMLElement;
+    expect(capturedContainer.querySelectorAll('img')).toHaveLength(41);
   });
 });
