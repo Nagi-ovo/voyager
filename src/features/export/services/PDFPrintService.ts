@@ -303,7 +303,6 @@ export class PDFPrintService {
       }
       const data = await toDataUrl(src);
       if (data) img.src = data;
-      else img.remove();
     });
 
     this.assertNotAborted(signal);
@@ -520,7 +519,10 @@ export class PDFPrintService {
    */
   private static renderHeader(metadata: ConversationMetadata): string {
     const metadataTitle = this.normalizeConversationTitle(metadata.title, metadata.platform);
-    const pageConversationTitle = this.normalizeConversationTitle(this.getConversationTitle());
+    const pageConversationTitle = this.normalizeConversationTitle(
+      this.getConversationTitle(),
+      metadata.platform,
+    );
     const conversationTitle = metadataTitle || pageConversationTitle || 'Untitled Conversation';
     // For PDF, avoid repeating the same title in smaller text under the H1.
     // Always derive a neutral "source" label from the URL instead of using metadata.title.

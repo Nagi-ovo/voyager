@@ -521,6 +521,21 @@ export class DOMContentExtractor {
         continue;
       }
 
+      if (tagName === 'blockquote') {
+        const quoteHtml: string[] = [];
+        const quoteText: string[] = [];
+        this.processNodes(child, quoteHtml, quoteText, flags, processedImageSrcs);
+        htmlParts.push(`<blockquote>${quoteHtml.join('')}</blockquote>`);
+        const markdown = quoteText
+          .join('')
+          .trim()
+          .split('\n')
+          .map((line) => (line ? `> ${line}` : '>'))
+          .join('\n');
+        if (markdown) textParts.push(`\n${markdown}\n`);
+        continue;
+      }
+
       // Generic containers: recurse if the element has child elements,
       // regardless of tag name. This handles custom elements from any platform
       // (e.g. Claude's response containers) without needing a whitelist.

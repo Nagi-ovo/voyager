@@ -529,4 +529,79 @@ describe('ImageExportService', () => {
     const img = capturedContainer.querySelector('img') as HTMLImageElement | null;
     expect(img?.getAttribute('src') || img?.src).toBe('data:image/png;base64,UFJFMQ==');
   });
+
+  it('falls back to plain text when captured snapshot HTML is empty', async () => {
+    (toBlob as unknown as ReturnType<typeof vi.fn>).mockReset();
+    (toBlob as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
+      new Blob(['x'], { type: 'image/png' }),
+    );
+
+    await ImageExportService.renderConversationBlob(
+      [
+        {
+          user: '',
+          assistant: 'Fallback response',
+          starred: false,
+          omitEmptySections: true,
+          assistantContent: {
+            text: 'Fallback response',
+            html: '',
+            attachments: [],
+            hasImages: false,
+            hasFormulas: false,
+            hasTables: false,
+            hasCode: false,
+          },
+        },
+      ],
+      mockMetadata,
+      {},
+    );
+
+    const capturedContainer = (toBlob as unknown as ReturnType<typeof vi.fn>).mock
+      .calls[0][0] as HTMLElement;
+    expect(capturedContainer.textContent).toContain('Fallback response');
+    expect(capturedContainer.textContent).not.toContain('No content');
+  });
+
+  it('keeps an already-rendered image when best-effort inlining fails', async () => {
+    const originalFetch = global.fetch;
+    global.fetch = vi.fn().mockRejectedValue(new Error('CORS blocked')) as typeof fetch;
+    (toBlob as unknown as ReturnType<typeof vi.fn>).mockReset();
+    (toBlob as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
+      new Blob(['x'], { type: 'image/png' }),
+    );
+
+    try {
+      await ImageExportService.renderConversationBlob(
+        [
+          {
+            user: '',
+            assistant: 'Image response',
+            starred: false,
+            omitEmptySections: true,
+            assistantContent: {
+              text: 'Image response',
+              html: '<img src="https://blocked.example/image.png" alt="kept" />',
+              attachments: [],
+              hasImages: true,
+              hasFormulas: false,
+              hasTables: false,
+              hasCode: false,
+            },
+          },
+        ],
+        mockMetadata,
+        {},
+      );
+    } finally {
+      global.fetch = originalFetch;
+    }
+
+    const capturedContainer = (toBlob as unknown as ReturnType<typeof vi.fn>).mock
+      .calls[0][0] as HTMLElement;
+    expect(capturedContainer.querySelector('img')?.getAttribute('src')).toBe(
+      'https://blocked.example/image.png',
+    );
+  });
 });

@@ -108,7 +108,29 @@ async function readBoundedResponse(
   ) {
     return null;
   }
-  const blob = await response.blob();
+  if (!response.body) {
+    const blob = await response.blob();
+    return reserveBudget(blob, normalizeImageType(blob.type) ?? contentType, budget);
+  }
+
+  const reader = response.body.getReader();
+  const chunks: ArrayBuffer[] = [];
+  let totalBytes = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value) continue;
+    totalBytes += value.byteLength;
+    if (totalBytes > MAX_EXPORT_IMAGE_BYTES || totalBytes > budget.remainingBytes) {
+      await reader.cancel();
+      return null;
+    }
+    const chunk = new Uint8Array(value.byteLength);
+    chunk.set(value);
+    chunks.push(chunk.buffer);
+  }
+
+  const blob = new Blob(chunks, { type: contentType });
   return reserveBudget(blob, normalizeImageType(blob.type) ?? contentType, budget);
 }
 
@@ -119,10 +141,14 @@ function decodeDataImage(url: string, budget: ImageFetchBudget): BoundedImage | 
   if (!contentType) return null;
 
   try {
-    const raw = /;base64(?:;|$)/i.test(match[2]) ? atob(match[3]) : decodeURIComponent(match[3]);
-    if (raw.length > MAX_EXPORT_IMAGE_BYTES || raw.length > budget.remainingBytes) return null;
-    const bytes = new Uint8Array(raw.length);
-    for (let index = 0; index < raw.length; index++) bytes[index] = raw.charCodeAt(index);
+    const isBase64 = /;base64(?:;|$)/i.test(match[2]);
+    const raw = isBase64 ? atob(match[3]) : decodeURIComponent(match[3]);
+    const bytes = isBase64
+      ? Uint8Array.from(raw, (character) => character.charCodeAt(0))
+      : new TextEncoder().encode(raw);
+    if (bytes.byteLength > MAX_EXPORT_IMAGE_BYTES || bytes.byteLength > budget.remainingBytes) {
+      return null;
+    }
     return reserveBudget(new Blob([bytes], { type: contentType }), contentType, budget);
   } catch {
     return null;

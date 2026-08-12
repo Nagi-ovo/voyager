@@ -149,12 +149,12 @@ export class ImageExportService {
         // Prefer content captured while a virtualized ChatGPT turn was mounted.
         // Reading its element after later scrolls can otherwise yield an empty shell.
         const userHtml =
-          turn.userContent?.html ??
+          turn.userContent?.html ||
           (turn.userElement
             ? DOMContentExtractor.extractUserContent(turn.userElement).html
             : this.formatPlainTextAsHtml(turn.user));
         const assistantHtml =
-          turn.assistantContent?.html ??
+          turn.assistantContent?.html ||
           (turn.assistantElement
             ? DOMContentExtractor.extractAssistantContent(turn.assistantElement).html
             : this.formatPlainTextAsHtml(turn.assistant));
@@ -533,8 +533,6 @@ export class ImageExportService {
         } catch {
           /* ignore */
         }
-      } else {
-        img.remove();
       }
     });
 

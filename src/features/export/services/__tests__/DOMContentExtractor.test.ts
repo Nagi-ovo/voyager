@@ -89,6 +89,21 @@ DOMContentExtractor.setExportAdapter({
 });
 
 describe('DOMContentExtractor', () => {
+  it('preserves blockquote structure in HTML and Markdown output', () => {
+    const assistant = document.createElement('div');
+    assistant.innerHTML = `
+      <message-content><div class="markdown">
+        <blockquote><p>Quoted line one.</p><p>Quoted line two.</p></blockquote>
+      </div></message-content>
+    `;
+
+    const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+
+    expect(extracted.html).toContain('<blockquote>');
+    expect(extracted.html).toContain('Quoted line one.');
+    expect(extracted.text).toContain('> Quoted line one.');
+    expect(extracted.text).toContain('> Quoted line two.');
+  });
   it('exports non-image user uploads as filename placeholders', () => {
     const user = document.createElement('div');
     user.innerHTML = `

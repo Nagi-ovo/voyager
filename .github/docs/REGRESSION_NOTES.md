@@ -56,6 +56,36 @@ Commit:
 
 `fix(export): re-anchor shifted ChatGPT shells`
 
+## ChatGPT export UI must belong to the active plugin lifecycle
+
+Symptom:
+
+Rapidly disabling and re-enabling the ChatGPT exporter could let a stale startup
+remove the replacement toolbar. Disabling while export preferences were still
+loading could also show a dialog after the plugin was already off.
+
+Root cause:
+
+Asynchronous startup and dialog loading were not tied to an abortable plugin
+lifecycle, while repeated toolbar mounts shared one DOM root without ownership.
+
+Fix:
+
+Pass the plugin lifecycle signal through startup and dialog loading, replace the
+shared toolbar's click handler on remount, and allow only the current owner to
+remove the shared root.
+
+Regression test:
+
+`src/features/plugins/builtin/chatgptExport/runtime.test.ts` (`aborts the stale
+lifecycle before starting a replacement`) and
+`src/pages/content/export/__tests__/persistentExportToolbar.test.ts` (`does not
+duplicate-mount; second call updates text on existing instance`).
+
+Commit:
+
+`fix(export): address ChatGPT export review findings`
+
 ## Timeline navigation must validate the live scroll viewport
 
 Symptom:

@@ -1582,7 +1582,6 @@ body.dark-theme .gv-export-dropdown-btn:hover,
 
 .gv-persistent-export-toolbar[data-gv-platform='chatgpt'] {
   top: 50px;
-  right: calc(var(--gv-persistent-export-right, 84px) - 50px);
 }
 
 .gv-persistent-export-btn {
@@ -1638,6 +1637,7 @@ body.dark-theme .gv-export-dropdown-btn:hover,
 }
 
 /* Dark theme */
+html.dark .gv-persistent-export-btn,
 html.dark-theme .gv-persistent-export-btn,
 body.dark-theme .gv-persistent-export-btn,
 .theme-host.dark-theme .gv-persistent-export-btn {
@@ -1646,6 +1646,7 @@ body.dark-theme .gv-persistent-export-btn,
   color: #e5e7eb;
 }
 
+html.dark .gv-persistent-export-btn:hover,
 html.dark-theme .gv-persistent-export-btn:hover,
 body.dark-theme .gv-persistent-export-btn:hover,
 .theme-host.dark-theme .gv-persistent-export-btn:hover {

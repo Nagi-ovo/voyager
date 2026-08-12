@@ -66,6 +66,7 @@ import {
 import { resolveUniqueExportTurnIds } from './selectionIds';
 import {
   groupSelectedMessagesByTurn,
+  pruneMissingSelectionIds,
   reconcileExistingSelectionHost,
   resolveInitialSelectedMessageIds,
   shouldRefreshSelectionUi,
@@ -1585,6 +1586,7 @@ async function performFinalExport(
   const selectionTitle = getConversationTitleForExport();
 
   let autoSelectAll = false;
+  let selectionBusy = false;
 
   const cleanup = () => {
     if (uiCleaned) return;
@@ -1648,13 +1650,14 @@ async function performFinalExport(
       '[data-gv-export-action="export"]',
     ) as HTMLButtonElement | null;
     if (exportBtn) {
-      exportBtn.disabled = selectedIds.size === 0;
+      exportBtn.disabled = selectionBusy || selectedIds.size === 0;
     }
 
     const selectAllBtn = bar.querySelector(
       '[data-gv-export-action="selectAll"]',
     ) as HTMLButtonElement | null;
     if (selectAllBtn) {
+      selectAllBtn.disabled = selectionBusy;
       const isAllSelected = allMessageIds.length > 0 && selectedIds.size === allMessageIds.length;
       selectAllBtn.dataset.checked = isAllSelected ? 'true' : 'false';
     }
@@ -1663,6 +1666,7 @@ async function performFinalExport(
       '[data-gv-export-action="selectUser"]',
     ) as HTMLButtonElement | null;
     if (selectUserBtn) {
+      selectUserBtn.disabled = selectionBusy;
       const userMessageIds = allMessageIds.filter((id) => messageRoles.get(id) === 'user');
       const isOnlyUserSelected =
         userMessageIds.length > 0 &&
@@ -1675,6 +1679,7 @@ async function performFinalExport(
       '[data-gv-export-action="selectAI"]',
     ) as HTMLButtonElement | null;
     if (selectAIBtn) {
+      selectAIBtn.disabled = selectionBusy;
       const aiMessageIds = allMessageIds.filter((id) => messageRoles.get(id) === 'assistant');
       const isOnlyAISelected =
         aiMessageIds.length > 0 &&
@@ -1682,6 +1687,10 @@ async function performFinalExport(
         aiMessageIds.every((id) => selectedIds.has(id));
       selectAIBtn.dataset.checked = isOnlyAISelected ? 'true' : 'false';
     }
+
+    idToCheckbox.forEach((checkbox) => {
+      checkbox.disabled = selectionBusy;
+    });
   };
 
   const attachSelectorIfNeeded = (msg: ExportMessage) => {
@@ -1727,6 +1736,7 @@ async function performFinalExport(
     };
 
     const toggleSelection = () => {
+      if (selectionBusy) return;
       autoSelectAll = false;
       const next = !selectedIds.has(msg.messageId);
       setSelected(msg.messageId, next);
@@ -1762,6 +1772,15 @@ async function performFinalExport(
   const syncMessages = (pairsInput: ChatTurn[]) => {
     const selectionMessages = resolveSelectionMessages(pairsInput);
     allMessageIds = selectionMessages.map((m) => m.messageId);
+    const liveMessageIds = new Set(allMessageIds);
+    const removedSelectionIds = pruneMissingSelectionIds(selectedIds, liveMessageIds);
+    removedSelectionIds.forEach((id) => setSelected(id, false));
+    for (const [id, binding] of selectorBindings) {
+      if (liveMessageIds.has(id)) continue;
+      binding.cleanup();
+      selectorBindings.delete(id);
+      messageRoles.delete(id);
+    }
 
     selectionMessages.forEach((m) => attachSelectorIfNeeded(m));
 
@@ -1844,9 +1863,10 @@ async function performFinalExport(
   };
 
   const selectOnlyRole = async (role: Exclude<ExportMessageRole, 'unknown'>) => {
+    if (selectionBusy) return;
     autoSelectAll = false;
-    selectUserBtn.disabled = true;
-    selectAIBtn.disabled = true;
+    selectionBusy = true;
+    updateBottomBar(bar);
     try {
       throwIfExportCancelled(signal);
       if (
@@ -1882,8 +1902,8 @@ async function performFinalExport(
       if (!isAbortError(error)) alert(resolveExportErrorMessage(error, t));
     } finally {
       if (!signal?.aborted && !uiCleaned) {
-        selectUserBtn.disabled = false;
-        selectAIBtn.disabled = false;
+        selectionBusy = false;
+        updateBottomBar(bar);
       }
     }
   };
@@ -1902,6 +1922,7 @@ async function performFinalExport(
 
   selectAllBtn.addEventListener('click', (ev) => {
     swallow(ev);
+    if (selectionBusy) return;
     const isAllSelected = allMessageIds.length > 0 && selectedIds.size === allMessageIds.length;
     if (isAllSelected) {
       selectedIds.clear();
@@ -1931,6 +1952,7 @@ async function performFinalExport(
 
   exportBtn.addEventListener('click', async (ev) => {
     swallow(ev);
+    if (selectionBusy) return;
     if (selectedIds.size === 0) {
       alert(t('export_select_mode_empty'));
       return;
@@ -2540,14 +2562,20 @@ function setupConversationMenuExportObserver({
  * their lifecycle and retain this callback; Gemini's native caller may ignore it
  * because its content script owns the page lifetime.
  */
-export async function startExportButton(): Promise<() => void> {
+export async function startExportButton(
+  options: { signal?: AbortSignal } = {},
+): Promise<() => void> {
+  const noCleanup = () => {};
+  if (options.signal?.aborted) return noCleanup;
   // Check for pending export immediately
   if (exportAdapter.shouldPreloadHistory()) {
     checkPendingExport();
   }
 
   const dict = await loadDictionaries();
+  if (options.signal?.aborted) return noCleanup;
   let lang = await getLanguage();
+  if (options.signal?.aborted) return noCleanup;
   const t = (key: TranslationKey) => dict[lang]?.[key] ?? dict.en?.[key] ?? key;
 
   // Platforms without Gemini's logo/menu UI: mount the persistent toolbar directly.
@@ -2555,7 +2583,7 @@ export async function startExportButton(): Promise<() => void> {
     const toolbarHandle = mountPersistentExportToolbar({
       label: t('pm_export'),
       tooltip: t('exportChatJson'),
-      onClick: () => showExportDialog(dict, lang),
+      onClick: () => void showExportDialog(dict, lang, { signal: options.signal }),
     });
     toolbarHandle.root.setAttribute('data-gv-platform', exportAdapter.site.id);
     const onStorageChange = (
@@ -2860,8 +2888,10 @@ async function showExportDialog(
   lang: AppLanguage,
   options?: {
     initialSelectedMessageId?: string | null;
+    signal?: AbortSignal;
   },
 ): Promise<void> {
+  if (options?.signal?.aborted) return;
   const t = (key: TranslationKey) => dict[lang]?.[key] ?? dict.en?.[key] ?? key;
   const speakerDefaults: ExportSpeakerLabels = {
     user: t('export_speaker_user_default'),
@@ -2871,6 +2901,7 @@ async function showExportDialog(
     getSavedImageExportWidth(),
     getSavedSpeakerLabelOverrides(),
   ]);
+  if (options?.signal?.aborted) return;
 
   // We defer collection until after the export sequence (scrolling/refresh checks)
 

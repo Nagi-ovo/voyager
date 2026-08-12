@@ -46,6 +46,41 @@ describe('bounded export image fetching', () => {
     ).resolves.toBeNull();
   });
 
+  it('encodes percent-decoded data images as UTF-8', async () => {
+    const result = await fetchBoundedExportImage(
+      'data:image/svg+xml,%3Csvg%3E%E4%BD%A0%E5%A5%BD%3C%2Fsvg%3E',
+      { remainingBytes: 1024 },
+    );
+
+    const text = await new Promise<string>((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.readAsText(result!.blob);
+    });
+    expect(text).toBe('<svg>你好</svg>');
+  });
+
+  it('cancels a streamed image before buffering past the remaining budget', async () => {
+    let cancelled = false;
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array([1, 2]));
+        controller.enqueue(new Uint8Array([3, 4]));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(stream, { status: 200, headers: { 'Content-Type': 'image/png' } }),
+    );
+
+    await expect(
+      fetchBoundedExportImage('https://example.com/stream.png', { remainingBytes: 3 }),
+    ).resolves.toBeNull();
+    expect(cancelled).toBe(true);
+  });
+
   it('caps concurrent work', async () => {
     let active = 0;
     let peak = 0;

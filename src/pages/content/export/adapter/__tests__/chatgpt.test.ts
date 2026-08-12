@@ -211,6 +211,20 @@ describe('chatgptCollectTurnContainers', () => {
     expect(turns[0]?.assistantContent?.html).toContain('https://example.com/generated.png');
   });
 
+  it('preserves assistant text when an image-generation card has no usable image', async () => {
+    document.body.innerHTML = `
+      <div data-turn-id-container="assistant-image-1">
+        <div data-message-author-role="assistant"><p>The image request was rejected.</p></div>
+        <div class="group/imagegen-image"><button>Edit</button></div>
+      </div>
+    `;
+
+    const turns = await buildChatGptTurnsForSelection(new Set(['assistant-image-1']));
+
+    expect(turns).toMatchObject([{ assistant: 'The image request was rejected.' }]);
+    expect(HTMLElement.prototype.scrollIntoView).not.toHaveBeenCalled();
+  });
+
   it('does not pair non-adjacent selected messages', async () => {
     document.body.innerHTML = `
       <div data-turn-id-container="user-1"><div data-message-author-role="user">U1</div></div>
@@ -224,6 +238,40 @@ describe('chatgptCollectTurnContainers', () => {
     expect(turns).toHaveLength(2);
     expect(turns[0]).toMatchObject({ user: 'U1', assistant: '' });
     expect(turns[1]).toMatchObject({ user: '', assistant: 'A2' });
+  });
+
+  it('keeps initial adjacency when ChatGPT inserts a virtual item during extraction', async () => {
+    let inserted = false;
+    DOMContentExtractor.setExportAdapter({
+      extractUserImage: () => [],
+      extractUserText: (
+        _lines: NodeListOf<HTMLElement>,
+        textParts: string[],
+        element: HTMLElement,
+      ) => {
+        textParts.push(element.textContent || '');
+        if (!inserted) {
+          inserted = true;
+          const extra = document.createElement('div');
+          extra.dataset.turnIdContainer = 'inserted';
+          extra.innerHTML = '<div data-message-author-role="assistant">Inserted</div>';
+          document.body.prepend(extra);
+        }
+      },
+      getUserAttachmentCandidates: () => [],
+      extractAssistantImage: () => undefined,
+      extractFormula: () => undefined,
+      extractCodeBlock: () => undefined,
+      extractInlineFormula: () => undefined,
+    } as unknown as ExportPlatformAdapter);
+    document.body.innerHTML = `
+      <div data-turn-id-container="user-1"><div data-message-author-role="user">U1</div></div>
+      <div data-turn-id-container="assistant-1"><div data-message-author-role="assistant">A1</div></div>
+    `;
+
+    const turns = await buildChatGptTurnsForSelection(new Set(['user-1', 'assistant-1']));
+
+    expect(turns).toMatchObject([{ user: 'U1', assistant: 'A1' }]);
   });
 
   it('fails instead of silently exporting a partial selection', async () => {

@@ -170,14 +170,19 @@ function hasMountedContent(turn: ChatGptTurnContainer): boolean {
     // Image-generation cards mount their Edit/Share controls before the image.
     // Those labels are not exportable response content, so wait for a usable
     // image URL instead of snapshotting the placeholder card.
-    return hasUsableGeneratedImage(turn.container);
+    if (hasUsableGeneratedImage(turn.container)) return true;
+    const assistantRoot = turn.container.querySelector<HTMLElement>(ASSISTANT_MESSAGE_SELECTOR);
+    return assistantRoot ? hasConventionalMountedContent(assistantRoot) : false;
   }
 
   const root =
     turn.role === 'user'
-      ? turn.container.querySelector(USER_MESSAGE_SELECTOR)
-      : turn.container.querySelector(ASSISTANT_MESSAGE_SELECTOR);
-  if (!root) return false;
+      ? turn.container.querySelector<HTMLElement>(USER_MESSAGE_SELECTOR)
+      : turn.container.querySelector<HTMLElement>(ASSISTANT_MESSAGE_SELECTOR);
+  return root ? hasConventionalMountedContent(root) : false;
+}
+
+function hasConventionalMountedContent(root: HTMLElement): boolean {
   return (
     (root.textContent?.trim().length ?? 0) > 0 ||
     root.querySelector('img, svg, canvas, pre, table, [data-math-source], [role="math"]') != null
@@ -363,7 +368,8 @@ export async function buildChatGptTurnsForSelection(
     for (const turn of selectedContainers) {
       assertSelectionActive(options);
       const materialized = await materializeChatGptTurnContainer(turn, options);
-      const { container, role, sequence } = materialized;
+      const { container, role } = materialized;
+      const sequence = turn.sequence;
 
       if (role === 'user') {
         // A second user message closes an earlier selected user-only turn.
@@ -392,18 +398,12 @@ export async function buildChatGptTurnsForSelection(
       }
 
       if (role === 'assistant') {
-        // Image-generation replies can be identified by IMAGEGEN_SELECTOR before
-        // ChatGPT exposes a conventional assistant root.
-        const expectsGeneratedImage = container.querySelector(IMAGEGEN_SELECTOR) != null;
         const assistantElement =
           container.querySelector<HTMLElement>(ASSISTANT_MESSAGE_SELECTOR) ?? container;
         let assistantContent = DOMContentExtractor.extractAssistantContent(assistantElement);
         const siblingImageContent = extractSiblingGeneratedImages(container, assistantElement);
         if (siblingImageContent) {
           assistantContent = mergeExtractedContent(assistantContent, siblingImageContent);
-        }
-        if (expectsGeneratedImage && !assistantContent.hasImages) {
-          throw new Error(`chatgpt_export_message_empty:${turn.id}`);
         }
         if (!assistantContent.text && !assistantContent.html) {
           throw new Error(`chatgpt_export_message_empty:${turn.id}`);

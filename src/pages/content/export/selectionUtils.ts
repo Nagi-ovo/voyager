@@ -108,6 +108,19 @@ export function resolveInitialSelectedMessageIds(
   return new Set<string>([preferredMessageId]);
 }
 
+export function pruneMissingSelectionIds(
+  selectedIds: Set<string>,
+  liveMessageIds: ReadonlySet<string>,
+): string[] {
+  const removed: string[] = [];
+  for (const id of selectedIds) {
+    if (liveMessageIds.has(id)) continue;
+    selectedIds.delete(id);
+    removed.push(id);
+  }
+  return removed;
+}
+
 export function reconcileExistingSelectionHost(
   boundHost: HTMLElement | null | undefined,
   currentHost: HTMLElement,

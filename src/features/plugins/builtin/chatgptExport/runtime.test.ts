@@ -27,10 +27,27 @@ describe('ChatGPT export builtin plugin lifecycle', () => {
     startChatGptExportPlugin();
 
     await vi.waitFor(() => expect(mocks.startExportButton).toHaveBeenCalledOnce());
+    const signal = mocks.startExportButton.mock.calls[0][0].signal as AbortSignal;
+    expect(signal.aborted).toBe(false);
     await vi.waitFor(() => expect(mocks.startExportButton).toHaveResolved());
 
     stopChatGptExportPlugin();
+    expect(signal.aborted).toBe(true);
     expect(cleanup).toHaveBeenCalledOnce();
+  });
+
+  it('aborts the stale lifecycle before starting a replacement', async () => {
+    mocks.startExportButton.mockResolvedValue(vi.fn());
+
+    startChatGptExportPlugin();
+    await vi.waitFor(() => expect(mocks.startExportButton).toHaveBeenCalledTimes(1));
+    const firstSignal = mocks.startExportButton.mock.calls[0][0].signal as AbortSignal;
+    stopChatGptExportPlugin();
+    startChatGptExportPlugin();
+    await vi.waitFor(() => expect(mocks.startExportButton).toHaveBeenCalledTimes(2));
+
+    expect(firstSignal.aborted).toBe(true);
+    expect((mocks.startExportButton.mock.calls[1][0].signal as AbortSignal).aborted).toBe(false);
   });
 
   it('cleans up a late export mount when the plugin was already disabled', async () => {

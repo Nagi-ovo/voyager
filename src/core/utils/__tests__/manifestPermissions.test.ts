@@ -1,6 +1,7 @@
 import { TextDecoder, TextEncoder } from 'node:util';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import manifestDev from '../../../../manifest.dev.json';
 import manifestChrome from '../../../../manifest.json';
 
 type ManifestPermissions = {
@@ -74,9 +75,11 @@ afterAll(() => {
 describe('manifest permissions', () => {
   it('keeps all-site access optional', () => {
     expect(manifestChrome.host_permissions).not.toContain('<all_urls>');
-    expect(manifestChrome.optional_host_permissions).toEqual(
-      expect.arrayContaining(['<all_urls>']),
-    );
+    expect(manifestChrome.optional_host_permissions).toEqual([
+      'https://chatgpt.com/*',
+      '<all_urls>',
+    ]);
+    expect(manifestDev.optional_host_permissions).toEqual(manifestChrome.optional_host_permissions);
   });
 
   it('keeps ChatGPT host access opt-in', () => {

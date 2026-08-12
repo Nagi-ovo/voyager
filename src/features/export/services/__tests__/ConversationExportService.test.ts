@@ -17,8 +17,6 @@ import { ImageExportService } from '../ImageExportService';
 import { MarkdownFormatter } from '../MarkdownFormatter';
 import { PDFPrintService } from '../PDFPrintService';
 
-DOMContentExtractor.setExportAdapter(resolveExportAdapter());
-
 vi.mock('html-to-image', () => {
   return {
     toBlob: vi.fn(),
@@ -30,6 +28,7 @@ vi.mock('html-to-image', () => {
 const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>');
 global.document = dom.window.document as unknown as Document;
 global.window = dom.window as unknown as Window & typeof globalThis;
+DOMContentExtractor.setExportAdapter(resolveExportAdapter());
 
 function setUserAgentVendor(userAgent: string, vendor: string): void {
   Object.defineProperty(global.navigator, 'userAgent', {

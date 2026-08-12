@@ -4,6 +4,7 @@ import {
   filterItemsBySelectedIds,
   findSelectionStartIdAtLine,
   groupSelectedMessagesByTurn,
+  pruneMissingSelectionIds,
   reconcileExistingSelectionHost,
   resolveInitialSelectedMessageIds,
   selectBelowIds,
@@ -139,6 +140,15 @@ describe('selectionUtils', () => {
 
       expect(selected.size).toBe(0);
     });
+  });
+
+  it('prunes selected ids that disappeared during same-route reconciliation', () => {
+    const selectedIds = new Set(['user-1', 'assistant-old']);
+
+    expect(pruneMissingSelectionIds(selectedIds, new Set(['user-1', 'assistant-new']))).toEqual([
+      'assistant-old',
+    ]);
+    expect(Array.from(selectedIds)).toEqual(['user-1']);
   });
 
   describe('selection host reconciliation', () => {

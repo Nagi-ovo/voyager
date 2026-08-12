@@ -416,6 +416,47 @@ describe('PDFPrintService', () => {
     expect(document.title).toBe('AI学习设备选择指南 - ChatGPT');
   });
 
+  it('keeps an already-rendered image when best-effort inlining fails', async () => {
+    window.print = vi.fn();
+    const originalFetch = global.fetch;
+    global.fetch = vi.fn().mockRejectedValue(new Error('CORS blocked')) as typeof fetch;
+
+    try {
+      await PDFPrintService.export(
+        [
+          {
+            user: '',
+            assistant: 'Image response',
+            starred: false,
+            omitEmptySections: true,
+            assistantContent: {
+              text: 'Image response',
+              html: '<img src="https://blocked.example/image.png" alt="kept" />',
+              attachments: [],
+              hasImages: true,
+              hasFormulas: false,
+              hasTables: false,
+              hasCode: false,
+            },
+          },
+        ],
+        {
+          url: 'https://chatgpt.com/c/x',
+          exportedAt: new Date().toISOString(),
+          count: 1,
+          title: 'Image fallback',
+          platform: 'ChatGPT',
+        },
+      );
+    } finally {
+      global.fetch = originalFetch;
+    }
+
+    expect(
+      document.querySelector<HTMLImageElement>('.gv-print-turn-text img')?.getAttribute('src'),
+    ).toBe('https://blocked.example/image.png');
+  });
+
   it('extracts title from native sidebar by conversation id and restores page title after print', async () => {
     vi.useFakeTimers();
     document.title = 'Google Gemini';

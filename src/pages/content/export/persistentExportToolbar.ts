@@ -29,6 +29,9 @@ const TOP_RIGHT_AVOIDANCE_SELECTORS = [
   '[aria-label*="advanced" i]',
 ].join(',');
 
+type OwnedToolbarRoot = HTMLDivElement & { _gvOwner?: symbol };
+type ToolbarButton = HTMLButtonElement & { _gvOnClick?: () => void };
+
 let activeAvoidanceRoot: HTMLDivElement | null = null;
 let activeAvoidanceCleanup: (() => void) | null = null;
 
@@ -154,13 +157,16 @@ export type PersistentExportToolbarHandle = {
 export function mountPersistentExportToolbar(
   options: PersistentExportToolbarOptions,
 ): PersistentExportToolbarHandle {
-  const existing = document.querySelector(`.${TOOLBAR_CLASS}`) as HTMLDivElement | null;
+  const owner = Symbol('persistent-export-toolbar-owner');
+  const existing = document.querySelector(`.${TOOLBAR_CLASS}`) as OwnedToolbarRoot | null;
   if (existing) {
-    const button = existing.querySelector(`.${BUTTON_CLASS}`) as HTMLButtonElement;
+    const button = existing.querySelector(`.${BUTTON_CLASS}`) as ToolbarButton;
     const labelEl = existing.querySelector(`.${LABEL_CLASS}`) as HTMLSpanElement;
     button.title = options.tooltip;
     button.setAttribute('aria-label', options.tooltip);
     if (labelEl) labelEl.textContent = options.label;
+    existing._gvOwner = owner;
+    button._gvOnClick = options.onClick;
     installToolbarAvoidance(existing);
     return {
       root: existing,
@@ -171,12 +177,16 @@ export function mountPersistentExportToolbar(
         if (labelEl) labelEl.textContent = label;
       },
       remove() {
-        removeToolbarRoot(existing);
+        if (existing._gvOwner === owner) removeToolbarRoot(existing);
       },
     };
   }
 
-  const { root, button, labelEl } = buildToolbarDom(options);
+  const { root: plainRoot, button: plainButton, labelEl } = buildToolbarDom(options);
+  const root = plainRoot as OwnedToolbarRoot;
+  const button = plainButton as ToolbarButton;
+  root._gvOwner = owner;
+  button._gvOnClick = options.onClick;
 
   const swallow = (e: Event) => {
     try {
@@ -189,7 +199,7 @@ export function mountPersistentExportToolbar(
   button.addEventListener('click', (ev) => {
     swallow(ev);
     try {
-      options.onClick();
+      button._gvOnClick?.();
     } catch (err) {
       try {
         console.error('[Gemini Voyager] Persistent export toolbar click failed:', err);
@@ -209,7 +219,7 @@ export function mountPersistentExportToolbar(
       labelEl.textContent = label;
     },
     remove() {
-      removeToolbarRoot(root);
+      if (root._gvOwner === owner) removeToolbarRoot(root);
     },
   };
 }

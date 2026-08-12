@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -63,20 +65,42 @@ describe('persistentExportToolbar', () => {
   });
 
   it('does not duplicate-mount; second call updates text on existing instance', () => {
+    const firstClick = vi.fn();
+    const secondClick = vi.fn();
     const first = mountPersistentExportToolbar({
       label: 'Export',
       tooltip: 'Export chat history',
-      onClick: vi.fn(),
+      onClick: firstClick,
     });
     const second = mountPersistentExportToolbar({
       label: '导出',
       tooltip: '导出对话历史',
-      onClick: vi.fn(),
+      onClick: secondClick,
     });
     expect(document.querySelectorAll('.gv-persistent-export-toolbar').length).toBe(1);
     expect(second.root).toBe(first.root);
     expect(first.button.getAttribute('aria-label')).toBe('导出对话历史');
     expect(first.button.textContent).toContain('导出');
+    second.button.click();
+    expect(firstClick).not.toHaveBeenCalled();
+    expect(secondClick).toHaveBeenCalledOnce();
+
+    first.remove();
+    expect(isPersistentExportToolbarMounted()).toBe(true);
+    second.remove();
+    expect(isPersistentExportToolbarMounted()).toBe(false);
+  });
+
+  it('keeps ChatGPT toolbar avoidance and dark-mode styles', () => {
+    const css = readFileSync(resolve(process.cwd(), 'public/contentStyle.css'), 'utf8');
+    const platformRule = css.match(
+      /\.gv-persistent-export-toolbar\[data-gv-platform='chatgpt'\]\s*\{([^}]*)\}/,
+    )?.[1];
+
+    expect(platformRule).toContain('top: 50px');
+    expect(platformRule).not.toContain('right:');
+    expect(css).toContain('html.dark .gv-persistent-export-btn,');
+    expect(css).toContain('html.dark .gv-persistent-export-btn:hover,');
   });
 
   it('setText updates label/tooltip after language change', () => {
