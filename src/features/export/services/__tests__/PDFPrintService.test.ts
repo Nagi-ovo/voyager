@@ -115,6 +115,39 @@ describe('PDFPrintService', () => {
     );
   });
 
+  it('restores ordered-list markers hidden by host page resets', async () => {
+    window.print = vi.fn();
+    const assistantElement = document.createElement('div');
+    assistantElement.innerHTML = `
+      <message-content>
+        <div class="markdown">
+          <ol start="22"><li>今天的空气有些凉。</li><li>一封邮件刚刚到达。</li></ol>
+        </div>
+      </message-content>
+    `;
+
+    await PDFPrintService.export(
+      [{ user: '', assistant: '', assistantElement, starred: false, omitEmptySections: true }],
+      {
+        url: 'https://chatgpt.com/c/x',
+        exportedAt: new Date().toISOString(),
+        count: 1,
+        title: 'Numbered list',
+        platform: 'ChatGPT',
+      },
+    );
+
+    const list = document.querySelector<HTMLOListElement>('.gv-print-turn-text ol');
+    const styleText = document.getElementById('gv-pdf-print-styles')?.textContent || '';
+    expect(list?.start).toBe(22);
+    expect(styleText).toMatch(
+      /\.gv-print-turn-text ol\s*\{[^}]*list-style-type:\s*decimal !important;/s,
+    );
+    expect(styleText).toMatch(
+      /\.gv-print-turn-text ul\s*\{[^}]*list-style-type:\s*disc !important;/s,
+    );
+  });
+
   it('restores KaTeX layout primitives after immersive-mode display override', async () => {
     window.print = vi.fn();
 

@@ -20,6 +20,7 @@ import {
   mapWithConcurrency,
 } from './boundedImageFetch';
 import { buildKatexExportStyles } from './katexExportStyles';
+import { buildListExportStyles } from './listExportStyles';
 import { buildMermaidExportStyles } from './mermaidExportStyles';
 import { isolateMermaidSvgImages, rasterizeMermaidSvgImages } from './mermaidSvgImage';
 
@@ -944,6 +945,8 @@ export class PDFPrintService {
           preservePrintBackground: true,
           diagramMaxHeight: '160mm',
         })}
+
+        ${buildListExportStyles('.gv-print-turn-text', true)}
 
         .gv-print-turn-assistant .gv-print-turn-text {
           border-left-color: #93c5fd;

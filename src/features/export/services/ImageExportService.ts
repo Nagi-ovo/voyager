@@ -24,6 +24,7 @@ import {
   mapWithConcurrency,
 } from './boundedImageFetch';
 import { buildKatexExportStyles } from './katexExportStyles';
+import { buildListExportStyles } from './listExportStyles';
 import { buildMermaidExportStyles } from './mermaidExportStyles';
 import { rasterizeMermaidSvgImages } from './mermaidSvgImage';
 
@@ -297,6 +298,8 @@ export class ImageExportService {
         diagramSelector: '> img',
       })}
 
+      ${buildListExportStyles('.gv-image-export-content', true)}
+
       .gv-image-export-content .gv-export-attachment {
         display: flex;
         align-items: center;
@@ -447,6 +450,8 @@ export class ImageExportService {
         containerMargin: '1em auto',
         diagramSelector: '> img',
       })}
+
+      ${buildListExportStyles('.gv-image-export-report-content', true)}
 
       .gv-image-export-report-content pre {
         background: rgba(0,0,0,0.05);

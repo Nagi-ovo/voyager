@@ -199,6 +199,41 @@ describe('ImageExportService', () => {
     expect(renderedStyles).toContain('color: #2563eb !important;');
   });
 
+  it('restores ordered-list markers hidden by host page resets', async () => {
+    let renderedTarget: HTMLElement | null = null;
+    let renderedStyles = '';
+    const assistantElement = document.createElement('div');
+    assistantElement.innerHTML = `
+      <message-content>
+        <div class="markdown">
+          <ol start="22"><li>今天的空气有些凉。</li><li>一封邮件刚刚到达。</li></ol>
+        </div>
+      </message-content>
+    `;
+    (toBlob as unknown as ReturnType<typeof vi.fn>).mockImplementation(
+      async (node: HTMLElement) => {
+        renderedTarget = node;
+        renderedStyles = node.parentElement?.querySelector('style')?.textContent ?? '';
+        return new Blob(['x'], { type: 'image/png' });
+      },
+    );
+
+    await ImageExportService.renderConversationBlob(
+      [{ user: '', assistant: '', assistantElement, starred: false, omitEmptySections: true }],
+      mockMetadata,
+      {},
+    );
+
+    const target = renderedTarget as HTMLElement | null;
+    expect(target?.querySelector<HTMLOListElement>('.gv-image-export-content ol')?.start).toBe(22);
+    expect(renderedStyles).toMatch(
+      /\.gv-image-export-content ol\s*\{[^}]*list-style-type:\s*decimal !important;/s,
+    );
+    expect(renderedStyles).toMatch(
+      /\.gv-image-export-content ul\s*\{[^}]*list-style-type:\s*disc !important;/s,
+    );
+  });
+
   it('renders Mermaid SVG with scoped image export styles', async () => {
     let renderedTarget: HTMLElement | null = null;
     let renderedStyles = '';
