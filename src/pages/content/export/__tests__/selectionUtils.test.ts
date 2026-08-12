@@ -145,6 +145,10 @@ describe('selectionUtils', () => {
     it('restores Voyager classes when ChatGPT rewrites the same host class list', () => {
       const host = document.createElement('div');
       host.className = 'gv-export-msg-host gv-export-msg-selected';
+      const selector = document.createElement('div');
+      selector.className = 'gv-export-msg-selector';
+      host.appendChild(selector);
+      document.body.appendChild(host);
 
       // ChatGPT can reconcile the existing node in place and overwrite className.
       host.className = 'chatgpt-turn';
@@ -153,6 +157,15 @@ describe('selectionUtils', () => {
       expect(host.classList.contains('chatgpt-turn')).toBe(true);
       expect(host.classList.contains('gv-export-msg-host')).toBe(true);
       expect(host.classList.contains('gv-export-msg-selected')).toBe(true);
+    });
+
+    it('rebuilds a binding when ChatGPT removes its selector from the same host', () => {
+      const host = document.createElement('div');
+      host.className = 'chatgpt-turn';
+      document.body.appendChild(host);
+
+      expect(reconcileExistingSelectionHost(host, host, true)).toBe(false);
+      expect(host.className).toBe('chatgpt-turn');
     });
 
     it('does not reuse a binding when ChatGPT replaces the host node', () => {

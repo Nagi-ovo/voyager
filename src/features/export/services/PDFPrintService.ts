@@ -104,12 +104,7 @@ export class PDFPrintService {
     const safari = isSafari();
 
     // Create print container
-    const container = this.createPrintContainer(
-      turns,
-      metadata,
-      preferMetadataTitle,
-      speakerLabels,
-    );
+    const container = this.createPrintContainer(turns, metadata, speakerLabels);
     if (safari) {
       isolateMermaidSvgImages(container);
     } else {
@@ -227,7 +222,6 @@ export class PDFPrintService {
   private static createPrintContainer(
     turns: ChatTurn[],
     metadata: ConversationMetadata,
-    preferMetadataTitle: boolean,
     speakerLabels: ExportSpeakerLabels,
   ): HTMLElement {
     const container = document.createElement('div');
@@ -237,7 +231,7 @@ export class PDFPrintService {
     // Build HTML content
     container.innerHTML = `
       <div class="gv-print-document">
-        ${this.renderHeader(metadata, preferMetadataTitle)}
+        ${this.renderHeader(metadata)}
         ${this.renderContent(turns, speakerLabels)}
         ${this.renderFooter(metadata)}
       </div>
@@ -523,15 +517,10 @@ export class PDFPrintService {
   /**
    * Render document header with cover page
    */
-  private static renderHeader(
-    metadata: ConversationMetadata,
-    preferMetadataTitle: boolean,
-  ): string {
-    const metadataTitle = this.normalizeConversationTitle(metadata.title);
+  private static renderHeader(metadata: ConversationMetadata): string {
+    const metadataTitle = this.normalizeConversationTitle(metadata.title, metadata.platform);
     const pageConversationTitle = this.normalizeConversationTitle(this.getConversationTitle());
-    const conversationTitle = preferMetadataTitle
-      ? metadataTitle || pageConversationTitle || 'Untitled Conversation'
-      : pageConversationTitle || metadataTitle || 'Untitled Conversation';
+    const conversationTitle = metadataTitle || pageConversationTitle || 'Untitled Conversation';
     // For PDF, avoid repeating the same title in smaller text under the H1.
     // Always derive a neutral "source" label from the URL instead of using metadata.title.
     const urlTitle = this.extractTitleFromURL(metadata.url, metadata.platform);
@@ -1146,6 +1135,9 @@ export class PDFPrintService {
       const escaped = platform.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       normalized = normalized.replace(new RegExp(`\\s+-\\s+${escaped}$`, 'i'), '').trim();
     }
+    if (platform && normalized.toLocaleLowerCase() === platform.trim().toLocaleLowerCase()) {
+      return '';
+    }
     return this.isMeaningfulConversationTitle(normalized) ? normalized : '';
   }
 
@@ -1164,7 +1156,7 @@ export class PDFPrintService {
       return metadataTitle || conversationTitle || `${platform} Conversation`;
     }
 
-    const base = conversationTitle || metadataTitle;
+    const base = metadataTitle || conversationTitle;
     if (!base) return `${platform} Conversation`;
     return `${base} - ${platform}`;
   }

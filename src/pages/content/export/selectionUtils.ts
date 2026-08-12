@@ -114,6 +114,8 @@ export function reconcileExistingSelectionHost(
   selected: boolean,
 ): boolean {
   if (boundHost !== currentHost) return false;
+  const selector = currentHost.querySelector<HTMLElement>(':scope > .gv-export-msg-selector');
+  if (!selector?.isConnected) return false;
 
   currentHost.classList.add('gv-export-msg-host');
   currentHost.classList.toggle('gv-export-msg-selected', selected);

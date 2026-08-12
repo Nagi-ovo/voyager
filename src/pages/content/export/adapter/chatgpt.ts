@@ -1,4 +1,7 @@
-import { DOMContentExtractor } from '@/features/export/services/DOMContentExtractor';
+import {
+  DOMContentExtractor,
+  type ExtractedContent,
+} from '@/features/export/services/DOMContentExtractor';
 import type { ChatTurn } from '@/features/export/types/export';
 
 import { computeConversationFingerprint } from '../topNodePreload';
@@ -36,6 +39,38 @@ function resolveTurnRole(container: HTMLElement): ChatGptTurnRole {
   }
 
   return 'unknown';
+}
+
+function mergeExtractedContent(
+  primary: ExtractedContent,
+  supplemental: ExtractedContent,
+): ExtractedContent {
+  return {
+    text: [primary.text, supplemental.text].filter(Boolean).join('\n\n'),
+    html: [primary.html, supplemental.html].filter(Boolean).join('\n'),
+    attachments: [...primary.attachments, ...supplemental.attachments],
+    hasImages: primary.hasImages || supplemental.hasImages,
+    hasFormulas: primary.hasFormulas || supplemental.hasFormulas,
+    hasTables: primary.hasTables || supplemental.hasTables,
+    hasCode: primary.hasCode || supplemental.hasCode,
+  };
+}
+
+function extractSiblingGeneratedImages(
+  container: HTMLElement,
+  assistantElement: HTMLElement,
+): ExtractedContent | null {
+  const siblingImages = Array.from(
+    container.querySelectorAll<HTMLImageElement>(`${IMAGEGEN_SELECTOR} img`),
+  ).filter((image) => !assistantElement.contains(image));
+  if (siblingImages.length === 0) return null;
+
+  // ChatGPT can render generated-image cards beside (rather than inside) the
+  // conventional assistant root. Extract only cloned image nodes so card
+  // controls such as Edit/Share cannot leak into the exported response.
+  const imageRoot = document.createElement('div');
+  siblingImages.forEach((image) => imageRoot.appendChild(image.cloneNode(true)));
+  return DOMContentExtractor.extractAssistantContent(imageRoot);
 }
 
 /**
@@ -348,7 +383,11 @@ export async function buildChatGptTurnsForSelection(
         const expectsGeneratedImage = container.querySelector(IMAGEGEN_SELECTOR) != null;
         const assistantElement =
           container.querySelector<HTMLElement>(ASSISTANT_MESSAGE_SELECTOR) ?? container;
-        const assistantContent = DOMContentExtractor.extractAssistantContent(assistantElement);
+        let assistantContent = DOMContentExtractor.extractAssistantContent(assistantElement);
+        const siblingImageContent = extractSiblingGeneratedImages(container, assistantElement);
+        if (siblingImageContent) {
+          assistantContent = mergeExtractedContent(assistantContent, siblingImageContent);
+        }
         if (expectsGeneratedImage && !assistantContent.hasImages) {
           throw new Error(`chatgpt_export_message_empty:${turn.id}`);
         }

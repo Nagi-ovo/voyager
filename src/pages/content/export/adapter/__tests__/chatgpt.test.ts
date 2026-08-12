@@ -11,6 +11,25 @@ import type { ExportPlatformAdapter } from '../platformAdapters';
 
 const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
 
+function setImageExportAdapter(): void {
+  DOMContentExtractor.setExportAdapter({
+    extractUserImage: (element: HTMLElement) => element.querySelectorAll('img'),
+    extractUserText: () => undefined,
+    getUserAttachmentCandidates: () => [],
+    extractAssistantImage: ((child, htmlParts, textParts, flags, tagName) => {
+      if (tagName !== 'img') return undefined;
+      const image = child as HTMLImageElement;
+      flags.hasImages = true;
+      htmlParts.push(`<img src="${image.src}" alt="${image.alt}" />`);
+      textParts.push(`![${image.alt}](${image.src})`);
+      return true;
+    }) as ExportPlatformAdapter['extractAssistantImage'],
+    extractFormula: () => undefined,
+    extractCodeBlock: () => undefined,
+    extractInlineFormula: () => undefined,
+  } as unknown as ExportPlatformAdapter);
+}
+
 beforeEach(() => {
   document.body.replaceChildren();
   Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
@@ -148,22 +167,7 @@ describe('chatgptCollectTurnContainers', () => {
   });
 
   it('exports a mounted generated image without waiting', async () => {
-    DOMContentExtractor.setExportAdapter({
-      extractUserImage: (element: HTMLElement) => element.querySelectorAll('img'),
-      extractUserText: () => undefined,
-      getUserAttachmentCandidates: () => [],
-      extractAssistantImage: ((child, htmlParts, textParts, flags, tagName) => {
-        if (tagName !== 'img') return undefined;
-        const image = child as HTMLImageElement;
-        flags.hasImages = true;
-        htmlParts.push(`<img src="${image.src}" alt="${image.alt}" />`);
-        textParts.push(`![${image.alt}](${image.src})`);
-        return true;
-      }) as ExportPlatformAdapter['extractAssistantImage'],
-      extractFormula: () => undefined,
-      extractCodeBlock: () => undefined,
-      extractInlineFormula: () => undefined,
-    } as unknown as ExportPlatformAdapter);
+    setImageExportAdapter();
     document.body.innerHTML = `
       <div data-turn-id-container="assistant-image-1">
         <section data-turn-id="assistant-image-1">
@@ -184,6 +188,27 @@ describe('chatgptCollectTurnContainers', () => {
     expect(turns[0]?.assistant).not.toContain('cc440d50ba-express-entrypoint-button');
     expect(turns[0]?.assistantContent?.html).not.toContain('cc440d50ba-express-entrypoint-button');
     expect(HTMLElement.prototype.scrollIntoView).not.toHaveBeenCalled();
+  });
+
+  it('exports a generated image rendered beside assistant markdown', async () => {
+    setImageExportAdapter();
+    document.body.innerHTML = `
+      <div data-turn-id-container="assistant-image-1">
+        <div data-message-author-role="assistant">
+          <div class="markdown"><p>Here is the requested image.</p></div>
+        </div>
+        <div class="group/imagegen-image">
+          <img src="https://example.com/generated.png" alt="Generated poster" />
+        </div>
+      </div>
+    `;
+
+    const turns = await buildChatGptTurnsForSelection(new Set(['assistant-image-1']));
+
+    expect(turns[0]?.assistant).toContain('Here is the requested image.');
+    expect(turns[0]?.assistant).toContain('https://example.com/generated.png');
+    expect(turns[0]?.assistantContent).toMatchObject({ hasImages: true });
+    expect(turns[0]?.assistantContent?.html).toContain('https://example.com/generated.png');
   });
 
   it('does not pair non-adjacent selected messages', async () => {

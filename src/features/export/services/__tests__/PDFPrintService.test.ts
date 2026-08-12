@@ -367,6 +367,22 @@ describe('PDFPrintService', () => {
     expect(coverTitle?.textContent).toBe('房贷还款方式对比分析');
   });
 
+  it('prefers the adapter title over a generic ChatGPT page title', async () => {
+    document.title = 'ChatGPT';
+    window.print = vi.fn();
+
+    await PDFPrintService.export([{ user: 'u', assistant: 'a', starred: false }], {
+      url: 'https://chatgpt.com/c/abc12345',
+      exportedAt: new Date().toISOString(),
+      count: 1,
+      title: 'AI学习设备选择指南',
+      platform: 'ChatGPT',
+    });
+
+    expect(document.querySelector('.gv-print-cover-title')?.textContent).toBe('AI学习设备选择指南');
+    expect(document.title).toBe('AI学习设备选择指南 - ChatGPT');
+  });
+
   it('extracts title from native sidebar by conversation id and restores page title after print', async () => {
     vi.useFakeTimers();
     document.title = 'Google Gemini';
