@@ -86,6 +86,32 @@ Commit:
 
 `fix(export): address ChatGPT export review findings`
 
+## Export fetch limits must not delete rendered content
+
+Symptom:
+
+PDF and PNG exports silently omitted images after the first 40.
+
+Root cause:
+
+The image fetch cap was implemented by removing later image nodes from the
+render tree, conflating bounded network inlining with content preservation.
+
+Fix:
+
+Inline at most 40 images, but leave every remaining rendered image and its
+original source intact for the browser renderer.
+
+Regression test:
+
+`src/features/export/services/__tests__/ImageExportService.test.ts` and
+`src/features/export/services/__tests__/PDFPrintService.test.ts` (`preserves
+images beyond the inlining fetch cap`).
+
+Commit:
+
+`fix(export): preserve bounded export content`
+
 ## Timeline navigation must validate the live scroll viewport
 
 Symptom:

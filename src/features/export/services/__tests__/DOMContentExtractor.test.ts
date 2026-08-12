@@ -89,6 +89,35 @@ DOMContentExtractor.setExportAdapter({
 });
 
 describe('DOMContentExtractor', () => {
+  it('escapes literal pipes in Markdown table cells', () => {
+    const assistant = document.createElement('div');
+    assistant.innerHTML = `
+      <message-content><div class="markdown">
+        <table><thead><tr><th>Choice</th><th>Meaning</th></tr></thead>
+        <tbody><tr><td>A | B</td><td>Either</td></tr></tbody></table>
+      </div></message-content>
+    `;
+
+    const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+
+    expect(extracted.text).toContain('| A \\| B | Either |');
+    expect(extracted.html).toContain('A | B');
+  });
+
+  it('preserves ordered-list starting numbers in Markdown', () => {
+    const assistant = document.createElement('div');
+    assistant.innerHTML = `
+      <message-content><div class="markdown">
+        <ol start="22"><li>First retained number</li><li>Next retained number</li></ol>
+      </div></message-content>
+    `;
+
+    const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+
+    expect(extracted.text).toContain('22. First retained number');
+    expect(extracted.text).toContain('23. Next retained number');
+  });
+
   it('preserves blockquote structure in HTML and Markdown output', () => {
     const assistant = document.createElement('div');
     assistant.innerHTML = `

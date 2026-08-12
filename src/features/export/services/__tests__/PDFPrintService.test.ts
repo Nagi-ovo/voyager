@@ -457,6 +457,49 @@ describe('PDFPrintService', () => {
     ).toBe('https://blocked.example/image.png');
   });
 
+  it('preserves images beyond the inlining fetch cap', async () => {
+    window.print = vi.fn();
+    const originalFetch = global.fetch;
+    global.fetch = vi.fn().mockRejectedValue(new Error('CORS blocked')) as typeof fetch;
+    const images = Array.from(
+      { length: 41 },
+      (_, index) => `<img src="https://blocked.example/${index}.png" alt="${index}" />`,
+    ).join('');
+
+    try {
+      await PDFPrintService.export(
+        [
+          {
+            user: '',
+            assistant: 'Image gallery',
+            starred: false,
+            omitEmptySections: true,
+            assistantContent: {
+              text: 'Image gallery',
+              html: images,
+              attachments: [],
+              hasImages: true,
+              hasFormulas: false,
+              hasTables: false,
+              hasCode: false,
+            },
+          },
+        ],
+        {
+          url: 'https://chatgpt.com/c/x',
+          exportedAt: new Date().toISOString(),
+          count: 1,
+          title: 'Image cap',
+          platform: 'ChatGPT',
+        },
+      );
+    } finally {
+      global.fetch = originalFetch;
+    }
+
+    expect(document.querySelectorAll('.gv-print-turn-text img')).toHaveLength(41);
+  });
+
   it('extracts title from native sidebar by conversation id and restores page title after print', async () => {
     vi.useFakeTimers();
     document.title = 'Google Gemini';

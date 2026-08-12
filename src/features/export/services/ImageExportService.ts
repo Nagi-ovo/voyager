@@ -492,7 +492,6 @@ export class ImageExportService {
 
   private static async inlineImages(container: HTMLElement, signal?: AbortSignal): Promise<void> {
     const allImages = Array.from(container.querySelectorAll('img')) as HTMLImageElement[];
-    allImages.slice(MAX_EXPORT_IMAGE_COUNT).forEach((image) => image.remove());
     const imgs = allImages.slice(0, MAX_EXPORT_IMAGE_COUNT);
     if (imgs.length === 0) return;
 

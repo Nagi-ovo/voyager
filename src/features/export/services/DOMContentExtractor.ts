@@ -457,7 +457,12 @@ export class DOMContentExtractor {
 
       // Table block (check for nested table-block first)
       const tableBlock = child.querySelector('table-block');
-      if (tagName === 'table-block' || tableBlock || child.querySelector('table')) {
+      if (
+        tagName === 'table' ||
+        tagName === 'table-block' ||
+        tableBlock ||
+        child.querySelector('table')
+      ) {
         if (this.DEBUG) console.log('[DOMContentExtractor] Found table block!');
         const elementToExtract = (tableBlock || child) as HTMLElement;
         const tableContent = this.extractTable(elementToExtract);
@@ -910,16 +915,18 @@ export class DOMContentExtractor {
     this.stripExportArtifacts(cleanTable);
 
     // Convert to Markdown
+    const normalizeCell = (cell: Element): string =>
+      this.normalizeText(cell.textContent || '').replace(/\|/g, '\\|');
     const rows: string[][] = [];
     const headerCells = Array.from(table.querySelectorAll('thead tr td, thead tr th'));
     if (headerCells.length > 0) {
-      rows.push(headerCells.map((cell) => this.normalizeText(cell.textContent || '')));
+      rows.push(headerCells.map(normalizeCell));
     }
 
     const bodyRows = table.querySelectorAll('tbody tr');
     bodyRows.forEach((row) => {
       const cells = Array.from(row.querySelectorAll('td, th'));
-      rows.push(cells.map((cell) => this.normalizeText(cell.textContent || '')));
+      rows.push(cells.map(normalizeCell));
     });
 
     // Build Markdown table
@@ -936,17 +943,13 @@ export class DOMContentExtractor {
       // Fallback: treat first tbody row as header if no thead present
       const firstBodyRow = table.querySelector('tbody tr');
       if (firstBodyRow) {
-        const header = Array.from(firstBodyRow.querySelectorAll('td, th')).map((cell) =>
-          this.normalizeText(cell.textContent || ''),
-        );
+        const header = Array.from(firstBodyRow.querySelectorAll('td, th')).map(normalizeCell);
         if (header.length > 0) {
           markdownLines.push('| ' + header.join(' | ') + ' |');
           markdownLines.push('| ' + header.map(() => '---').join(' | ') + ' |');
           const rest = Array.from(table.querySelectorAll('tbody tr')).slice(1);
           rest.forEach((row) => {
-            const cells = Array.from(row.querySelectorAll('td, th')).map((cell) =>
-              this.normalizeText(cell.textContent || ''),
-            );
+            const cells = Array.from(row.querySelectorAll('td, th')).map(normalizeCell);
             markdownLines.push('| ' + cells.join(' | ') + ' |');
           });
         }
@@ -967,6 +970,7 @@ export class DOMContentExtractor {
     depth: number = 0,
   ): { html: string; text: string; hasFormulas: boolean; hasCode: boolean } {
     const isOrdered = element.tagName === 'OL';
+    const orderedStart = isOrdered ? (element as HTMLOListElement).start : 1;
     const items = Array.from(element.querySelectorAll(':scope > li'));
     const indent = '  '.repeat(depth); // 2 spaces per level
 
@@ -974,7 +978,7 @@ export class DOMContentExtractor {
     let hasFormulas = false;
     let hasCode = false;
     items.forEach((item, index) => {
-      const prefix = isOrdered ? `${index + 1}. ` : '- ';
+      const prefix = isOrdered ? `${orderedStart + index}. ` : '- ';
       const continuationIndent = indent + ' '.repeat(prefix.length);
       let hasItemContent = false;
       let proseNodes: Node[] = [];

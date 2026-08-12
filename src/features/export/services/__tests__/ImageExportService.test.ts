@@ -604,4 +604,47 @@ describe('ImageExportService', () => {
       'https://blocked.example/image.png',
     );
   });
+
+  it('preserves images beyond the inlining fetch cap', async () => {
+    const originalFetch = global.fetch;
+    global.fetch = vi.fn().mockRejectedValue(new Error('CORS blocked')) as typeof fetch;
+    (toBlob as unknown as ReturnType<typeof vi.fn>).mockReset();
+    (toBlob as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
+      new Blob(['x'], { type: 'image/png' }),
+    );
+    const images = Array.from(
+      { length: 41 },
+      (_, index) => `<img src="https://blocked.example/${index}.png" alt="${index}" />`,
+    ).join('');
+
+    try {
+      await ImageExportService.renderConversationBlob(
+        [
+          {
+            user: '',
+            assistant: 'Image gallery',
+            starred: false,
+            omitEmptySections: true,
+            assistantContent: {
+              text: 'Image gallery',
+              html: images,
+              attachments: [],
+              hasImages: true,
+              hasFormulas: false,
+              hasTables: false,
+              hasCode: false,
+            },
+          },
+        ],
+        mockMetadata,
+        {},
+      );
+    } finally {
+      global.fetch = originalFetch;
+    }
+
+    const capturedContainer = (toBlob as unknown as ReturnType<typeof vi.fn>).mock
+      .calls[0][0] as HTMLElement;
+    expect(capturedContainer.querySelectorAll('img')).toHaveLength(41);
+  });
 });
