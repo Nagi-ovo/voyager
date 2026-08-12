@@ -312,11 +312,7 @@ export class FormulaCopyService {
 
         for (const node of record.addedNodes) {
           if (node instanceof HTMLElement || node instanceof DocumentFragment) {
-            const containsMathSource =
-              node instanceof HTMLElement && node.matches('[data-math]')
-                ? true
-                : node.querySelector('[data-math]') !== null;
-            if (containsMathSource) {
+            if (this.containsMathSource(node)) {
               refreshRoots.add(
                 node instanceof HTMLElement
                   ? (node.closest<HTMLElement>('.math-inline') ?? node)
@@ -331,13 +327,14 @@ export class FormulaCopyService {
             ? record.target.closest<HTMLElement>('.math-inline')
             : null;
         if (inlineContainer) {
-          const removedIgnoredArrow = Array.from(record.removedNodes).some(
+          const removedRelevantMath = Array.from(record.removedNodes).some(
             (node) =>
-              node instanceof HTMLElement &&
-              (node.classList.contains(FormulaCopyService.IGNORED_INTERACTION_CLASS) ||
-                node.querySelector(`.${FormulaCopyService.IGNORED_INTERACTION_CLASS}`) !== null),
+              this.containsMathSource(node) ||
+              (node instanceof HTMLElement &&
+                (node.classList.contains(FormulaCopyService.IGNORED_INTERACTION_CLASS) ||
+                  node.querySelector(`.${FormulaCopyService.IGNORED_INTERACTION_CLASS}`) !== null)),
           );
-          if (removedIgnoredArrow) refreshRoots.add(inlineContainer);
+          if (removedRelevantMath) refreshRoots.add(inlineContainer);
         }
       }
 
@@ -349,6 +346,14 @@ export class FormulaCopyService {
       childList: true,
       subtree: true,
     });
+  }
+
+  private containsMathSource(node: Node): boolean {
+    if (!(node instanceof HTMLElement || node instanceof DocumentFragment)) return false;
+    return (
+      (node instanceof HTMLElement && node.matches('[data-math]')) ||
+      node.querySelector('[data-math]') !== null
+    );
   }
 
   private stopArrowExclusionObserver(): void {

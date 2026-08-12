@@ -361,6 +361,25 @@ describe('FormulaCopyService', () => {
     expect(wrapper.classList.contains('gv-formula-copy-ignored')).toBe(false);
   });
 
+  it('ignores a shared inline wrapper after its last real formula is removed', async () => {
+    const wrapper = document.createElement('span');
+    wrapper.className = 'math-inline';
+    const arrow = document.createElement('span');
+    arrow.setAttribute('data-math', '\\rightarrow');
+    const formula = document.createElement('span');
+    formula.setAttribute('data-math', 'x^2');
+    wrapper.append(arrow, formula);
+    document.body.appendChild(wrapper);
+    service.initialize();
+    expect(wrapper.classList.contains('gv-formula-copy-ignored')).toBe(false);
+
+    formula.remove();
+    await Promise.resolve();
+
+    expect(arrow.classList.contains('gv-formula-copy-ignored')).toBe(true);
+    expect(wrapper.classList.contains('gv-formula-copy-ignored')).toBe(true);
+  });
+
   it('stops observing while disabled and scans again when re-enabled', async () => {
     service.initialize();
     service.destroy();

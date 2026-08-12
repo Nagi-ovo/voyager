@@ -2,6 +2,7 @@ import browser from 'webextension-polyfill';
 
 import { logger } from '@/core';
 import { StorageKeys } from '@/core/types/common';
+import { isExtensionContextInvalidatedError } from '@/core/utils/extensionContext';
 
 import { getFormulaCopyService } from './FormulaCopyService';
 
@@ -102,6 +103,7 @@ export async function startNativeFormulaCopy(
       });
       initiallyEnabled = stored[StorageKeys.FORMULA_COPY_ENABLED] !== false;
     } catch (error) {
+      if (isExtensionContextInvalidatedError(error)) throw error;
       nativeFormulaCopyLogger.warn(
         'Failed to read formula copy setting, continuing with the enabled default',
         { error },

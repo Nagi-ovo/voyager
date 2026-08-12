@@ -209,4 +209,18 @@ describe('native formula copy lifecycle', () => {
     expect(storageMocks.removeListener).toHaveBeenCalledTimes(1);
     expect(dispose).toHaveBeenCalledTimes(1);
   });
+
+  it('propagates extension invalidation from the initial enabled-setting read', async () => {
+    const error = new Error('Extension context invalidated.');
+    storageMocks.get.mockRejectedValueOnce(error);
+    const baseService = createService();
+    const dispose = vi.fn();
+    const service = { ...baseService, dispose };
+
+    await expect(startNativeFormulaCopy({ service })).rejects.toBe(error);
+
+    expect(service.initialize).not.toHaveBeenCalled();
+    expect(storageMocks.removeListener).toHaveBeenCalledTimes(1);
+    expect(dispose).toHaveBeenCalledTimes(1);
+  });
 });
