@@ -1,4 +1,4 @@
-import React, { act } from 'react';
+import React, { act, useEffect } from 'react';
 import { type Root, createRoot } from 'react-dom/client';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -9,7 +9,12 @@ import {
 } from '../useFormulaCopyPopupSettings';
 
 function Harness({ capture }: { capture: (settings: FormulaCopyPopupSettings) => void }) {
-  capture(useFormulaCopyPopupSettings());
+  const settings = useFormulaCopyPopupSettings();
+
+  useEffect(() => {
+    capture(settings);
+  }, [capture, settings]);
+
   return null;
 }
 

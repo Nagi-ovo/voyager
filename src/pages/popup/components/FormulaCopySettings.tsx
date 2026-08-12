@@ -66,7 +66,12 @@ export function FormulaCopySettings({
             <p className="text-muted-foreground mb-3 text-xs">{t('formulaCopyFormatHint')}</p>
             <div className="space-y-2">
               {FORMAT_OPTIONS.map((option) => (
-                <label key={option.value} className="flex cursor-pointer items-center space-x-3">
+                <label
+                  key={option.value}
+                  className={`flex items-center space-x-3 ${
+                    formatsDisabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
+                  }`}
+                >
                   <input
                     type="radio"
                     name="formulaCopyFormat"

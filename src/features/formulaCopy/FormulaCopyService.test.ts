@@ -228,6 +228,51 @@ describe('FormulaCopyService', () => {
     expect(wrapper.classList.contains('gv-formula-copy-ignored')).toBe(true);
   });
 
+  it('coalesces same-wrapper arrow refreshes within one mutation batch', async () => {
+    const wrapper = document.createElement('span');
+    wrapper.className = 'math-inline';
+    document.body.appendChild(wrapper);
+    service.initialize();
+    const refreshSpy = vi.spyOn(
+      service as unknown as { refreshArrowExclusions(root: ParentNode): void },
+      'refreshArrowExclusions',
+    );
+
+    const firstArrow = document.createElement('span');
+    firstArrow.setAttribute('data-math', '\\rightarrow');
+    const secondArrow = document.createElement('span');
+    secondArrow.setAttribute('data-math', '→');
+    wrapper.append(firstArrow, secondArrow);
+    await Promise.resolve();
+
+    expect(refreshSpy).toHaveBeenCalledTimes(1);
+    expect(refreshSpy).toHaveBeenCalledWith(wrapper);
+  });
+
+  it('does not rescan a streaming root when a whole ignored response subtree is removed', async () => {
+    const streamingRoot = document.createElement('main');
+    const response = document.createElement('article');
+    const wrapper = document.createElement('span');
+    wrapper.className = 'math-inline';
+    const arrow = document.createElement('span');
+    arrow.setAttribute('data-math', '\\rightarrow');
+    wrapper.appendChild(arrow);
+    response.appendChild(wrapper);
+    streamingRoot.appendChild(response);
+    document.body.appendChild(streamingRoot);
+    service.initialize();
+    expect(wrapper.classList.contains('gv-formula-copy-ignored')).toBe(true);
+    const refreshSpy = vi.spyOn(
+      service as unknown as { refreshArrowExclusions(root: ParentNode): void },
+      'refreshArrowExclusions',
+    );
+
+    response.remove();
+    await Promise.resolve();
+
+    expect(refreshSpy).not.toHaveBeenCalled();
+  });
+
   it('keeps explicitly delimited and non-inline Gemini arrows copyable', async () => {
     const clipboard = navigator.clipboard as unknown as { write?: unknown };
     clipboard.write = undefined;

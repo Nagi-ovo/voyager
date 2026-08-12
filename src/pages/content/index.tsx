@@ -9,7 +9,6 @@ import {
 } from '@/core/utils/extensionContext';
 import { isGeminiEnterpriseEnvironment } from '@/core/utils/gemini';
 import { WATERMARK_STORAGE_KEYS } from '@/core/utils/watermarkSettings';
-import { startNativeFormulaCopy } from '@/features/formulaCopy';
 import { startPluginHost } from '@/features/plugins';
 import { resolvePluginPlatformId } from '@/features/plugins/sites/registry';
 import { initI18n } from '@/utils/i18n';
@@ -41,6 +40,7 @@ import { startFolderProject } from './folderProject/index';
 import { startFolderSpacingAdjuster } from './folderSpacing/index';
 import { isForkFeatureEnabledValue } from './fork/featureFlag';
 import { startFork } from './fork/index';
+import { startNativeFormulaCopyForContent } from './formulaCopyStartup';
 import { startGemsHider } from './gemsHider/index';
 import { startGemsSidebar } from './gemsSidebar/index';
 import { startInputCollapse } from './inputCollapse/index';
@@ -308,11 +308,10 @@ async function initializeFeatures(): Promise<void> {
         CleanupPositions.CleanupSendBehavior,
       );
       startPreventAutoScroll();
-      const formulaCopyController = await startNativeFormulaCopy();
-      cleanupManager.registerCleanupFunction(
-        formulaCopyController.destroy,
-        CleanupPositions.CleanupFormulaCopy,
-      );
+      await startNativeFormulaCopyForContent({
+        registerCleanup: (cleanup) =>
+          cleanupManager.registerCleanupFunction(cleanup, CleanupPositions.CleanupFormulaCopy),
+      });
       await delay(LIGHT_FEATURE_INIT_DELAY);
 
       // Quote Reply - conditionally start based on storage setting
@@ -474,11 +473,10 @@ async function initializeFeatures(): Promise<void> {
       await delay(LIGHT_FEATURE_INIT_DELAY);
 
       // Formula copy support for AI Studio
-      const formulaCopyController = await startNativeFormulaCopy();
-      cleanupManager.registerCleanupFunction(
-        formulaCopyController.destroy,
-        CleanupPositions.CleanupFormulaCopy,
-      );
+      await startNativeFormulaCopyForContent({
+        registerCleanup: (cleanup) =>
+          cleanupManager.registerCleanupFunction(cleanup, CleanupPositions.CleanupFormulaCopy),
+      });
       await delay(LIGHT_FEATURE_INIT_DELAY);
 
       // Send behavior (Enter to send)

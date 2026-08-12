@@ -25,11 +25,15 @@ describe('formula copy interaction styles', () => {
     expect(css).toContain(
       ':root.gv-platform-themed.gv-formula-copy-enabled .katex:not(.gv-formula-copy-ignored)',
     );
+    expect(css).toContain("html.gv-formula-copy-enabled[data-color-scheme='light']");
 
     expect(css).not.toMatch(/^\.math-inline/m);
     expect(css).not.toMatch(/^\.math-display/m);
     expect(css).not.toMatch(/^\[data-math\]/m);
     expect(css).not.toMatch(/^ms-katex/m);
+    expect(css).not.toMatch(
+      /html\[data-color-scheme='light'\]\s+(?:\.math-inline|\.math-display|\[data-math\]|ms-katex)/,
+    );
     expect(css).not.toContain(':root.gv-platform-themed .katex');
   });
 });

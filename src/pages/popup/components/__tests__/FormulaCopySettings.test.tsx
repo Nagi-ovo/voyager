@@ -52,6 +52,12 @@ describe('FormulaCopySettings', () => {
       'enableFormulaCopyHint',
     );
     expect(container.querySelector<HTMLInputElement>('input[value="notion"]')?.checked).toBe(true);
+    expect(
+      container
+        .querySelector<HTMLInputElement>('input[value="notion"]')
+        ?.closest('label')
+        ?.classList.contains('cursor-pointer'),
+    ).toBe(true);
 
     act(() => switchInput.click());
     expect(onEnabledChange).toHaveBeenCalledWith(false);
@@ -60,6 +66,11 @@ describe('FormulaCopySettings', () => {
     expect(container.querySelector<HTMLInputElement>('#formula-copy-enabled')?.checked).toBe(false);
     expect(container.querySelector<HTMLInputElement>('input[value="notion"]')?.checked).toBe(true);
     expect(container.querySelector<HTMLInputElement>('input[value="notion"]')?.disabled).toBe(true);
+    const disabledFormatLabel = container
+      .querySelector<HTMLInputElement>('input[value="notion"]')
+      ?.closest('label');
+    expect(disabledFormatLabel?.classList.contains('cursor-not-allowed')).toBe(true);
+    expect(disabledFormatLabel?.classList.contains('opacity-60')).toBe(true);
     expect(onFormatChange).not.toHaveBeenCalled();
 
     act(() => container.querySelector<HTMLInputElement>('#formula-copy-enabled')!.click());

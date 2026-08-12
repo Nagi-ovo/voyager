@@ -300,9 +300,13 @@ export class FormulaCopyService {
     if (this.arrowExclusionObserver || !document.documentElement) return;
 
     this.arrowExclusionObserver = new MutationObserver((records) => {
+      const refreshRoots = new Set<ParentNode>();
+
       for (const record of records) {
         if (record.type === 'attributes') {
-          if (record.target instanceof HTMLElement) this.refreshArrowExclusions(record.target);
+          if (record.target instanceof HTMLElement) {
+            refreshRoots.add(record.target.closest<HTMLElement>('.math-inline') ?? record.target);
+          }
           continue;
         }
 
@@ -312,20 +316,32 @@ export class FormulaCopyService {
               node instanceof HTMLElement && node.matches('[data-math]')
                 ? true
                 : node.querySelector('[data-math]') !== null;
-            if (containsMathSource) this.refreshArrowExclusions(node);
+            if (containsMathSource) {
+              refreshRoots.add(
+                node instanceof HTMLElement
+                  ? (node.closest<HTMLElement>('.math-inline') ?? node)
+                  : node,
+              );
+            }
           }
         }
 
-        const removedIgnoredArrow = Array.from(record.removedNodes).some(
-          (node) =>
-            node instanceof HTMLElement &&
-            (node.classList.contains(FormulaCopyService.IGNORED_INTERACTION_CLASS) ||
-              node.querySelector(`.${FormulaCopyService.IGNORED_INTERACTION_CLASS}`) !== null),
-        );
-        if (removedIgnoredArrow && record.target instanceof HTMLElement) {
-          this.refreshArrowExclusions(record.target);
+        const inlineContainer =
+          record.target instanceof HTMLElement
+            ? record.target.closest<HTMLElement>('.math-inline')
+            : null;
+        if (inlineContainer) {
+          const removedIgnoredArrow = Array.from(record.removedNodes).some(
+            (node) =>
+              node instanceof HTMLElement &&
+              (node.classList.contains(FormulaCopyService.IGNORED_INTERACTION_CLASS) ||
+                node.querySelector(`.${FormulaCopyService.IGNORED_INTERACTION_CLASS}`) !== null),
+          );
+          if (removedIgnoredArrow) refreshRoots.add(inlineContainer);
         }
       }
+
+      for (const root of refreshRoots) this.refreshArrowExclusions(root);
     });
     this.arrowExclusionObserver.observe(document.documentElement, {
       attributes: true,
