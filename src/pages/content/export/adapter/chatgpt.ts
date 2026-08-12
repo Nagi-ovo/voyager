@@ -25,6 +25,7 @@ const STREAMING_TURN_SELECTOR = [
 const MATERIALIZATION_TIMEOUT_MS = 3000;
 const MATERIALIZATION_POLL_MS = 80;
 const MATERIALIZATION_IDLE_MS = 240;
+const MATERIALIZATION_REPOSITION_MS = 160;
 
 function resolveTurnRole(container: HTMLElement): ChatGptTurnRole {
   if (container.querySelector(USER_MESSAGE_SELECTOR)) {
@@ -214,6 +215,7 @@ export async function materializeChatGptTurnContainer(
 
   const contentSelectors = [USER_MESSAGE_SELECTOR, ASSISTANT_MESSAGE_SELECTOR, IMAGEGEN_SELECTOR];
   const startedAt = Date.now();
+  let lastPositionAt = startedAt;
   let stableSignature = '';
   let stableSince = 0;
 
@@ -222,7 +224,19 @@ export async function materializeChatGptTurnContainer(
     const latest = findTurnContainer(turn.id);
     if (latest) current = { ...latest, role: resolveTurnRole(latest.container) };
 
-    if (current.role !== 'unknown' && hasMountedContent(current) && !isGeneratingTurn(current)) {
+    const hasContent = current.role !== 'unknown' && hasMountedContent(current);
+    if (!hasContent && Date.now() - lastPositionAt >= MATERIALIZATION_REPOSITION_MS) {
+      const rect = current.container.getBoundingClientRect();
+      if (rect.bottom <= 0 || rect.top >= window.innerHeight) {
+        // ChatGPT reconciles estimated shell heights after nearby turns mount.
+        // That layout shift can move the requested shell back out of view even
+        // though the first scrollIntoView call succeeded, so re-anchor it.
+        current.container.scrollIntoView({ block: 'center', behavior: 'auto' });
+        lastPositionAt = Date.now();
+      }
+    }
+
+    if (hasContent && !isGeneratingTurn(current)) {
       const fingerprint = computeConversationFingerprint(current.container, contentSelectors, 10);
       const signature = `${fingerprint.signature}:${fingerprint.count}`;
       if (signature !== stableSignature) {

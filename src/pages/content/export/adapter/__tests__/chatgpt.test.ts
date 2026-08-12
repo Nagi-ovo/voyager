@@ -248,6 +248,38 @@ describe('chatgptCollectTurnContainers', () => {
     await assertion;
   });
 
+  it('repositions a virtual shell that moves offscreen after height reconciliation', async () => {
+    vi.useFakeTimers();
+    document.body.innerHTML = `<div data-turn-id-container="user-1"></div>`;
+    const shell = document.querySelector<HTMLElement>('[data-turn-id-container="user-1"]')!;
+    vi.spyOn(shell, 'getBoundingClientRect').mockReturnValue({
+      bottom: -100,
+      height: 50,
+      left: 0,
+      right: 100,
+      top: -150,
+      width: 100,
+      x: 0,
+      y: -150,
+      toJSON: () => ({}),
+    });
+    (HTMLElement.prototype.scrollIntoView as ReturnType<typeof vi.fn>).mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      if (
+        (HTMLElement.prototype.scrollIntoView as ReturnType<typeof vi.fn>).mock.calls.length === 2
+      ) {
+        this.innerHTML = '<div data-message-author-role="user">Recovered prompt</div>';
+      }
+    });
+
+    const exportPromise = buildChatGptTurnsForSelection(new Set(['user-1']));
+    await vi.advanceTimersByTimeAsync(1000);
+
+    await expect(exportPromise).resolves.toMatchObject([{ user: 'Recovered prompt' }]);
+    expect(HTMLElement.prototype.scrollIntoView).toHaveBeenCalledTimes(2);
+  });
+
   it('refuses to snapshot a response that is still streaming', async () => {
     vi.useFakeTimers();
     document.body.innerHTML = `

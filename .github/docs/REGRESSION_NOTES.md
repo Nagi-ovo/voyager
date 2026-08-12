@@ -26,6 +26,36 @@ Regression test:
 Commit:
 ```
 
+## ChatGPT virtual shells must be repositioned after height reconciliation
+
+Symptom:
+
+Exporting a cold, long ChatGPT conversation could fail with
+`chatgpt_export_message_unavailable:<turn-id>` even though the selected message
+was present and became exportable after manually scrolling to it.
+
+Root cause:
+
+The materializer called `scrollIntoView()` only once. Mounting nearby turns made
+ChatGPT replace estimated virtual-shell heights with measured heights, which
+could move the requested shell several viewports away before it mounted. The
+remaining timeout loop only polled the offscreen shell and never corrected its
+position.
+
+Fix:
+
+While a requested shell remains unmounted, re-anchor it at a throttled interval
+only when height reconciliation has moved it outside the viewport.
+
+Regression test:
+
+`src/pages/content/export/adapter/__tests__/chatgpt.test.ts`
+(`repositions a virtual shell that moves offscreen after height reconciliation`).
+
+Commit:
+
+`fix(export): re-anchor shifted ChatGPT shells`
+
 ## Timeline navigation must validate the live scroll viewport
 
 Symptom:
