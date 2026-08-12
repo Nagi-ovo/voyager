@@ -86,6 +86,33 @@ Commit:
 
 `fix(export): address ChatGPT export review findings`
 
+## Temporary-chat handoff attachments need unique names
+
+Symptom:
+
+A second long temporary-chat handoff could reuse the first attachment preview
+and insert only the new instruction, silently handing the old transcript to the
+new chat.
+
+Root cause:
+
+Attachment recovery treats a visible matching filename as proof that the file
+was already delivered, while the original filename contained only the date.
+
+Fix:
+
+Give every handoff a timestamp plus nonce and reuse that identity for both the
+downloaded backup and the composer attachment.
+
+Regression test:
+
+`src/features/plugins/builtin/chatgptTemporaryHandoff/handoff.test.ts`
+(`gives separate handoffs unique filenames even at the same instant`).
+
+Commit:
+
+`feat(plugins): add ChatGPT temporary chat handoff`
+
 ## Export fetch limits must not delete rendered content
 
 Symptom:
