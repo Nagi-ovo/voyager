@@ -70,7 +70,7 @@ for (const { relativePath, source } of tableLatexMethodBundles) {
     nextMethodIndex === -1 ? methodNameIndex + 2000 : nextMethodIndex,
   );
 
-  if (methodFragment.includes('(?<!')) {
+  if (/\(\?<([=!])/.test(methodFragment)) {
     console.error(`${tableLatexMethodName} uses unsupported RegExp lookbehind in ${relativePath}`);
     process.exit(1);
   }

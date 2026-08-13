@@ -65,6 +65,14 @@ interface SerializedTable {
   hasFormulas: boolean;
 }
 
+interface ProcessedInlineContent {
+  html: string;
+  text: string;
+  hasFormulas: boolean;
+  hasLeadingWhitespace: boolean;
+  hasTrailingWhitespace: boolean;
+}
+
 export class DOMContentExtractor {
   private static DEBUG = false;
   private static exportAdapter: ExportPlatformAdapter;
@@ -384,6 +392,23 @@ export class DOMContentExtractor {
     processedImageSrcs: Set<string> = new Set<string>(),
   ): void {
     const children = Array.from(container.children);
+    const appendInlineContent = (processed: ProcessedInlineContent): void => {
+      if (processed.html) {
+        htmlParts.push(`<span>${processed.html}</span>`);
+      }
+
+      if (processed.text) {
+        const previousText = textParts.at(-1) ?? '';
+        const needsLeadingSpace =
+          processed.hasLeadingWhitespace && previousText.length > 0 && !/\s$/.test(previousText);
+
+        textParts.push(
+          `${needsLeadingSpace ? ' ' : ''}${processed.text}${
+            processed.hasTrailingWhitespace ? ' ' : ''
+          }`,
+        );
+      }
+    };
     if (this.DEBUG)
       console.log(
         `[DOMContentExtractor] processNodes: ${children.length} children in`,
@@ -567,8 +592,7 @@ export class DOMContentExtractor {
         if (hasDirectText && onlyInlineChildren) {
           const processed = this.processInlineContent(child as HTMLElement);
           if (processed.hasFormulas) flags.hasFormulas = true;
-          htmlParts.push(`<span>${processed.html}</span>`);
-          textParts.push(processed.text);
+          appendInlineContent(processed);
         } else {
           this.processNodes(child, htmlParts, textParts, flags, processedImageSrcs);
         }
@@ -576,11 +600,15 @@ export class DOMContentExtractor {
       }
 
       // Leaf element with no child elements: extract text content
-      const text = this.normalizeText(child.textContent || '');
-      if (text) {
-        htmlParts.push(`<span>${this.escapeHtml(text)}</span>`);
-        textParts.push(text);
-      }
+      const rawText = child.textContent || '';
+      const text = this.normalizeText(rawText);
+      appendInlineContent({
+        html: this.escapeHtml(text),
+        text,
+        hasFormulas: false,
+        hasLeadingWhitespace: /^\s/.test(rawText),
+        hasTrailingWhitespace: /\s$/.test(rawText),
+      });
     }
   }
 
@@ -715,14 +743,35 @@ export class DOMContentExtractor {
   private static processInlineContent(
     element: HTMLElement,
     forMarkdownTable = false,
-  ): {
-    html: string;
-    text: string;
-    hasFormulas: boolean;
-  } {
+  ): ProcessedInlineContent {
     let hasFormulas = false;
     const htmlParts: string[] = [];
     const textParts: string[] = [];
+
+    const appendFormattedContent = (
+      processed: ProcessedInlineContent,
+      htmlTag: 'code' | 'em' | 'strong',
+      serializeMarkdown: (text: string) => string,
+    ): void => {
+      if (processed.hasFormulas) hasFormulas = true;
+
+      const leadingSpace = processed.hasLeadingWhitespace ? ' ' : '';
+      const trailingSpace = processed.hasTrailingWhitespace ? ' ' : '';
+      const hasBoundaryWhitespace =
+        processed.hasLeadingWhitespace || processed.hasTrailingWhitespace;
+
+      if (processed.html) {
+        htmlParts.push(`${leadingSpace}<${htmlTag}>${processed.html}</${htmlTag}>${trailingSpace}`);
+      } else if (hasBoundaryWhitespace) {
+        htmlParts.push(' ');
+      }
+
+      if (processed.text) {
+        textParts.push(`${leadingSpace}${serializeMarkdown(processed.text)}${trailingSpace}`);
+      } else if (hasBoundaryWhitespace) {
+        textParts.push(' ');
+      }
+    };
 
     // Process all child nodes including text nodes
     const processNode = (node: Node): void => {
@@ -763,33 +812,23 @@ export class DOMContentExtractor {
         // Emphasis
         if (el.tagName === 'I' || el.tagName === 'EM') {
           const processed = this.processInlineContent(el as HTMLElement, forMarkdownTable);
-          if (processed.hasFormulas) hasFormulas = true;
-          if (processed.html || processed.text) {
-            htmlParts.push(`<em>${processed.html}</em>`);
-            textParts.push(`*${processed.text}*`);
-          }
+          appendFormattedContent(processed, 'em', (text) => `*${text}*`);
           return;
         }
 
         // Strong
         if (el.tagName === 'B' || el.tagName === 'STRONG') {
           const processed = this.processInlineContent(el as HTMLElement, forMarkdownTable);
-          if (processed.hasFormulas) hasFormulas = true;
-          if (processed.html || processed.text) {
-            htmlParts.push(`<strong>${processed.html}</strong>`);
-            textParts.push(`**${processed.text}**`);
-          }
+          appendFormattedContent(processed, 'strong', (text) => `**${text}**`);
           return;
         }
 
         // Code
         if (el.tagName === 'CODE' && !el.closest('pre')) {
-          const processed = this.processInlineContent(el as HTMLElement, forMarkdownTable);
-          if (processed.hasFormulas) hasFormulas = true;
-          if (processed.html || processed.text) {
-            htmlParts.push(`<code>${processed.html}</code>`);
-            textParts.push(`\`${processed.text}\``);
-          }
+          const processed = this.processInlineCodeContent(el as HTMLElement);
+          appendFormattedContent(processed, 'code', (text) =>
+            this.serializeInlineCodeSpan(text, forMarkdownTable),
+          );
           return;
         }
 
@@ -815,11 +854,77 @@ export class DOMContentExtractor {
 
     Array.from(element.childNodes).forEach(processNode);
 
+    const rawHtml = htmlParts.join('');
+    const rawText = textParts.join('');
+
     return {
-      html: htmlParts.join('').trim(),
-      text: textParts.join('').trim(),
+      html: rawHtml.trim(),
+      text: rawText.trim(),
       hasFormulas,
+      hasLeadingWhitespace: /^\s/.test(rawText),
+      hasTrailingWhitespace: /\s$/.test(rawText),
     };
+  }
+
+  private static processInlineCodeContent(element: HTMLElement): ProcessedInlineContent {
+    const textParts: string[] = [];
+
+    const collectText = (node: Node): void => {
+      if (node.nodeType === Node.TEXT_NODE) {
+        textParts.push(node.textContent || '');
+        return;
+      }
+
+      if (node.nodeType !== Node.ELEMENT_NODE) return;
+
+      const child = node as Element;
+      if (this.shouldSkipElement(child)) return;
+
+      Array.from(child.childNodes).forEach(collectText);
+    };
+
+    Array.from(element.childNodes).forEach(collectText);
+
+    const rawText = textParts.join('');
+    const text = rawText.trim();
+
+    return {
+      html: this.escapeHtml(text),
+      text,
+      hasFormulas: false,
+      hasLeadingWhitespace: /^\s/.test(rawText),
+      hasTrailingWhitespace: /\s$/.test(rawText),
+    };
+  }
+
+  private static serializeInlineCodeSpan(text: string, forMarkdownTable = false): string {
+    const needsTableSafeHtml =
+      forMarkdownTable &&
+      (/\\+\|/.test(text) || (text.includes('|') && this.normalizeText(text) !== text));
+
+    if (needsTableSafeHtml) {
+      // Marked continues parsing Markdown inside raw inline HTML. Encode every
+      // code point so backslashes and collapsible whitespace stay literal.
+      const escapedCode = Array.from(
+        text,
+        (character) => `&#x${character.codePointAt(0)!.toString(16)};`,
+      ).join('');
+
+      return `<code>${escapedCode}</code>`;
+    }
+
+    const longestBacktickRun = (text.match(/`+/g) ?? []).reduce(
+      (longest, run) => Math.max(longest, run.length),
+      0,
+    );
+    const delimiter = '`'.repeat(longestBacktickRun + 1);
+    const needsPadding =
+      text.startsWith('`') ||
+      text.endsWith('`') ||
+      (text.startsWith(' ') && text.endsWith(' ') && text.trim() !== '');
+    const padding = needsPadding ? ' ' : '';
+
+    return `${delimiter}${padding}${text}${padding}${delimiter}`;
   }
 
   /**
@@ -1015,6 +1120,8 @@ export class DOMContentExtractor {
    * Escape pipes before joining cells into a Markdown table row.
    * Existing backslashes are doubled so the rendered cell preserves them while
    * the final odd backslash still prevents the pipe from becoming a delimiter.
+   * Inline code containing pipes is serialized without literal pipes before
+   * reaching this table-level escape.
    */
   private static escapeMarkdownTableCell(text: string): string {
     return text.replace(/(\\*)\|/g, (_match, backslashes: string) => {

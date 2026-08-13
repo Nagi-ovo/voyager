@@ -231,6 +231,39 @@ describe('DOMContentExtractor', () => {
     expect(extracted.html).toContain('total');
   });
 
+  it.each([
+    ['<span>First <strong>bold</strong> </span><span>Second.</span>', 'First **bold** Second.'],
+    ['<span>First <strong>bold</strong></span><span> Second.</span>', 'First **bold** Second.'],
+  ])('preserves whitespace between adjacent inline containers', (content, expected) => {
+    const assistant = document.createElement('div');
+    assistant.innerHTML = `
+      <message-content>
+        <div class="markdown">
+          <div>${content}</div>
+        </div>
+      </message-content>
+    `;
+
+    const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+
+    expect(extracted.text).toBe(expected);
+  });
+
+  it('does not invent whitespace between adjacent inline containers', () => {
+    const assistant = document.createElement('div');
+    assistant.innerHTML = `
+      <message-content>
+        <div class="markdown">
+          <div><span>Hello</span><span>, world.</span></div>
+        </div>
+      </message-content>
+    `;
+
+    const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+
+    expect(extracted.text).toBe('Hello, world.');
+  });
+
   it('exports ordinary prose rendered inside an open shadow root', () => {
     const assistant = document.createElement('div');
     assistant.innerHTML = `<message-content><div class="markdown"><shadow-answer></shadow-answer></div></message-content>`;
@@ -887,6 +920,181 @@ describe('DOMContentExtractor', () => {
       expect(extracted.text).toBe(['| Assessment |', '| --- |', '| **high** *risk* |'].join('\n'));
     });
 
+    it.each([
+      ['First<strong> Second</strong>', 'First **Second**'],
+      ['<strong>First </strong>Second', '**First** Second'],
+      ['First<em> Second</em>', 'First *Second*'],
+      ['<code>First </code>Second', '`First` Second'],
+    ])(
+      'moves nested formatting boundary whitespace outside Markdown markers',
+      (content, expected) => {
+        const assistant = document.createElement('div');
+        assistant.innerHTML = `
+        <message-content>
+          <div class="markdown">
+            <table-block>
+              <table>
+                <tbody>
+                  <tr><th>Content</th></tr>
+                  <tr><td>${content}</td></tr>
+                </tbody>
+              </table>
+            </table-block>
+          </div>
+        </message-content>
+      `;
+
+        const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+
+        expect(extracted.text).toBe(['| Content |', '| --- |', `| ${expected} |`].join('\n'));
+      },
+    );
+
+    it('serializes nested display tags in inline code as plain text', () => {
+      const assistant = document.createElement('div');
+      assistant.innerHTML = `
+        <message-content>
+          <div class="markdown">
+            <div>Run <code><strong>npm</strong><em> install</em></code>.</div>
+          </div>
+        </message-content>
+      `;
+
+      const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+
+      expect(extracted.text).toBe('Run `npm install`.');
+      expect(extracted.html).toContain('Run <code>npm install</code>.');
+    });
+
+    it('serializes nested display tags in table inline code as plain text', () => {
+      const assistant = document.createElement('div');
+      assistant.innerHTML = `
+        <message-content>
+          <div class="markdown">
+            <table-block>
+              <table>
+                <tbody>
+                  <tr><th>Code</th></tr>
+                  <tr>
+                    <td>
+                      <code><strong>npm</strong><em> install|test</em><source-inline-chip>PDF</source-inline-chip></code>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </table-block>
+          </div>
+        </message-content>
+      `;
+
+      const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+      const rendered = document.createElement('div');
+      rendered.innerHTML = marked.parse(extracted.text) as string;
+
+      expect(rendered.querySelectorAll('tbody tr:first-child td')).toHaveLength(1);
+      expect(rendered.querySelector('tbody tr:first-child code')?.textContent).toBe(
+        'npm install|test',
+      );
+      expect(extracted.text).not.toContain('PDF');
+    });
+
+    it.each([
+      ['a`b', '``a`b``'],
+      ['`edge`', '`` `edge` ``'],
+      ['a``b', '```a``b```'],
+    ])('round-trips backticks in inline code spans', (content, expectedMarkdown) => {
+      const assistant = document.createElement('div');
+      assistant.innerHTML = `
+        <message-content>
+          <div class="markdown">
+            <table-block>
+              <table>
+                <tbody>
+                  <tr><th>Code</th></tr>
+                  <tr><td><code>${content}</code></td></tr>
+                </tbody>
+              </table>
+            </table-block>
+          </div>
+        </message-content>
+      `;
+
+      const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+      expect(extracted.text).toContain(`| ${expectedMarkdown} |`);
+
+      const rendered = document.createElement('div');
+      rendered.innerHTML = marked.parse(extracted.text) as string;
+
+      expect(rendered.querySelector('tbody tr:first-child code')?.textContent).toBe(content);
+    });
+
+    it.each([
+      [String.raw`\|`, '<code>&#x5c;&#x7c;</code>'],
+      [String.raw`\\|`, '<code>&#x5c;&#x5c;&#x7c;</code>'],
+      ['*em*|x', '`*em*\\|x`'],
+      [
+        '[link](https://example.com)|**bold**~~gone~~',
+        '`[link](https://example.com)\\|**bold**~~gone~~`',
+      ],
+    ])(
+      'round-trips Markdown syntax and backslashes in table inline code spans',
+      (content, expectedMarkdown) => {
+        const assistant = document.createElement('div');
+        assistant.innerHTML = `
+          <message-content>
+            <div class="markdown">
+              <table-block>
+                <table>
+                  <tbody>
+                    <tr><th>Code</th></tr>
+                    <tr><td><code>${content}</code></td></tr>
+                  </tbody>
+                </table>
+              </table-block>
+            </div>
+          </message-content>
+        `;
+
+        const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+        expect(extracted.text).toContain(`| ${expectedMarkdown} |`);
+
+        const rendered = document.createElement('div');
+        rendered.innerHTML = marked.parse(extracted.text) as string;
+
+        expect(rendered.querySelectorAll('tbody tr:first-child td')).toHaveLength(1);
+        expect(rendered.querySelector('tbody tr:first-child code')?.textContent).toBe(content);
+      },
+    );
+
+    it.each(['a  |  b', 'a\t|\tb', 'a\n|\nb'])(
+      'round-trips collapsible whitespace in table inline code',
+      (content) => {
+        const assistant = document.createElement('div');
+        assistant.innerHTML = `
+          <message-content>
+            <div class="markdown">
+              <table-block>
+                <table>
+                  <tbody>
+                    <tr><th>Code</th></tr>
+                    <tr><td><code>${content}</code></td></tr>
+                  </tbody>
+                </table>
+              </table-block>
+            </div>
+          </message-content>
+        `;
+
+        const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+        const rendered = document.createElement('div');
+        rendered.innerHTML = marked.parse(extracted.text) as string;
+
+        expect(extracted.text).toContain('<code>');
+        expect(rendered.querySelectorAll('tbody tr:first-child td')).toHaveLength(1);
+        expect(rendered.querySelector('tbody tr:first-child code')?.textContent).toBe(content);
+      },
+    );
+
     it('escapes table delimiters in formulas, text, and inline code', () => {
       const assistant = document.createElement('div');
       assistant.innerHTML = `
@@ -921,6 +1129,22 @@ describe('DOMContentExtractor', () => {
         'left | right',
         'a|b',
       ]);
+
+      const katexParser = new Marked(
+        markedKatex({
+          throwOnError: false,
+          output: 'html',
+          trust: true,
+          strict: false,
+        }),
+      );
+      const katexRendered = document.createElement('div');
+      katexRendered.innerHTML = katexParser.parse(extracted.text) as string;
+
+      const formulaCell = katexRendered.querySelector('tbody tr:first-child td:first-child');
+      expect(formulaCell?.querySelector('.katex')).not.toBeNull();
+      expect(formulaCell?.querySelector('.katex-error')).toBeNull();
+      expect(formulaCell?.querySelector('.katex-html')?.textContent).toContain('P(A');
     });
 
     it('preserves LaTeX vertical-bar commands through Markdown table rendering', () => {
