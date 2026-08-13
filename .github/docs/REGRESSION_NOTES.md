@@ -99,21 +99,25 @@ Root cause:
 The handoff relied on composer node replacement and an unconstrained textbox
 fallback, compared multiline text against `textContent`, and stored the complete
 transcript in page-owned `sessionStorage` without invalidating resume state on
-plugin disposal.
+plugin disposal. Moving the payload to extension storage without sweeping its
+key also left orphaned transcripts behind when a tab closed and lost its token.
 
 Fix:
 
 Resolve only ChatGPT composer candidates in selector-priority order, accept a
 usable same-node composer after temporary mode ends, compare normalized rendered
 text, and keep the payload in extension storage behind a tab-scoped token that
-is removed on success, cancellation, mismatch, or expiry.
+is removed on success, cancellation, mismatch, or expiry. Sweep expired payload
+keys on later handoff activity so a closed tab cannot retain its transcript
+indefinitely.
 
 Regression test:
 
 `src/features/plugins/builtin/chatgptTemporaryHandoff/handoff.test.ts` (`accepts
 a reused composer node and verifies multiline content by rendered text`,
 `ignores another page editor before the real ChatGPT composer`, and `clears
-pending state when plugin disposal cancels a resume`).
+pending state when plugin disposal cancels a resume`, and `sweeps an expired
+orphan after its tab-scoped token is lost`).
 
 Commit:
 

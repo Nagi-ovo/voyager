@@ -60,6 +60,7 @@ const NEW_CHAT_SELECTOR =
   'a[data-testid="create-new-chat-button"], a[href="/"][data-testid*="new" i]';
 export const PENDING_HANDOFF_KEY = 'gv-chatgpt-temporary-handoff-pending';
 export const PENDING_HANDOFF_TAB_KEY = 'gv-chatgpt-temporary-handoff-tab';
+const PENDING_HANDOFF_STORAGE_PREFIX = `${PENDING_HANDOFF_KEY}:`;
 const PENDING_TTL_MS = 60_000;
 const INLINE_THRESHOLD = 5_000;
 let activeHandoffOperations = 0;
@@ -217,7 +218,29 @@ function readPendingTabToken(): string | null {
 }
 
 function pendingStorageKey(token: string): string {
-  return `${PENDING_HANDOFF_KEY}:${token}`;
+  return `${PENDING_HANDOFF_STORAGE_PREFIX}${token}`;
+}
+
+function shouldSweepPendingHandoff(value: unknown, now: number): boolean {
+  if (!value || typeof value !== 'object') return true;
+  const storedAt = (value as Partial<PendingHandoff>).storedAt;
+  return (
+    typeof storedAt !== 'number' ||
+    !Number.isFinite(storedAt) ||
+    now - storedAt > PENDING_TTL_MS ||
+    storedAt > now + 5_000
+  );
+}
+
+async function sweepExpiredPendingHandoffs(now = Date.now()): Promise<void> {
+  const stored = await browser.storage.local.get();
+  const expiredKeys = Object.entries(stored)
+    .filter(
+      ([key, value]) =>
+        key.startsWith(PENDING_HANDOFF_STORAGE_PREFIX) && shouldSweepPendingHandoff(value, now),
+    )
+    .map(([key]) => key);
+  if (expiredKeys.length > 0) await browser.storage.local.remove(expiredKeys);
 }
 
 function ensurePendingTabToken(): string {
@@ -246,8 +269,9 @@ export async function discardPendingHandoff(): Promise<void> {
 }
 
 async function writePending(delivery: HandoffDelivery, accountScope: string): Promise<void> {
-  const token = ensurePendingTabToken();
   try {
+    await sweepExpiredPendingHandoffs();
+    const token = ensurePendingTabToken();
     await browser.storage.local.set({
       [pendingStorageKey(token)]: {
         delivery,
@@ -264,16 +288,13 @@ async function writePending(delivery: HandoffDelivery, accountScope: string): Pr
 }
 
 async function readPending(): Promise<PendingHandoff | null> {
-  const token = readPendingTabToken();
-  if (!token) {
-    try {
-      sessionStorage.removeItem(PENDING_HANDOFF_KEY);
-    } catch {
-      // Best-effort legacy cleanup only.
-    }
-    return null;
-  }
   try {
+    await sweepExpiredPendingHandoffs();
+    const token = readPendingTabToken();
+    if (!token) {
+      sessionStorage.removeItem(PENDING_HANDOFF_KEY);
+      return null;
+    }
     const key = pendingStorageKey(token);
     const result = await browser.storage.local.get(key);
     const parsed = result[key] as Partial<PendingHandoff> | undefined;

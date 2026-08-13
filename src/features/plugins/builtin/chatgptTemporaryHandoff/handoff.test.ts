@@ -22,7 +22,11 @@ vi.mock('webextension-polyfill', () => ({
   default: {
     storage: {
       local: {
-        get: vi.fn(async (key: string) => ({ [key]: storageState.get(key) })),
+        get: vi.fn(async (keys?: null | string | string[]) => {
+          if (keys == null) return Object.fromEntries(storageState);
+          const requested = Array.isArray(keys) ? keys : [keys];
+          return Object.fromEntries(requested.map((key) => [key, storageState.get(key)]));
+        }),
         remove: vi.fn(async (key: string | string[]) => {
           for (const item of Array.isArray(key) ? key : [key]) storageState.delete(item);
         }),
@@ -342,6 +346,29 @@ describe('temporary chat handoff', () => {
     expect(composer.textContent).toBe('Current draft');
     expect(pendingEntryCount()).toBe(0);
     expect(sessionStorage.getItem(PENDING_HANDOFF_TAB_KEY)).toBeNull();
+  });
+
+  it('sweeps an expired orphan after its tab-scoped token is lost', async () => {
+    const expiredKey = `${PENDING_HANDOFF_KEY}:closed-tab`;
+    const freshKey = `${PENDING_HANDOFF_KEY}:other-live-tab`;
+    const delivery = { mode: 'inline' as const, text: 'Private transcript' };
+    storageState.set(expiredKey, {
+      delivery,
+      storedAt: Date.now() - 60_001,
+      accountScope: 'route:default',
+    });
+    storageState.set(freshKey, {
+      delivery,
+      storedAt: Date.now(),
+      accountScope: 'route:default',
+    });
+
+    expect(sessionStorage.getItem(PENDING_HANDOFF_TAB_KEY)).toBeNull();
+    await expect(resumePendingHandoff(createScope())).resolves.toBeNull();
+
+    expect(storageState.has(expiredKey)).toBe(false);
+    expect(storageState.has(freshKey)).toBe(true);
+    expect(browser.storage.local.remove).toHaveBeenCalledWith([expiredKey]);
   });
 
   it('clears pending state when plugin disposal cancels a live handoff', async () => {
