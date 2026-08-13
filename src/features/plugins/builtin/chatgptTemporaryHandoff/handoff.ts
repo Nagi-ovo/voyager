@@ -1,3 +1,5 @@
+import browser from 'webextension-polyfill';
+
 import type { ChatTurn } from '@/features/export/types/export';
 import { type Dispose, PluginScope } from '@/features/plugins/runtime/pluginScope';
 import { insertTextIntoChatInput } from '@/pages/content/chatInput';
@@ -29,6 +31,7 @@ export type HandoffResult =
   | 'leave-failed'
   | 'composer-missing'
   | 'delivery-failed'
+  | 'storage-failed'
   | 'account-mismatch';
 
 export type PendingHandoffResult = 'ready' | 'delivery-failed' | 'account-mismatch' | null;
@@ -39,10 +42,24 @@ export const CHATGPT_TEMP_TOGGLE_SELECTOR = [
   'button[aria-label*="临时聊天"]',
   'button[aria-label*="暫時聊天"]',
 ].join(',');
-const COMPOSER_SELECTOR = '#prompt-textarea, [contenteditable="true"][role="textbox"]';
+const CHATGPT_COMPOSER_SELECTORS = [
+  '#prompt-textarea',
+  'form[data-type="unified-composer"] [contenteditable="true"][role="textbox"]',
+  'form[data-testid*="composer" i] [contenteditable="true"][role="textbox"]',
+] as const;
+const CHATGPT_GENERIC_COMPOSER_SELECTOR = 'main form [contenteditable="true"][role="textbox"]';
+const CHATGPT_SEND_CONTROL_SELECTOR = [
+  'button[data-testid="send-button"]',
+  'button[data-testid="composer-submit-button"]',
+].join(',');
+export const CHATGPT_COMPOSER_SELECTOR = [
+  ...CHATGPT_COMPOSER_SELECTORS,
+  CHATGPT_GENERIC_COMPOSER_SELECTOR,
+].join(',');
 const NEW_CHAT_SELECTOR =
   'a[data-testid="create-new-chat-button"], a[href="/"][data-testid*="new" i]';
 export const PENDING_HANDOFF_KEY = 'gv-chatgpt-temporary-handoff-pending';
+export const PENDING_HANDOFF_TAB_KEY = 'gv-chatgpt-temporary-handoff-tab';
 const PENDING_TTL_MS = 60_000;
 const INLINE_THRESHOLD = 5_000;
 let activeHandoffOperations = 0;
@@ -190,33 +207,84 @@ export function getChatGptNewChatPath(): string {
   }
 }
 
-function clearPending(): void {
+function readPendingTabToken(): string | null {
   try {
+    const token = sessionStorage.getItem(PENDING_HANDOFF_TAB_KEY);
+    return token && /^[a-z0-9-]{4,80}$/i.test(token) ? token : null;
+  } catch {
+    return null;
+  }
+}
+
+function pendingStorageKey(token: string): string {
+  return `${PENDING_HANDOFF_KEY}:${token}`;
+}
+
+function ensurePendingTabToken(): string {
+  const existing = readPendingTabToken();
+  if (existing) return existing;
+  const token = `${Date.now().toString(36)}-${randomFilenameNonce()}`;
+  sessionStorage.setItem(PENDING_HANDOFF_TAB_KEY, token);
+  return token;
+}
+
+export async function discardPendingHandoff(): Promise<void> {
+  const token = readPendingTabToken();
+  try {
+    sessionStorage.removeItem(PENDING_HANDOFF_TAB_KEY);
+    // Remove the legacy page-owned payload left by earlier revisions of this PR.
     sessionStorage.removeItem(PENDING_HANDOFF_KEY);
   } catch {
     // Storage can be unavailable in locked-down browsing contexts.
   }
-}
-
-function writePending(delivery: HandoffDelivery, accountScope: string): void {
-  sessionStorage.setItem(
-    PENDING_HANDOFF_KEY,
-    JSON.stringify({ delivery, storedAt: Date.now(), accountScope } satisfies PendingHandoff),
-  );
-}
-
-function readPending(): PendingHandoff | null {
+  if (!token) return;
   try {
-    const raw = sessionStorage.getItem(PENDING_HANDOFF_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<PendingHandoff>;
+    await browser.storage.local.remove(pendingStorageKey(token));
+  } catch {
+    // The tab token is already invalidated, so a later plugin lifecycle cannot replay it.
+  }
+}
+
+async function writePending(delivery: HandoffDelivery, accountScope: string): Promise<void> {
+  const token = ensurePendingTabToken();
+  try {
+    await browser.storage.local.set({
+      [pendingStorageKey(token)]: {
+        delivery,
+        storedAt: Date.now(),
+        accountScope,
+      } satisfies PendingHandoff,
+    });
+    // Do not retain full transcripts written by earlier revisions in page storage.
+    sessionStorage.removeItem(PENDING_HANDOFF_KEY);
+  } catch (error) {
+    await discardPendingHandoff();
+    throw error;
+  }
+}
+
+async function readPending(): Promise<PendingHandoff | null> {
+  const token = readPendingTabToken();
+  if (!token) {
+    try {
+      sessionStorage.removeItem(PENDING_HANDOFF_KEY);
+    } catch {
+      // Best-effort legacy cleanup only.
+    }
+    return null;
+  }
+  try {
+    const key = pendingStorageKey(token);
+    const result = await browser.storage.local.get(key);
+    const parsed = result[key] as Partial<PendingHandoff> | undefined;
     if (
+      !parsed ||
       typeof parsed.storedAt !== 'number' ||
       !Number.isFinite(parsed.storedAt) ||
       typeof parsed.accountScope !== 'string' ||
       !parsed.delivery
     ) {
-      clearPending();
+      await discardPendingHandoff();
       return null;
     }
     const delivery = parsed.delivery;
@@ -231,10 +299,10 @@ function readPending(): PendingHandoff | null {
     ) {
       return { delivery, storedAt: parsed.storedAt, accountScope: parsed.accountScope };
     }
-    clearPending();
+    await discardPendingHandoff();
     return null;
   } catch {
-    clearPending();
+    await discardPendingHandoff();
     return null;
   }
 }
@@ -261,9 +329,52 @@ function dispatchPaste(input: HTMLElement, text: string | null, file: File | nul
   }
 }
 
+const COMPOSER_BLOCK_TAGS = new Set([
+  'ADDRESS',
+  'BLOCKQUOTE',
+  'DIV',
+  'H1',
+  'H2',
+  'H3',
+  'H4',
+  'H5',
+  'H6',
+  'LI',
+  'P',
+  'PRE',
+]);
+
+function readComposerDomText(root: HTMLElement): string {
+  const parts: string[] = [];
+  const visit = (node: Node): void => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      parts.push(node.textContent || '');
+      return;
+    }
+    if (!(node instanceof Element)) return;
+    if (node.tagName === 'BR') {
+      parts.push('\n');
+      return;
+    }
+    const block = COMPOSER_BLOCK_TAGS.has(node.tagName);
+    if (block && parts.length > 0 && !parts[parts.length - 1].endsWith('\n')) parts.push('\n');
+    node.childNodes.forEach(visit);
+    if (block && !parts[parts.length - 1]?.endsWith('\n')) parts.push('\n');
+  };
+  root.childNodes.forEach(visit);
+  return parts.join('');
+}
+
 function readComposerText(input: HTMLElement): string {
   if (input instanceof HTMLTextAreaElement || input instanceof HTMLInputElement) return input.value;
-  return input.textContent || '';
+  return readComposerDomText(input);
+}
+
+function normalizeComposerText(text: string): string {
+  return text
+    .replace(/[\u200b\u00a0]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function placeComposerCaretAtEnd(input: HTMLElement): void {
@@ -284,10 +395,9 @@ function insertComposerText(input: HTMLElement, text: string): boolean {
   input.focus();
   const existing = readComposerText(input).trim();
   placeComposerCaretAtEnd(input);
-  return (
-    insertTextIntoChatInput(existing ? `\n\n${text}` : text, input) &&
-    readComposerText(input).includes(text)
-  );
+  if (!insertTextIntoChatInput(existing ? `\n\n${text}` : text, input)) return false;
+  const expected = normalizeComposerText(text);
+  return expected.length > 0 && normalizeComposerText(readComposerText(input)).includes(expected);
 }
 
 function hasAttachmentPreview(input: HTMLElement, filename: string): boolean {
@@ -348,41 +458,74 @@ async function deliver(
   return insertComposerText(input, delivery.directive);
 }
 
-function currentComposer(excluded?: HTMLElement): HTMLElement | null {
+function isUsableComposer(candidate: HTMLElement): boolean {
   return (
-    Array.from(document.querySelectorAll<HTMLElement>(COMPOSER_SELECTOR)).find(
-      (candidate) => candidate !== excluded,
-    ) || null
+    candidate.isConnected &&
+    !candidate.matches('[hidden], [aria-hidden="true"], [aria-disabled="true"]') &&
+    !candidate.closest('[hidden], [inert], [aria-hidden="true"]')
   );
 }
 
-async function findComposer(
-  scope: PluginScope,
-  timeoutMs: number,
-  excluded?: HTMLElement,
-): Promise<HTMLElement | null> {
+function pickComposer(candidates: readonly HTMLElement[]): HTMLElement | null {
+  const usable = candidates.filter(isUsableComposer);
+  for (let index = usable.length - 1; index >= 0; index -= 1) {
+    const rect = usable[index].getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) return usable[index];
+  }
+  return usable[usable.length - 1] || null;
+}
+
+function currentComposer(): HTMLElement | null {
+  for (const selector of CHATGPT_COMPOSER_SELECTORS) {
+    const candidate = pickComposer(Array.from(document.querySelectorAll<HTMLElement>(selector)));
+    if (candidate) return candidate;
+  }
+
+  return pickComposer(
+    Array.from(document.querySelectorAll<HTMLElement>(CHATGPT_GENERIC_COMPOSER_SELECTOR)).filter(
+      (candidate) => candidate.closest('form')?.querySelector(CHATGPT_SEND_CONTROL_SELECTOR),
+    ),
+  );
+}
+
+async function findComposer(scope: PluginScope, timeoutMs: number): Promise<HTMLElement | null> {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
     if (scope.signal.aborted) return null;
-    const input = currentComposer(excluded);
+    const input = currentComposer();
     if (input) return input;
     await wait(scope, 120);
   }
   return null;
 }
 
+async function waitForNormalComposer(
+  scope: PluginScope,
+  attempts: number,
+): Promise<HTMLElement | null> {
+  let previous: HTMLElement | null = null;
+  let stableChecks = 0;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    if (!isTemporaryChat()) {
+      const composer = currentComposer();
+      stableChecks = composer && composer === previous ? stableChecks + 1 : composer ? 1 : 0;
+      previous = composer;
+      if (composer && stableChecks >= 3) return composer;
+    } else {
+      previous = null;
+      stableChecks = 0;
+    }
+    await wait(scope, 100);
+  }
+  return null;
+}
+
 export async function leaveTemporaryChat(scope: PluginScope): Promise<HTMLElement | null> {
-  const temporaryComposer = currentComposer() || undefined;
   const toggle = document.querySelector<HTMLElement>(CHATGPT_TEMP_TOGGLE_SELECTOR);
   if (toggle) {
     toggle.click();
-    for (let attempt = 0; attempt < 16; attempt += 1) {
-      if (!isTemporaryChat()) {
-        const replacement = currentComposer(temporaryComposer);
-        if (replacement) return replacement;
-      }
-      await wait(scope, 100);
-    }
+    const composer = await waitForNormalComposer(scope, 16);
+    if (composer) return composer;
   }
 
   const newChat = document.querySelector<HTMLElement>(NEW_CHAT_SELECTOR);
@@ -390,14 +533,7 @@ export async function leaveTemporaryChat(scope: PluginScope): Promise<HTMLElemen
   if (newChat && newChatPath === '/') newChat.click();
   else location.assign(newChatPath);
 
-  for (let attempt = 0; attempt < 30; attempt += 1) {
-    if (!isTemporaryChat()) {
-      const replacement = currentComposer(temporaryComposer);
-      if (replacement) return replacement;
-    }
-    await wait(scope, 100);
-  }
-  return null;
+  return await waitForNormalComposer(scope, 30);
 }
 
 export async function handoffTemporaryChat(
@@ -408,26 +544,28 @@ export async function handoffTemporaryChat(
   try {
     const accountScope = readAccountScope();
     try {
-      writePending(delivery, accountScope);
+      await writePending(delivery, accountScope);
     } catch {
-      // The live same-page path still works without the reload safety net.
+      return 'storage-failed';
     }
+    if (scope.signal.aborted) throw abortError();
     const input = await leaveTemporaryChat(scope);
     if (!input) {
       if (!isTemporaryChat()) return 'composer-missing';
-      clearPending();
+      await discardPendingHandoff();
       return 'leave-failed';
     }
     if (readAccountScope() !== accountScope) {
-      clearPending();
+      await discardPendingHandoff();
       return 'account-mismatch';
     }
+    if (scope.signal.aborted) throw abortError();
     const delivered = await deliver(scope, input, delivery);
     if (!delivered) return 'delivery-failed';
-    clearPending();
+    await discardPendingHandoff();
     return 'ready';
   } catch (error) {
-    if (isAbortError(error)) clearPending();
+    if (isAbortError(error)) await discardPendingHandoff();
     throw error;
   } finally {
     activeHandoffOperations -= 1;
@@ -435,25 +573,32 @@ export async function handoffTemporaryChat(
 }
 
 export async function resumePendingHandoff(scope: PluginScope): Promise<PendingHandoffResult> {
-  while (activeHandoffOperations > 0) {
-    if (scope.signal.aborted) return null;
-    await wait(scope, 120);
+  try {
+    while (activeHandoffOperations > 0) {
+      if (scope.signal.aborted) throw abortError();
+      await wait(scope, 120);
+    }
+    if (scope.signal.aborted) throw abortError();
+    const pending = await readPending();
+    if (!pending) return null;
+    if (Date.now() - pending.storedAt > PENDING_TTL_MS || pending.storedAt > Date.now() + 5_000) {
+      await discardPendingHandoff();
+      return null;
+    }
+    if (pending.accountScope !== readAccountScope()) {
+      await discardPendingHandoff();
+      return 'account-mismatch';
+    }
+    if (isTemporaryChat()) return null;
+    const input = await findComposer(scope, 6_000);
+    if (!input) return null;
+    if (scope.signal.aborted) throw abortError();
+    const delivered = await deliver(scope, input, pending.delivery);
+    if (!delivered) return 'delivery-failed';
+    await discardPendingHandoff();
+    return 'ready';
+  } catch (error) {
+    if (isAbortError(error)) await discardPendingHandoff();
+    throw error;
   }
-  const pending = readPending();
-  if (!pending) return null;
-  if (Date.now() - pending.storedAt > PENDING_TTL_MS || pending.storedAt > Date.now() + 5_000) {
-    clearPending();
-    return null;
-  }
-  if (pending.accountScope !== readAccountScope()) {
-    clearPending();
-    return 'account-mismatch';
-  }
-  if (isTemporaryChat()) return null;
-  const input = await findComposer(scope, 6_000);
-  if (!input) return null;
-  const delivered = await deliver(scope, input, pending.delivery);
-  if (!delivered) return 'delivery-failed';
-  clearPending();
-  return 'ready';
 }

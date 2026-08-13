@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   handoff: vi.fn(),
   plan: vi.fn(),
   resume: vi.fn(),
+  discardPending: vi.fn(),
 }));
 
 vi.mock('@/utils/i18n', () => ({
@@ -30,7 +31,9 @@ vi.mock('@/pages/content/export/adapter/platformAdapters', () => ({
 }));
 
 vi.mock('./handoff', () => ({
+  CHATGPT_COMPOSER_SELECTOR: '#prompt-textarea',
   CHATGPT_TEMP_TOGGLE_SELECTOR: '[data-testid="temporary-chat-toggle"]',
+  discardPendingHandoff: mocks.discardPending,
   downloadHandoffBackup: mocks.downloadBackup,
   handoffTemporaryChat: mocks.handoff,
   isTemporaryChat: () => mocks.temporary,
@@ -68,6 +71,7 @@ beforeEach(() => {
   });
   mocks.handoff.mockResolvedValue('ready');
   mocks.resume.mockResolvedValue(null);
+  mocks.discardPending.mockResolvedValue(undefined);
 });
 
 afterEach(async () => {
@@ -91,6 +95,7 @@ describe('ChatGPT temporary handoff plugin', () => {
     await scope.dispose();
     expect(document.querySelector('[data-gv-chatgpt-handoff-button]')).toBeNull();
     expect(document.querySelector('[data-gv-chatgpt-handoff-owned]')).toBeNull();
+    expect(mocks.discardPending).toHaveBeenCalledOnce();
   });
 
   it('does not mount after async language loading finishes for a disposed plugin', async () => {

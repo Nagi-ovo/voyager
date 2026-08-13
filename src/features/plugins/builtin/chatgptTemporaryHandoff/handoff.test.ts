@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import browser from 'webextension-polyfill';
 
 import type { ChatTurn } from '@/features/export/types/export';
 import { PluginScope } from '@/features/plugins/runtime/pluginScope';
 
 import {
   PENDING_HANDOFF_KEY,
+  PENDING_HANDOFF_TAB_KEY,
   buildHandoffTranscript,
   createHandoffFilename,
   getChatGptNewChatPath,
@@ -14,7 +16,49 @@ import {
   resumePendingHandoff,
 } from './handoff';
 
+const storageState = vi.hoisted(() => new Map<string, unknown>());
+
+vi.mock('webextension-polyfill', () => ({
+  default: {
+    storage: {
+      local: {
+        get: vi.fn(async (key: string) => ({ [key]: storageState.get(key) })),
+        remove: vi.fn(async (key: string | string[]) => {
+          for (const item of Array.isArray(key) ? key : [key]) storageState.delete(item);
+        }),
+        set: vi.fn(async (items: Record<string, unknown>) => {
+          for (const [key, value] of Object.entries(items)) storageState.set(key, value);
+        }),
+      },
+    },
+  },
+}));
+
 const scopes: PluginScope[] = [];
+
+function currentPendingStorageKey(): string | null {
+  const token = sessionStorage.getItem(PENDING_HANDOFF_TAB_KEY);
+  return token ? `${PENDING_HANDOFF_KEY}:${token}` : null;
+}
+
+function storedPending(): unknown {
+  const key = currentPendingStorageKey();
+  return key ? storageState.get(key) : undefined;
+}
+
+function pendingEntryCount(): number {
+  return [...storageState.keys()].filter((key) => key.startsWith(`${PENDING_HANDOFF_KEY}:`)).length;
+}
+
+function seedPending(
+  delivery: { mode: 'inline'; text: string },
+  storedAt = Date.now(),
+  accountScope = 'route:default',
+): void {
+  const token = 'test-tab-token';
+  sessionStorage.setItem(PENDING_HANDOFF_TAB_KEY, token);
+  storageState.set(`${PENDING_HANDOFF_KEY}:${token}`, { delivery, storedAt, accountScope });
+}
 
 function createScope(): PluginScope {
   const scope = new PluginScope();
@@ -61,7 +105,9 @@ afterEach(async () => {
   document.body.replaceChildren();
   history.replaceState({}, '', '/');
   sessionStorage.clear();
+  storageState.clear();
   vi.useRealTimers();
+  vi.clearAllMocks();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -130,7 +176,69 @@ describe('temporary chat handoff', () => {
     ).resolves.toBe('ready');
 
     expect(getComposer()?.textContent).toContain('Continue this transcript');
-    expect(sessionStorage.getItem(PENDING_HANDOFF_KEY)).toBeNull();
+    expect(pendingEntryCount()).toBe(0);
+    expect(sessionStorage.getItem(PENDING_HANDOFF_TAB_KEY)).toBeNull();
+  });
+
+  it('accepts a reused composer node and verifies multiline content by rendered text', async () => {
+    const scope = createScope();
+    history.replaceState({}, '', '/?temporary-chat=true');
+    const composer = addComposer();
+    const toggle = document.createElement('button');
+    toggle.dataset.testid = 'temporary-chat-toggle';
+    toggle.setAttribute('aria-label', 'Close temporary chat');
+    toggle.addEventListener('click', () => {
+      history.replaceState({}, '', '/');
+      toggle.remove();
+    });
+    document.body.appendChild(toggle);
+
+    await expect(
+      handoffTemporaryChat(scope, { mode: 'inline', text: 'First line\n\nThird line' }),
+    ).resolves.toBe('ready');
+
+    expect(composer.textContent).toContain('First line');
+    expect(composer.textContent).toContain('Third line');
+    expect(pendingEntryCount()).toBe(0);
+  });
+
+  it('ignores another page editor before the real ChatGPT composer', async () => {
+    const scope = createScope();
+    const canvas = document.createElement('div');
+    canvas.contentEditable = 'true';
+    canvas.setAttribute('role', 'textbox');
+    canvas.textContent = 'Canvas draft';
+    document.body.appendChild(canvas);
+    addComposer();
+    const getComposer = addTemporaryExit();
+
+    await expect(
+      handoffTemporaryChat(scope, { mode: 'inline', text: 'Private handoff' }),
+    ).resolves.toBe('ready');
+
+    expect(canvas.textContent).toBe('Canvas draft');
+    expect(getComposer()?.textContent).toContain('Private handoff');
+  });
+
+  it('does not leave temporary mode when extension storage rejects the pending payload', async () => {
+    const scope = createScope();
+    history.replaceState({}, '', '/?temporary-chat=true');
+    addComposer();
+    const toggle = document.createElement('button');
+    toggle.dataset.testid = 'temporary-chat-toggle';
+    toggle.setAttribute('aria-label', 'Close temporary chat');
+    const click = vi.spyOn(toggle, 'click');
+    document.body.appendChild(toggle);
+    vi.mocked(browser.storage.local.set).mockRejectedValueOnce(new Error('quota exceeded'));
+
+    await expect(
+      handoffTemporaryChat(scope, { mode: 'inline', text: 'Keep this private' }),
+    ).resolves.toBe('storage-failed');
+
+    expect(click).not.toHaveBeenCalled();
+    expect(isTemporaryChat()).toBe(true);
+    expect(pendingEntryCount()).toBe(0);
+    expect(sessionStorage.getItem(PENDING_HANDOFF_TAB_KEY)).toBeNull();
   });
 
   it('preserves pending delivery when the normal composer mounts after the wait budget', async () => {
@@ -159,12 +267,12 @@ describe('temporary chat handoff', () => {
     await vi.advanceTimersByTimeAsync(4_700);
 
     await expect(handoff).resolves.toBe('composer-missing');
-    expect(sessionStorage.getItem(PENDING_HANDOFF_KEY)).not.toBeNull();
+    expect(storedPending()).toBeDefined();
 
     const normalComposer = addComposer();
     await expect(resumePendingHandoff(scope)).resolves.toBe('ready');
     expect(normalComposer.textContent).toContain('Deliver after a slow mount');
-    expect(sessionStorage.getItem(PENDING_HANDOFF_KEY)).toBeNull();
+    expect(pendingEntryCount()).toBe(0);
   });
 
   it('rejects a handoff when leaving temporary mode switches accounts', async () => {
@@ -185,7 +293,7 @@ describe('temporary chat handoff', () => {
     await expect(
       handoffTemporaryChat(scope, { mode: 'inline', text: 'Other account transcript' }),
     ).resolves.toBe('account-mismatch');
-    expect(sessionStorage.getItem(PENDING_HANDOFF_KEY)).toBeNull();
+    expect(pendingEntryCount()).toBe(0);
   });
 
   it('keeps a pending attachment when ChatGPT rejects delivery without changing the draft', async () => {
@@ -205,7 +313,10 @@ describe('temporary chat handoff', () => {
     ).resolves.toBe('delivery-failed');
 
     expect(getComposer()?.textContent).toBe('Existing draft');
-    expect(sessionStorage.getItem(PENDING_HANDOFF_KEY)).not.toBeNull();
+    expect(storedPending()).toBeDefined();
+    expect(browser.storage.local.set).toHaveBeenCalledOnce();
+    expect(sessionStorage.getItem(PENDING_HANDOFF_KEY)).toBeNull();
+    expect(sessionStorage.getItem(PENDING_HANDOFF_TAB_KEY)).not.toContain('# Transcript');
   });
 
   it('preserves formatted composer DOM when resuming a pending inline handoff', async () => {
@@ -213,20 +324,24 @@ describe('temporary chat handoff', () => {
     const composer = addComposer();
     composer.innerHTML = '<p><strong>First paragraph</strong></p><p>Second paragraph</p>';
     const originalDraft = composer.innerHTML;
-    sessionStorage.setItem(
-      PENDING_HANDOFF_KEY,
-      JSON.stringify({
-        delivery: { mode: 'inline', text: 'Recovered handoff' },
-        storedAt: Date.now(),
-        accountScope: 'route:default',
-      }),
-    );
+    seedPending({ mode: 'inline', text: 'Recovered handoff' });
 
     await expect(resumePendingHandoff(scope)).resolves.toBe('ready');
     expect(composer.innerHTML.startsWith(originalDraft)).toBe(true);
     expect(composer.querySelector('strong')?.textContent).toBe('First paragraph');
     expect(composer.querySelectorAll('p')).toHaveLength(2);
     expect(composer.textContent).toContain('Recovered handoff');
+  });
+
+  it('removes an expired pending payload without touching the composer', async () => {
+    const composer = addComposer('Current draft');
+    seedPending({ mode: 'inline', text: 'Expired handoff' }, Date.now() - 60_001);
+
+    await expect(resumePendingHandoff(createScope())).resolves.toBeNull();
+
+    expect(composer.textContent).toBe('Current draft');
+    expect(pendingEntryCount()).toBe(0);
+    expect(sessionStorage.getItem(PENDING_HANDOFF_TAB_KEY)).toBeNull();
   });
 
   it('clears pending state when plugin disposal cancels a live handoff', async () => {
@@ -244,6 +359,23 @@ describe('temporary chat handoff', () => {
 
     await expect(handoff).rejects.toMatchObject({ name: 'AbortError' });
     await disposal;
-    expect(sessionStorage.getItem(PENDING_HANDOFF_KEY)).toBeNull();
+    expect(pendingEntryCount()).toBe(0);
+  });
+
+  it('clears pending state when plugin disposal cancels a resume', async () => {
+    vi.useFakeTimers();
+    const scope = createScope();
+    seedPending({ mode: 'inline', text: 'Do not replay after disable' });
+
+    const resume = resumePendingHandoff(scope);
+    const rejected = expect(resume).rejects.toMatchObject({ name: 'AbortError' });
+    await vi.advanceTimersByTimeAsync(0);
+    await scope.dispose();
+    await rejected;
+
+    expect(pendingEntryCount()).toBe(0);
+    const composer = addComposer();
+    await expect(resumePendingHandoff(createScope())).resolves.toBeNull();
+    expect(composer.textContent).toBe('');
   });
 });

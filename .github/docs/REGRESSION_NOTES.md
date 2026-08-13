@@ -86,6 +86,39 @@ Commit:
 
 `fix(export): address ChatGPT export review findings`
 
+## Temporary-chat handoff state must stay private and tab-scoped
+
+Symptom:
+
+Leaving temporary mode could fail when ChatGPT reused its composer node, write
+the transcript into another page editor, or replay a cancelled handoff after the
+plugin was re-enabled. Multiline insertion could also be misreported as failed.
+
+Root cause:
+
+The handoff relied on composer node replacement and an unconstrained textbox
+fallback, compared multiline text against `textContent`, and stored the complete
+transcript in page-owned `sessionStorage` without invalidating resume state on
+plugin disposal.
+
+Fix:
+
+Resolve only ChatGPT composer candidates in selector-priority order, accept a
+usable same-node composer after temporary mode ends, compare normalized rendered
+text, and keep the payload in extension storage behind a tab-scoped token that
+is removed on success, cancellation, mismatch, or expiry.
+
+Regression test:
+
+`src/features/plugins/builtin/chatgptTemporaryHandoff/handoff.test.ts` (`accepts
+a reused composer node and verifies multiline content by rendered text`,
+`ignores another page editor before the real ChatGPT composer`, and `clears
+pending state when plugin disposal cancels a resume`).
+
+Commit:
+
+`fix(plugins): harden ChatGPT temporary handoff recovery`
+
 ## Temporary-chat handoff attachments need unique names
 
 Symptom:

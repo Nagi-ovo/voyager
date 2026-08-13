@@ -12,7 +12,9 @@ import { watchRouteChanges } from '@/pages/content/utils/routeWatcher';
 import { getCurrentLanguage } from '@/utils/i18n';
 
 import {
+  CHATGPT_COMPOSER_SELECTOR,
   CHATGPT_TEMP_TOGGLE_SELECTOR,
+  discardPendingHandoff,
   downloadHandoffBackup,
   handoffTemporaryChat,
   isTemporaryChat,
@@ -26,7 +28,6 @@ import { showHandoffConfirmation, showHandoffProgress, showHandoffToast } from '
 const BUTTON_MARKER = 'data-gv-chatgpt-handoff-button';
 const HEADER_SELECTOR = '#conversation-header-actions';
 const SHARE_SELECTOR = '[data-testid="share-chat-button"]';
-const COMPOSER_SELECTOR = '#prompt-textarea, [contenteditable="true"][role="textbox"]';
 const REFRESH_DELAY_MS = 80;
 
 interface ButtonMountTarget {
@@ -92,6 +93,10 @@ class ChatGptTemporaryHandoffPlugin {
 
   start(): void {
     this.scope.style(CHATGPT_TEMPORARY_HANDOFF_CSS);
+    this.scope.effect(
+      () => () => discardPendingHandoff(),
+      'discard-chatgpt-temporary-handoff-on-disable',
+    );
     this.ensureButton();
     this.scope.observe(
       document.body,
@@ -130,7 +135,10 @@ class ChatGptTemporaryHandoffPlugin {
     return records.some((record) =>
       [...record.addedNodes].some((node) => {
         if (!(node instanceof Element)) return false;
-        return node.matches(COMPOSER_SELECTOR) || node.querySelector(COMPOSER_SELECTOR) !== null;
+        return (
+          node.matches(CHATGPT_COMPOSER_SELECTOR) ||
+          node.querySelector(CHATGPT_COMPOSER_SELECTOR) !== null
+        );
       }),
     );
   }
@@ -279,6 +287,8 @@ class ChatGptTemporaryHandoffPlugin {
         showHandoffToast(this.scope, this.copy.composerMissing);
       } else if (result === 'delivery-failed') {
         showHandoffToast(this.scope, this.copy.deliveryFailed, 'error');
+      } else if (result === 'storage-failed') {
+        showHandoffToast(this.scope, this.copy.failed, 'error');
       } else showHandoffToast(this.scope, this.copy.accountChanged, 'error');
     });
   }
