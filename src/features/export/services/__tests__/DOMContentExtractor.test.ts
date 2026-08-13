@@ -706,6 +706,41 @@ describe('DOMContentExtractor', () => {
   });
 
   describe('Gemini Notebook table exports', () => {
+    it('ends the table block before a following paragraph', () => {
+      const assistant = document.createElement('div');
+      assistant.innerHTML = `
+        <message-content>
+          <div class="markdown">
+            <p>前置段落</p>
+            <table-block>
+              <table>
+                <tbody>
+                  <tr><th>案例</th></tr>
+                  <tr><td>最后一行表格内容</td></tr>
+                </tbody>
+              </table>
+            </table-block>
+            <p>通过这三个例题的对比可以看出……</p>
+          </div>
+        </message-content>
+      `;
+
+      const sourceRowCount = assistant.querySelectorAll('table tr').length;
+      const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+
+      expect(extracted.text).toContain('| 最后一行表格内容 |\n\n通过这三个例题的对比可以看出……');
+
+      const rendered = document.createElement('div');
+      rendered.innerHTML = marked.parse(extracted.text) as string;
+      const renderedTable = rendered.querySelector('table');
+
+      expect(renderedTable?.querySelector('tbody')?.textContent).not.toContain(
+        '通过这三个例题的对比可以看出……',
+      );
+      expect(renderedTable?.nextElementSibling?.tagName).toBe('P');
+      expect(renderedTable?.querySelectorAll('tr')).toHaveLength(sourceRowCount);
+    });
+
     it('preserves inline LaTeX and removes source chips from tables with a thead', () => {
       const assistant = document.createElement('div');
       assistant.innerHTML = `
@@ -921,6 +956,41 @@ describe('DOMContentExtractor', () => {
 
       expect(rendered.querySelector('.katex-html')?.textContent).toBe('∥x∥');
       expect(rendered.querySelector('.katex-html .newline')).toBeNull();
+    });
+
+    it('preserves consecutive LaTeX vertical-bar commands in Markdown tables', () => {
+      const assistant = document.createElement('div');
+      assistant.innerHTML = `
+        <message-content>
+          <div class="markdown">
+            <table-block>
+              <table>
+                <tbody>
+                  <tr><th>Bars</th></tr>
+                  <tr>
+                    <td><span class="math-inline" data-math="\\|\\|">‖‖</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </table-block>
+          </div>
+        </message-content>
+      `;
+
+      const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+      const parser = new Marked(
+        markedKatex({
+          throwOnError: false,
+          output: 'html',
+          trust: true,
+          strict: false,
+        }),
+      );
+      const rendered = document.createElement('div');
+      rendered.innerHTML = parser.parse(extracted.text) as string;
+
+      expect(extracted.text).toContain('$\\Vert{}\\Vert{}$');
+      expect(rendered.querySelector('.katex-html')?.textContent).toBe('∥∥');
     });
 
     it('recursively serializes formulas and filters sources inside formatting tags', () => {

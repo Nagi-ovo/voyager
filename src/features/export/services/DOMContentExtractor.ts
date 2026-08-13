@@ -482,7 +482,7 @@ export class DOMContentExtractor {
           // Only add if table was successfully extracted
           flags.hasTables = true;
           htmlParts.push(tableContent.html);
-          textParts.push(`\n${tableContent.text}\n`);
+          textParts.push(`\n${tableContent.text}\n\n`);
         }
         continue;
       }
@@ -1029,7 +1029,9 @@ export class DOMContentExtractor {
    * the equivalent pipe-free command instead.
    */
   private static preserveLatexPipeCommandsInMarkdownTable(latex: string): string {
-    return latex.replace(/(?<!\\)\\\|/g, '\\Vert{}');
+    return latex.replace(/\\+\|/g, (command) => {
+      return command === '\\|' ? '\\Vert{}' : command;
+    });
   }
 
   /**
