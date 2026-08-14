@@ -12,6 +12,7 @@ export interface ProgressHandle {
 }
 
 let dialogSequence = 0;
+const CHATGPT_VOYAGER_URL = 'https://github.com/TanChuping/chatgpt-voyager';
 
 function ownScope(parent: PluginScope, label: string): OwnedScope {
   const scope = new PluginScope();
@@ -55,6 +56,8 @@ function createDialog(
 
   const body = document.createElement('div');
   body.className = 'gv-chatgpt-handoff-dialog-body';
+  body.id = `gv-chatgpt-handoff-dialog-body-${dialogSequence}`;
+  dialog.setAttribute('aria-describedby', body.id);
   body.textContent = bodyText;
 
   const footer = document.createElement('footer');
@@ -77,6 +80,7 @@ function mountDialog(
   overlay: HTMLElement,
   dialog: HTMLElement,
   dismiss: () => void,
+  initialFocus?: HTMLElement,
 ): void {
   const previousFocus =
     document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -114,7 +118,7 @@ function mountDialog(
     }
   });
   scope.mount(overlay, document.body);
-  (focusables(dialog)[0] || dialog).focus();
+  (initialFocus || focusables(dialog)[0] || dialog).focus();
 }
 
 export function showHandoffConfirmation(
@@ -132,12 +136,21 @@ export function showHandoffConfirmation(
     owned.scope.signal.addEventListener('abort', () => finish(false), { once: true });
 
     const { overlay, dialog, footer } = createDialog(copy.confirmTitle, copy.confirmBody);
+    const attribution = document.createElement('a');
+    attribution.className = 'gv-chatgpt-handoff-dialog-attribution';
+    attribution.href = CHATGPT_VOYAGER_URL;
+    attribution.target = '_blank';
+    attribution.rel = 'noopener noreferrer';
+    const attributionPrefix = document.createElement('span');
+    attributionPrefix.className = 'gv-chatgpt-handoff-dialog-attribution-prefix';
+    attributionPrefix.textContent = 'Powered by ';
+    attribution.append(attributionPrefix, 'ChatGPT Voyager');
     const cancel = createButton(copy.cancel);
     const confirm = createButton(copy.confirm, true);
     owned.scope.on(cancel, 'click', () => finish(false));
     owned.scope.on(confirm, 'click', () => finish(true));
-    footer.append(cancel, confirm);
-    mountDialog(owned.scope, overlay, dialog, () => finish(false));
+    footer.append(attribution, cancel, confirm);
+    mountDialog(owned.scope, overlay, dialog, () => finish(false), cancel);
   });
 }
 

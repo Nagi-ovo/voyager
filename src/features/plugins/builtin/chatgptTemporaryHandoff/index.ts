@@ -14,11 +14,18 @@ import { getCurrentLanguage } from '@/utils/i18n';
 import {
   CHATGPT_COMPOSER_SELECTOR,
   CHATGPT_TEMP_TOGGLE_SELECTOR,
+  buildHandoffBackup,
   discardPendingHandoff,
   downloadHandoffBackup,
   handoffTemporaryChat,
+  hasCurrentComposerAttachments,
+  isHandoffPageUnloading,
   isTemporaryChat,
+  markHandoffPageActive,
+  markHandoffPageUnloading,
+  pendingAttachmentPreviewReady,
   planHandoff,
+  readCurrentComposerDraft,
   resumePendingHandoff,
 } from './handoff';
 import { type TemporaryHandoffCopy, getTemporaryHandoffCopy } from './i18n';
@@ -84,6 +91,9 @@ class ChatGptTemporaryHandoffPlugin {
   private operationRequest = 0;
   private resumeInFlight: Promise<void> | null = null;
   private resumeRequested = false;
+  private attachmentPreviewCheckInFlight = false;
+  private attachmentPreviewCheckRequested = false;
+  private attachmentPreviewResumeTriggered = false;
 
   constructor(
     private readonly scope: PluginScope,
@@ -93,8 +103,10 @@ class ChatGptTemporaryHandoffPlugin {
 
   start(): void {
     this.scope.style(CHATGPT_TEMPORARY_HANDOFF_CSS);
+    this.scope.on(window, 'pagehide', markHandoffPageUnloading, { capture: true });
+    this.scope.on(window, 'pageshow', markHandoffPageActive, { capture: true });
     this.scope.effect(
-      () => () => discardPendingHandoff(),
+      () => () => (isHandoffPageUnloading() ? undefined : discardPendingHandoff()),
       'discard-chatgpt-temporary-handoff-on-disable',
     );
     this.ensureButton();
@@ -104,10 +116,15 @@ class ChatGptTemporaryHandoffPlugin {
         childList: true,
         subtree: true,
         attributes: true,
-        attributeFilter: ['aria-label', 'aria-pressed', 'data-testid'],
+        attributeFilter: ['aria-label', 'aria-pressed', 'data-testid', 'title'],
       },
       (records) => {
-        if (this.mutationsTouchComposer(records)) this.tryResumePendingHandoff();
+        if (this.mutationsMountComposer(records)) {
+          this.attachmentPreviewResumeTriggered = false;
+          this.tryResumePendingHandoff();
+        } else if (this.mutationsTouchComposerForm(records)) {
+          this.tryResumeWhenAttachmentReady();
+        }
         if (this.mutationsTouchButtonMount(records)) this.scheduleRefresh();
       },
     );
@@ -115,6 +132,7 @@ class ChatGptTemporaryHandoffPlugin {
       () =>
         watchRouteChanges(() => {
           this.scheduleRefresh();
+          this.attachmentPreviewResumeTriggered = false;
           this.tryResumePendingHandoff();
         }),
       'watch-chatgpt-handoff-route',
@@ -131,16 +149,54 @@ class ChatGptTemporaryHandoffPlugin {
     );
   }
 
-  private mutationsTouchComposer(records: readonly MutationRecord[]): boolean {
-    return records.some((record) =>
-      [...record.addedNodes].some((node) => {
+  private mutationsMountComposer(records: readonly MutationRecord[]): boolean {
+    return records.some((record) => {
+      const mutationTarget =
+        record.target instanceof Element ? record.target : record.target.parentElement;
+      if (record.type === 'attributes' && mutationTarget?.matches(CHATGPT_COMPOSER_SELECTOR)) {
+        return true;
+      }
+      return [...record.addedNodes].some((node) => {
         if (!(node instanceof Element)) return false;
         return (
           node.matches(CHATGPT_COMPOSER_SELECTOR) ||
           node.querySelector(CHATGPT_COMPOSER_SELECTOR) !== null
         );
-      }),
-    );
+      });
+    });
+  }
+
+  private mutationsTouchComposerForm(records: readonly MutationRecord[]): boolean {
+    return records.some((record) => {
+      const target = record.target instanceof Element ? record.target : record.target.parentElement;
+      return Boolean(target?.closest('form')?.querySelector(CHATGPT_COMPOSER_SELECTOR));
+    });
+  }
+
+  private tryResumeWhenAttachmentReady(): void {
+    if (this.scope.isDisposed || this.attachmentPreviewResumeTriggered) return;
+    if (this.attachmentPreviewCheckInFlight) {
+      this.attachmentPreviewCheckRequested = true;
+      return;
+    }
+
+    this.attachmentPreviewCheckInFlight = true;
+    void (async () => {
+      try {
+        do {
+          this.attachmentPreviewCheckRequested = false;
+          if (await pendingAttachmentPreviewReady()) {
+            this.attachmentPreviewResumeTriggered = true;
+            this.tryResumePendingHandoff();
+            return;
+          }
+        } while (this.attachmentPreviewCheckRequested && !this.scope.isDisposed);
+      } catch (error) {
+        logger.warn('ChatGPT temporary handoff preview check failed', { error: String(error) });
+      } finally {
+        this.attachmentPreviewCheckInFlight = false;
+      }
+    })();
   }
 
   private mutationsTouchButtonMount(records: readonly MutationRecord[]): boolean {
@@ -261,6 +317,10 @@ class ChatGptTemporaryHandoffPlugin {
         showHandoffToast(this.scope, this.copy.notTemporary, 'error');
         return;
       }
+      if (hasCurrentComposerAttachments()) {
+        showHandoffToast(this.scope, this.copy.attachmentDraftUnsupported, 'error');
+        return;
+      }
 
       const expectedUrl = location.href;
       const progress = showHandoffProgress(operationScope, this.copy, () =>
@@ -278,8 +338,12 @@ class ChatGptTemporaryHandoffPlugin {
       }
 
       const plan = planHandoff(turns, this.language);
-      downloadHandoffBackup(plan.transcript, plan.backupFilename);
-      const result = await handoffTemporaryChat(operationScope, plan.delivery);
+      const preservedDraft = readCurrentComposerDraft();
+      downloadHandoffBackup(
+        buildHandoffBackup(plan.transcript, preservedDraft, this.language),
+        plan.backupFilename,
+      );
+      const result = await handoffTemporaryChat(operationScope, plan.delivery, preservedDraft);
       if (result === 'ready') showHandoffToast(this.scope, this.copy.ready);
       else if (result === 'leave-failed') {
         showHandoffToast(this.scope, this.copy.leaveFailed, 'error');

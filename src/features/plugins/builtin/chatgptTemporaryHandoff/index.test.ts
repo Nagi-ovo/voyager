@@ -6,15 +6,22 @@ import { activateChatGptTemporaryHandoff } from './index';
 
 const mocks = vi.hoisted(() => ({
   temporary: true,
+  unloading: false,
   getCurrentLanguage: vi.fn(),
   collectContainers: vi.fn(),
   buildTurns: vi.fn(),
   resolveAdapter: vi.fn(),
+  buildBackup: vi.fn(),
   downloadBackup: vi.fn(),
   handoff: vi.fn(),
+  hasAttachments: vi.fn(),
   plan: vi.fn(),
   resume: vi.fn(),
   discardPending: vi.fn(),
+  markUnloading: vi.fn(),
+  markActive: vi.fn(),
+  pendingPreviewReady: vi.fn(),
+  readDraft: vi.fn(),
 }));
 
 vi.mock('@/utils/i18n', () => ({
@@ -33,11 +40,24 @@ vi.mock('@/pages/content/export/adapter/platformAdapters', () => ({
 vi.mock('./handoff', () => ({
   CHATGPT_COMPOSER_SELECTOR: '#prompt-textarea',
   CHATGPT_TEMP_TOGGLE_SELECTOR: '[data-testid="temporary-chat-toggle"]',
+  buildHandoffBackup: mocks.buildBackup,
   discardPendingHandoff: mocks.discardPending,
   downloadHandoffBackup: mocks.downloadBackup,
   handoffTemporaryChat: mocks.handoff,
+  hasCurrentComposerAttachments: mocks.hasAttachments,
+  isHandoffPageUnloading: () => mocks.unloading,
   isTemporaryChat: () => mocks.temporary,
+  markHandoffPageUnloading: () => {
+    mocks.unloading = true;
+    mocks.markUnloading();
+  },
+  markHandoffPageActive: () => {
+    mocks.unloading = false;
+    mocks.markActive();
+  },
+  pendingAttachmentPreviewReady: mocks.pendingPreviewReady,
   planHandoff: mocks.plan,
+  readCurrentComposerDraft: mocks.readDraft,
   resumePendingHandoff: mocks.resume,
 }));
 
@@ -56,6 +76,7 @@ async function flush(): Promise<void> {
 
 beforeEach(() => {
   mocks.temporary = true;
+  mocks.unloading = false;
   mocks.getCurrentLanguage.mockResolvedValue('en');
   mocks.collectContainers.mockReturnValue([
     { id: 'user-1', role: 'user', sequence: 0, container: document.createElement('div') },
@@ -70,8 +91,12 @@ beforeEach(() => {
     delivery: { mode: 'inline', text: 'Continue' },
   });
   mocks.handoff.mockResolvedValue('ready');
+  mocks.hasAttachments.mockReturnValue(false);
+  mocks.buildBackup.mockReturnValue('## User\n\nQuestion\n\n## Unsent draft\n\nUnsent follow-up');
+  mocks.readDraft.mockReturnValue('Unsent follow-up');
   mocks.resume.mockResolvedValue(null);
   mocks.discardPending.mockResolvedValue(undefined);
+  mocks.pendingPreviewReady.mockResolvedValue(false);
 });
 
 afterEach(async () => {
@@ -95,6 +120,30 @@ describe('ChatGPT temporary handoff plugin', () => {
     await scope.dispose();
     expect(document.querySelector('[data-gv-chatgpt-handoff-button]')).toBeNull();
     expect(document.querySelector('[data-gv-chatgpt-handoff-owned]')).toBeNull();
+    expect(mocks.discardPending).toHaveBeenCalledOnce();
+  });
+
+  it('retains a pending handoff when disposal is caused by page navigation', async () => {
+    const scope = createScope();
+    await activateChatGptTemporaryHandoff(scope);
+
+    window.dispatchEvent(new Event('pagehide'));
+    await scope.dispose();
+
+    expect(mocks.markUnloading).toHaveBeenCalledOnce();
+    expect(mocks.discardPending).not.toHaveBeenCalled();
+  });
+
+  it('clears the navigation marker when a cached page is restored', async () => {
+    const scope = createScope();
+    await activateChatGptTemporaryHandoff(scope);
+
+    window.dispatchEvent(new Event('pagehide'));
+    window.dispatchEvent(new Event('pageshow'));
+    await scope.dispose();
+
+    expect(mocks.markUnloading).toHaveBeenCalledOnce();
+    expect(mocks.markActive).toHaveBeenCalledOnce();
     expect(mocks.discardPending).toHaveBeenCalledOnce();
   });
 
@@ -134,6 +183,20 @@ describe('ChatGPT temporary handoff plugin', () => {
 
     document.querySelector<HTMLButtonElement>('[data-gv-chatgpt-handoff-button]')?.click();
     await flush();
+    const attribution = document.querySelector<HTMLAnchorElement>(
+      '.gv-chatgpt-handoff-dialog-attribution',
+    );
+    expect(attribution?.textContent).toBe('Powered by ChatGPT Voyager');
+    expect(attribution?.href).toBe('https://github.com/TanChuping/chatgpt-voyager');
+    expect(attribution?.target).toBe('_blank');
+    expect(attribution?.rel).toContain('noopener');
+    expect(document.activeElement?.textContent).toBe('Cancel');
+    expect(document.querySelector('.gv-chatgpt-handoff-dialog-body')?.textContent).toContain(
+      'uploaded as a draft attachment',
+    );
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]');
+    const description = document.querySelector<HTMLElement>('.gv-chatgpt-handoff-dialog-body');
+    expect(dialog?.getAttribute('aria-describedby')).toBe(description?.id);
     document
       .querySelector<HTMLButtonElement>('.gv-chatgpt-handoff-dialog-button--primary')
       ?.click();
@@ -143,11 +206,71 @@ describe('ChatGPT temporary handoff plugin', () => {
       signal: expect.any(AbortSignal),
       expectedUrl: location.href,
     });
-    expect(mocks.downloadBackup).toHaveBeenCalledWith('## User\n\nQuestion', 'unique.md');
+    expect(mocks.buildBackup).toHaveBeenCalledWith('## User\n\nQuestion', 'Unsent follow-up', 'en');
+    expect(mocks.downloadBackup).toHaveBeenCalledWith(
+      '## User\n\nQuestion\n\n## Unsent draft\n\nUnsent follow-up',
+      'unique.md',
+    );
     expect(mocks.handoff).toHaveBeenCalledWith(
       expect.any(PluginScope),
       expect.objectContaining({ mode: 'inline', text: 'Continue' }),
+      'Unsent follow-up',
     );
     expect(document.querySelectorAll('[data-gv-chatgpt-handoff-button]')).toHaveLength(1);
+  });
+
+  it('keeps temporary mode open when the unsent draft still has an attachment', async () => {
+    mocks.hasAttachments.mockReturnValue(true);
+    const scope = createScope();
+    await activateChatGptTemporaryHandoff(scope);
+
+    document.querySelector<HTMLButtonElement>('[data-gv-chatgpt-handoff-button]')?.click();
+    await flush();
+    document
+      .querySelector<HTMLButtonElement>('.gv-chatgpt-handoff-dialog-button--primary')
+      ?.click();
+
+    await vi.waitFor(() =>
+      expect(document.querySelector('.gv-chatgpt-handoff-toast')?.textContent).toContain(
+        'attached file or image',
+      ),
+    );
+    expect(mocks.buildTurns).not.toHaveBeenCalled();
+    expect(mocks.handoff).not.toHaveBeenCalled();
+  });
+
+  it('retries a pending handoff when a late attachment preview mounts in the composer', async () => {
+    mocks.temporary = false;
+    const form = document.createElement('form');
+    form.dataset.type = 'unified-composer';
+    const composer = document.createElement('div');
+    composer.id = 'prompt-textarea';
+    composer.contentEditable = 'true';
+    composer.setAttribute('role', 'textbox');
+    form.appendChild(composer);
+    document.body.appendChild(form);
+
+    const scope = createScope();
+    await activateChatGptTemporaryHandoff(scope);
+    await vi.waitFor(() => expect(mocks.resume).toHaveBeenCalledOnce());
+    mocks.resume.mockClear();
+
+    const placeholder = document.createElement('div');
+    placeholder.dataset.testid = 'attachment-placeholder';
+    form.appendChild(placeholder);
+    await vi.waitFor(() => expect(mocks.pendingPreviewReady).toHaveBeenCalled());
+    expect(mocks.resume).not.toHaveBeenCalled();
+
+    mocks.pendingPreviewReady.mockResolvedValue(true);
+    const preview = document.createElement('div');
+    preview.dataset.testid = 'attachment-preview';
+    preview.textContent = 'late-transcript.md';
+    form.appendChild(preview);
+
+    await vi.waitFor(() => expect(mocks.resume).toHaveBeenCalledOnce());
+
+    composer.appendChild(document.createTextNode('delivery mutation'));
+    await flush();
+    expect(mocks.resume).toHaveBeenCalledOnce();
   });
 });

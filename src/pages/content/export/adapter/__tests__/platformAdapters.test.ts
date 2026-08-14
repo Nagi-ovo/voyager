@@ -5,6 +5,7 @@ import { DOMContentExtractor } from '@/features/export/services/DOMContentExtrac
 import {
   chatgptExtractFormula,
   chatgptExtractInlineFormula,
+  chatgptExtractUserText,
   resolveExportAdapter,
 } from '../platformAdapters';
 
@@ -49,6 +50,16 @@ describe('Gemini export adapter contract', () => {
 });
 
 describe('ChatGPT export adapter HTML safety', () => {
+  it('preserves line breaks in multiline user prompts', () => {
+    const message = document.createElement('div');
+    message.innerHTML = '<div>First line<br>Second line</div><p>Third paragraph</p>';
+    const text: string[] = [];
+
+    chatgptExtractUserText(message.querySelectorAll('.query-text-line'), text, message);
+
+    expect(text).toEqual(['First line\nSecond line\nThird paragraph']);
+  });
+
   it('escapes block formula source in attribute context', () => {
     const wrapper = document.createElement('div');
     wrapper.setAttribute('data-math-source', 'x" onpointerover="alert(1)');

@@ -3,18 +3,30 @@ import browser from 'webextension-polyfill';
 
 import type { ChatTurn } from '@/features/export/types/export';
 import { PluginScope } from '@/features/plugins/runtime/pluginScope';
+import { APP_LANGUAGES } from '@/utils/language';
 
 import {
+  type HandoffDelivery,
   PENDING_HANDOFF_KEY,
   PENDING_HANDOFF_TAB_KEY,
+  buildHandoffBackup,
   buildHandoffTranscript,
   createHandoffFilename,
+  discardPendingHandoff,
   getChatGptNewChatPath,
   handoffTemporaryChat,
+  hasCurrentComposerAttachments,
   isTemporaryChat,
+  markHandoffPageActive,
+  markHandoffPageUnloading,
   planHandoff,
   resumePendingHandoff,
 } from './handoff';
+import { getTemporaryHandoffCopy } from './i18n';
+import {
+  CHATGPT_HANDOFF_CANCEL_EXPIRY_MESSAGE,
+  CHATGPT_HANDOFF_SCHEDULE_EXPIRY_MESSAGE,
+} from './storage';
 
 const storageState = vi.hoisted(() => new Map<string, unknown>());
 
@@ -34,6 +46,9 @@ vi.mock('webextension-polyfill', () => ({
           for (const [key, value] of Object.entries(items)) storageState.set(key, value);
         }),
       },
+    },
+    runtime: {
+      sendMessage: vi.fn(async () => ({ ok: true })),
     },
   },
 }));
@@ -55,13 +70,19 @@ function pendingEntryCount(): number {
 }
 
 function seedPending(
-  delivery: { mode: 'inline'; text: string },
+  delivery: HandoffDelivery,
   storedAt = Date.now(),
   accountScope = 'route:default',
+  draft?: string,
 ): void {
   const token = 'test-tab-token';
   sessionStorage.setItem(PENDING_HANDOFF_TAB_KEY, token);
-  storageState.set(`${PENDING_HANDOFF_KEY}:${token}`, { delivery, storedAt, accountScope });
+  storageState.set(`${PENDING_HANDOFF_KEY}:${token}`, {
+    delivery,
+    storedAt,
+    accountScope,
+    ...(draft ? { draft } : {}),
+  });
 }
 
 function createScope(): PluginScope {
@@ -108,6 +129,7 @@ afterEach(async () => {
   await Promise.all(scopes.splice(0).map((scope) => scope.dispose()));
   document.body.replaceChildren();
   history.replaceState({}, '', '/');
+  markHandoffPageActive();
   sessionStorage.clear();
   storageState.clear();
   vi.useRealTimers();
@@ -131,6 +153,10 @@ describe('temporary chat handoff', () => {
   it('keeps the active account prefix in fallback new-chat navigation', () => {
     history.replaceState({}, '', '/u/12/c/example');
     expect(getChatGptNewChatPath()).toBe('/u/12/');
+    history.replaceState({}, '', '/g/g-example/c/example');
+    expect(getChatGptNewChatPath()).toBe('/g/g-example/');
+    history.replaceState({}, '', '/u/12/g/g-example/c/example');
+    expect(getChatGptNewChatPath()).toBe('/u/12/g/g-example/');
     history.replaceState({}, '', '/c/example');
     expect(getChatGptNewChatPath()).toBe('/');
   });
@@ -142,12 +168,78 @@ describe('temporary chat handoff', () => {
 
     const chinese = planHandoff(turns, 'zh', 'zh.md');
     const english = planHandoff(turns, 'en', 'en.md');
+    const japanese = planHandoff(turns, 'ja', 'ja.md');
     expect(chinese.delivery.mode).toBe('inline');
     expect(english.delivery.mode).toBe('inline');
     if (chinese.delivery.mode === 'inline' && english.delivery.mode === 'inline') {
       expect(chinese.delivery.text).toContain('[从临时对话继续]');
       expect(english.delivery.text).toContain('[Continue from a temporary chat]');
     }
+    expect(japanese.transcript).toContain('## ユーザー\n\nFirst question');
+    if (japanese.delivery.mode === 'inline') {
+      expect(japanese.delivery.text).toContain('[一時チャットから続ける]');
+      expect(japanese.delivery.text).toContain('--- 会話記録 開始 ---');
+    }
+  });
+
+  it('includes an unsent draft in the downloaded backup without adding it to the handoff transcript', () => {
+    const transcript = '## User\n\nQuestion\n\n## ChatGPT\n\nAnswer';
+    const backup = buildHandoffBackup(transcript, 'Unsent follow-up', 'en');
+
+    expect(backup).toBe(`${transcript}\n\n## Unsent draft\n\nUnsent follow-up`);
+    expect(buildHandoffBackup(transcript, '   ', 'en')).toBe(transcript);
+    expect(buildHandoffBackup(transcript, '待发送内容', 'zh')).toContain('## 未发送草稿');
+    expect(buildHandoffBackup(transcript, '待傳送內容', 'zh_TW')).toContain('## 未傳送草稿');
+  });
+
+  it('localizes every user-visible handoff artifact in all supported languages', () => {
+    const shortTurns = [turn('Question', 'Answer')];
+    const longTurns = [turn('x'.repeat(5_100))];
+    const titles = new Set<string>();
+    const draftWarnings = new Set<string>();
+
+    for (const language of APP_LANGUAGES) {
+      const copy = getTemporaryHandoffCopy(language);
+      const inline = planHandoff(shortTurns, language, `${language}-inline.md`);
+      const attachment = planHandoff(longTurns, language, `${language}-attachment.md`);
+      expect(inline.transcript).toContain(`## ${copy.userRole}\n\nQuestion`);
+      expect(inline.delivery.mode).toBe('inline');
+      if (inline.delivery.mode === 'inline') {
+        expect(inline.delivery.text).toContain(copy.handoffTitle);
+        expect(inline.delivery.text).toContain(copy.inlineInstruction);
+        expect(inline.delivery.text).toContain(copy.transcriptStart);
+        expect(inline.delivery.text).toContain(copy.transcriptEnd);
+      }
+      expect(attachment.delivery.mode).toBe('attachment');
+      if (attachment.delivery.mode === 'attachment') {
+        expect(attachment.delivery.directive).toContain(copy.handoffTitle);
+        expect(attachment.delivery.directive).toContain(copy.attachmentInstruction);
+      }
+      expect(buildHandoffBackup(inline.transcript, 'Draft', language)).toContain(
+        `## ${copy.unsentDraftHeading}`,
+      );
+      titles.add(copy.handoffTitle);
+      draftWarnings.add(copy.attachmentDraftUnsupported);
+    }
+
+    expect(titles.size).toBe(APP_LANGUAGES.length);
+    expect(draftWarnings.size).toBe(APP_LANGUAGES.length);
+  });
+
+  it('detects a native attachment preview in the live composer draft', () => {
+    const form = document.createElement('form');
+    const composer = document.createElement('div');
+    composer.id = 'prompt-textarea';
+    composer.contentEditable = 'true';
+    composer.setAttribute('role', 'textbox');
+    form.appendChild(composer);
+    document.body.appendChild(form);
+
+    expect(hasCurrentComposerAttachments()).toBe(false);
+    const preview = document.createElement('div');
+    preview.dataset.testid = 'attachment-preview';
+    form.appendChild(preview);
+    expect(hasCurrentComposerAttachments()).toBe(true);
   });
 
   it('gives separate handoffs unique filenames even at the same instant', () => {
@@ -182,12 +274,18 @@ describe('temporary chat handoff', () => {
     expect(getComposer()?.textContent).toContain('Continue this transcript');
     expect(pendingEntryCount()).toBe(0);
     expect(sessionStorage.getItem(PENDING_HANDOFF_TAB_KEY)).toBeNull();
+    expect(browser.runtime.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: CHATGPT_HANDOFF_SCHEDULE_EXPIRY_MESSAGE }),
+    );
+    expect(browser.runtime.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: CHATGPT_HANDOFF_CANCEL_EXPIRY_MESSAGE }),
+    );
   });
 
   it('accepts a reused composer node and verifies multiline content by rendered text', async () => {
     const scope = createScope();
     history.replaceState({}, '', '/?temporary-chat=true');
-    const composer = addComposer();
+    const composer = addComposer('Unsent follow-up');
     const toggle = document.createElement('button');
     toggle.dataset.testid = 'temporary-chat-toggle';
     toggle.setAttribute('aria-label', 'Close temporary chat');
@@ -203,6 +301,9 @@ describe('temporary chat handoff', () => {
 
     expect(composer.textContent).toContain('First line');
     expect(composer.textContent).toContain('Third line');
+    expect(composer.textContent.indexOf('First line')).toBeLessThan(
+      composer.textContent.indexOf('Unsent follow-up'),
+    );
     expect(pendingEntryCount()).toBe(0);
   });
 
@@ -245,6 +346,39 @@ describe('temporary chat handoff', () => {
     expect(sessionStorage.getItem(PENDING_HANDOFF_TAB_KEY)).toBeNull();
   });
 
+  it('keeps the expiry alarm when pending storage deletion fails', async () => {
+    seedPending({ mode: 'inline', text: 'Delete me later' });
+    const storageKey = currentPendingStorageKey()!;
+    vi.mocked(browser.storage.local.remove).mockRejectedValueOnce(new Error('storage busy'));
+
+    await discardPendingHandoff();
+
+    expect(browser.runtime.sendMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: CHATGPT_HANDOFF_CANCEL_EXPIRY_MESSAGE }),
+    );
+    expect(storageState.has(storageKey)).toBe(true);
+  });
+
+  it('does not leave temporary mode when durable expiry scheduling fails', async () => {
+    const scope = createScope();
+    history.replaceState({}, '', '/?temporary-chat=true');
+    addComposer();
+    const toggle = document.createElement('button');
+    toggle.dataset.testid = 'temporary-chat-toggle';
+    toggle.setAttribute('aria-label', 'Close temporary chat');
+    const click = vi.spyOn(toggle, 'click');
+    document.body.appendChild(toggle);
+    vi.mocked(browser.runtime.sendMessage).mockResolvedValueOnce({ ok: false });
+
+    await expect(
+      handoffTemporaryChat(scope, { mode: 'inline', text: 'Keep this private' }),
+    ).resolves.toBe('storage-failed');
+
+    expect(click).not.toHaveBeenCalled();
+    expect(pendingEntryCount()).toBe(0);
+    expect(sessionStorage.getItem(PENDING_HANDOFF_TAB_KEY)).toBeNull();
+  });
+
   it('preserves pending delivery when the normal composer mounts after the wait budget', async () => {
     vi.useFakeTimers();
     const scope = createScope();
@@ -274,8 +408,77 @@ describe('temporary chat handoff', () => {
     expect(storedPending()).toBeDefined();
 
     const normalComposer = addComposer();
-    await expect(resumePendingHandoff(scope)).resolves.toBe('ready');
+    const resume = resumePendingHandoff(scope);
+    await vi.advanceTimersByTimeAsync(800);
+    await expect(resume).resolves.toBe('ready');
     expect(normalComposer.textContent).toContain('Deliver after a slow mount');
+    expect(pendingEntryCount()).toBe(0);
+  });
+
+  it('restores an unsent temporary-chat draft after the new-chat fallback replaces the composer', async () => {
+    vi.useFakeTimers();
+    const scope = createScope();
+    history.replaceState({}, '', '/?temporary-chat=true');
+    const temporaryComposer = addComposer('Unsent follow-up');
+    let normalComposer: HTMLElement | null = null;
+    const newChat = document.createElement('a');
+    newChat.dataset.testid = 'create-new-chat-button';
+    newChat.href = '/';
+    newChat.addEventListener('click', (event) => {
+      event.preventDefault();
+      history.replaceState({}, '', '/');
+      temporaryComposer.remove();
+      normalComposer = addComposer();
+    });
+    document.body.appendChild(newChat);
+
+    const handoff = handoffTemporaryChat(scope, {
+      mode: 'inline',
+      text: 'Continue the saved transcript',
+    });
+    await vi.advanceTimersByTimeAsync(900);
+
+    await expect(handoff).resolves.toBe('ready');
+    const mountedComposer = document.querySelector<HTMLElement>('#prompt-textarea');
+    expect(mountedComposer).toBe(normalComposer);
+    expect(mountedComposer?.textContent).toContain('Continue the saved transcript');
+    expect(mountedComposer?.textContent).toContain('Unsent follow-up');
+    expect(mountedComposer!.textContent.indexOf('Continue the saved transcript')).toBeLessThan(
+      mountedComposer!.textContent.indexOf('Unsent follow-up'),
+    );
+    expect(pendingEntryCount()).toBe(0);
+  });
+
+  it('redelivers when ChatGPT replaces the accepted composer shortly after insertion', async () => {
+    vi.useFakeTimers();
+    const scope = createScope();
+    history.replaceState({}, '', '/?temporary-chat=true');
+    const staleComposer = addComposer('Unsent follow-up');
+    let replacement: HTMLElement | null = null;
+    const toggle = document.createElement('button');
+    toggle.dataset.testid = 'temporary-chat-toggle';
+    toggle.setAttribute('aria-label', 'Close temporary chat');
+    toggle.addEventListener('click', () => {
+      history.replaceState({}, '', '/');
+      toggle.remove();
+      window.setTimeout(() => {
+        staleComposer.remove();
+        replacement = addComposer();
+      }, 350);
+    });
+    document.body.appendChild(toggle);
+
+    const handoff = handoffTemporaryChat(scope, {
+      mode: 'inline',
+      text: 'Continue the stable transcript',
+    });
+    await vi.advanceTimersByTimeAsync(1_200);
+
+    await expect(handoff).resolves.toBe('ready');
+    const settledComposer = document.querySelector<HTMLElement>('#prompt-textarea');
+    expect(settledComposer).toBe(replacement);
+    expect(settledComposer?.textContent).toContain('Continue the stable transcript');
+    expect(settledComposer?.textContent).toContain('Unsent follow-up');
     expect(pendingEntryCount()).toBe(0);
   });
 
@@ -337,6 +540,81 @@ describe('temporary chat handoff', () => {
     expect(composer.textContent).toContain('Recovered handoff');
   });
 
+  it('restores a short draft as its own segment instead of matching an unrelated substring', async () => {
+    const composer = addComposer('data');
+    seedPending({ mode: 'inline', text: 'Recovered handoff' }, Date.now(), 'route:default', 'a');
+
+    await expect(resumePendingHandoff(createScope())).resolves.toBe('ready');
+
+    expect(composer.textContent).toContain('data');
+    expect(composer.textContent).toContain('Recovered handoff');
+    expect(composer.lastChild?.textContent).toBe('a');
+  });
+
+  it('finishes attachment delivery in the live composer when ChatGPT replaces the editor', async () => {
+    class TestDataTransfer {
+      private readonly transferredFiles: File[] = [];
+      readonly items = {
+        add: (file: File) => {
+          this.transferredFiles.push(file);
+        },
+      };
+      readonly setData = vi.fn();
+      get files(): File[] {
+        return this.transferredFiles;
+      }
+    }
+    class TestClipboardEvent extends Event {
+      readonly clipboardData: TestDataTransfer;
+      constructor(type: string, init: EventInit & { clipboardData: TestDataTransfer }) {
+        super(type, init);
+        this.clipboardData = init.clipboardData;
+      }
+    }
+    vi.stubGlobal('DataTransfer', TestDataTransfer);
+    vi.stubGlobal('ClipboardEvent', TestClipboardEvent);
+
+    const oldForm = document.createElement('form');
+    const oldComposer = document.createElement('div');
+    oldComposer.id = 'prompt-textarea';
+    oldComposer.contentEditable = 'true';
+    oldComposer.setAttribute('role', 'textbox');
+    oldForm.appendChild(oldComposer);
+    document.body.appendChild(oldForm);
+
+    oldComposer.addEventListener('paste', () => {
+      oldForm.remove();
+      const liveForm = document.createElement('form');
+      const replacement = document.createElement('div');
+      replacement.id = 'prompt-textarea';
+      replacement.contentEditable = 'true';
+      replacement.setAttribute('role', 'textbox');
+      const preview = document.createElement('div');
+      preview.dataset.testid = 'attachment-preview';
+      preview.textContent = 'handoff.md';
+      liveForm.append(replacement, preview);
+      document.body.appendChild(liveForm);
+    });
+    seedPending(
+      {
+        mode: 'attachment',
+        directive: 'Read the saved handoff',
+        attachment: '# Transcript',
+        filename: 'handoff.md',
+      },
+      Date.now(),
+      'route:default',
+      'Unsent follow-up',
+    );
+
+    await expect(resumePendingHandoff(createScope())).resolves.toBe('ready');
+
+    const liveComposer = document.querySelector<HTMLElement>('#prompt-textarea');
+    expect(oldComposer.isConnected).toBe(false);
+    expect(liveComposer?.textContent).toContain('Read the saved handoff');
+    expect(liveComposer?.lastChild?.textContent).toBe('Unsent follow-up');
+  });
+
   it('removes an expired pending payload without touching the composer', async () => {
     const composer = addComposer('Current draft');
     seedPending({ mode: 'inline', text: 'Expired handoff' }, Date.now() - 60_001);
@@ -346,29 +624,6 @@ describe('temporary chat handoff', () => {
     expect(composer.textContent).toBe('Current draft');
     expect(pendingEntryCount()).toBe(0);
     expect(sessionStorage.getItem(PENDING_HANDOFF_TAB_KEY)).toBeNull();
-  });
-
-  it('sweeps an expired orphan after its tab-scoped token is lost', async () => {
-    const expiredKey = `${PENDING_HANDOFF_KEY}:closed-tab`;
-    const freshKey = `${PENDING_HANDOFF_KEY}:other-live-tab`;
-    const delivery = { mode: 'inline' as const, text: 'Private transcript' };
-    storageState.set(expiredKey, {
-      delivery,
-      storedAt: Date.now() - 60_001,
-      accountScope: 'route:default',
-    });
-    storageState.set(freshKey, {
-      delivery,
-      storedAt: Date.now(),
-      accountScope: 'route:default',
-    });
-
-    expect(sessionStorage.getItem(PENDING_HANDOFF_TAB_KEY)).toBeNull();
-    await expect(resumePendingHandoff(createScope())).resolves.toBeNull();
-
-    expect(storageState.has(expiredKey)).toBe(false);
-    expect(storageState.has(freshKey)).toBe(true);
-    expect(browser.storage.local.remove).toHaveBeenCalledWith([expiredKey]);
   });
 
   it('clears pending state when plugin disposal cancels a live handoff', async () => {
@@ -387,6 +642,61 @@ describe('temporary chat handoff', () => {
     await expect(handoff).rejects.toMatchObject({ name: 'AbortError' });
     await disposal;
     expect(pendingEntryCount()).toBe(0);
+  });
+
+  it('retains pending state when page unload aborts a live handoff', async () => {
+    vi.useFakeTimers();
+    const scope = createScope();
+    history.replaceState({}, '', '/?temporary-chat=true');
+    addComposer('Unsent draft');
+    const toggle = document.createElement('button');
+    toggle.dataset.testid = 'temporary-chat-toggle';
+    toggle.setAttribute('aria-label', 'Close temporary chat');
+    document.body.appendChild(toggle);
+
+    const handoff = handoffTemporaryChat(scope, { mode: 'inline', text: 'Resume after reload' });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(pendingEntryCount()).toBe(1);
+
+    markHandoffPageUnloading();
+    const rejected = expect(handoff).rejects.toMatchObject({ name: 'AbortError' });
+    await scope.dispose();
+    await rejected;
+
+    expect(pendingEntryCount()).toBe(1);
+    expect(storedPending()).toMatchObject({ draft: 'Unsent draft' });
+    await vi.advanceTimersByTimeAsync(0);
+  });
+
+  it('retains pending state when unload happens before the storage write resolves', async () => {
+    const scope = createScope();
+    history.replaceState({}, '', '/?temporary-chat=true');
+    addComposer('Deferred draft');
+    const toggle = document.createElement('button');
+    toggle.dataset.testid = 'temporary-chat-toggle';
+    toggle.setAttribute('aria-label', 'Close temporary chat');
+    document.body.appendChild(toggle);
+
+    let finishWrite!: () => void;
+    vi.mocked(browser.storage.local.set).mockImplementationOnce(
+      (items) =>
+        new Promise<void>((resolve) => {
+          finishWrite = () => {
+            for (const [key, value] of Object.entries(items)) storageState.set(key, value);
+            resolve();
+          };
+        }),
+    );
+
+    const handoff = handoffTemporaryChat(scope, { mode: 'inline', text: 'Resume after reload' });
+    await vi.waitFor(() => expect(finishWrite).toBeTypeOf('function'));
+    markHandoffPageUnloading();
+    await scope.dispose();
+    finishWrite();
+
+    await expect(handoff).rejects.toMatchObject({ name: 'AbortError' });
+    expect(pendingEntryCount()).toBe(1);
+    expect(storedPending()).toMatchObject({ draft: 'Deferred draft' });
   });
 
   it('clears pending state when plugin disposal cancels a resume', async () => {

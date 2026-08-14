@@ -2,6 +2,10 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
+import {
+  CHATGPT_HANDOFF_CANCEL_EXPIRY_MESSAGE,
+  CHATGPT_HANDOFF_SCHEDULE_EXPIRY_MESSAGE,
+} from '@/features/plugins/builtin/chatgptTemporaryHandoff/storage';
 import { PLUGIN_CONTENT_SCRIPT_SYNC_MESSAGE } from '@/features/plugins/runtime/messages';
 
 import { isHandledBackgroundRuntimeMessage } from '../runtimeMessageRouting';
@@ -12,6 +16,12 @@ describe('background runtime message routing', () => {
     expect(isHandledBackgroundRuntimeMessage({ type: 'gv.highlight.list' })).toBe(true);
     expect(isHandledBackgroundRuntimeMessage({ type: 'gv.sync.upload' })).toBe(true);
     expect(isHandledBackgroundRuntimeMessage({ type: PLUGIN_CONTENT_SCRIPT_SYNC_MESSAGE })).toBe(
+      true,
+    );
+    expect(
+      isHandledBackgroundRuntimeMessage({ type: CHATGPT_HANDOFF_SCHEDULE_EXPIRY_MESSAGE }),
+    ).toBe(true);
+    expect(isHandledBackgroundRuntimeMessage({ type: CHATGPT_HANDOFF_CANCEL_EXPIRY_MESSAGE })).toBe(
       true,
     );
 

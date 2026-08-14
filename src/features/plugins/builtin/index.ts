@@ -259,11 +259,11 @@ export const BUILTIN_PLUGINS: readonly PluginManifest[] = [
     description: 'Save a temporary ChatGPT conversation and continue it safely in a normal chat.',
     i18n: {
       zh: {
-        name: 'ChatGPT · 临时对话续接',
+        name: 'ChatGPT · 临时对话反悔',
         description: '保存临时 ChatGPT 对话，并安全地转到普通聊天继续。',
       },
       zh_TW: {
-        name: 'ChatGPT · 暫時對話續接',
+        name: 'ChatGPT · 暫時對話反悔',
         description: '儲存暫時 ChatGPT 對話，並安全地轉到一般聊天繼續。',
       },
       ja: {

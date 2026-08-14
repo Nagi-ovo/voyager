@@ -70,12 +70,30 @@ export const CHATGPT_TEMPORARY_HANDOFF_CSS = `
   }
   .gv-chatgpt-handoff-dialog-footer {
     display: flex;
+    align-items: center;
     justify-content: flex-end;
     gap: 9px;
     padding: 14px 24px;
     border-top: 1px solid rgba(0, 0, 0, 0.09);
   }
+  .gv-chatgpt-handoff-dialog-attribution {
+    min-width: 0;
+    margin-inline-end: auto;
+    overflow: hidden;
+    color: #6b7280;
+    font: 400 11px/1.4 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    text-decoration: none;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .gv-chatgpt-handoff-dialog-attribution:hover { color: #4b5563; }
+  .gv-chatgpt-handoff-dialog-attribution:focus-visible {
+    border-radius: 3px;
+    outline: 1px solid currentColor;
+    outline-offset: 3px;
+  }
   .gv-chatgpt-handoff-dialog-button {
+    flex: none;
     min-height: 38px;
     padding: 8px 15px;
     border: 1px solid rgba(0, 0, 0, 0.13);
@@ -83,6 +101,7 @@ export const CHATGPT_TEMPORARY_HANDOFF_CSS = `
     color: inherit;
     background: transparent;
     font: inherit;
+    white-space: nowrap;
     cursor: pointer;
   }
   .gv-chatgpt-handoff-dialog-button:hover { background: #f3f4f6; }
@@ -127,6 +146,31 @@ export const CHATGPT_TEMPORARY_HANDOFF_CSS = `
     color: #f5f5f5;
     background: #212121;
   }
+  html.dark .gv-chatgpt-handoff-dialog-body,
+  html.dark-theme .gv-chatgpt-handoff-dialog-body,
+  body.dark-theme .gv-chatgpt-handoff-dialog-body,
+  [data-theme='dark'] .gv-chatgpt-handoff-dialog-body { color: #a3a3a3; }
+  html.dark .gv-chatgpt-handoff-dialog-attribution,
+  html.dark-theme .gv-chatgpt-handoff-dialog-attribution,
+  body.dark-theme .gv-chatgpt-handoff-dialog-attribution,
+  [data-theme='dark'] .gv-chatgpt-handoff-dialog-attribution { color: #8b8b8b; }
+  html.dark .gv-chatgpt-handoff-dialog-attribution:hover,
+  html.dark-theme .gv-chatgpt-handoff-dialog-attribution:hover,
+  body.dark-theme .gv-chatgpt-handoff-dialog-attribution:hover,
+  [data-theme='dark'] .gv-chatgpt-handoff-dialog-attribution:hover { color: #d4d4d4; }
+  html.dark .gv-chatgpt-handoff-dialog-footer,
+  html.dark-theme .gv-chatgpt-handoff-dialog-footer,
+  body.dark-theme .gv-chatgpt-handoff-dialog-footer,
+  [data-theme='dark'] .gv-chatgpt-handoff-dialog-footer {
+    border-top-color: rgba(255, 255, 255, 0.1);
+  }
+  html.dark .gv-chatgpt-handoff-dialog-button:not(.gv-chatgpt-handoff-dialog-button--primary),
+  html.dark-theme .gv-chatgpt-handoff-dialog-button:not(.gv-chatgpt-handoff-dialog-button--primary),
+  body.dark-theme .gv-chatgpt-handoff-dialog-button:not(.gv-chatgpt-handoff-dialog-button--primary),
+  [data-theme='dark']
+    .gv-chatgpt-handoff-dialog-button:not(.gv-chatgpt-handoff-dialog-button--primary) {
+    border-color: rgba(255, 255, 255, 0.14);
+  }
   html.dark .gv-chatgpt-handoff-dialog-button:hover,
   html.dark-theme .gv-chatgpt-handoff-dialog-button:hover,
   body.dark-theme .gv-chatgpt-handoff-dialog-button:hover,
@@ -145,6 +189,14 @@ export const CHATGPT_TEMPORARY_HANDOFF_CSS = `
     .gv-chatgpt-handoff-button-label { display: none; }
     .gv-chatgpt-handoff-dialog-title { padding: 18px 18px 8px; }
     .gv-chatgpt-handoff-dialog-body { padding: 0 18px 18px; }
-    .gv-chatgpt-handoff-dialog-footer { padding: 12px 18px; }
+    .gv-chatgpt-handoff-dialog-footer { flex-wrap: wrap; padding: 12px 18px; }
+    .gv-chatgpt-handoff-dialog-attribution { font-size: 10px; }
+    .gv-chatgpt-handoff-dialog-attribution-prefix { display: none; }
+  }
+  @media (max-width: 400px) {
+    .gv-chatgpt-handoff-dialog-attribution {
+      flex-basis: 100%;
+      margin-inline-end: 0;
+    }
   }
 `;

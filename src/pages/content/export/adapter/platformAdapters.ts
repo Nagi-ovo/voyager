@@ -13,7 +13,11 @@ import type { ExportPlatformAdapter } from './platform/contract';
 import { buildGeminiAdapter } from './platform/gemini';
 
 export type { ExportPlatformAdapter } from './platform/contract';
-export { chatgptExtractFormula, chatgptExtractInlineFormula } from './platform/chatgpt';
+export {
+  chatgptExtractFormula,
+  chatgptExtractInlineFormula,
+  chatgptExtractUserText,
+} from './platform/chatgpt';
 
 type ExportAdapterFactory = (site: SiteAdapter) => ExportPlatformAdapter;
 

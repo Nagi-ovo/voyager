@@ -55,7 +55,8 @@ describe('BUILTIN_PLUGINS', () => {
     expect(handoff?.matches).toEqual(['https://chatgpt.com/*', 'https://chat.openai.com/*']);
     expect(handoff?.contributes.styles ?? []).toEqual([]);
     expect(handoff?.contributes.domOps ?? []).toEqual([]);
-    expect(handoff?.i18n?.zh?.name).toBe('ChatGPT · 临时对话续接');
+    expect(handoff?.i18n?.zh?.name).toBe('ChatGPT · 临时对话反悔');
+    expect(handoff?.i18n?.zh_TW?.name).toBe('ChatGPT · 暫時對話反悔');
     expect(handoff?.id).not.toBe('voyager.chatgpt-export');
   });
 

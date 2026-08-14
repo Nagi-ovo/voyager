@@ -5,6 +5,18 @@ import { type Dispose, PluginScope } from '@/features/plugins/runtime/pluginScop
 import { insertTextIntoChatInput } from '@/pages/content/chatInput';
 import type { AppLanguage } from '@/utils/language';
 
+import { getTemporaryHandoffCopy } from './i18n';
+import {
+  CHATGPT_HANDOFF_CANCEL_EXPIRY_MESSAGE,
+  CHATGPT_HANDOFF_SCHEDULE_EXPIRY_MESSAGE,
+  PENDING_HANDOFF_KEY,
+  PENDING_HANDOFF_STORAGE_PREFIX,
+  PENDING_HANDOFF_TAB_KEY,
+  PENDING_HANDOFF_TTL_MS,
+} from './storage';
+
+export { PENDING_HANDOFF_KEY, PENDING_HANDOFF_TAB_KEY } from './storage';
+
 export type HandoffDelivery =
   | { readonly mode: 'inline'; readonly text: string }
   | {
@@ -22,6 +34,7 @@ export interface HandoffPlan {
 
 interface PendingHandoff {
   readonly delivery: HandoffDelivery;
+  readonly draft?: string;
   readonly storedAt: number;
   readonly accountScope: string;
 }
@@ -58,13 +71,22 @@ export const CHATGPT_COMPOSER_SELECTOR = [
 ].join(',');
 const NEW_CHAT_SELECTOR =
   'a[data-testid="create-new-chat-button"], a[href="/"][data-testid*="new" i]';
-export const PENDING_HANDOFF_KEY = 'gv-chatgpt-temporary-handoff-pending';
-export const PENDING_HANDOFF_TAB_KEY = 'gv-chatgpt-temporary-handoff-tab';
-const PENDING_HANDOFF_STORAGE_PREFIX = `${PENDING_HANDOFF_KEY}:`;
-const PENDING_TTL_MS = 60_000;
 const INLINE_THRESHOLD = 5_000;
 let activeHandoffOperations = 0;
 let fallbackFilenameSequence = 0;
+let pageUnloading = false;
+
+export function markHandoffPageUnloading(): void {
+  pageUnloading = true;
+}
+
+export function markHandoffPageActive(): void {
+  pageUnloading = false;
+}
+
+export function isHandoffPageUnloading(): boolean {
+  return pageUnloading;
+}
 
 function abortError(): DOMException {
   return new DOMException('Temporary chat handoff cancelled', 'AbortError');
@@ -114,15 +136,29 @@ function turnContent(turn: ChatTurn, role: 'user' | 'assistant'): string {
   return (turn.assistantContent?.text || turn.assistant || '').trim();
 }
 
-export function buildHandoffTranscript(turns: readonly ChatTurn[]): string {
+export function buildHandoffTranscript(
+  turns: readonly ChatTurn[],
+  language: AppLanguage = 'en',
+): string {
+  const copy = getTemporaryHandoffCopy(language);
   const sections: string[] = [];
   for (const turn of turns) {
     const user = turnContent(turn, 'user');
     const assistant = turnContent(turn, 'assistant');
-    if (user) sections.push(`## User\n\n${user}`);
+    if (user) sections.push(`## ${copy.userRole}\n\n${user}`);
     if (assistant) sections.push(`## ChatGPT\n\n${assistant}`);
   }
   return sections.join('\n\n');
+}
+
+export function buildHandoffBackup(
+  transcript: string,
+  draft: string | undefined,
+  language: AppLanguage = 'en',
+): string {
+  if (!draft?.trim()) return transcript;
+  const heading = `## ${getTemporaryHandoffCopy(language).unsentDraftHeading}`;
+  return `${transcript}\n\n${heading}\n\n${draft}`;
 }
 
 function randomFilenameNonce(): string {
@@ -153,25 +189,18 @@ export function planHandoff(
   language: AppLanguage = 'en',
   filename = createHandoffFilename(),
 ): HandoffPlan {
-  const transcript = buildHandoffTranscript(turns);
-  const chinese = language === 'zh' || language === 'zh_TW';
-  const title = chinese ? '[从临时对话继续]' : '[Continue from a temporary chat]';
-  const inlineInstruction = chinese
-    ? '下面是刚才临时对话的完整记录。请把它当作当前对话的既有上下文，保持原来的语气、约束和任务状态，从最后一条消息自然继续。'
-    : 'The complete temporary-chat transcript follows. Treat it as the existing context for this chat, preserve its tone, constraints and task state, and continue naturally from the last message.';
-  const attachmentInstruction = chinese
-    ? '已附上刚才临时对话的 Markdown 记录。请先完整读取附件，把它当作当前对话的既有上下文，再从最后一条消息自然继续。'
-    : 'The attached Markdown file contains the complete temporary chat. Read it first, treat it as the existing context, and continue naturally from its final message.';
+  const copy = getTemporaryHandoffCopy(language);
+  const transcript = buildHandoffTranscript(turns, language);
 
   const delivery: HandoffDelivery =
     transcript.length <= INLINE_THRESHOLD
       ? {
           mode: 'inline',
-          text: `${title}\n\n${inlineInstruction}\n\n--- TRANSCRIPT START ---\n\n${transcript}\n\n--- TRANSCRIPT END ---`,
+          text: `${copy.handoffTitle}\n\n${copy.inlineInstruction}\n\n${copy.transcriptStart}\n\n${transcript}\n\n${copy.transcriptEnd}`,
         }
       : {
           mode: 'attachment',
-          directive: `${title}\n\n${attachmentInstruction}`,
+          directive: `${copy.handoffTitle}\n\n${copy.attachmentInstruction}`,
           attachment: transcript,
           filename,
         };
@@ -201,7 +230,10 @@ function readAccountScope(): string {
 
 export function getChatGptNewChatPath(): string {
   try {
-    const accountPrefix = /^\/u\/[^/]+/.exec(new URL(location.href).pathname)?.[0];
+    const pathname = new URL(location.href).pathname;
+    const customGpt = /^(\/u\/[^/]+)?\/g\/([^/]+)/.exec(pathname);
+    if (customGpt) return `${customGpt[1] || ''}/g/${customGpt[2]}/`;
+    const accountPrefix = /^\/u\/[^/]+/.exec(pathname)?.[0];
     return accountPrefix ? `${accountPrefix}/` : '/';
   } catch {
     return '/';
@@ -227,7 +259,7 @@ function shouldSweepPendingHandoff(value: unknown, now: number): boolean {
   return (
     typeof storedAt !== 'number' ||
     !Number.isFinite(storedAt) ||
-    now - storedAt > PENDING_TTL_MS ||
+    now - storedAt > PENDING_HANDOFF_TTL_MS ||
     storedAt > now + 5_000
   );
 }
@@ -261,24 +293,48 @@ export async function discardPendingHandoff(): Promise<void> {
     // Storage can be unavailable in locked-down browsing contexts.
   }
   if (!token) return;
+  const storageKey = pendingStorageKey(token);
+  let removed = false;
   try {
-    await browser.storage.local.remove(pendingStorageKey(token));
+    await browser.storage.local.remove(storageKey);
+    removed = true;
   } catch {
     // The tab token is already invalidated, so a later plugin lifecycle cannot replay it.
   }
+  if (!removed) return;
+  try {
+    await browser.runtime.sendMessage({
+      type: CHATGPT_HANDOFF_CANCEL_EXPIRY_MESSAGE,
+      payload: { storageKey },
+    });
+  } catch {
+    // A stale alarm only attempts to remove the already-deleted storage key.
+  }
 }
 
-async function writePending(delivery: HandoffDelivery, accountScope: string): Promise<void> {
+async function writePending(
+  delivery: HandoffDelivery,
+  accountScope: string,
+  draft?: string,
+): Promise<void> {
   try {
     await sweepExpiredPendingHandoffs();
     const token = ensurePendingTabToken();
+    const storageKey = pendingStorageKey(token);
+    const storedAt = Date.now();
     await browser.storage.local.set({
-      [pendingStorageKey(token)]: {
+      [storageKey]: {
         delivery,
-        storedAt: Date.now(),
+        ...(draft ? { draft } : {}),
+        storedAt,
         accountScope,
       } satisfies PendingHandoff,
     });
+    const scheduled = (await browser.runtime.sendMessage({
+      type: CHATGPT_HANDOFF_SCHEDULE_EXPIRY_MESSAGE,
+      payload: { storageKey, expiresAt: storedAt + PENDING_HANDOFF_TTL_MS },
+    })) as { ok?: unknown } | undefined;
+    if (scheduled?.ok !== true) throw new Error('Unable to schedule pending handoff expiry');
     // Do not retain full transcripts written by earlier revisions in page storage.
     sessionStorage.removeItem(PENDING_HANDOFF_KEY);
   } catch (error) {
@@ -289,7 +345,6 @@ async function writePending(delivery: HandoffDelivery, accountScope: string): Pr
 
 async function readPending(): Promise<PendingHandoff | null> {
   try {
-    await sweepExpiredPendingHandoffs();
     const token = readPendingTabToken();
     if (!token) {
       sessionStorage.removeItem(PENDING_HANDOFF_KEY);
@@ -303,14 +358,25 @@ async function readPending(): Promise<PendingHandoff | null> {
       typeof parsed.storedAt !== 'number' ||
       !Number.isFinite(parsed.storedAt) ||
       typeof parsed.accountScope !== 'string' ||
+      (parsed.draft !== undefined && typeof parsed.draft !== 'string') ||
       !parsed.delivery
     ) {
       await discardPendingHandoff();
       return null;
     }
+    if (shouldSweepPendingHandoff(parsed, Date.now())) {
+      await discardPendingHandoff();
+      return null;
+    }
     const delivery = parsed.delivery;
+    const draft = parsed.draft;
     if (delivery.mode === 'inline' && typeof delivery.text === 'string') {
-      return { delivery, storedAt: parsed.storedAt, accountScope: parsed.accountScope };
+      return {
+        delivery,
+        draft,
+        storedAt: parsed.storedAt,
+        accountScope: parsed.accountScope,
+      };
     }
     if (
       delivery.mode === 'attachment' &&
@@ -318,7 +384,12 @@ async function readPending(): Promise<PendingHandoff | null> {
       typeof delivery.attachment === 'string' &&
       typeof delivery.filename === 'string'
     ) {
-      return { delivery, storedAt: parsed.storedAt, accountScope: parsed.accountScope };
+      return {
+        delivery,
+        draft,
+        storedAt: parsed.storedAt,
+        accountScope: parsed.accountScope,
+      };
     }
     await discardPendingHandoff();
     return null;
@@ -394,35 +465,67 @@ function readComposerText(input: HTMLElement): string {
 function normalizeComposerText(text: string): string {
   return text
     .replace(/[\u200b\u00a0]/g, ' ')
-    .replace(/\s+/g, ' ')
+    .replace(/\r\n?/g, '\n')
+    .replace(/[^\S\n]+/g, ' ')
+    .replace(/ *\n+ */g, '\n')
     .trim();
 }
 
-function placeComposerCaretAtEnd(input: HTMLElement): void {
+function hasComposerSegment(input: HTMLElement, text: string): boolean {
+  const existing = normalizeComposerText(readComposerText(input));
+  const expected = normalizeComposerText(text);
+  if (!expected) return true;
+  return (
+    existing === expected ||
+    existing.startsWith(`${expected}\n`) ||
+    existing.endsWith(`\n${expected}`) ||
+    existing.includes(`\n${expected}\n`)
+  );
+}
+
+type ComposerInsertionPlacement = 'start' | 'end';
+
+function placeComposerCaret(input: HTMLElement, placement: ComposerInsertionPlacement): void {
   if (input instanceof HTMLTextAreaElement || input instanceof HTMLInputElement) {
-    input.setSelectionRange(input.value.length, input.value.length);
+    const offset = placement === 'start' ? 0 : input.value.length;
+    input.setSelectionRange(offset, offset);
     return;
   }
   const selection = window.getSelection();
   if (!selection) return;
   const range = document.createRange();
   range.selectNodeContents(input);
-  range.collapse(false);
+  range.collapse(placement === 'start');
   selection.removeAllRanges();
   selection.addRange(range);
 }
 
-function insertComposerText(input: HTMLElement, text: string): boolean {
+function insertComposerText(
+  input: HTMLElement,
+  text: string,
+  placement: ComposerInsertionPlacement,
+): boolean {
   input.focus();
   const existing = readComposerText(input).trim();
-  placeComposerCaretAtEnd(input);
-  if (!insertTextIntoChatInput(existing ? `\n\n${text}` : text, input)) return false;
-  const expected = normalizeComposerText(text);
-  return expected.length > 0 && normalizeComposerText(readComposerText(input)).includes(expected);
+  placeComposerCaret(input, placement);
+  const insertion = existing ? (placement === 'start' ? `${text}\n\n` : `\n\n${text}`) : text;
+  if (!insertTextIntoChatInput(insertion, input)) return false;
+  return hasComposerSegment(input, text);
+}
+
+function ensureComposerText(
+  input: HTMLElement,
+  text: string,
+  placement: ComposerInsertionPlacement,
+): boolean {
+  if (hasComposerSegment(input, text)) return true;
+  return insertComposerText(input, text, placement);
 }
 
 function hasAttachmentPreview(input: HTMLElement, filename: string): boolean {
-  const root = input.closest('form') || document.body;
+  if (!input.isConnected) return false;
+  const root = input.closest('form');
+  if (!root?.isConnected) return false;
   const normalizedFilename = filename.trim().toLowerCase();
   if (!normalizedFilename) return false;
 
@@ -451,32 +554,117 @@ function hasAttachmentPreview(input: HTMLElement, filename: string): boolean {
   return labelledPreview || (root.textContent || '').toLowerCase().includes(normalizedFilename);
 }
 
+export function hasCurrentComposerAttachments(): boolean {
+  const input = currentComposer();
+  const root = input?.closest('form');
+  if (!root?.isConnected) return false;
+
+  const fileInputs = root.querySelectorAll<HTMLInputElement>('input[type="file"]');
+  if (Array.from(fileInputs).some((fileInput) => (fileInput.files?.length ?? 0) > 0)) return true;
+
+  return Array.from(
+    root.querySelectorAll<HTMLElement>('[data-attachment-id], [data-file-id], [data-testid]'),
+  ).some((candidate) => {
+    if (candidate.matches('input, button, label, [hidden], [aria-hidden="true"]')) return false;
+    if (candidate.hasAttribute('data-attachment-id') || candidate.hasAttribute('data-file-id')) {
+      return true;
+    }
+    const testId = candidate.dataset.testid?.toLowerCase() || '';
+    return (
+      /(attachment|file)/.test(testId) && !/(add|button|input|menu|picker|upload)/.test(testId)
+    );
+  });
+}
+
 async function dispatchAttachmentAndVerify(
   scope: PluginScope,
   input: HTMLElement,
   file: File,
-): Promise<boolean> {
-  if (hasAttachmentPreview(input, file.name)) return true;
-  if (!dispatchPaste(input, null, file)) return false;
-  if (hasAttachmentPreview(input, file.name)) return true;
+): Promise<HTMLElement | null> {
+  if (hasAttachmentPreview(input, file.name)) return input;
+  if (!dispatchPaste(input, null, file)) return null;
+  const immediateComposer = currentComposer();
+  if (immediateComposer && hasAttachmentPreview(immediateComposer, file.name)) {
+    return immediateComposer;
+  }
 
   const deadline = Date.now() + 1_200;
   while (Date.now() < deadline) {
     await wait(scope, 60);
-    if (hasAttachmentPreview(input, file.name)) return true;
+    const liveComposer = currentComposer();
+    if (liveComposer && hasAttachmentPreview(liveComposer, file.name)) return liveComposer;
   }
-  return false;
+  return null;
 }
 
-async function deliver(
+async function deliverOnce(
   scope: PluginScope,
   input: HTMLElement,
   delivery: HandoffDelivery,
+  draft?: string,
+): Promise<HTMLElement | null> {
+  let deliveryInput = input;
+  let initialText = normalizeComposerText(readComposerText(deliveryInput));
+  const expectedDraft = draft ? normalizeComposerText(draft) : '';
+  let draftAlreadyPresent = expectedDraft.length > 0 && initialText === expectedDraft;
+  let delivered: boolean;
+  if (delivery.mode === 'inline') {
+    delivered = ensureComposerText(
+      deliveryInput,
+      delivery.text,
+      draftAlreadyPresent ? 'start' : 'end',
+    );
+  } else {
+    const file = new File([delivery.attachment], delivery.filename, { type: 'text/markdown' });
+    const liveInput = await dispatchAttachmentAndVerify(scope, deliveryInput, file);
+    if (!liveInput) return null;
+    deliveryInput = liveInput;
+    initialText = normalizeComposerText(readComposerText(deliveryInput));
+    draftAlreadyPresent = expectedDraft.length > 0 && initialText === expectedDraft;
+    delivered = ensureComposerText(
+      deliveryInput,
+      delivery.directive,
+      draftAlreadyPresent ? 'start' : 'end',
+    );
+  }
+
+  const draftPreserved =
+    !expectedDraft || draftAlreadyPresent || ensureComposerText(deliveryInput, draft!, 'end');
+  return delivered && draftPreserved ? deliveryInput : null;
+}
+
+function isDeliveryComplete(
+  input: HTMLElement,
+  delivery: HandoffDelivery,
+  draft?: string,
+): boolean {
+  if (!input.isConnected) return false;
+  const handoffPresent =
+    delivery.mode === 'inline'
+      ? hasComposerSegment(input, delivery.text)
+      : hasAttachmentPreview(input, delivery.filename) &&
+        hasComposerSegment(input, delivery.directive);
+  return handoffPresent && (!draft?.trim() || hasComposerSegment(input, draft));
+}
+
+async function stabilizeDelivery(
+  scope: PluginScope,
+  deliveredInput: HTMLElement,
+  delivery: HandoffDelivery,
+  draft?: string,
 ): Promise<boolean> {
-  if (delivery.mode === 'inline') return insertComposerText(input, delivery.text);
-  const file = new File([delivery.attachment], delivery.filename, { type: 'text/markdown' });
-  if (!(await dispatchAttachmentAndVerify(scope, input, file))) return false;
-  return insertComposerText(input, delivery.directive);
+  let lastDeliveredInput = deliveredInput;
+  for (let check = 0; check < 5; check += 1) {
+    await wait(scope, 100);
+    const liveInput = currentComposer();
+    if (!liveInput || liveInput === lastDeliveredInput) continue;
+    const recovered = isDeliveryComplete(liveInput, delivery, draft)
+      ? liveInput
+      : await deliverOnce(scope, liveInput, delivery, draft);
+    if (recovered) lastDeliveredInput = recovered;
+  }
+  const settledInput = currentComposer();
+  return !!settledInput && isDeliveryComplete(settledInput, delivery, draft);
 }
 
 function isUsableComposer(candidate: HTMLElement): boolean {
@@ -560,12 +748,22 @@ export async function leaveTemporaryChat(scope: PluginScope): Promise<HTMLElemen
 export async function handoffTemporaryChat(
   scope: PluginScope,
   delivery: HandoffDelivery,
+  preservedDraft?: string,
 ): Promise<HandoffResult> {
   activeHandoffOperations += 1;
+  let abortedByPageUnload = scope.signal.aborted && isHandoffPageUnloading();
+  const rememberAbortReason = (): void => {
+    abortedByPageUnload = isHandoffPageUnloading();
+  };
+  scope.signal.addEventListener('abort', rememberAbortReason, { once: true });
   try {
     const accountScope = readAccountScope();
+    const temporaryComposer = currentComposer();
+    const composerDraft =
+      preservedDraft ?? (temporaryComposer ? readComposerText(temporaryComposer) : '');
+    const pendingDraft = composerDraft.trim() ? composerDraft : undefined;
     try {
-      await writePending(delivery, accountScope);
+      await writePending(delivery, accountScope, pendingDraft);
     } catch {
       return 'storage-failed';
     }
@@ -581,19 +779,37 @@ export async function handoffTemporaryChat(
       return 'account-mismatch';
     }
     if (scope.signal.aborted) throw abortError();
-    const delivered = await deliver(scope, input, delivery);
-    if (!delivered) return 'delivery-failed';
+    const deliveredInput = await deliverOnce(scope, input, delivery, pendingDraft);
+    if (
+      !deliveredInput ||
+      !(await stabilizeDelivery(scope, deliveredInput, delivery, pendingDraft))
+    ) {
+      return 'delivery-failed';
+    }
     await discardPendingHandoff();
     return 'ready';
   } catch (error) {
-    if (isAbortError(error)) await discardPendingHandoff();
+    if (isAbortError(error) && !abortedByPageUnload) await discardPendingHandoff();
     throw error;
   } finally {
+    scope.signal.removeEventListener('abort', rememberAbortReason);
     activeHandoffOperations -= 1;
   }
 }
 
+export async function pendingAttachmentPreviewReady(): Promise<boolean> {
+  const pending = await readPending();
+  if (!pending || pending.delivery.mode !== 'attachment' || isTemporaryChat()) return false;
+  const input = currentComposer();
+  return !!input && hasAttachmentPreview(input, pending.delivery.filename);
+}
+
 export async function resumePendingHandoff(scope: PluginScope): Promise<PendingHandoffResult> {
+  let abortedByPageUnload = scope.signal.aborted && isHandoffPageUnloading();
+  const rememberAbortReason = (): void => {
+    abortedByPageUnload = isHandoffPageUnloading();
+  };
+  scope.signal.addEventListener('abort', rememberAbortReason, { once: true });
   try {
     while (activeHandoffOperations > 0) {
       if (scope.signal.aborted) throw abortError();
@@ -602,7 +818,10 @@ export async function resumePendingHandoff(scope: PluginScope): Promise<PendingH
     if (scope.signal.aborted) throw abortError();
     const pending = await readPending();
     if (!pending) return null;
-    if (Date.now() - pending.storedAt > PENDING_TTL_MS || pending.storedAt > Date.now() + 5_000) {
+    if (
+      Date.now() - pending.storedAt > PENDING_HANDOFF_TTL_MS ||
+      pending.storedAt > Date.now() + 5_000
+    ) {
       await discardPendingHandoff();
       return null;
     }
@@ -614,12 +833,26 @@ export async function resumePendingHandoff(scope: PluginScope): Promise<PendingH
     const input = await findComposer(scope, 6_000);
     if (!input) return null;
     if (scope.signal.aborted) throw abortError();
-    const delivered = await deliver(scope, input, pending.delivery);
-    if (!delivered) return 'delivery-failed';
+    const deliveredInput = await deliverOnce(scope, input, pending.delivery, pending.draft);
+    if (
+      !deliveredInput ||
+      !(await stabilizeDelivery(scope, deliveredInput, pending.delivery, pending.draft))
+    ) {
+      return 'delivery-failed';
+    }
     await discardPendingHandoff();
     return 'ready';
   } catch (error) {
-    if (isAbortError(error)) await discardPendingHandoff();
+    if (isAbortError(error) && !abortedByPageUnload) await discardPendingHandoff();
     throw error;
+  } finally {
+    scope.signal.removeEventListener('abort', rememberAbortReason);
   }
+}
+
+export function readCurrentComposerDraft(): string | undefined {
+  const input = currentComposer();
+  if (!input) return undefined;
+  const draft = readComposerText(input);
+  return draft.trim() ? draft : undefined;
 }

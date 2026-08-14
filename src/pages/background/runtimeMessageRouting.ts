@@ -1,3 +1,7 @@
+import {
+  CHATGPT_HANDOFF_CANCEL_EXPIRY_MESSAGE,
+  CHATGPT_HANDOFF_SCHEDULE_EXPIRY_MESSAGE,
+} from '@/features/plugins/builtin/chatgptTemporaryHandoff/storage';
 import { PLUGIN_CONTENT_SCRIPT_SYNC_MESSAGE } from '@/features/plugins/runtime/messages';
 
 const HANDLED_BACKGROUND_MESSAGE_TYPES = new Set([
@@ -6,6 +10,8 @@ const HANDLED_BACKGROUND_MESSAGE_TYPES = new Set([
   'gv.generatedUi.ensureCapturePermission',
   'gv.generatedUi.captureVisibleTab',
   PLUGIN_CONTENT_SCRIPT_SYNC_MESSAGE,
+  CHATGPT_HANDOFF_SCHEDULE_EXPIRY_MESSAGE,
+  CHATGPT_HANDOFF_CANCEL_EXPIRY_MESSAGE,
   'gv.account.resolve',
   'gv.responseComplete.notify',
   'gv.responseComplete.requestNativePermission',
