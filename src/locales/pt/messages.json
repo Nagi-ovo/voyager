@@ -2626,5 +2626,49 @@
   "diagnosticsCopyFailed": {
     "message": "Área de transferência indisponível. Selecione a prévia manualmente ou baixe o JSON."
   },
-  "diagnosticsDownloadJson": { "message": "Baixar JSON" }
+  "diagnosticsDownloadJson": { "message": "Baixar JSON" },
+  "promptHistoryTitle": {
+    "message": "Histórico de prompts",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryEmpty": {
+    "message": "Nenhum histórico ainda",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistorySent": {
+    "message": "Enviado",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryEdited": {
+    "message": "Editado",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryCopy": {
+    "message": "Copiar",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryInsert": {
+    "message": "Inserir",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryDelete": {
+    "message": "Excluir",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryClear": {
+    "message": "Limpar",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryCopied": {
+    "message": "Copiado",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryInserted": {
+    "message": "Inserido",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryInsertFailed": {
+    "message": "Falha ao inserir",
+    "description": "Prompt History panel text (#923)"
+  }
 }

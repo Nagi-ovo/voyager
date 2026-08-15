@@ -2623,5 +2623,49 @@
   "diagnosticsCopyFailed": {
     "message": "クリップボードを使用できません。プレビューを手動で選択するか JSON をダウンロードしてください。"
   },
-  "diagnosticsDownloadJson": { "message": "JSON をダウンロード" }
+  "diagnosticsDownloadJson": { "message": "JSON をダウンロード" },
+  "promptHistoryTitle": {
+    "message": "プロンプト履歴",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryEmpty": {
+    "message": "プロンプト履歴はありません",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistorySent": {
+    "message": "送信",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryEdited": {
+    "message": "編集",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryCopy": {
+    "message": "コピー",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryInsert": {
+    "message": "挿入",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryDelete": {
+    "message": "削除",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryClear": {
+    "message": "クリア",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryCopied": {
+    "message": "コピーしました",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryInserted": {
+    "message": "挿入しました",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryInsertFailed": {
+    "message": "挿入に失敗しました",
+    "description": "Prompt History panel text (#923)"
+  }
 }

@@ -2626,5 +2626,49 @@
   "diagnosticsCopyFailed": {
     "message": "Буфер обмена недоступен. Выделите текст вручную или скачайте JSON."
   },
-  "diagnosticsDownloadJson": { "message": "Скачать JSON" }
+  "diagnosticsDownloadJson": { "message": "Скачать JSON" },
+  "promptHistoryTitle": {
+    "message": "История запросов",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryEmpty": {
+    "message": "История пока пуста",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistorySent": {
+    "message": "Отправлено",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryEdited": {
+    "message": "Изменено",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryCopy": {
+    "message": "Копировать",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryInsert": {
+    "message": "Вставить",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryDelete": {
+    "message": "Удалить",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryClear": {
+    "message": "Очистить",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryCopied": {
+    "message": "Скопировано",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryInserted": {
+    "message": "Вставлено",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryInsertFailed": {
+    "message": "Ошибка вставки",
+    "description": "Prompt History panel text (#923)"
+  }
 }

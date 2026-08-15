@@ -14176,3 +14176,244 @@ code-block .gv-code-block-toggle svg {
   width: 20px;
   height: 20px;
 }
+
+/* ============================================================================
+   Prompt History (#923)
+   ========================================================================== */
+.gv-ph-trigger {
+  position: fixed;
+  right: 18px;
+  top: 80px;
+  width: 46px;
+  height: 46px;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(
+    135deg,
+    var(--gv-pm-brand, var(--gv-pm-brand-default)),
+    color-mix(in srgb, var(--gv-pm-brand, var(--gv-pm-brand-default)) 85%, white)
+  );
+  border: 1.5px solid var(--gv-pm-brand, var(--gv-pm-brand-default));
+  box-shadow:
+    0 6px 24px color-mix(in srgb, var(--gv-pm-brand, var(--gv-pm-brand-default)) 35%, transparent),
+    0 2px 8px color-mix(in srgb, var(--gv-pm-brand, var(--gv-pm-brand-default)) 20%, transparent),
+    inset 0 1px 0 oklch(1 0 0 / 0.15);
+  color: var(--gv-pm-brand-fg, var(--gv-pm-brand-fg-default));
+  z-index: 2147483150;
+  cursor: pointer;
+  transition:
+    transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.gv-ph-trigger:hover {
+  transform: scale(1.08) translateY(-1px);
+}
+
+.gv-ph-trigger:active {
+  transform: scale(0.94);
+}
+
+.gv-ph-trigger-icon {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.gv-ph-panel {
+  position: fixed;
+  right: 18px;
+  top: 132px;
+  display: flex;
+  flex-direction: column;
+  width: 440px;
+  max-width: calc(100vw - 20px);
+  max-height: min(70vh, 560px);
+  overflow: hidden;
+  font-size: 14px;
+  --gv-pm-surface: oklch(0.995 0.002 250);
+  border-radius: 18px;
+  background: oklch(0.995 0.002 250);
+  border: 1px solid oklch(0.92 0.004 250 / 0.7);
+  z-index: 2147483200;
+  color: oklch(0.14 0.004 285);
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    Segoe UI,
+    Roboto,
+    Helvetica,
+    Arial,
+    'Apple Color Emoji',
+    'Segoe UI Emoji';
+}
+
+@media (prefers-color-scheme: dark) {
+  .gv-ph-panel {
+    background: oklch(0.2 0.008 285);
+    color: oklch(0.92 0.004 250);
+    border-color: oklch(0.3 0.008 285 / 0.7);
+  }
+}
+
+.theme-host.dark-theme .gv-ph-panel,
+body.dark-theme .gv-ph-panel {
+  background: oklch(0.2 0.008 285);
+  color: oklch(0.92 0.004 250);
+  border-color: oklch(0.3 0.008 285 / 0.7);
+}
+
+.theme-host.light-theme .gv-ph-panel,
+body.light-theme .gv-ph-panel {
+  background: oklch(0.995 0.002 250);
+  color: oklch(0.14 0.004 285);
+  border-color: oklch(0.92 0.004 250 / 0.7);
+}
+
+.gv-ph-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  gap: 6px;
+  border-bottom: 1px solid oklch(0.92 0.004 250 / 0.5);
+}
+
+.gv-ph-title {
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.gv-ph-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gv-ph-empty {
+  padding: 24px 12px;
+  text-align: center;
+  opacity: 0.6;
+}
+
+.gv-ph-item {
+  border: 1px solid oklch(0.92 0.004 250 / 0.6);
+  border-radius: 12px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gv-ph-item-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.gv-ph-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.gv-ph-badge-sent {
+  background: color-mix(in srgb, var(--gv-pm-brand, var(--gv-pm-brand-default)) 15%, transparent);
+  color: var(--gv-pm-brand, var(--gv-pm-brand-default));
+}
+
+.gv-ph-badge-edited {
+  background: oklch(0.6 0.13 45 / 0.15);
+  color: oklch(0.55 0.13 45);
+}
+
+.gv-ph-time {
+  font-size: 12px;
+  opacity: 0.6;
+}
+
+.gv-ph-item-text {
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.gv-ph-item-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.gv-ph-action {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 8px;
+  border: 1px solid oklch(0.92 0.004 250 / 0.6);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    transform 100ms ease;
+}
+
+.gv-ph-action:hover {
+  background: oklch(0.5 0 0 / 0.08);
+}
+
+.gv-ph-action:active {
+  transform: scale(0.97);
+}
+
+.gv-ph-action-primary {
+  border-color: var(--gv-pm-brand, var(--gv-pm-brand-default));
+  color: var(--gv-pm-brand, var(--gv-pm-brand-default));
+}
+
+.gv-ph-action-primary:hover {
+  background: color-mix(in srgb, var(--gv-pm-brand, var(--gv-pm-brand-default)) 12%, transparent);
+}
+
+.gv-ph-action-danger {
+  color: oklch(0.55 0.16 25);
+  border-color: oklch(0.6 0.15 25 / 0.4);
+}
+
+.gv-ph-action-danger:hover {
+  background: oklch(0.55 0.16 25 / 0.1);
+}
+
+.gv-ph-notice {
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  transform: translateX(-50%);
+  padding: 6px 14px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 500;
+  z-index: 2;
+  box-shadow: 0 4px 16px oklch(0 0 0 / 0.2);
+}
+
+.gv-ph-notice-ok {
+  background: oklch(0.5 0.13 155 / 0.9);
+  color: oklch(1 0 0);
+}
+
+.gv-ph-notice-error {
+  background: oklch(0.55 0.16 25 / 0.9);
+  color: oklch(1 0 0);
+}

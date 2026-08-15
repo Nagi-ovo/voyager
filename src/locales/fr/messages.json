@@ -2633,5 +2633,49 @@
   "diagnosticsCopyFailed": {
     "message": "Presse-papiers indisponible. Sélectionnez l’aperçu manuellement ou téléchargez le JSON."
   },
-  "diagnosticsDownloadJson": { "message": "Télécharger le JSON" }
+  "diagnosticsDownloadJson": { "message": "Télécharger le JSON" },
+  "promptHistoryTitle": {
+    "message": "Historique des invites",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryEmpty": {
+    "message": "Aucun historique pour le moment",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistorySent": {
+    "message": "Envoyé",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryEdited": {
+    "message": "Modifié",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryCopy": {
+    "message": "Copier",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryInsert": {
+    "message": "Insérer",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryDelete": {
+    "message": "Supprimer",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryClear": {
+    "message": "Vider",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryCopied": {
+    "message": "Copié",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryInserted": {
+    "message": "Inséré",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryInsertFailed": {
+    "message": "Échec de l'insertion",
+    "description": "Prompt History panel text (#923)"
+  }
 }

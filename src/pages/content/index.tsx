@@ -55,6 +55,7 @@ import { createCustomSiteCoverageReconciler } from './prompt/customSiteCoverage'
 import { startPromptManager } from './prompt/index';
 import { slashPromptCoachmarkStep } from './prompt/slashPromptCoachmark';
 import { startSlashPromptFeature } from './prompt/slashPromptFeature';
+import { startPromptHistory } from './promptHistory/index';
 import { startQuoteReply } from './quoteReply/index';
 import { startRemoteAnnouncements } from './remoteAnnouncements/index';
 import { startResponseCompleteNotification } from './responseNotification/index';
@@ -365,12 +366,14 @@ async function initializeFeatures(): Promise<void> {
 
       // These modules only share the extension storage API and can hydrate in
       // parallel without changing their runtime ordering.
-      const [notificationResult, draftResult, gemsResult, usageResult] = await Promise.allSettled([
-        startResponseCompleteNotification(),
-        startDraftSave(),
-        startGemsSidebar(),
-        startUsageStatus(),
-      ]);
+      const [notificationResult, draftResult, gemsResult, usageResult, promptHistoryResult] =
+        await Promise.allSettled([
+          startResponseCompleteNotification(),
+          startDraftSave(),
+          startGemsSidebar(),
+          startUsageStatus(),
+          startPromptHistory(),
+        ]);
       if (notificationResult.status === 'fulfilled') {
         cleanupManager.registerCleanupFunction(
           notificationResult.value,
@@ -396,7 +399,20 @@ async function initializeFeatures(): Promise<void> {
         );
       }
 
-      const failedInitializer = [notificationResult, draftResult, gemsResult, usageResult].find(
+      if (promptHistoryResult.status === 'fulfilled') {
+        cleanupManager.registerCleanupFunction(
+          promptHistoryResult.value,
+          CleanupPositions.CleanupPromptHistory,
+        );
+      }
+
+      const failedInitializer = [
+        notificationResult,
+        draftResult,
+        gemsResult,
+        usageResult,
+        promptHistoryResult,
+      ].find(
         (result): result is PromiseRejectedResult => result.status === 'rejected',
       );
       if (failedInitializer) throw failedInitializer.reason;

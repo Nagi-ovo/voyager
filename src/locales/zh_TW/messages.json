@@ -2615,5 +2615,49 @@
   "diagnosticsCopyFailed": {
     "message": "無法存取剪貼簿，請手動選取預覽內容或下載 JSON。"
   },
-  "diagnosticsDownloadJson": { "message": "下載 JSON" }
+  "diagnosticsDownloadJson": { "message": "下載 JSON" },
+  "promptHistoryTitle": {
+    "message": "提示詞歷史",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryEmpty": {
+    "message": "暫無提示詞歷史",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistorySent": {
+    "message": "傳送",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryEdited": {
+    "message": "修改",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryCopy": {
+    "message": "複製",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryInsert": {
+    "message": "插入",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryDelete": {
+    "message": "刪除",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryClear": {
+    "message": "清空",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryCopied": {
+    "message": "已複製",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryInserted": {
+    "message": "已插入",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryInsertFailed": {
+    "message": "插入失敗",
+    "description": "Prompt History panel text (#923)"
+  }
 }

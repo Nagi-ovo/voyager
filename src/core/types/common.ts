@@ -141,6 +141,11 @@ export const StorageKeys = {
   INPUT_VIM_MODE: 'gvInputVimMode',
   DRAFT_AUTO_SAVE: 'gvDraftAutoSave',
   PREVENT_AUTO_SCROLL_ENABLED: 'gvPreventAutoScrollEnabled',
+  // Prompt history (#923). chrome.storage.local only — a per-device, per-account
+  // record of sent/edited prompts so users can recover prompts that Gemini
+  // swallowed on error.
+  PROMPT_HISTORY_ENABLED: 'gvPromptHistoryEnabled',
+  PROMPT_HISTORY_ITEMS: 'gvPromptHistoryItems',
 
   // Default Model
   DEFAULT_MODEL: 'gvDefaultModel',

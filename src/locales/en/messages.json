@@ -2653,5 +2653,49 @@
   "diagnosticsCopyFailed": {
     "message": "Clipboard unavailable. Select the preview manually or download JSON."
   },
-  "diagnosticsDownloadJson": { "message": "Download JSON" }
+  "diagnosticsDownloadJson": { "message": "Download JSON" },
+  "promptHistoryTitle": {
+    "message": "Prompt History",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryEmpty": {
+    "message": "No prompt history yet",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistorySent": {
+    "message": "Sent",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryEdited": {
+    "message": "Edited",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryCopy": {
+    "message": "Copy",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryInsert": {
+    "message": "Insert",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryDelete": {
+    "message": "Delete",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryClear": {
+    "message": "Clear",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryCopied": {
+    "message": "Copied",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryInserted": {
+    "message": "Inserted",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryInsertFailed": {
+    "message": "Insert failed",
+    "description": "Prompt History panel text (#923)"
+  }
 }
