@@ -16,15 +16,13 @@ function setupMocks() {
   localStore = {};
 
   (chrome.storage as unknown as Record<string, unknown>).local = {
-    get: vi.fn(
-      (key: string | null, callback: (result: Record<string, unknown>) => void) => {
-        if (key === null) {
-          callback({ ...localStore });
-        } else {
-          callback({ [key]: localStore[key] });
-        }
-      },
-    ),
+    get: vi.fn((key: string | null, callback: (result: Record<string, unknown>) => void) => {
+      if (key === null) {
+        callback({ ...localStore });
+      } else {
+        callback({ [key]: localStore[key] });
+      }
+    }),
     set: vi.fn((items: Record<string, unknown>, callback?: () => void) => {
       Object.assign(localStore, items);
       callback?.();

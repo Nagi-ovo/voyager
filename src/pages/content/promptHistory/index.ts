@@ -20,16 +20,16 @@ import { StorageKeys } from '@/core/types/common';
 import { isExtensionContextInvalidatedError } from '@/core/utils/extensionContext';
 import { getTranslationSync } from '@/utils/i18n';
 
-import { insertTextIntoChatInput, findChatInput } from '../chatInput/index';
-import { expandInputCollapseIfNeeded } from '../inputCollapse/index';
+import { findChatInput, insertTextIntoChatInput } from '../chatInput/index';
 import { stripInstructionBlock } from '../folderProject/instructionBlock';
+import { expandInputCollapseIfNeeded } from '../inputCollapse/index';
 import { watchRouteChanges } from '../utils/routeWatcher';
 import {
+  type PromptHistoryItem,
   addPromptHistory,
   clearPromptHistory,
   getPromptHistory,
   removePromptHistoryItem,
-  type PromptHistoryItem,
 } from './storage';
 
 // ============================================================================

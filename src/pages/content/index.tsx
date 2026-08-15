@@ -412,9 +412,7 @@ async function initializeFeatures(): Promise<void> {
         gemsResult,
         usageResult,
         promptHistoryResult,
-      ].find(
-        (result): result is PromiseRejectedResult => result.status === 'rejected',
-      );
+      ].find((result): result is PromiseRejectedResult => result.status === 'rejected');
       if (failedInitializer) throw failedInitializer.reason;
       await delay(LIGHT_FEATURE_INIT_DELAY);
 
