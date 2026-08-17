@@ -312,11 +312,11 @@ Gemini 是 Google LLC 的商標。Claude 是 Anthropic, PBC 的商標。ChatGPT 
 ---
 
 <div align="center">
-  <a href="https://www.star-history.com/#Nagi-ovo/voyager&type=date&legend=top-left">
+  <a href="https://star-history.dera.page/#Nagi-ovo/voyager&type=date&legend=top-left">
    <picture>
-     <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=Nagi-ovo/voyager&type=date&theme=dark&legend=top-left" />
-     <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=Nagi-ovo/voyager&type=date&legend=top-left" />
-     <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=Nagi-ovo/voyager&type=date&legend=top-left" />
+     <source media="(prefers-color-scheme: dark)" srcset="https://star-history.dera.page/svg?repos=Nagi-ovo/voyager&type=date&theme=dark&legend=top-left" />
+     <source media="(prefers-color-scheme: light)" srcset="https://star-history.dera.page/svg?repos=Nagi-ovo/voyager&type=date&legend=top-left" />
+     <img alt="Star History Chart" src="https://star-history.dera.page/svg?repos=Nagi-ovo/voyager&type=date&legend=top-left" />
    </picture>
   </a>
   <p>Made with ❤️ by Jesse Zhang</p>

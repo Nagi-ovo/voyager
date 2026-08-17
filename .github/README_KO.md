@@ -306,11 +306,11 @@ Gemini은 Google LLC의 상표입니다. Claude는 Anthropic, PBC의 상표입�
 ---
 
 <div align="center">
-  <a href="https://www.star-history.com/#Nagi-ovo/voyager&type=date&legend=top-left">
+  <a href="https://star-history.dera.page/#Nagi-ovo/voyager&type=date&legend=top-left">
    <picture>
-     <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=Nagi-ovo/voyager&type=date&theme=dark&legend=top-left" />
-     <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=Nagi-ovo/voyager&type=date&legend=top-left" />
-     <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=Nagi-ovo/voyager&type=date&legend=top-left" />
+     <source media="(prefers-color-scheme: dark)" srcset="https://star-history.dera.page/svg?repos=Nagi-ovo/voyager&type=date&theme=dark&legend=top-left" />
+     <source media="(prefers-color-scheme: light)" srcset="https://star-history.dera.page/svg?repos=Nagi-ovo/voyager&type=date&legend=top-left" />
+     <img alt="Star History Chart" src="https://star-history.dera.page/svg?repos=Nagi-ovo/voyager&type=date&legend=top-left" />
    </picture>
   </a>
   <p>Made with ❤️ by Jesse Zhang</p>
