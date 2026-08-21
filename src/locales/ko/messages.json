@@ -1585,6 +1585,42 @@
     "message": "대화에서 텍스트를 선택할 때 선택한 텍스트를 인용할 수 있는 플로팅 버튼을 표시합니다",
     "description": "Quote reply feature hint"
   },
+  "enableWaveDromRendering": {
+    "message": "WaveDrom 타이밍 다이어그램 렌더링 사용",
+    "description": "WaveDrom 렌더링 토글 라벨"
+  },
+  "enableWaveDromRenderingHint": {
+    "message": "코드 블록의 WaveJSON을 대화형 타이밍 다이어그램으로 자동 렌더링합니다",
+    "description": "WaveDrom 기능 설명"
+  },
+  "wavedromDiagramButton": {
+    "message": "〜 다이어그램",
+    "description": "렌더링된 다이어그램으로 전환하는 버튼 라벨"
+  },
+  "wavedromCodeButton": {
+    "message": "</> 코드",
+    "description": "WaveJSON 소스로 전환하는 버튼 라벨"
+  },
+  "wavedromZoomIn": {
+    "message": "확대",
+    "description": "전체화면 툴바: 확대 버튼 제목"
+  },
+  "wavedromZoomOut": {
+    "message": "축소",
+    "description": "전체화면 툴바: 축소 버튼 제목"
+  },
+  "wavedromResetView": {
+    "message": "초기화",
+    "description": "전체화면 툴바: 보기 초기화 버튼 제목"
+  },
+  "wavedromCloseFullscreen": {
+    "message": "닫기 (ESC)",
+    "description": "전체화면 툴바: 닫기 버튼 제목"
+  },
+  "wavedromFullscreenHint": {
+    "message": "스크롤로 확대/축소 • 드래그로 이동 • ESC로 닫기",
+    "description": "전체화면 오버레이 조작 힌트"
+  },
   "enableHighlights": {
     "message": "하이라이트 활성화",
     "description": "Highlight feature toggle label"

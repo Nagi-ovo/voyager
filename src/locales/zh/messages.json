@@ -1583,6 +1583,42 @@
     "message": "在对话中选中文字时显示悬浮按钮，用于引用所选内容",
     "description": "引用回复功能提示"
   },
+  "enableWaveDromRendering": {
+    "message": "启用 WaveDrom 时序图渲染",
+    "description": "WaveDrom 渲染开关标签"
+  },
+  "enableWaveDromRenderingHint": {
+    "message": "自动将代码块中的 WaveJSON 渲染为可交互的时序波形图",
+    "description": "WaveDrom 渲染功能提示"
+  },
+  "wavedromDiagramButton": {
+    "message": "〜 图示",
+    "description": "切换到已渲染图示的按钮标签"
+  },
+  "wavedromCodeButton": {
+    "message": "</> 代码",
+    "description": "切换到 WaveJSON 源码的按钮标签"
+  },
+  "wavedromZoomIn": {
+    "message": "放大",
+    "description": "全屏工具栏：放大按钮标题"
+  },
+  "wavedromZoomOut": {
+    "message": "缩小",
+    "description": "全屏工具栏：缩小按钮标题"
+  },
+  "wavedromResetView": {
+    "message": "重置视图",
+    "description": "全屏工具栏：重置视图按钮标题"
+  },
+  "wavedromCloseFullscreen": {
+    "message": "关闭 (ESC)",
+    "description": "全屏工具栏：关闭按钮标题"
+  },
+  "wavedromFullscreenHint": {
+    "message": "滚动缩放 • 拖拽平移 • ESC 关闭",
+    "description": "全屏遮罩操作提示"
+  },
   "enableHighlights": {
     "message": "启用高亮",
     "description": "高亮功能开关标签"

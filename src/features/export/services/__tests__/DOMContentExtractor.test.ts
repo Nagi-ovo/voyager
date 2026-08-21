@@ -426,6 +426,70 @@ describe('DOMContentExtractor', () => {
     expect(extracted.text).toContain('```mermaid\nflowchart TD\nA --> B\n```');
   });
 
+  it('exports rendered WaveDrom SVG in HTML while preserving WaveJSON source in text', () => {
+    const assistant = document.createElement('div');
+    assistant.innerHTML = `
+      <message-content>
+        <div class="markdown">
+          <div class="gv-wavedrom-wrapper">
+            <code-block style="display: none;">
+              <div class="code-block-decoration">wavedrom</div>
+              <pre><code role="text">{"signal": [{"name":"clk","wave":"p..."}]}</code></pre>
+            </code-block>
+            <div class="gv-wavedrom-toggle">
+              <button class="active">Diagram</button>
+              <button>Code</button>
+            </div>
+            <div class="gv-wavedrom-diagram">
+              <svg viewBox="0 0 800 200" aria-label="Timing diagram">
+                <g><text>clk</text></g>
+              </svg>
+            </div>
+          </div>
+        </div>
+      </message-content>
+    `;
+
+    const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+
+    expect(extracted.hasCode).toBe(true);
+    expect(extracted.html).toContain('class="gv-export-wavedrom"');
+    expect(extracted.html).toContain('<svg viewBox="0 0 800 200"');
+    expect(extracted.html).not.toContain('<pre><code');
+    expect(extracted.html).not.toContain('gv-wavedrom-toggle');
+    expect(extracted.text).toContain(
+      '```wavedrom\n{"signal": [{"name":"clk","wave":"p..."}]}\n```',
+    );
+    expect(extracted.text).not.toContain('```code snippet');
+  });
+
+  it('falls back to WaveJSON source when a rendered WaveDrom SVG is unavailable', () => {
+    const assistant = document.createElement('div');
+    assistant.innerHTML = `
+      <message-content>
+        <div class="markdown">
+          <div class="gv-wavedrom-wrapper">
+            <code-block>
+              <div class="code-block-decoration">wavedrom</div>
+              <pre><code role="text">{"signal": [{"name":"clk","wave":"p..."}]}</code></pre>
+            </code-block>
+            <div class="gv-wavedrom-toggle"><button>Diagram</button></div>
+            <div class="gv-wavedrom-diagram"></div>
+          </div>
+        </div>
+      </message-content>
+    `;
+
+    const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+
+    expect(extracted.hasCode).toBe(true);
+    expect(extracted.html).toContain('<pre><code class="language-wavedrom">');
+    expect(extracted.html).not.toContain('class="gv-export-wavedrom"');
+    expect(extracted.text).toContain(
+      '```wavedrom\n{"signal": [{"name":"clk","wave":"p..."}]}\n```',
+    );
+  });
+
   it('reaches a rendered Mermaid wrapper through an intervening container', () => {
     const assistant = document.createElement('div');
     assistant.innerHTML = `

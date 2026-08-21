@@ -768,6 +768,7 @@ interface SettingsUpdate {
   inputCollapseWhenNotEmpty?: boolean;
   inputVimModeEnabled?: boolean;
   mermaidEnabled?: boolean;
+  wavedromEnabled?: boolean;
   quoteReplyEnabled?: boolean;
   highlightEnabled?: boolean;
   highlightTimelineMarkersEnabled?: boolean;
@@ -980,6 +981,7 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
   // badge on the floating ball instead of auto-popping the modal.
   const [changelogBadgeMode, setChangelogBadgeMode] = useState<boolean>(false);
   const [mermaidEnabled, setMermaidEnabled] = useState<boolean>(true);
+  const [wavedromEnabled, setWavedromEnabled] = useState<boolean>(true);
   const [showMessageTimestamps, setShowMessageTimestamps] = useState<boolean>(false);
   const [quoteReplyEnabled, setQuoteReplyEnabled] = useState<boolean>(true);
 
@@ -1380,6 +1382,8 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
         payload[StorageKeys.INPUT_VIM_MODE] = settings.inputVimModeEnabled;
       if (typeof settings.mermaidEnabled === 'boolean')
         payload.gvMermaidEnabled = settings.mermaidEnabled;
+      if (typeof settings.wavedromEnabled === 'boolean')
+        payload[StorageKeys.WAVEDROM_ENABLED] = settings.wavedromEnabled;
       if (typeof settings.quoteReplyEnabled === 'boolean')
         payload.gvQuoteReplyEnabled = settings.quoteReplyEnabled;
       if (typeof settings.highlightEnabled === 'boolean') {
@@ -1952,6 +1956,7 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
           [StorageKeys.INPUT_VIM_MODE]: false,
           [StorageKeys.TAB_TITLE_UPDATE_ENABLED]: false,
           gvMermaidEnabled: true,
+          [StorageKeys.WAVEDROM_ENABLED]: true,
           gvQuoteReplyEnabled: true,
           [StorageKeys.HIGHLIGHT_ENABLED]: false,
           [StorageKeys.HIGHLIGHT_TIMELINE_MARKERS_ENABLED]: true,
@@ -2035,6 +2040,7 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
             void setSyncStorage({ [StorageKeys.TAB_TITLE_UPDATE_ENABLED]: false });
           }
           setMermaidEnabled(res?.gvMermaidEnabled !== false);
+          setWavedromEnabled(res?.[StorageKeys.WAVEDROM_ENABLED] !== false);
           setQuoteReplyEnabled(res?.gvQuoteReplyEnabled !== false);
           setHighlightEnabled(res?.[StorageKeys.HIGHLIGHT_ENABLED] === true);
           setHighlightTimelineMarkersEnabled(
@@ -4232,6 +4238,31 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
                     onChange={(e) => {
                       setMermaidEnabled(e.target.checked);
                       apply({ mermaidEnabled: e.target.checked });
+                    }}
+                  />
+                </div>,
+              )}
+              {renderSetting(
+                'general',
+                'enableWaveDromRendering',
+                <div className="group flex items-center justify-between">
+                  <div className="flex-1">
+                    <Label
+                      htmlFor="wavedrom-enabled"
+                      className="group-hover:text-primary cursor-pointer text-sm font-medium transition-colors"
+                    >
+                      {t('enableWaveDromRendering')}
+                    </Label>
+                    <p className="text-muted-foreground mt-1 text-xs">
+                      {t('enableWaveDromRenderingHint')}
+                    </p>
+                  </div>
+                  <Switch
+                    id="wavedrom-enabled"
+                    checked={wavedromEnabled}
+                    onChange={(e) => {
+                      setWavedromEnabled(e.target.checked);
+                      apply({ wavedromEnabled: e.target.checked });
                     }}
                   />
                 </div>,

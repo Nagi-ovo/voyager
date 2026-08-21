@@ -16,6 +16,8 @@
  *    light backdrop) is readable on any Gemini theme and sidesteps the dark
  *    skin's white-stroke contrast issues entirely.
  */
+import { StorageKeys } from '@/core/types/common';
+import { isExtensionContextInvalidatedError } from '@/core/utils/extensionContext';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -29,6 +31,22 @@ export const resolveWaveRenderTheme = (
   mode: WaveThemeMode,
   appTheme: 'light' | 'dark',
 ): 'light' | 'dark' => (mode === 'auto' ? appTheme : 'light');
+
+// ---------------------------------------------------------------------------
+// i18n
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve an i18n string with a safe fallback. Content scripts must not throw
+ * when the extension context is invalidated mid-flight, hence the guard.
+ */
+const t = (key: string, fallback: string): string => {
+  try {
+    return chrome.i18n?.getMessage(key) || fallback;
+  } catch {
+    return fallback;
+  }
+};
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -110,6 +128,12 @@ interface WaveDromBundle {
 let bundleCache: WaveDromBundle | null = null;
 let bundleLoadFailed = false;
 let currentModal: HTMLElement | null = null;
+/**
+ * Teardown for the active fullscreen modal, registered at open time so the
+ * singleton can be destroyed from anywhere (tests, context loss) without
+ * leaking document-level listeners.
+ */
+let closeActiveModal: (() => void) | null = null;
 
 /** @internal Exported for testing. */
 export const _resetWaveDromLoader = () => {
@@ -119,8 +143,8 @@ export const _resetWaveDromLoader = () => {
 
 /** @internal Close and clear the fullscreen modal singleton. For testing only. */
 export const _closeModalForTest = () => {
-  currentModal?.remove();
-  currentModal = null;
+  closeActiveModal?.();
+  closeActiveModal = null;
 };
 
 /**
@@ -194,11 +218,14 @@ export const makeResponsiveSvg = (svg: string): string => {
 };
 
 /**
- * Render WaveJSON source code into an SVG string, or null when the code is
- * not a valid waveform description. Parsing is lenient (JSON5) so hand-written
- * or LLM-generated WaveJSON with comments or trailing commas still renders.
+ * Render WaveJSON source code into a sanitised SVG string, or null when the
+ * code is not a valid waveform description. Parsing is lenient (JSON5) so
+ * hand-written or LLM-generated WaveJSON with comments or trailing commas
+ * still renders.
+ *
+ * @internal Exported for testing.
  */
-const renderWaveSvg = async (code: string, isDark: boolean): Promise<string | null> => {
+export const renderWaveSvg = async (code: string, isDark: boolean): Promise<string | null> => {
   const bundle = await loadWaveDrom();
   if (!bundle) return null;
 
@@ -206,8 +233,9 @@ const renderWaveSvg = async (code: string, isDark: boolean): Promise<string | nu
   const skin = isDark ? waveSkinDarkRemapped : waveSkinDefault;
 
   try {
-    const JSON5 = await import('json5');
-    const parse = JSON5.default?.parse ?? JSON5.parse;
+    const [JSON5Mod, DOMPurifyMod] = await Promise.all([import('json5'), import('dompurify')]);
+    const parse = JSON5Mod.default?.parse ?? JSON5Mod.parse;
+    const DOMPurify = DOMPurifyMod.default ?? DOMPurifyMod;
     const parsed: unknown = parse(code.trim());
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null;
 
@@ -218,7 +246,11 @@ const renderWaveSvg = async (code: string, isDark: boolean): Promise<string | nu
 
     const tree = WaveDrom.renderAny(diagramIndex++, source, skin);
     const svgRaw = WaveDrom.onml.stringify(tree);
-    return makeResponsiveSvg(svgRaw);
+    // The SVG markup is library-generated from parsed WaveJSON, but the markup
+    // still crosses innerHTML twice (inline container + fullscreen overlay), so
+    // sanitise once here. The bundled dark-skin <style> block survives DOMPurify.
+    const svgSanitized = DOMPurify.sanitize(svgRaw);
+    return makeResponsiveSvg(svgSanitized);
   } catch {
     return null;
   }
@@ -399,6 +431,36 @@ const createStyles = (panelBg: string) => {
 // Fullscreen overlay
 // ---------------------------------------------------------------------------
 
+/**
+ * Read the intrinsic diagram size from the SVG `viewBox`.
+ * The rendered width/height are forced to 100% by the overlay, so scrollWidth
+ * reflects the container, not the diagram — only the viewBox carries the real
+ * aspect/size needed for auto-fitting.
+ *
+ * @internal Exported for testing.
+ */
+export const parseViewBoxSize = (svgEl: SVGSVGElement): { w: number; h: number } | null => {
+  const vb = svgEl.getAttribute('viewBox')?.trim().split(/\s+/).map(Number);
+  if (!vb || vb.length !== 4 || !(vb[2] > 0) || !(vb[3] > 0)) return null;
+  return { w: vb[2], h: vb[3] };
+};
+
+/**
+ * Scale factor that fits an intrinsic diagram size into a viewport, clamped to
+ * the 0.1–10 zoom range (1 when the inputs are unusable).
+ *
+ * @internal Exported for testing.
+ */
+export const computeAutoFitScale = (
+  intrinsicW: number,
+  intrinsicH: number,
+  viewportW: number,
+  viewportH: number,
+): number => {
+  if (intrinsicW <= 0 || intrinsicH <= 0 || viewportW <= 0 || viewportH <= 0) return 1;
+  return Math.min(Math.max(Math.min(viewportW / intrinsicW, viewportH / intrinsicH), 0.1), 10);
+};
+
 const openFullscreen = (svgHtml: string, panelBg: string) => {
   if (currentModal) return;
 
@@ -417,19 +479,19 @@ const openFullscreen = (svgHtml: string, panelBg: string) => {
 
   const zoomInBtn = document.createElement('button');
   zoomInBtn.innerHTML = '+';
-  zoomInBtn.title = 'Zoom In';
+  zoomInBtn.title = t('wavedromZoomIn', 'Zoom In');
 
   const zoomOutBtn = document.createElement('button');
   zoomOutBtn.innerHTML = '−';
-  zoomOutBtn.title = 'Zoom Out';
+  zoomOutBtn.title = t('wavedromZoomOut', 'Zoom Out');
 
   const resetBtn = document.createElement('button');
   resetBtn.innerHTML = '⊙';
-  resetBtn.title = 'Reset';
+  resetBtn.title = t('wavedromResetView', 'Reset');
 
   const closeBtn = document.createElement('button');
   closeBtn.innerHTML = '✕';
-  closeBtn.title = 'Close (ESC)';
+  closeBtn.title = t('wavedromCloseFullscreen', 'Close (ESC)');
 
   toolbar.append(zoomInBtn, zoomOutBtn, resetBtn, closeBtn);
 
@@ -443,6 +505,8 @@ const openFullscreen = (svgHtml: string, panelBg: string) => {
 
   const content = document.createElement('div');
   content.className = 'gv-wavedrom-modal-content';
+  // The markup was sanitised with DOMPurify before it was inserted into the
+  // diagram container, so this innerHTML only re-inserts already-safe markup.
   content.innerHTML = svgHtml;
 
   // Ensure the SVG fills the card (fix: remove fixed pixel w/h if viewBox present).
@@ -456,7 +520,7 @@ const openFullscreen = (svgHtml: string, panelBg: string) => {
 
   const hint = document.createElement('div');
   hint.className = 'gv-wavedrom-modal-hint';
-  hint.textContent = 'Scroll to zoom • Drag to pan • ESC to close';
+  hint.textContent = t('wavedromFullscreenHint', 'Scroll to zoom • Drag to pan • ESC to close');
 
   modal.append(toolbar, card, hint);
   document.body.appendChild(modal);
@@ -497,10 +561,31 @@ const openFullscreen = (svgHtml: string, panelBg: string) => {
   const handleKeyDown = (e: KeyboardEvent) => {
     if (e.key === 'Escape') closeModal();
   };
+
+  // Single registration point: every listener (including the document-level
+  // keydown/mousemove/mouseup) is removed together on close, so no listener
+  // outlives the modal even when it is torn down externally.
+  const cleanupFns: Array<() => void> = [];
+  const on = <K extends keyof DocumentEventMap>(
+    target: EventTarget,
+    type: K,
+    handler: (e: DocumentEventMap[K]) => void,
+    opts?: AddEventListenerOptions,
+  ) => {
+    const listener = handler as EventListener;
+    target.addEventListener(type, listener, opts);
+    cleanupFns.push(() => target.removeEventListener(type, listener, opts));
+  };
   const removeListeners = () => {
-    document.removeEventListener('keydown', handleKeyDown);
-    document.removeEventListener('mousemove', handleMouseMove);
-    document.removeEventListener('mouseup', handleMouseUp);
+    cleanupFns.splice(0).forEach((remove) => remove());
+  };
+
+  const destroyModal = () => {
+    removeListeners();
+    handleMouseUp();
+    modal.remove();
+    currentModal = null;
+    closeActiveModal = null;
   };
   const closeModal = () => {
     if (closing) return;
@@ -511,18 +596,21 @@ const openFullscreen = (svgHtml: string, panelBg: string) => {
     setTimeout(() => {
       modal.remove();
       currentModal = null;
+      closeActiveModal = null;
     }, 300);
   };
+  closeActiveModal = destroyModal;
 
-  zoomInBtn.addEventListener('click', zoomIn);
-  zoomOutBtn.addEventListener('click', zoomOut);
-  resetBtn.addEventListener('click', resetView);
-  closeBtn.addEventListener('click', closeModal);
-  modal.addEventListener('click', (e) => {
+  on(zoomInBtn, 'click', zoomIn);
+  on(zoomOutBtn, 'click', zoomOut);
+  on(resetBtn, 'click', resetView);
+  on(closeBtn, 'click', closeModal);
+  on(modal, 'click', (e) => {
     if (e.target === modal) closeModal();
   });
-  document.addEventListener('keydown', handleKeyDown);
-  modal.addEventListener(
+  on(document, 'keydown', handleKeyDown);
+  on(
+    modal,
     'wheel',
     (e) => {
       e.preventDefault();
@@ -531,24 +619,25 @@ const openFullscreen = (svgHtml: string, panelBg: string) => {
     },
     { passive: false },
   );
-  content.addEventListener('mousedown', (e) => {
+  on(content, 'mousedown', (e) => {
     isDragging = true;
     startX = e.clientX - translateX;
     startY = e.clientY - translateY;
     content.classList.add('dragging');
   });
-  document.addEventListener('mousemove', handleMouseMove);
-  document.addEventListener('mouseup', handleMouseUp);
+  on(document, 'mousemove', handleMouseMove);
+  on(document, 'mouseup', handleMouseUp);
 
-  // Auto-fit the SVG to the viewport.
+  // Auto-fit the SVG to the viewport from its intrinsic viewBox size.
   if (svgEl) {
     const padding = 80;
     const vw = window.innerWidth - padding * 2;
     const vh = window.innerHeight - padding * 2;
-    const w = svgEl.scrollWidth || svgEl.clientWidth;
-    const h = svgEl.scrollHeight || svgEl.clientHeight;
+    const intrinsic = parseViewBoxSize(svgEl);
+    const w = intrinsic?.w ?? (svgEl.scrollWidth || svgEl.clientWidth);
+    const h = intrinsic?.h ?? (svgEl.scrollHeight || svgEl.clientHeight);
     if (w > 0 && h > 0) {
-      scale = Math.min(Math.max(Math.min(vw / w, vh / h), 0.1), 10);
+      scale = computeAutoFitScale(w, h, vw, vh);
       initialScale = scale;
       applyTransform();
     }
@@ -591,6 +680,31 @@ export const resolveGeminiTheme = (doc: Document, prefersDark: boolean): 'light'
 const getAppTheme = (): 'light' | 'dark' =>
   resolveGeminiTheme(document, window.matchMedia('(prefers-color-scheme: dark)').matches);
 
+/**
+ * Move Gemini's native code-block copy button into the toggle toolbar.
+ * The toolbar overlays the code block in Code view, so a native copy button
+ * left in place gets covered. Mirrors the Mermaid renderer's approach.
+ *
+ * @returns the moved button, or null when no native copy button was found.
+ * @internal Exported for testing.
+ */
+export const moveNativeCopyButton = (
+  wrapper: HTMLElement,
+  target: HTMLElement,
+): HTMLElement | null => {
+  const parentElement = wrapper.parentElement;
+  const nativeCopyBtn =
+    parentElement?.querySelector('.buttons') || parentElement?.querySelector('.copy-button');
+  if (!nativeCopyBtn) return null;
+  // Reset positioning that might conflict with the toolbar layout.
+  (nativeCopyBtn as HTMLElement).style.position = 'static';
+  (nativeCopyBtn as HTMLElement).style.top = 'auto';
+  (nativeCopyBtn as HTMLElement).style.right = 'auto';
+  (nativeCopyBtn as HTMLElement).style.marginTop = '0';
+  target.appendChild(nativeCopyBtn);
+  return nativeCopyBtn as HTMLElement;
+};
+
 const renderWaveDrom = async (codeEl: HTMLElement, code: string) => {
   if (codeEl.dataset.wavedromCode === code) return;
   if (codeEl.dataset.wavedromProcessing === 'true') return;
@@ -627,13 +741,17 @@ const renderWaveDrom = async (codeEl: HTMLElement, code: string) => {
       const toggleContainer = document.createElement('div');
       toggleContainer.className = 'gv-wavedrom-toggle';
 
+      // Move the native copy button into the toolbar so it is not covered by
+      // the overlay in Code view (same fix as the Mermaid renderer).
+      moveNativeCopyButton(wrapper, toggleContainer);
+
       const diagramBtn = document.createElement('button');
-      diagramBtn.textContent = '〜 Diagram';
+      diagramBtn.textContent = t('wavedromDiagramButton', '〜 Diagram');
       diagramBtn.className = 'active';
       diagramBtn.dataset.view = 'diagram';
 
       const codeBtn = document.createElement('button');
-      codeBtn.textContent = '</> Code';
+      codeBtn.textContent = t('wavedromCodeButton', '</> Code');
       codeBtn.dataset.view = 'code';
 
       toggleContainer.append(diagramBtn, codeBtn);
@@ -732,30 +850,46 @@ const processCodeBlocks = () => {
 let wavedromEnabled = true;
 let observer: MutationObserver | null = null;
 
-/** Start the WaveDrom renderer (called from the content script entry point). */
+/**
+ * Start the WaveDrom renderer (called from the content script entry point).
+ * Storage calls are guarded: after an extension reload the context may be
+ * invalidated, and an unguarded call would throw on the page.
+ */
 export const startWaveDrom = () => {
-  chrome.storage?.sync?.get({ gvWaveDromEnabled: true }, (result) => {
-    wavedromEnabled = result?.gvWaveDromEnabled !== false;
-    if (wavedromEnabled) {
-      initializeWaveDrom();
-    } else {
-      console.log('[Gemini Voyager] WaveDrom rendering is disabled');
-    }
-  });
-
-  chrome.storage?.onChanged?.addListener((changes, areaName) => {
-    if (areaName === 'sync' && changes.gvWaveDromEnabled) {
-      wavedromEnabled = changes.gvWaveDromEnabled.newValue !== false;
+  try {
+    chrome.storage?.sync?.get({ [StorageKeys.WAVEDROM_ENABLED]: true }, (result) => {
+      wavedromEnabled = result?.[StorageKeys.WAVEDROM_ENABLED] !== false;
       if (wavedromEnabled) {
         initializeWaveDrom();
-        console.log('[Gemini Voyager] WaveDrom rendering enabled');
       } else {
-        observer?.disconnect();
-        observer = null;
-        console.log('[Gemini Voyager] WaveDrom rendering disabled');
+        console.log('[Gemini Voyager] WaveDrom rendering is disabled');
       }
+    });
+  } catch (err) {
+    if (!isExtensionContextInvalidatedError(err)) {
+      console.error('[Gemini Voyager] Failed to read WaveDrom setting:', err);
     }
-  });
+  }
+
+  try {
+    chrome.storage?.onChanged?.addListener((changes, areaName) => {
+      if (areaName === 'sync' && changes[StorageKeys.WAVEDROM_ENABLED]) {
+        wavedromEnabled = changes[StorageKeys.WAVEDROM_ENABLED].newValue !== false;
+        if (wavedromEnabled) {
+          initializeWaveDrom();
+          console.log('[Gemini Voyager] WaveDrom rendering enabled');
+        } else {
+          observer?.disconnect();
+          observer = null;
+          console.log('[Gemini Voyager] WaveDrom rendering disabled');
+        }
+      }
+    });
+  } catch (err) {
+    if (!isExtensionContextInvalidatedError(err)) {
+      console.error('[Gemini Voyager] Failed to watch WaveDrom setting:', err);
+    }
+  }
 };
 
 const initializeWaveDrom = () => {
