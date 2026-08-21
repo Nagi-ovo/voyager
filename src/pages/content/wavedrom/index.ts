@@ -90,12 +90,18 @@ export const remapDarkSkinStyle = (styleText: string): string => {
 // Lazy WaveDrom loader
 // ---------------------------------------------------------------------------
 
-type WaveDromModule = typeof import('wavedrom');
-type WaveSkin = { [key: string]: unknown };
-type OnmlTree = [string, Record<string, unknown>, ...unknown[]];
+type WaveSkin = import('wavedrom').WaveSkin;
+type OnmlTree = import('wavedrom').OnmlTree;
+type WaveSource = import('wavedrom').WaveSource;
+
+/** The subset of the WaveDrom API used by this renderer. */
+interface WaveDromAPI {
+  renderAny: (index: number, source: WaveSource, waveSkin?: WaveSkin) => OnmlTree;
+  onml: { stringify: (tree: OnmlTree) => string };
+}
 
 interface WaveDromBundle {
-  WaveDrom: WaveDromModule;
+  WaveDrom: WaveDromAPI;
   waveSkinDefault: WaveSkin;
   /** Bundled dark skin with near-black fills remapped for Gemini's dark page. */
   waveSkinDarkRemapped: WaveSkin;
@@ -132,7 +138,7 @@ const loadWaveDrom = async (): Promise<WaveDromBundle | null> => {
       import('wavedrom/skins/default.js'),
     ]);
 
-    const WaveDrom = WaveDromMod.default ?? (WaveDromMod as unknown as WaveDromModule);
+    const WaveDrom: WaveDromAPI = (WaveDromMod.default ?? WaveDromMod) as unknown as WaveDromAPI;
     const waveSkinDefault = (defaultMod.default ?? defaultMod) as WaveSkin;
     const rawDarkSkin = (darkMod.default ?? darkMod) as WaveSkin;
 
@@ -205,16 +211,12 @@ const renderWaveSvg = async (code: string, isDark: boolean): Promise<string | nu
     const parsed: unknown = parse(code.trim());
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null;
 
-    const source = parsed as { signal?: unknown; assign?: unknown; reg?: unknown };
+    const source = parsed as WaveSource;
     const hasLanes =
       Array.isArray(source.signal) || Array.isArray(source.assign) || Array.isArray(source.reg);
     if (!hasLanes) return null;
 
-    const tree = WaveDrom.renderAny(
-      diagramIndex++,
-      source as Parameters<WaveDromModule['renderAny']>[1],
-      skin as Parameters<WaveDromModule['renderAny']>[2],
-    );
+    const tree = WaveDrom.renderAny(diagramIndex++, source, skin);
     const svgRaw = WaveDrom.onml.stringify(tree);
     return makeResponsiveSvg(svgRaw);
   } catch {
