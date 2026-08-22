@@ -1591,6 +1591,42 @@
     "message": "会話でテキストを選択したときに、選択したテキストを引用するフローティングボタンを表示します",
     "description": "Quote reply feature hint"
   },
+  "enableWaveDromRendering": {
+    "message": "WaveDrom タイミング図のレンダリングを有効化",
+    "description": "WaveDrom レンダリングトグルラベル"
+  },
+  "enableWaveDromRenderingHint": {
+    "message": "コードブロック内の WaveJSON をインタラクティブなタイミング図として自動描画します",
+    "description": "WaveDrom 機能の説明"
+  },
+  "wavedromDiagramButton": {
+    "message": "〜 図",
+    "description": "描画された図に切り替えるボタンのラベル"
+  },
+  "wavedromCodeButton": {
+    "message": "</> コード",
+    "description": "WaveJSON ソースに切り替えるボタンのラベル"
+  },
+  "wavedromZoomIn": {
+    "message": "拡大",
+    "description": "全画面ツールバー：拡大ボタンのタイトル"
+  },
+  "wavedromZoomOut": {
+    "message": "縮小",
+    "description": "全画面ツールバー：縮小ボタンのタイトル"
+  },
+  "wavedromResetView": {
+    "message": "リセット",
+    "description": "全画面ツールバー：リセットボタンのタイトル"
+  },
+  "wavedromCloseFullscreen": {
+    "message": "閉じる (ESC)",
+    "description": "全画面ツールバー：閉じるボタンのタイトル"
+  },
+  "wavedromFullscreenHint": {
+    "message": "スクロールで拡大縮小 • ドラッグで移動 • ESC で閉じる",
+    "description": "全画面覆いの操作ヒント"
+  },
   "enableHighlights": {
     "message": "ハイライトを有効化",
     "description": "Highlight feature toggle label"

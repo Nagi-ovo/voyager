@@ -74,6 +74,7 @@ import {
   startWatermarkRemover,
   stopWatermarkRemover,
 } from './watermarkRemover/index';
+import { startWaveDrom } from './wavedrom/index';
 
 // Suppress Vite's CSS preload errors in the Chrome extension content script context.
 // Dynamic imports (e.g., mermaid) trigger Vite's __vitePreload helper which tries to
@@ -458,6 +459,8 @@ async function initializeFeatures(): Promise<void> {
     if (location.hostname === 'gemini.google.com') {
       // Initialize Mermaid rendering (lightweight)
       startMermaid();
+      // Initialize WaveDrom rendering (lazy-loaded timing diagrams)
+      startWaveDrom();
       // Initialize user message LaTeX rendering
       startUserLatex();
       await delay(LIGHT_FEATURE_INIT_DELAY);

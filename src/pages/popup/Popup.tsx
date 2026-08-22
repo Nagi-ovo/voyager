@@ -105,6 +105,7 @@ import {
 import WidthSlider from './components/WidthSlider';
 import { useFormulaCopyPopupSettings } from './hooks/useFormulaCopyPopupSettings';
 import { usePopupScrollRestoration } from './hooks/usePopupScrollRestoration';
+import { useWaveDromPopupSettings } from './hooks/useWaveDromPopupSettings';
 import {
   type SettingsSearchItem,
   getSettingsSearchMatches,
@@ -453,6 +454,12 @@ const POPUP_SETTINGS_SEARCH_ITEMS = [
     'enableMermaidRendering',
     'enableMermaidRenderingHint',
   ]),
+  popupSearchTarget(
+    'general',
+    'enableWaveDromRendering',
+    ['enableWaveDromRendering', 'enableWaveDromRenderingHint'],
+    ['wavedrom wavejson timing diagram'],
+  ),
   popupSearchTarget('general', 'enableQuoteReply', ['enableQuoteReply', 'enableQuoteReplyHint']),
   popupSearchTarget('general', 'enableHighlights', ['enableHighlights', 'enableHighlightsHint']),
   popupSearchTarget('general', 'showHighlightTimelineMarkers', [
@@ -942,6 +949,22 @@ function ParagraphSpacingControl({
 
 export default function Popup({ sourceTabId }: PopupProps = {}) {
   const { t, language } = useLanguage();
+  const setSyncStorage = useCallback(async (payload: Record<string, unknown>) => {
+    try {
+      await browser.storage.sync.set(payload);
+      return;
+    } catch {
+      // Fallback to chrome.* if polyfill is unavailable in this context.
+    }
+
+    await new Promise<void>((resolve) => {
+      try {
+        chrome.storage?.sync?.set(payload, () => resolve());
+      } catch {
+        resolve();
+      }
+    });
+  }, []);
   const [mode, setMode] = useState<ScrollMode>('flow');
   const [timelineStyle, setTimelineStyle] = useState<TimelineStyle>('dots');
   const [hideContainer, setHideContainer] = useState<boolean>(false);
@@ -986,6 +1009,11 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
   // badge on the floating ball instead of auto-popping the modal.
   const [changelogBadgeMode, setChangelogBadgeMode] = useState<boolean>(false);
   const [mermaidEnabled, setMermaidEnabled] = useState<boolean>(true);
+  const {
+    enabled: wavedromEnabled,
+    hydrateFromStorage: hydrateWavedromEnabled,
+    setEnabledFromUser: setWavedromEnabledFromUser,
+  } = useWaveDromPopupSettings(setSyncStorage);
   const [showMessageTimestamps, setShowMessageTimestamps] = useState<boolean>(false);
   const [quoteReplyEnabled, setQuoteReplyEnabled] = useState<boolean>(true);
 
@@ -1301,23 +1329,6 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
       active = false;
       unsubscribe();
     };
-  }, []);
-
-  const setSyncStorage = useCallback(async (payload: Record<string, unknown>) => {
-    try {
-      await browser.storage.sync.set(payload);
-      return;
-    } catch {
-      // Fallback to chrome.* if polyfill is unavailable in this context.
-    }
-
-    await new Promise<void>((resolve) => {
-      try {
-        chrome.storage?.sync?.set(payload, () => resolve());
-      } catch {
-        resolve();
-      }
-    });
   }, []);
 
   const handleFormulaCopyEnabledChange = useCallback(
@@ -1961,6 +1972,7 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
           [StorageKeys.INPUT_VIM_MODE]: false,
           [StorageKeys.TAB_TITLE_UPDATE_ENABLED]: false,
           gvMermaidEnabled: true,
+          [StorageKeys.WAVEDROM_ENABLED]: true,
           gvQuoteReplyEnabled: true,
           [StorageKeys.HIGHLIGHT_ENABLED]: false,
           [StorageKeys.HIGHLIGHT_TIMELINE_MARKERS_ENABLED]: true,
@@ -2045,6 +2057,7 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
             void setSyncStorage({ [StorageKeys.TAB_TITLE_UPDATE_ENABLED]: false });
           }
           setMermaidEnabled(res?.gvMermaidEnabled !== false);
+          hydrateWavedromEnabled(res?.[StorageKeys.WAVEDROM_ENABLED]);
           setQuoteReplyEnabled(res?.gvQuoteReplyEnabled !== false);
           setHighlightEnabled(res?.[StorageKeys.HIGHLIGHT_ENABLED] === true);
           setHighlightTimelineMarkersEnabled(
@@ -2167,7 +2180,7 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
         },
       );
     } catch {}
-  }, [hydrateFormulaCopySettings, setSyncStorage]);
+  }, [hydrateFormulaCopySettings, hydrateWavedromEnabled, setSyncStorage]);
 
   // Validate and normalize URL
   const normalizeUrl = useCallback((url: string): string | null => {
@@ -4267,6 +4280,30 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
                     onChange={(e) => {
                       setMermaidEnabled(e.target.checked);
                       apply({ mermaidEnabled: e.target.checked });
+                    }}
+                  />
+                </div>,
+              )}
+              {renderSetting(
+                'general',
+                'enableWaveDromRendering',
+                <div className="group flex items-center justify-between">
+                  <div className="flex-1">
+                    <Label
+                      htmlFor="wavedrom-enabled"
+                      className="group-hover:text-primary cursor-pointer text-sm font-medium transition-colors"
+                    >
+                      {t('enableWaveDromRendering')}
+                    </Label>
+                    <p className="text-muted-foreground mt-1 text-xs">
+                      {t('enableWaveDromRenderingHint')}
+                    </p>
+                  </div>
+                  <Switch
+                    id="wavedrom-enabled"
+                    checked={wavedromEnabled}
+                    onChange={(e) => {
+                      setWavedromEnabledFromUser(e.target.checked);
                     }}
                   />
                 </div>,

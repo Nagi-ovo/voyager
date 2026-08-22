@@ -1599,6 +1599,42 @@
     "message": "Affiche un bouton flottant pour citer le texte sélectionné dans les conversations",
     "description": "Quote reply feature hint"
   },
+  "enableWaveDromRendering": {
+    "message": "Activer le rendu des diagrammes temporels WaveDrom",
+    "description": "Libellé de l’interrupteur de rendu WaveDrom"
+  },
+  "enableWaveDromRenderingHint": {
+    "message": "Rend automatiquement les blocs de code WaveJSON en diagrammes temporels interactifs",
+    "description": "Description de la fonctionnalité WaveDrom"
+  },
+  "wavedromDiagramButton": {
+    "message": "〜 Diagramme",
+    "description": "Libellé du bouton pour afficher le diagramme rendu"
+  },
+  "wavedromCodeButton": {
+    "message": "</> Code",
+    "description": "Libellé du bouton pour afficher le code source WaveJSON"
+  },
+  "wavedromZoomIn": {
+    "message": "Zoom avant",
+    "description": "Barre d’outils plein écran : titre du bouton de zoom avant"
+  },
+  "wavedromZoomOut": {
+    "message": "Zoom arrière",
+    "description": "Barre d’outils plein écran : titre du bouton de zoom arrière"
+  },
+  "wavedromResetView": {
+    "message": "Réinitialiser",
+    "description": "Barre d’outils plein écran : titre du bouton de réinitialisation"
+  },
+  "wavedromCloseFullscreen": {
+    "message": "Fermer (Échap)",
+    "description": "Barre d’outils plein écran : titre du bouton de fermeture"
+  },
+  "wavedromFullscreenHint": {
+    "message": "Molette pour zoomer • Glisser pour déplacer • Échap pour fermer",
+    "description": "Aide à l’utilisation de la superposition plein écran"
+  },
   "enableHighlights": {
     "message": "Activer les surlignages",
     "description": "Highlight feature toggle label"

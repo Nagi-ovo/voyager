@@ -1594,6 +1594,42 @@
     "message": "Mostra um botão flutuante para citar o texto selecionado em conversas",
     "description": "Quote reply feature hint"
   },
+  "enableWaveDromRendering": {
+    "message": "Ativar a renderização de diagramas de temporização do WaveDrom",
+    "description": "Rótulo do interruptor de renderização WaveDrom"
+  },
+  "enableWaveDromRenderingHint": {
+    "message": "Renderiza automaticamente blocos de código WaveJSON como diagramas de temporização interativos",
+    "description": "Descrição do recurso WaveDrom"
+  },
+  "wavedromDiagramButton": {
+    "message": "〜 Diagrama",
+    "description": "Rótulo do botão para mostrar o diagrama renderizado"
+  },
+  "wavedromCodeButton": {
+    "message": "</> Código",
+    "description": "Rótulo do botão para mostrar o código-fonte WaveJSON"
+  },
+  "wavedromZoomIn": {
+    "message": "Ampliar",
+    "description": "Barra de ferramentas em tela cheia: título do botão de ampliar"
+  },
+  "wavedromZoomOut": {
+    "message": "Reduzir",
+    "description": "Barra de ferramentas em tela cheia: título do botão de reduzir"
+  },
+  "wavedromResetView": {
+    "message": "Redefinir",
+    "description": "Barra de ferramentas em tela cheia: título do botão de redefinir"
+  },
+  "wavedromCloseFullscreen": {
+    "message": "Fechar (ESC)",
+    "description": "Barra de ferramentas em tela cheia: título do botão de fechar"
+  },
+  "wavedromFullscreenHint": {
+    "message": "Role para ampliar • Arraste para mover • ESC para fechar",
+    "description": "Dica de uso da sobreposição em tela cheia"
+  },
   "enableHighlights": {
     "message": "Ativar destaques",
     "description": "Highlight feature toggle label"
