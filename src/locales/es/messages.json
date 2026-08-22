@@ -2664,5 +2664,69 @@
   "diagnosticsCopyFailed": {
     "message": "El portapapeles no está disponible. Selecciona la vista previa o descarga el JSON."
   },
-  "diagnosticsDownloadJson": { "message": "Descargar JSON" }
+  "diagnosticsDownloadJson": { "message": "Descargar JSON" },
+  "promptHistoryTitle": {
+    "message": "Historial de indicaciones",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryEnabledHint": {
+    "message": "Guarda en este dispositivo las indicaciones enviadas y actualizadas, separadas por cuenta de Gemini.",
+    "description": "Prompt History setting hint (#923)"
+  },
+  "promptHistoryEmpty": {
+    "message": "Sin historial todavía",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistorySent": {
+    "message": "Enviado",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryEdited": {
+    "message": "Editado",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryCopy": {
+    "message": "Copiar",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryInsert": {
+    "message": "Insertar",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryDelete": {
+    "message": "Eliminar",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryClear": {
+    "message": "Vaciar",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryCopied": {
+    "message": "Copiado",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryInserted": {
+    "message": "Insertado",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryInsertFailed": {
+    "message": "Error al insertar",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryCopyFailed": {
+    "message": "Error al copiar",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryClearConfirm": {
+    "message": "¿Vaciar el historial de indicaciones de esta cuenta de Gemini?",
+    "description": "Prompt History clear confirmation (#923)"
+  },
+  "promptHistoryCancel": {
+    "message": "Cancelar",
+    "description": "Prompt History clear confirmation (#923)"
+  },
+  "promptHistoryStorageFailed": {
+    "message": "No se pudo guardar el historial. Revisa el almacenamiento de la extensión.",
+    "description": "Prompt History storage error (#923)"
+  }
 }

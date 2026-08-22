@@ -164,7 +164,7 @@ interface CategoryDefinition {
   clearable: boolean;
 }
 
-const PROMPT_KEYS = new Set<string>([StorageKeys.PROMPT_ITEMS]);
+const PROMPT_KEYS = new Set<string>([StorageKeys.PROMPT_ITEMS, StorageKeys.PROMPT_HISTORY_ITEMS]);
 
 const FOLDER_KEYS = new Set<string>([StorageKeys.FOLDER_DATA, StorageKeys.FOLDER_DATA_AISTUDIO]);
 
@@ -208,7 +208,12 @@ const SETTINGS_KEYS = new Set<string>([
 ]);
 
 const CATEGORY_DEFINITIONS: readonly CategoryDefinition[] = [
-  { id: 'prompts', exactKeys: PROMPT_KEYS, clearable: false },
+  {
+    id: 'prompts',
+    exactKeys: PROMPT_KEYS,
+    prefixes: [`${StorageKeys.PROMPT_HISTORY_ITEMS}:`],
+    clearable: false,
+  },
   {
     id: 'folders',
     exactKeys: FOLDER_KEYS,

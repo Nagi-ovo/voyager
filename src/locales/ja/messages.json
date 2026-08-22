@@ -2659,5 +2659,69 @@
   "diagnosticsCopyFailed": {
     "message": "クリップボードを使用できません。プレビューを手動で選択するか JSON をダウンロードしてください。"
   },
-  "diagnosticsDownloadJson": { "message": "JSON をダウンロード" }
+  "diagnosticsDownloadJson": { "message": "JSON をダウンロード" },
+  "promptHistoryTitle": {
+    "message": "プロンプト履歴",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryEnabledHint": {
+    "message": "送信・更新したプロンプトを、このデバイスに Gemini アカウントごとに保存します。",
+    "description": "Prompt History setting hint (#923)"
+  },
+  "promptHistoryEmpty": {
+    "message": "プロンプト履歴はありません",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistorySent": {
+    "message": "送信",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryEdited": {
+    "message": "編集",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryCopy": {
+    "message": "コピー",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryInsert": {
+    "message": "挿入",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryDelete": {
+    "message": "削除",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryClear": {
+    "message": "クリア",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryCopied": {
+    "message": "コピーしました",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryInserted": {
+    "message": "挿入しました",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryInsertFailed": {
+    "message": "挿入に失敗しました",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryCopyFailed": {
+    "message": "コピーに失敗しました",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryClearConfirm": {
+    "message": "この Gemini アカウントのプロンプト履歴を消去しますか？",
+    "description": "Prompt History clear confirmation (#923)"
+  },
+  "promptHistoryCancel": {
+    "message": "キャンセル",
+    "description": "Prompt History clear confirmation (#923)"
+  },
+  "promptHistoryStorageFailed": {
+    "message": "プロンプト履歴を保存できませんでした。拡張機能のストレージを確認してください。",
+    "description": "Prompt History storage error (#923)"
+  }
 }

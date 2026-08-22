@@ -6,7 +6,7 @@ import { type PromptItem } from '@/core/types/sync';
 import { getPromptNameComparisonKey, getPromptNameConflictIds } from '@/core/utils/promptName';
 
 import { findChatInput, insertTextIntoChatInput } from '../chatInput/index';
-import { findClosestSendActionButton } from '../sendBehavior/sendButton';
+import { findClosestSendActionButton, isSendKeyboardEvent } from '../sendBehavior/sendButton';
 
 const ROOT_ID = 'gv-pm-slash-root';
 const LIST_ID = 'gv-pm-slash-list';
@@ -1494,10 +1494,7 @@ export function startPromptSlashCommand(options: SlashPromptOptions = {}): Slash
       return;
     }
 
-    const isSendEnter = ctrlEnterSendEnabled
-      ? event.ctrlKey || event.metaKey
-      : !event.shiftKey || event.ctrlKey || event.metaKey;
-    if (event.key === 'Enter' && isSendEnter) {
+    if (isSendKeyboardEvent(event, ctrlEnterSendEnabled)) {
       if (!hasPromptToken(input)) return;
       event.preventDefault();
       event.stopPropagation();
