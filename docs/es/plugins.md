@@ -1,6 +1,5 @@
 ---
 layout: page
-sidebar: false
 aside: false
 gitChangelog: false
 title: Mercado de plugins

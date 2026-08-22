@@ -96,6 +96,53 @@ describe('community issue policy', () => {
     );
   });
 
+  it('requires maintainer approval for a feature-level claim', async () => {
+    const github = makeGithub({ permission: 'read' });
+    const context = makeContext({ labels: ['enhancement'], commenter: 'drive-by' });
+
+    await expect(handleClaim({ github, context })).resolves.toEqual({
+      status: 'awaiting_approval',
+      username: 'drive-by',
+    });
+    expect(github.rest.issues.addAssignees).not.toHaveBeenCalled();
+    expect(github.rest.issues.createComment).toHaveBeenCalledWith(
+      expect.objectContaining({ body: expect.stringContaining('feature-level work item') }),
+    );
+  });
+
+  it('lets a maintainer approve a feature-level claim', async () => {
+    const github = makeGithub({ permission: 'write' });
+    const context = makeContext({ labels: ['enhancement'], commenter: 'maintainer' });
+
+    await expect(handleApprove({ github, context, username: 'contributor' })).resolves.toEqual({
+      status: 'assigned',
+      username: 'contributor',
+    });
+    expect(github.rest.issues.addAssignees).toHaveBeenCalledWith(
+      expect.objectContaining({ assignees: ['contributor'] }),
+    );
+  });
+
+  it('rejects /approve on issues that do not gate claims', async () => {
+    const github = makeGithub({ permission: 'admin' });
+    const context = makeContext({ labels: ['bug'], commenter: 'maintainer' });
+
+    await expect(handleApprove({ github, context, username: 'contributor' })).resolves.toEqual({
+      status: 'not_approval_required',
+    });
+    expect(github.rest.issues.addAssignees).not.toHaveBeenCalled();
+  });
+
+  it('lets a maintainer claim a feature-level issue directly', async () => {
+    const github = makeGithub({ permission: 'admin' });
+    const context = makeContext({ labels: ['enhancement'], commenter: 'maintainer' });
+
+    await expect(handleClaim({ github, context })).resolves.toEqual({
+      status: 'assigned',
+      username: 'maintainer',
+    });
+  });
+
   it('keeps ordinary issues open to direct claims', async () => {
     const github = makeGithub();
     const context = makeContext({ commenter: 'outside-contributor' });

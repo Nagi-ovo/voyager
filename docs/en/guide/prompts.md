@@ -70,6 +70,12 @@ The Prompt Manager can now be used on any website you choose, not just Gemini™
 - `copilot.microsoft.com` - Microsoft Copilot
 - `poe.com` - Poe
 
+### Local Apps
+
+Local addresses work too — enter `localhost:3080` or `127.0.0.1:3080` the same way. For example, [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) runs on `localhost:3080`, and the Prompt Manager attaches to it just like any hosted site.
+
+![Prompt Manager running inside DeepSeek Harness](/assets/prompt-manager-deepseek-harness.png)
+
 ::: tip
 On custom websites, **only** the Prompt Manager feature is activated. Other features like Timeline and Folders are designed specifically for Gemini and will not load.
 :::

@@ -44,9 +44,9 @@
 
 ## 🐙 GitHub Issues
 
-Если вы нашли ошибку или у вас есть конкретный запрос на функцию, пожалуйста, откройте issue на GitHub:
+Если вы нашли воспроизводимую ошибку, пожалуйста, откройте issue на GitHub. Запросы функций, идеи и вопросы публикуйте в Discussions, а не в issues:
 
 - [Сообщить об ошибке](https://github.com/Nagi-ovo/voyager/issues/new?template=bug_report.yml)
-- [Предложить функцию](https://github.com/Nagi-ovo/voyager/issues/new?template=feature_request.yml)
+- [Предложить функцию или идею (Discussions)](https://github.com/Nagi-ovo/voyager/discussions)
 
 Спасибо за поддержку Voyager! ❤️

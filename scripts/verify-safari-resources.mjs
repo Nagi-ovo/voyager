@@ -43,6 +43,39 @@ function listFiles(directory, prefix = '') {
   });
 }
 
+const tableLatexMethodName = 'preserveLatexPipeCommandsInMarkdownTable';
+const tableLatexMethodBundles = listFiles(distDir)
+  .filter((relativePath) => relativePath.endsWith('.js'))
+  .map((relativePath) => ({
+    relativePath,
+    source: fs.readFileSync(path.join(distDir, relativePath), 'utf8'),
+  }))
+  .filter(({ source }) => source.includes(tableLatexMethodName));
+
+if (tableLatexMethodBundles.length === 0) {
+  console.error(`Missing ${tableLatexMethodName} in the Safari build output`);
+  process.exit(1);
+}
+
+for (const { relativePath, source } of tableLatexMethodBundles) {
+  const methodDefinition = `static ${tableLatexMethodName}`;
+  const methodNameIndex = source.indexOf(methodDefinition);
+  if (methodNameIndex === -1) {
+    console.error(`Missing ${methodDefinition} definition in ${relativePath}`);
+    process.exit(1);
+  }
+  const nextMethodIndex = source.indexOf('static ', methodNameIndex + methodDefinition.length);
+  const methodFragment = source.slice(
+    methodNameIndex,
+    nextMethodIndex === -1 ? methodNameIndex + 2000 : nextMethodIndex,
+  );
+
+  if (/\(\?<([=!])/.test(methodFragment)) {
+    console.error(`${tableLatexMethodName} uses unsupported RegExp lookbehind in ${relativePath}`);
+    process.exit(1);
+  }
+}
+
 const bundleResourcesDir = process.argv[2];
 if (bundleResourcesDir) {
   const missingBundleFiles = listFiles(distDir).filter(

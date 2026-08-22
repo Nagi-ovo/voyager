@@ -89,7 +89,7 @@ bun run dev
 
 ### 2. 认领 Issue
 
-对于未分配且**没有** `community-only` 标签的 issue，评论 `/claim`，机器人会自动将你分配为负责人。
+对于未分配、且**没有** `community-only` 或 `enhancement` 标签的 issue，评论 `/claim`，机器人会自动将你分配为负责人。带这两个标签中任意一个的 issue，必须等维护者回复 `/approve @你的用户名` 后才会分配。
 
 ### 3. 社群专属 Issue
 
@@ -275,7 +275,7 @@ Voyager 通过以下功能增强 Gemini AI 聊天体验：
 - UI 自定义
 
 > [!NOTE]
-> **我们认为 Voyager 的功能已经足够充分且全面。** 引入过多个性化、小众的功能不会让软件更好用，反而会增加维护负担。除非你认为某个功能确实是急需的、大多数用户都会用到的，否则不建议提交 Feature Request。
+> **我们认为 Voyager 的功能已经足够充分且全面。** 引入过多个性化、小众的功能不会让软件更好用，反而会增加维护负担。除非你认为某个功能确实是急需的、大多数用户都会用到的，否则不建议提交 Feature Request。若确实必要，请到 [Discussions](https://github.com/Nagi-ovo/voyager/discussions) 提出，不要开 Issue。
 
 **不在范围内**：网站爬取、网络拦截、账户自动化。
 
@@ -382,7 +382,7 @@ Before starting, check if the issue is already assigned to someone by looking at
 
 ### 2. Claim an Issue
 
-For an unassigned issue **without** the `community-only` label, comment `/claim` to assign yourself automatically. A bot will confirm the assignment.
+For an unassigned issue **without** the `community-only` or `enhancement` label, comment `/claim` to assign yourself automatically. A bot will confirm the assignment. An issue carrying either label is assigned only after a maintainer replies `/approve @your-username`.
 
 ### 3. Community-only Issues
 
@@ -580,7 +580,7 @@ Voyager enhances the Gemini AI chat experience with:
 - UI customization
 
 > [!NOTE]
-> **We believe Voyager's feature set is already comprehensive and well-rounded.** Adding too many niche or overly personalized features does not make the software better — it only increases the maintenance burden. Unless you believe a feature is truly essential and would benefit the majority of users, please reconsider submitting a Feature Request.
+> **We believe Voyager's feature set is already comprehensive and well-rounded.** Adding too many niche or overly personalized features does not make the software better — it only increases the maintenance burden. Unless you believe a feature is truly essential and would benefit the majority of users, please reconsider submitting a Feature Request. If it truly is essential, raise it in [Discussions](https://github.com/Nagi-ovo/voyager/discussions), not as an Issue.
 
 **Out of scope**: Site scraping, network interception, account automation.
 

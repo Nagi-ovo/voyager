@@ -18,9 +18,9 @@ hero:
       link: ./guide/getting-started
 
 safariLaunch:
-  image: /assets/promotion/voyager-safari-1.6.0-twitter-zh.png
-  alt: Voyager 1.6.0 现已原生支持 Safari
-  link: ./guide/installation#_3-safari-macos
+  image: /assets/promotion/voyager-social-preview.png
+  alt: 提示词库可用于任意 Web UI，含 DeepSeek Harness
+  link: ./guide/deepseek-harness
 
 teaser:
   title: '重新定义交互。'

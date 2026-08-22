@@ -20,7 +20,7 @@
 <!-- Link the issue this PR resolves (e.g., Closes #123). FOR NEW FEATURES: You MUST open an Issue for discussion first. PRs submitted without prior discussion will be closed. -->
 <!-- 链接此 PR 解决的 issue（例如：Closes #123）。对于新功能：请务必先开启一个 Issue 进行讨论，未经讨论直接提交的 PR 会被关闭。 -->
 
-- [ ] If the issue is labeled `community-only`, I was assigned after maintainer approval before starting. / 如果 Issue 带有 `community-only` 标签，我已在开始前获得维护者确认并被分配。
+- [ ] If the issue is labeled `community-only` or `enhancement`, I was assigned after maintainer approval before starting. / 如果 Issue 带有 `community-only` 或 `enhancement` 标签，我已在开始前获得维护者确认并被分配。
 
 ### Visual Proof / 可视化证据
 

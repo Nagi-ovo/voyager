@@ -150,6 +150,10 @@ export default defineConfig({
             text: 'Claude & ChatGPT',
             items: [{ text: '浏览插件', link: '/plugins' }],
           },
+          {
+            text: '本地 Web UI',
+            items: [{ text: 'DeepSeek Harness', link: '/guide/deepseek-harness' }],
+          },
         ],
         footer: {
           message:
@@ -224,6 +228,10 @@ export default defineConfig({
           {
             text: 'Claude & ChatGPT',
             items: [{ text: '瀏覽外掛', link: '/zh_TW/plugins' }],
+          },
+          {
+            text: '本機 Web UI',
+            items: [{ text: 'DeepSeek Harness', link: '/zh_TW/guide/deepseek-harness' }],
           },
         ],
         footer: {
@@ -300,6 +308,10 @@ export default defineConfig({
             text: 'Claude & ChatGPT',
             items: [{ text: 'Browse Plugins', link: '/en/plugins' }],
           },
+          {
+            text: 'Local Web UI',
+            items: [{ text: 'DeepSeek Harness', link: '/en/guide/deepseek-harness' }],
+          },
         ],
         footer: {
           message:
@@ -374,6 +386,10 @@ export default defineConfig({
           {
             text: 'Claude & ChatGPT',
             items: [{ text: 'プラグインを見る', link: '/ja/plugins' }],
+          },
+          {
+            text: 'ローカル Web UI',
+            items: [{ text: 'DeepSeek Harness', link: '/ja/guide/deepseek-harness' }],
           },
         ],
         footer: {
@@ -450,6 +466,10 @@ export default defineConfig({
             text: 'Claude & ChatGPT',
             items: [{ text: '플러그인 둘러보기', link: '/ko/plugins' }],
           },
+          {
+            text: '로컬 Web UI',
+            items: [{ text: 'DeepSeek Harness', link: '/ko/guide/deepseek-harness' }],
+          },
         ],
         footer: {
           message:
@@ -524,6 +544,10 @@ export default defineConfig({
           {
             text: 'Claude & ChatGPT',
             items: [{ text: 'Parcourir les plugins', link: '/fr/plugins' }],
+          },
+          {
+            text: 'Interface Web locale',
+            items: [{ text: 'DeepSeek Harness', link: '/fr/guide/deepseek-harness' }],
           },
         ],
         footer: {
@@ -606,6 +630,10 @@ export default defineConfig({
             text: 'Claude & ChatGPT',
             items: [{ text: 'Explorar plugins', link: '/es/plugins' }],
           },
+          {
+            text: 'Interfaz Web local',
+            items: [{ text: 'DeepSeek Harness', link: '/es/guide/deepseek-harness' }],
+          },
         ],
         footer: {
           message:
@@ -680,6 +708,10 @@ export default defineConfig({
           {
             text: 'Claude & ChatGPT',
             items: [{ text: 'Explorar plugins', link: '/pt/plugins' }],
+          },
+          {
+            text: 'Interface Web local',
+            items: [{ text: 'DeepSeek Harness', link: '/pt/guide/deepseek-harness' }],
           },
         ],
         footer: {
@@ -756,6 +788,10 @@ export default defineConfig({
           {
             text: 'Claude & ChatGPT',
             items: [{ text: 'تصفح الإضافات', link: '/ar/plugins' }],
+          },
+          {
+            text: 'واجهة ويب محلية',
+            items: [{ text: 'DeepSeek Harness', link: '/ar/guide/deepseek-harness' }],
           },
         ],
         footer: {
@@ -837,6 +873,10 @@ export default defineConfig({
           {
             text: 'Claude & ChatGPT',
             items: [{ text: 'Обзор плагинов', link: '/ru/plugins' }],
+          },
+          {
+            text: 'Локальный веб-интерфейс',
+            items: [{ text: 'DeepSeek Harness', link: '/ru/guide/deepseek-harness' }],
           },
         ],
         footer: {

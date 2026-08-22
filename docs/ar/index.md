@@ -4,7 +4,7 @@ gitChangelog: false
 
 hero:
   name: 'Voyager'
-  text: 'نظام التشغيل المفقود لروبوتات الدردشة الذكية.'
+  text: 'نظام التشغيل المفقود لواجهات الويب الذكية.'
   tagline: '.Gemini · Claude · ChatGPT — أخيراً، اكتمل'
   image:
     src: /logo.png

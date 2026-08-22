@@ -4,7 +4,7 @@ gitChangelog: false
 
 hero:
   name: 'Voyager'
-  text: 'The missing OS for your AI chatbots.'
+  text: 'The missing OS for your AI web UIs.'
   tagline: 'Gemini · Claude · ChatGPT — finally, complete.'
   image:
     src: /logo.png
@@ -18,9 +18,9 @@ hero:
       link: ./guide/getting-started
 
 safariLaunch:
-  image: /assets/promotion/voyager-safari-1.6.0-twitter-en.png
-  alt: Voyager 1.6.0 now supports Safari natively
-  link: ./guide/installation#_3-safari-macos
+  image: /assets/promotion/voyager-social-preview.png
+  alt: Your prompt library on any web UI, including DeepSeek Harness
+  link: ./guide/deepseek-harness
 
 teaser:
   title: 'It just works.'

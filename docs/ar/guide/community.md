@@ -44,9 +44,9 @@
 
 ## 🐙 مشكلات GitHub
 
-إذا وجدت خطأً في البرنامج (Bug) أو كان لديك طلب ميزة واضح (Feature Request)، نوصي بتقديم مشكلة (Issue) على GitHub:
+إذا وجدت خطأً قابلاً لإعادة الإنتاج، فقدّم مشكلة (Issue) على GitHub. أما طلبات الميزات والأفكار والأسئلة فمكانها Discussions وليس Issues:
 
 - [تقديم تقرير خطأ](https://github.com/Nagi-ovo/voyager/issues/new?template=bug_report.yml)
-- [تقديم طلب ميزة](https://github.com/Nagi-ovo/voyager/issues/new?template=feature_request.yml)
+- [اقتراح ميزة أو فكرة (Discussions)](https://github.com/Nagi-ovo/voyager/discussions)
 
 شكراً لدعمك لـ Voyager! ❤️
