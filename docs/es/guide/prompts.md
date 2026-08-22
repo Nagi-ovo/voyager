@@ -70,6 +70,12 @@ El Gestor de Prompts ahora se puede utilizar en cualquier sitio web que elijas, 
 - `copilot.microsoft.com` - Microsoft Copilot
 - `poe.com` - Poe
 
+### Aplicaciones locales
+
+Las direcciones locales también funcionan: introduce `localhost:3080` o `127.0.0.1:3080` de la misma forma. Por ejemplo, [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) se ejecuta en `localhost:3080`, y el Gestor de Prompts se acopla igual que en cualquier sitio.
+
+![Gestor de Prompts dentro de DeepSeek Harness](/assets/prompt-manager-deepseek-harness.png)
+
 ::: tip
 En sitios web personalizados, **solo** se activa la función del Gestor de Prompts. Otras funciones como la Línea de tiempo y las Carpetas están diseñadas específicamente para Gemini y no se cargarán.
 :::

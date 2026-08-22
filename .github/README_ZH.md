@@ -1,18 +1,10 @@
 <div align="center">
   <img src="../docs/public/logo.png" alt="Voyager logo" width="120" height="120">
-  <h3>打造属于你的 AI Chatbot 体验 ✨</h3>
+  <h3>打造属于你的 AI 体验 ✨</h3>
   <p>
     <b>Gemini · Claude · ChatGPT，终于完整了。</b>
   </p>
   
-  <p>
-    <img src="https://img.shields.io/badge/Chrome-✓-4285F4?style=flat-square&logo=googlechrome&logoColor=white" alt="Chrome">
-    <img src="https://img.shields.io/badge/Edge-✓-0078D7?style=flat-square&logo=microsoftedge&logoColor=white" alt="Edge">
-    <img src="https://img.shields.io/badge/Firefox-✓-FF7139?style=flat-square&logo=firefox&logoColor=white" alt="Firefox">
-    <img src="https://img.shields.io/badge/Safari-✓-000000?style=flat-square&logo=safari&logoColor=white" alt="Safari">
-    <img src="https://img.shields.io/badge/Opera-✓-FF1B2D?style=flat-square&logo=opera&logoColor=white" alt="Opera">
-    <img src="https://img.shields.io/badge/Brave-✓-FB542B?style=flat-square&logo=brave&logoColor=white" alt="Brave">
-  </p>
   <p>
     <img src="https://voyager.nagi.fun/badges/github-stars.svg" alt="GitHub Star">
     <img src="https://voyager.nagi.fun/badges/github-forks.svg" alt="GitHub Fork">
@@ -23,16 +15,6 @@
     <img src="https://img.shields.io/badge/edge%20users-50k%2B-0078D7?style=flat-square&logo=microsoftedge&logoColor=white" alt="Edge 商店用户数">
     <img src="https://img.shields.io/amo/users/gemini-voyager?style=flat-square&logo=firefox" alt="Firefox 商店用户数">
     <img src="https://img.shields.io/amo/rating/gemini-voyager?style=flat-square&logo=firefox" alt="Firefox 商店评分">
-  </p>
-  <p>
-    <a href="https://trendshift.io/repositories/16094" target="_blank"><img src="https://trendshift.io/api/badge/repositories/16094" alt="Nagi-ovo%2Fvoyager | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
-    <a href="https://www.producthunt.com/products/gemini-voyager?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-gemini-voyager" target="_blank" rel="noopener noreferrer"><img alt="Voyager - AI conversation tools for Gemini, Claude, and ChatGPT | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1064704&amp;theme=light&amp;t=1768842096186"></a>
-  </p>
-  <p>
-    <a href="https://x.com/Nag1ovo" target="_blank"><img src="https://img.shields.io/badge/@Nag1ovo-000000?style=flat-square&logo=x&logoColor=white" alt="X"></a>
-    <a href="https://discord.gg/TEUFxdMbGb" target="_blank"><img src="https://img.shields.io/badge/Discord-加入社区-5865F2?style=flat-square&logo=discord&logoColor=white" alt="Discord"></a>
-    <a href="https://www.xiaohongshu.com/user/profile/5d366136000000001101950a" target="_blank"><img src="https://img.shields.io/badge/小红书-@卡普迪姆-FF2442?style=flat-square" alt="小红书"></a>
-    <a href="https://space.bilibili.com/312249633" target="_blank"><img src="https://img.shields.io/badge/Bilibili-@卡普迪姆-FB7299?style=flat-square&logo=bilibili&logoColor=white" alt="Bilibili"></a>
   </p>
 </div>
 
@@ -49,11 +31,8 @@
   <a href="./README_KO.md">한국어</a>
 </p>
 
-<!-- Fable 5 Verified badge source: https://github.com/yetone/alma-releases/issues/56 (@yetone). -->
 <p align="center">
-  <a href="https://github.com/yetone/alma-releases/issues/56" target="_blank" rel="noopener noreferrer" title="Fable 5 Verified badge by @yetone" aria-label="Fable 5 Verified badge by @yetone">
-    <img src="../docs/public/assets/fable-5-verified.png" alt="Fable 5 Verified" width="360">
-  </a>
+  <img src="../docs/public/assets/promotion/voyager-social-preview.png" alt="Voyager —— 你的提示词，全部保存在本地。适用于任意网页界面，包括 DeepSeek Harness" width="820">
 </p>
 
 <!-- <p align="center">
@@ -119,6 +98,14 @@
 - **📖 舒适阅读宽度**: 调整 Claude 和 ChatGPT 的对话宽度，获得更好的阅读体验。
 - **🈶 CJK 渲染修复**: 修复 Claude 上的中日韩字符渲染问题。
 
+### 🧩 任意站点，包括本地
+
+在扩展弹窗里添加任意网站，Prompt Manager 就会跟到那里，本地应用也一样。下图是它运行在 `localhost:3080` 的 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 里：
+
+<p align="center">
+  <img src="../docs/public/assets/prompt-manager-deepseek-harness.png" alt="在 DeepSeek Harness 中运行的 Prompt Manager" width="720">
+</p>
+
 ### 🎨 个性化体验
 
 - 点击插件图标，在设置中的 **视觉特效** 里可切换 `关闭`、`飘雪`、`樱花`、`雨`。
@@ -150,8 +137,6 @@
 <p align="center">
   <sub><b>Edge 用户：</b>考虑到移动端和平板用户需求，Voyager 会继续维护并发布 Edge Add-ons 版本。若商店审核延迟，仍可临时使用 Chrome 应用店版本或 GitHub 手动包。</sub>
 </p>
-
-> **商店状态：** Chrome ✅ · Firefox ✅ · Safari ✅ · Edge ✅
 
 关于 **手动安装** 或 **开发构建**，请参阅 [安装指南](https://voyager.nagi.fun/guide/installation)。
 
@@ -239,7 +224,8 @@
 
 欢迎参与贡献！
 
-- **Issue**：使用 [Bug 报告](https://github.com/Nagi-ovo/voyager/issues/new?template=bug_report.yml) 或 [功能请求](https://github.com/Nagi-ovo/voyager/issues/new?template=feature_request.yml) 模板。
+- **Issue**：仅接受可复现的缺陷，请使用 [Bug 报告](https://github.com/Nagi-ovo/voyager/issues/new?template=bug_report.yml) 模板。
+- **Discussions**：[功能需求、想法和提问](https://github.com/Nagi-ovo/voyager/discussions)请发到讨论区，不要开 Issue。
 - **Pull Request**：请查看 [贡献指南](./CONTRIBUTING.md)。
 
 <details>
@@ -301,6 +287,15 @@ bun run build:all      # Chrome + Firefox + Safari
 - **[claude-nexus](https://github.com/Qiuner/claude-nexus)** - 受 Voyager 启发的 Claude.ai 增强扩展，提供时间线导航、文件夹管理、提示词库等功能，并与 Voyager 的提示词导入/导出完全兼容！
 
 - **[Better_Doubao](https://github.com/Rex16200513/Better_Doubao)** - 为豆包提供增强导航、组织管理和生产力功能的浏览器扩展。
+
+---
+
+## 🏅 荣誉
+
+<p align="center">
+  <a href="https://trendshift.io/repositories/16094" target="_blank"><img src="https://trendshift.io/api/badge/repositories/16094" alt="Nagi-ovo%2Fvoyager | Trendshift" width="250" height="55"/></a>
+  <a href="https://www.producthunt.com/products/gemini-voyager?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-gemini-voyager" target="_blank" rel="noopener noreferrer"><img alt="Voyager - AI conversation tools for Gemini, Claude, and ChatGPT | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1064704&amp;theme=light&amp;t=1768842096186"></a>
+</p>
 
 ---
 

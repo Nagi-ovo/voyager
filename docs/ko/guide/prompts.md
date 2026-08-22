@@ -70,6 +70,12 @@
 - `copilot.microsoft.com` - Microsoft Copilot
 - `poe.com` - Poe
 
+### 로컬 앱
+
+로컬 주소도 사용할 수 있습니다 — `localhost:3080` 또는 `127.0.0.1:3080`을 똑같이 입력하면 됩니다. 예를 들어 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)는 `localhost:3080`에서 실행되며, 프롬프트 관리자가 일반 사이트와 똑같이 붙습니다.
+
+![DeepSeek Harness 안에서 실행 중인 프롬프트 관리자](/assets/prompt-manager-deepseek-harness.png)
+
 ::: tip
 사용자 지정 웹사이트에서는 **프롬프트 관리자** 기능만 활성화됩니다. 타임라인 및 폴더와 같은 다른 기능은 Gemini 전용으로 설계되었으며 로드되지 않습니다.
 :::

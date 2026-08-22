@@ -4,7 +4,7 @@ gitChangelog: false
 
 hero:
   name: 'Voyager'
-  text: 'AI 챗봇을 위한 완벽한 운영체제.'
+  text: 'AI 웹 UI를 위한 완벽한 운영체제.'
   tagline: 'Gemini · Claude · ChatGPT — 드디어, 완성되다.'
   image:
     src: /logo.png

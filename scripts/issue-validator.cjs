@@ -2,7 +2,8 @@ const UNSUPPORTED_DEFAULT_VERSION = '1.1.3';
 const UNSUPPORTED_DEFAULT_VERSION_COMMENT =
   '⚠️ 你填写的可能是错误的版本号，1.1.3 已经不再支持，请及时更正。';
 
-const EMPTY_TITLE_PATTERNS = [/^\[Bug\]\s*$/i, /^\[Feature\]\s*$/i];
+// Feature requests go to Discussions, so `[Bug]` is the only template prefix that can reach Issues.
+const EMPTY_TITLE_PATTERNS = [/^\[Bug\]\s*$/i];
 
 function extractSection(text, headerPattern) {
   const match = text.match(new RegExp(`${headerPattern}\\s+([\\s\\S]*?)(?=\\n###|$)`));
@@ -34,10 +35,7 @@ function getTitlePrefix(title) {
 
 function generateIssueTitle(title, body) {
   const prefix = getTitlePrefix(title);
-  const description =
-    extractSection(body, '### 🐛 问题描述 \\| Bug Description') ||
-    extractSection(body, '### 🥰 需求描述 \\| Feature Description') ||
-    '';
+  const description = extractSection(body, '### 🐛 问题描述 \\| Bug Description');
 
   if (!description) return '';
 

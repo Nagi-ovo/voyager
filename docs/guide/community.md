@@ -44,9 +44,9 @@
 
 ## 🐙 GitHub Issues
 
-如果你发现了程序错误（Bug）或有明确的功能需求（Feature Request），建议在 GitHub 上提交 Issue：
+如果你发现了可复现的程序错误（Bug），请在 GitHub 上提交 Issue。功能需求、想法和提问请到 Discussions，不要开 Issue：
 
 - [提交 Bug 报告](https://github.com/Nagi-ovo/voyager/issues/new?template=bug_report.yml)
-- [提交功能建议](https://github.com/Nagi-ovo/voyager/issues/new?template=feature_request.yml)
+- [提出功能需求或想法（Discussions）](https://github.com/Nagi-ovo/voyager/discussions)
 
 感谢你对 Voyager 的支持！❤️

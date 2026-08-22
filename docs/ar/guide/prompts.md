@@ -70,6 +70,12 @@
 - `copilot.microsoft.com` - Microsoft Copilot
 - `poe.com` - Poe
 
+### التطبيقات المحلية
+
+العناوين المحلية تعمل أيضًا — أدخل `localhost:3080` أو `127.0.0.1:3080` بالطريقة نفسها. على سبيل المثال، يعمل [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) على `localhost:3080`، ويرتبط به مدير المطالبات تمامًا كما في أي موقع آخر.
+
+![مدير المطالبات داخل DeepSeek Harness](/assets/prompt-manager-deepseek-harness.png)
+
 ::: tip
 في المواقع المخصصة، يتم تفعيل ميزة مدير المطالبات **فقط**. الميزات الأخرى مثل الجدول الزمني والمجلدات وما إلى ذلك مخصصة لـ Gemini ولن يتم تحميلها.
 :::

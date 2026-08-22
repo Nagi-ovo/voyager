@@ -4,7 +4,7 @@ gitChangelog: false
 
 hero:
   name: 'Voyager'
-  text: 'Недостающая ОС для ваших AI-чатботов.'
+  text: 'Недостающая ОС для ваших AI веб-интерфейсов.'
   tagline: 'Gemini · Claude · ChatGPT — наконец, всё на месте.'
   image:
     src: /logo.png

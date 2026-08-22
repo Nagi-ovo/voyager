@@ -1,5 +1,8 @@
 blank_issues_enabled: false
 contact_links:
-  - name: '💬 讨论区 Discussions'
-    url: https://github.com/Nagi-ovo/voyager/discussions
-    about: '讨论想法或提问，而非提交 Bug 或 Feature | For general discussions, questions, and ideas'
+  - name: '🌠 功能需求与想法 Feature requests and ideas'
+    url: https://github.com/Nagi-ovo/voyager/discussions/new?category=ideas
+    about: '功能需求、想法、行为调整、产品方向请开 Discussion | Start a discussion for feature requests, ideas, behavior changes, and product direction.'
+  - name: '💬 提问与贡献提案 Questions and contribution proposals'
+    url: https://github.com/Nagi-ovo/voyager/discussions/new?category=q-a
+    about: '提问、贡献提案，以及任何不是可复现缺陷的内容 | Use discussions for questions, contribution proposals, and anything that is not a reproducible bug.'

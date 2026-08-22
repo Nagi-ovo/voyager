@@ -4,7 +4,7 @@ gitChangelog: false
 
 hero:
   name: 'Voyager'
-  text: 'O sistema operativo que faltava aos seus chatbots de IA.'
+  text: 'O sistema operativo que faltava às suas interfaces web de IA.'
   tagline: 'Gemini · Claude · ChatGPT — finalmente, completo.'
   image:
     src: /logo.png

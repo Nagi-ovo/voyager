@@ -44,9 +44,9 @@ Discord 서버에 가입하여 다른 Voyager들과 대화해 보세요!
 
 ## 🐙 GitHub 이슈
 
-버그를 발견했거나 구체적인 기능 제안이 있다면 GitHub에서 이슈를 열어주세요:
+재현 가능한 버그를 발견했다면 GitHub에서 이슈를 열어주세요. 기능 제안, 아이디어, 질문은 이슈가 아니라 Discussions에 올려주세요:
 
 - [버그 보고하기](https://github.com/Nagi-ovo/voyager/issues/new?template=bug_report.yml)
-- [기능 제안하기](https://github.com/Nagi-ovo/voyager/issues/new?template=feature_request.yml)
+- [기능 제안 및 아이디어 남기기 (Discussions)](https://github.com/Nagi-ovo/voyager/discussions)
 
 Voyager를 응원해 주셔서 감사합니다! ❤️

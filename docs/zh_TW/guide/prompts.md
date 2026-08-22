@@ -70,6 +70,12 @@
 - `copilot.microsoft.com` - Microsoft Copilot
 - `poe.com` - Poe
 
+### 本機應用
+
+本機位址同樣可以填 —— 輸入 `localhost:3080` 或 `127.0.0.1:3080` 即可。例如 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 執行在 `localhost:3080`，提示詞管理器會像在一般網站上一樣掛載。
+
+![在 DeepSeek Harness 中執行的提示詞管理器](/assets/prompt-manager-deepseek-harness.png)
+
 ::: tip
 在自定義網站上，**僅**激活提示詞管理器功能。時間線、資料夾等其他功能是專為 Gemini 設計的，不會加載。
 :::

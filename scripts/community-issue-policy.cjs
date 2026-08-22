@@ -1,4 +1,8 @@
 const COMMUNITY_ONLY_LABEL = 'community-only';
+const ENHANCEMENT_LABEL = 'enhancement';
+// Issues carrying one of these labels cannot be self-claimed: a maintainer confirms scope
+// with `/approve @user` first. Order matters — the first match picks the explanation text.
+const APPROVAL_REQUIRED_LABELS = [COMMUNITY_ONLY_LABEL, ENHANCEMENT_LABEL];
 const CLAIMED_LABEL = '👷 Claimed';
 const PUBLIC_DISCOVERY_LABELS = ['good first issue', 'help wanted'];
 const COMMUNITY_NOTICE_MARKER = '<!-- voyager-community-only-policy -->';
@@ -37,6 +41,18 @@ function parseCommand(body = '') {
   if (approval) return { name: 'approve', username: approval[1] };
 
   return null;
+}
+
+function findApprovalRequiredLabel(issue) {
+  return APPROVAL_REQUIRED_LABELS.find((label) => issueHasLabel(issue, label)) || null;
+}
+
+function approvalRequestBody(commenter, label) {
+  if (label === COMMUNITY_ONLY_LABEL) {
+    return `🏠 **@${commenter}**, this is a community-only issue. / 这是一个社群专属 Issue。\n\nA maintainer must verify your community membership before assignment. Maintainers: comment \`/approve @${commenter}\` to approve this claim.\n\n维护者确认社群身份后，请评论 \`/approve @${commenter}\` 完成认领。`;
+  }
+
+  return `🌠 **@${commenter}**, this is a feature-level work item. / 这是一个功能级工作项。\n\nFeature work needs scope alignment with a maintainer before it is assigned. Describe what you plan to build here first. Maintainers: comment \`/approve @${commenter}\` to approve this claim.\n\n功能级改动需要先和维护者对齐范围，请先在这里说明你打算怎么做。维护者确认后会评论 \`/approve @${commenter}\` 完成认领。`;
 }
 
 function canModerate(permission) {
@@ -129,15 +145,15 @@ async function handleClaim({ github, context }) {
   if (await rejectIfAssigned({ github, context })) return { status: 'already_assigned' };
 
   const commenter = context.payload.comment.user.login;
-  const isCommunityOnly = issueHasLabel(context.payload.issue, COMMUNITY_ONLY_LABEL);
+  const approvalLabel = findApprovalRequiredLabel(context.payload.issue);
 
-  if (isCommunityOnly) {
+  if (approvalLabel) {
     const permission = await getUserPermission({ github, context, username: commenter });
     if (!canModerate(permission)) {
       await comment({
         github,
         context,
-        body: `🏠 **@${commenter}**, this is a community-only issue. / 这是一个社群专属 Issue。\n\nA maintainer must verify your community membership before assignment. Maintainers: comment \`/approve @${commenter}\` to approve this claim.\n\n维护者确认社群身份后，请评论 \`/approve @${commenter}\` 完成认领。`,
+        body: approvalRequestBody(commenter, approvalLabel),
       });
       return { status: 'awaiting_approval', username: commenter };
     }
@@ -147,13 +163,13 @@ async function handleClaim({ github, context }) {
 }
 
 async function handleApprove({ github, context, username }) {
-  if (!issueHasLabel(context.payload.issue, COMMUNITY_ONLY_LABEL)) {
+  if (!findApprovalRequiredLabel(context.payload.issue)) {
     await comment({
       github,
       context,
-      body: 'ℹ️ `/approve` is only used for issues labeled `community-only`. / `/approve` 仅用于带有 `community-only` 标签的 Issue。',
+      body: 'ℹ️ `/approve` is only used for issues labeled `community-only` or `enhancement`. / `/approve` 仅用于带有 `community-only` 或 `enhancement` 标签的 Issue。',
     });
-    return { status: 'not_community_only' };
+    return { status: 'not_approval_required' };
   }
 
   const approver = context.payload.comment.user.login;
@@ -260,12 +276,15 @@ async function handleIssuePolicy({ github, context }) {
 }
 
 module.exports = {
+  APPROVAL_REQUIRED_LABELS,
   CLAIMED_LABEL,
   COMMUNITY_NOTICE,
   COMMUNITY_NOTICE_MARKER,
   COMMUNITY_ONLY_LABEL,
+  ENHANCEMENT_LABEL,
   PUBLIC_DISCOVERY_LABELS,
   canModerate,
+  findApprovalRequiredLabel,
   handleApprove,
   handleClaim,
   handleCommunityLabel,

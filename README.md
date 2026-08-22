@@ -1,18 +1,10 @@
 <div align="center">
   <img src="docs/public/logo.png" alt="Voyager logo" width="120" height="120">
-  <h3>Make Your AI Chatbot Experience Truly Yours ✨</h3>
+  <h3>Make Your AI Experience Truly Yours ✨</h3>
   <p>
     <b>Gemini · Claude · ChatGPT — finally, complete.</b>
   </p>
   
-  <p>
-    <img src="https://img.shields.io/badge/Chrome-✓-4285F4?style=flat-square&logo=googlechrome&logoColor=white" alt="Chrome">
-    <img src="https://img.shields.io/badge/Edge-✓-0078D7?style=flat-square&logo=microsoftedge&logoColor=white" alt="Edge">
-    <img src="https://img.shields.io/badge/Firefox-✓-FF7139?style=flat-square&logo=firefox&logoColor=white" alt="Firefox">
-    <img src="https://img.shields.io/badge/Safari-✓-000000?style=flat-square&logo=safari&logoColor=white" alt="Safari">
-    <img src="https://img.shields.io/badge/Opera-✓-FF1B2D?style=flat-square&logo=opera&logoColor=white" alt="Opera">
-    <img src="https://img.shields.io/badge/Brave-✓-FB542B?style=flat-square&logo=brave&logoColor=white" alt="Brave">
-  </p>
   <p>
     <img src="https://voyager.nagi.fun/badges/github-stars.svg" alt="GitHub stars">
     <img src="https://voyager.nagi.fun/badges/github-forks.svg" alt="GitHub forks">
@@ -23,16 +15,6 @@
     <img src="https://img.shields.io/badge/edge%20users-50k%2B-0078D7?style=flat-square&logo=microsoftedge&logoColor=white" alt="Edge Add-ons users">
     <img src="https://img.shields.io/amo/users/gemini-voyager?style=flat-square&logo=firefox" alt="Firefox Add-ons users">
     <img src="https://img.shields.io/amo/rating/gemini-voyager?style=flat-square&logo=firefox" alt="Firefox Add-ons rating">
-  </p>
-  <p>
-    <a href="https://trendshift.io/repositories/16094" target="_blank"><img src="https://trendshift.io/api/badge/repositories/16094" alt="Nagi-ovo%2Fvoyager | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
-    <a href="https://www.producthunt.com/products/gemini-voyager?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-gemini-voyager" target="_blank" rel="noopener noreferrer"><img alt="Voyager - AI conversation tools for Gemini, Claude, and ChatGPT | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1064704&amp;theme=light&amp;t=1768842096186"></a>
-  </p>
-  <p>
-    <a href="https://x.com/Nag1ovo" target="_blank"><img src="https://img.shields.io/badge/@Nag1ovo-000000?style=flat-square&logo=x&logoColor=white" alt="X"></a>
-    <a href="https://discord.gg/TEUFxdMbGb" target="_blank"><img src="https://img.shields.io/discord/1463273957120675973?style=flat-square&logo=discord&logoColor=white&label=Discord&color=5865F2" alt="Discord online"></a>
-    <a href="https://www.xiaohongshu.com/user/profile/5d366136000000001101950a" target="_blank"><img src="https://img.shields.io/badge/小红书-@卡普迪姆-FF2442?style=flat-square" alt="Xiaohongshu"></a>
-    <a href="https://space.bilibili.com/312249633" target="_blank"><img src="https://img.shields.io/badge/Bilibili-@卡普迪姆-FB7299?style=flat-square&logo=bilibili&logoColor=white" alt="Bilibili"></a>
   </p>
 </div>
 
@@ -49,11 +31,8 @@
   <a href="./.github/README_KO.md">한국어</a>
 </p>
 
-<!-- Fable 5 Verified badge source: https://github.com/yetone/alma-releases/issues/56 (@yetone). -->
 <p align="center">
-  <a href="https://github.com/yetone/alma-releases/issues/56" target="_blank" rel="noopener noreferrer" title="Fable 5 Verified badge by @yetone" aria-label="Fable 5 Verified badge by @yetone">
-    <img src="docs/public/assets/fable-5-verified.png" alt="Fable 5 Verified" width="360">
-  </a>
+  <img src="docs/public/assets/promotion/voyager-social-preview.png" alt="Voyager — your prompts, kept local. Any web UI, including DeepSeek Harness." width="820">
 </p>
 
 <!-- <p align="center">
@@ -118,6 +97,14 @@ Powered by the [Voyager Plugin Engine](https://voyager.nagi.fun/en/plugins), the
 - **📖 Comfortable Reading Width**: Adjust chat width for a better reading experience on Claude and ChatGPT.
 - **🈶 CJK Render Fix**: Fix CJK character rendering issues on Claude.
 
+### 🧩 Any Site — Even Localhost
+
+Add any site in the extension popup and the Prompt Manager follows you there, local apps included. Here it is inside [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) running on `localhost:3080`:
+
+<p align="center">
+  <img src="docs/public/assets/prompt-manager-deepseek-harness.png" alt="Prompt Manager running inside DeepSeek Harness" width="720">
+</p>
+
 ### 🎨 Personalization
 
 - Open the extension popup and find **Visual Effects** to switch between `Off`, `Snow`, `Sakura`, and `Rain`.
@@ -149,8 +136,6 @@ Powered by the [Voyager Plugin Engine](https://voyager.nagi.fun/en/plugins), the
 <p align="center">
   <sub><b>Edge users:</b> Voyager is still maintained on Edge Add-ons for users who need Edge on mobile or tablet. If review is delayed, Chrome Web Store and GitHub manual packages remain available.</sub>
 </p>
-
-> **Store Status:** Chrome ✅ · Firefox ✅ · Safari ✅ · Edge ✅
 
 For **manual installation** or **development builds**, please refer to the [Installation Guide](https://voyager.nagi.fun/en/guide/installation).
 
@@ -238,7 +223,8 @@ I highly recommend **[Typeless (typeless.com)](https://www.typeless.com/refer?co
 
 We welcome contributions! Whether you want to report bugs, suggest features, improve documentation, or submit code:
 
-- **Issues**: Use our [bug report](https://github.com/Nagi-ovo/voyager/issues/new?template=bug_report.yml) or [feature request](https://github.com/Nagi-ovo/voyager/issues/new?template=feature_request.yml) templates
+- **Issues**: Reproducible bugs only — use the [bug report](https://github.com/Nagi-ovo/voyager/issues/new?template=bug_report.yml) template
+- **Discussions**: [Feature requests, ideas, and questions](https://github.com/Nagi-ovo/voyager/discussions) — not Issues
 - **Pull Requests**: Check out [CONTRIBUTING.md](./.github/CONTRIBUTING.md) for guidelines
 
 <details>
@@ -302,6 +288,15 @@ If your project is inspired by Voyager, forked from it, or built on top of it, f
 - **[Better_Doubao](https://github.com/Rex16200513/Better_Doubao)** - An advanced browser extension supercharging Doubao with enhanced navigation, organization, and productivity features.
 
 - **[DeepSeek Enhancer](https://github.com/dlshuangchenyue1210/DeepSeek-Enhancer)** - A Voyager-inspired enhancement extension for the DeepSeek web app, offering multi-level folders, chat export, formula copy, data backup, and more.
+
+---
+
+## 🏅 Recognition
+
+<p align="center">
+  <a href="https://trendshift.io/repositories/16094" target="_blank"><img src="https://trendshift.io/api/badge/repositories/16094" alt="Nagi-ovo%2Fvoyager | Trendshift" width="250" height="55"/></a>
+  <a href="https://www.producthunt.com/products/gemini-voyager?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-gemini-voyager" target="_blank" rel="noopener noreferrer"><img alt="Voyager - AI conversation tools for Gemini, Claude, and ChatGPT | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1064704&amp;theme=light&amp;t=1768842096186"></a>
+</p>
 
 ---
 
