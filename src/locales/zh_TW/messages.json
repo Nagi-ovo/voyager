@@ -1579,6 +1579,31 @@
     "message": "捲動縮放 • 拖曳平移 • ESC 關閉",
     "description": "全螢幕遮罩操作提示"
   },
+  "enableEchartsRendering": {
+    "message": "啟用 ECharts 圖表渲染",
+    "description": "ECharts rendering toggle label"
+  },
+  "enableEchartsRenderingHint": {
+    "message": "自動將 ECharts 設定程式碼區塊轉換為互動式圖表",
+    "description": "ECharts rendering feature hint"
+  },
+  "echartsDiagramButton": {
+    "message": "📊 圖表",
+    "description": "Toggle button label to show the rendered chart"
+  },
+  "echartsCodeButton": {
+    "message": "</> 程式碼",
+    "description": "Toggle button label to show the ECharts option source"
+  },
+  "echartsCloseFullscreen": {
+    "message": "關閉（ESC）",
+    "description": "Fullscreen toolbar: close button title"
+  },
+  "echartsFullscreenHint": {
+    "message": "按 ESC 關閉",
+    "description": "Fullscreen overlay usage hint"
+  },
+
   "enableHighlights": {
     "message": "啟用醒目標記",
     "description": "醒目標記功能開關標籤"

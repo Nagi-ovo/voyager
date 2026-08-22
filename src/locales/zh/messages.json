@@ -1619,6 +1619,31 @@
     "message": "滚动缩放 • 拖拽平移 • ESC 关闭",
     "description": "全屏遮罩操作提示"
   },
+  "enableEchartsRendering": {
+    "message": "启用 ECharts 图表渲染",
+    "description": "ECharts rendering toggle label"
+  },
+  "enableEchartsRenderingHint": {
+    "message": "自动将 ECharts 配置代码块渲染为交互式图表",
+    "description": "ECharts rendering feature hint"
+  },
+  "echartsDiagramButton": {
+    "message": "📊 图表",
+    "description": "Toggle button label to show the rendered chart"
+  },
+  "echartsCodeButton": {
+    "message": "</> 代码",
+    "description": "Toggle button label to show the ECharts option source"
+  },
+  "echartsCloseFullscreen": {
+    "message": "关闭（ESC）",
+    "description": "Fullscreen toolbar: close button title"
+  },
+  "echartsFullscreenHint": {
+    "message": "按 ESC 关闭",
+    "description": "Fullscreen overlay usage hint"
+  },
+
   "enableHighlights": {
     "message": "启用高亮",
     "description": "高亮功能开关标签"

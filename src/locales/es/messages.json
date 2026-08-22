@@ -1630,6 +1630,31 @@
     "message": "Desplázate para hacer zoom • Arrastra para mover • ESC para cerrar",
     "description": "Sugerencia de uso de la superposición de pantalla completa"
   },
+  "enableEchartsRendering": {
+    "message": "Habilitar el renderizado de ECharts",
+    "description": "ECharts rendering toggle label"
+  },
+  "enableEchartsRenderingHint": {
+    "message": "Representar automáticamente los bloques de código de opciones de ECharts como gráficos interactivos",
+    "description": "ECharts rendering feature hint"
+  },
+  "echartsDiagramButton": {
+    "message": "📊 Gráfico",
+    "description": "Toggle button label to show the rendered chart"
+  },
+  "echartsCodeButton": {
+    "message": "</> Código",
+    "description": "Toggle button label to show the ECharts option source"
+  },
+  "echartsCloseFullscreen": {
+    "message": "Cerrar (ESC)",
+    "description": "Fullscreen toolbar: close button title"
+  },
+  "echartsFullscreenHint": {
+    "message": "Pulsa ESC para cerrar",
+    "description": "Fullscreen overlay usage hint"
+  },
+
   "enableHighlights": {
     "message": "Activar resaltados",
     "description": "Highlight feature toggle label"

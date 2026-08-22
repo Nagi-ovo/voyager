@@ -1633,6 +1633,31 @@
     "message": "Scroll to zoom • Drag to pan • ESC to close",
     "description": "Fullscreen overlay usage hint"
   },
+  "enableEchartsRendering": {
+    "message": "Enable ECharts rendering",
+    "description": "ECharts rendering toggle label"
+  },
+  "enableEchartsRenderingHint": {
+    "message": "Automatically render ECharts option code blocks as interactive charts",
+    "description": "ECharts rendering feature hint"
+  },
+  "echartsDiagramButton": {
+    "message": "📊 Diagram",
+    "description": "Toggle button label to show the rendered chart"
+  },
+  "echartsCodeButton": {
+    "message": "</> Code",
+    "description": "Toggle button label to show the ECharts option source"
+  },
+  "echartsCloseFullscreen": {
+    "message": "Close (ESC)",
+    "description": "Fullscreen toolbar: close button title"
+  },
+  "echartsFullscreenHint": {
+    "message": "Press ESC to close",
+    "description": "Fullscreen overlay usage hint"
+  },
+
   "enableHighlights": {
     "message": "Enable highlights",
     "description": "Highlight feature toggle label"

@@ -1630,6 +1630,31 @@
     "message": "Колесо — масштаб • Перетаскивание — перемещение • ESC — закрыть",
     "description": "Подсказка по управлению в полноэкранном режиме"
   },
+  "enableEchartsRendering": {
+    "message": "Включить отрисовку ECharts",
+    "description": "ECharts rendering toggle label"
+  },
+  "enableEchartsRenderingHint": {
+    "message": "Автоматически отображать блоки кода с опциями ECharts в виде интерактивных графиков",
+    "description": "ECharts rendering feature hint"
+  },
+  "echartsDiagramButton": {
+    "message": "📊 График",
+    "description": "Toggle button label to show the rendered chart"
+  },
+  "echartsCodeButton": {
+    "message": "</> Код",
+    "description": "Toggle button label to show the ECharts option source"
+  },
+  "echartsCloseFullscreen": {
+    "message": "Закрыть (ESC)",
+    "description": "Fullscreen toolbar: close button title"
+  },
+  "echartsFullscreenHint": {
+    "message": "Нажмите ESC для закрытия",
+    "description": "Fullscreen overlay usage hint"
+  },
+
   "enableHighlights": {
     "message": "Включить выделения",
     "description": "Highlight feature toggle label"

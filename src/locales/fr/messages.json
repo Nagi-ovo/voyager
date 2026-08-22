@@ -1635,6 +1635,31 @@
     "message": "Molette pour zoomer • Glisser pour déplacer • Échap pour fermer",
     "description": "Aide à l’utilisation de la superposition plein écran"
   },
+  "enableEchartsRendering": {
+    "message": "Activer le rendu ECharts",
+    "description": "ECharts rendering toggle label"
+  },
+  "enableEchartsRenderingHint": {
+    "message": "Afficher automatiquement les blocs de code d'options ECharts en graphiques interactifs",
+    "description": "ECharts rendering feature hint"
+  },
+  "echartsDiagramButton": {
+    "message": "📊 Graphique",
+    "description": "Toggle button label to show the rendered chart"
+  },
+  "echartsCodeButton": {
+    "message": "</> Code",
+    "description": "Toggle button label to show the ECharts option source"
+  },
+  "echartsCloseFullscreen": {
+    "message": "Fermer (ÉCHAP)",
+    "description": "Fullscreen toolbar: close button title"
+  },
+  "echartsFullscreenHint": {
+    "message": "Appuyez sur ÉCHAP pour fermer",
+    "description": "Fullscreen overlay usage hint"
+  },
+
   "enableHighlights": {
     "message": "Activer les surlignages",
     "description": "Highlight feature toggle label"

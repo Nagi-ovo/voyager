@@ -49,6 +49,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "dompurify": "^3",
+    "echarts": "6.1.0",
     "html-to-image": "^1.11.13",
     "json5": "^2.2.3",
     "jszip": "^3.10.1",

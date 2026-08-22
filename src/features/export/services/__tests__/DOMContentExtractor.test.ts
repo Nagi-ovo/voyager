@@ -3,7 +3,7 @@
  */
 import { Marked, marked } from 'marked';
 import markedKatex from 'marked-katex-extension';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { resolveExportAdapter } from '@/pages/content/export/adapter/platformAdapters';
 
@@ -604,6 +604,108 @@ describe('DOMContentExtractor', () => {
     expect(extracted.html).not.toContain('gv-mermaid-wrapper');
     expect(extracted.html).not.toContain('<pre><code');
     expect(extracted.text).toContain('- Diagram\n  ```mermaid\n  flowchart TD\n  A --> B\n  ```');
+  });
+
+  it('exports a rendered ECharts canvas as an image while preserving option source in text', () => {
+    const toDataURLSpy = vi
+      .spyOn(HTMLCanvasElement.prototype, 'toDataURL')
+      .mockReturnValue('data:image/png;base64,TESTDATA');
+    try {
+      const assistant = document.createElement('div');
+      assistant.innerHTML = `
+        <message-content>
+          <div class="markdown">
+            <div class="gv-echarts-wrapper">
+              <code-block style="display: none;">
+                <div class="code-block-decoration">echarts</div>
+                <pre><code role="text">{"series": [{"type": "pie", "data": [{"value": 1, "name": "a"}]}]}</code></pre>
+              </code-block>
+              <div class="gv-echarts-toggle">
+                <button class="active">Diagram</button>
+                <button>Code</button>
+              </div>
+              <div class="gv-echarts-diagram">
+                <canvas width="800" height="400"></canvas>
+              </div>
+            </div>
+          </div>
+        </message-content>
+      `;
+
+      const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+
+      expect(extracted.hasCode).toBe(true);
+      expect(extracted.html).toContain('class="gv-export-echarts"');
+      expect(extracted.html).toContain('<img src="data:image/png;base64,TESTDATA"');
+      expect(extracted.html).not.toContain('<pre><code');
+      expect(extracted.html).not.toContain('gv-echarts-toggle');
+      expect(extracted.text).toContain(
+        '```echarts\n{"series": [{"type": "pie", "data": [{"value": 1, "name": "a"}]}]}\n```',
+      );
+    } finally {
+      toDataURLSpy.mockRestore();
+    }
+  });
+
+  it('falls back to option source when a rendered ECharts canvas is unavailable', () => {
+    const assistant = document.createElement('div');
+    assistant.innerHTML = `
+      <message-content>
+        <div class="markdown">
+          <div class="gv-echarts-wrapper">
+            <code-block>
+              <div class="code-block-decoration">echarts</div>
+              <pre><code role="text">{"series": [{"type": "pie", "data": [{"value": 1, "name": "a"}]}]}</code></pre>
+            </code-block>
+            <div class="gv-echarts-toggle"><button>Diagram</button></div>
+            <div class="gv-echarts-diagram"></div>
+          </div>
+        </div>
+      </message-content>
+    `;
+
+    const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+
+    expect(extracted.hasCode).toBe(true);
+    expect(extracted.html).toContain('<pre><code class="language-echarts">');
+    expect(extracted.html).not.toContain('class="gv-export-echarts"');
+    expect(extracted.text).toContain(
+      '```echarts\n{"series": [{"type": "pie", "data": [{"value": 1, "name": "a"}]}]}\n```',
+    );
+  });
+
+  it('falls back to option source when the ECharts canvas is tainted', () => {
+    const toDataURLSpy = vi
+      .spyOn(HTMLCanvasElement.prototype, 'toDataURL')
+      .mockImplementation(() => {
+        throw new Error('Tainted canvas');
+      });
+    try {
+      const assistant = document.createElement('div');
+      assistant.innerHTML = `
+        <message-content>
+          <div class="markdown">
+            <div class="gv-echarts-wrapper">
+              <code-block style="display: none;">
+                <div class="code-block-decoration">echarts</div>
+                <pre><code role="text">{"series": [{"type": "pie", "data": [{"value": 1, "name": "a"}]}]}</code></pre>
+              </code-block>
+              <div class="gv-echarts-diagram"><canvas width="800" height="400"></canvas></div>
+            </div>
+          </div>
+        </message-content>
+      `;
+
+      const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+
+      expect(extracted.html).toContain('<pre><code class="language-echarts">');
+      expect(extracted.html).not.toContain('class="gv-export-echarts"');
+      expect(extracted.text).toContain(
+        '```echarts\n{"series": [{"type": "pie", "data": [{"value": 1, "name": "a"}]}]}\n```',
+      );
+    } finally {
+      toDataURLSpy.mockRestore();
+    }
   });
 
   it('preserves regular fenced code when list extraction handles block content', () => {

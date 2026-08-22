@@ -1630,6 +1630,31 @@
     "message": "Role para ampliar • Arraste para mover • ESC para fechar",
     "description": "Dica de uso da sobreposição em tela cheia"
   },
+  "enableEchartsRendering": {
+    "message": "Ativar renderização de ECharts",
+    "description": "ECharts rendering toggle label"
+  },
+  "enableEchartsRenderingHint": {
+    "message": "Renderizar automaticamente blocos de código de opções do ECharts como gráficos interativos",
+    "description": "ECharts rendering feature hint"
+  },
+  "echartsDiagramButton": {
+    "message": "📊 Gráfico",
+    "description": "Toggle button label to show the rendered chart"
+  },
+  "echartsCodeButton": {
+    "message": "</> Código",
+    "description": "Toggle button label to show the ECharts option source"
+  },
+  "echartsCloseFullscreen": {
+    "message": "Fechar (ESC)",
+    "description": "Fullscreen toolbar: close button title"
+  },
+  "echartsFullscreenHint": {
+    "message": "Pressione ESC para fechar",
+    "description": "Fullscreen overlay usage hint"
+  },
+
   "enableHighlights": {
     "message": "Ativar destaques",
     "description": "Highlight feature toggle label"

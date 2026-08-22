@@ -1624,6 +1624,31 @@
     "message": "مرر للتكبير • اسحب للتحريك • ESC للإغلاق",
     "description": "توجيه استخدام طبقة ملء الشاشة"
   },
+  "enableEchartsRendering": {
+    "message": "تفعيل عرض ECharts",
+    "description": "ECharts rendering toggle label"
+  },
+  "enableEchartsRenderingHint": {
+    "message": "عرض أكواد خيارات ECharts تلقائيًا كرسوم بيانية تفاعلية",
+    "description": "ECharts rendering feature hint"
+  },
+  "echartsDiagramButton": {
+    "message": "📊 رسم بياني",
+    "description": "Toggle button label to show the rendered chart"
+  },
+  "echartsCodeButton": {
+    "message": "</> الكود",
+    "description": "Toggle button label to show the ECharts option source"
+  },
+  "echartsCloseFullscreen": {
+    "message": "إغلاق (ESC)",
+    "description": "Fullscreen toolbar: close button title"
+  },
+  "echartsFullscreenHint": {
+    "message": "اضغط ESC للإغلاق",
+    "description": "Fullscreen overlay usage hint"
+  },
+
   "enableHighlights": {
     "message": "تمكين التمييز",
     "description": "Highlight feature toggle label"

@@ -1621,6 +1621,31 @@
     "message": "스크롤로 확대/축소 • 드래그로 이동 • ESC로 닫기",
     "description": "전체화면 오버레이 조작 힌트"
   },
+  "enableEchartsRendering": {
+    "message": "ECharts 렌더링 사용",
+    "description": "ECharts rendering toggle label"
+  },
+  "enableEchartsRenderingHint": {
+    "message": "ECharts 옵션 코드 블록을 대화형 차트로 자동 렌더링",
+    "description": "ECharts rendering feature hint"
+  },
+  "echartsDiagramButton": {
+    "message": "📊 차트",
+    "description": "Toggle button label to show the rendered chart"
+  },
+  "echartsCodeButton": {
+    "message": "</> 코드",
+    "description": "Toggle button label to show the ECharts option source"
+  },
+  "echartsCloseFullscreen": {
+    "message": "닫기(ESC)",
+    "description": "Fullscreen toolbar: close button title"
+  },
+  "echartsFullscreenHint": {
+    "message": "ESC 키로 닫기",
+    "description": "Fullscreen overlay usage hint"
+  },
+
   "enableHighlights": {
     "message": "하이라이트 활성화",
     "description": "Highlight feature toggle label"

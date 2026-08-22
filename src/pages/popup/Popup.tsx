@@ -103,6 +103,7 @@ import {
   IconQwen,
 } from './components/WebsiteLogos';
 import WidthSlider from './components/WidthSlider';
+import { useEchartsPopupSettings } from './hooks/useEchartsPopupSettings';
 import { useFormulaCopyPopupSettings } from './hooks/useFormulaCopyPopupSettings';
 import { usePopupScrollRestoration } from './hooks/usePopupScrollRestoration';
 import { useWaveDromPopupSettings } from './hooks/useWaveDromPopupSettings';
@@ -459,6 +460,12 @@ const POPUP_SETTINGS_SEARCH_ITEMS = [
     'enableWaveDromRendering',
     ['enableWaveDromRendering', 'enableWaveDromRenderingHint'],
     ['wavedrom wavejson timing diagram'],
+  ),
+  popupSearchTarget(
+    'general',
+    'enableEchartsRendering',
+    ['enableEchartsRendering', 'enableEchartsRenderingHint'],
+    ['echarts chart diagram'],
   ),
   popupSearchTarget('general', 'enableQuoteReply', ['enableQuoteReply', 'enableQuoteReplyHint']),
   popupSearchTarget('general', 'enableHighlights', ['enableHighlights', 'enableHighlightsHint']),
@@ -1014,6 +1021,11 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
     hydrateFromStorage: hydrateWavedromEnabled,
     setEnabledFromUser: setWavedromEnabledFromUser,
   } = useWaveDromPopupSettings(setSyncStorage);
+  const {
+    enabled: echartsEnabled,
+    hydrateFromStorage: hydrateEchartsEnabled,
+    setEnabledFromUser: setEchartsEnabledFromUser,
+  } = useEchartsPopupSettings(setSyncStorage);
   const [showMessageTimestamps, setShowMessageTimestamps] = useState<boolean>(false);
   const [quoteReplyEnabled, setQuoteReplyEnabled] = useState<boolean>(true);
 
@@ -1973,6 +1985,7 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
           [StorageKeys.TAB_TITLE_UPDATE_ENABLED]: false,
           gvMermaidEnabled: true,
           [StorageKeys.WAVEDROM_ENABLED]: true,
+          [StorageKeys.ECHARTS_ENABLED]: true,
           gvQuoteReplyEnabled: true,
           [StorageKeys.HIGHLIGHT_ENABLED]: false,
           [StorageKeys.HIGHLIGHT_TIMELINE_MARKERS_ENABLED]: true,
@@ -2058,6 +2071,7 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
           }
           setMermaidEnabled(res?.gvMermaidEnabled !== false);
           hydrateWavedromEnabled(res?.[StorageKeys.WAVEDROM_ENABLED]);
+          hydrateEchartsEnabled(res?.[StorageKeys.ECHARTS_ENABLED]);
           setQuoteReplyEnabled(res?.gvQuoteReplyEnabled !== false);
           setHighlightEnabled(res?.[StorageKeys.HIGHLIGHT_ENABLED] === true);
           setHighlightTimelineMarkersEnabled(
@@ -4304,6 +4318,30 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
                     checked={wavedromEnabled}
                     onChange={(e) => {
                       setWavedromEnabledFromUser(e.target.checked);
+                    }}
+                  />
+                </div>,
+              )}
+              {renderSetting(
+                'general',
+                'enableEchartsRendering',
+                <div className="group flex items-center justify-between">
+                  <div className="flex-1">
+                    <Label
+                      htmlFor="echarts-enabled"
+                      className="group-hover:text-primary cursor-pointer text-sm font-medium transition-colors"
+                    >
+                      {t('enableEchartsRendering')}
+                    </Label>
+                    <p className="text-muted-foreground mt-1 text-xs">
+                      {t('enableEchartsRenderingHint')}
+                    </p>
+                  </div>
+                  <Switch
+                    id="echarts-enabled"
+                    checked={echartsEnabled}
+                    onChange={(e) => {
+                      setEchartsEnabledFromUser(e.target.checked);
                     }}
                   />
                 </div>,

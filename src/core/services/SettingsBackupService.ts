@@ -85,6 +85,7 @@ export const BACKUPABLE_SYNC_SETTINGS_DEFAULTS = {
   [StorageKeys.TAB_TITLE_UPDATE_ENABLED]: false,
   [StorageKeys.MERMAID_ENABLED]: true,
   [StorageKeys.WAVEDROM_ENABLED]: true,
+  [StorageKeys.ECHARTS_ENABLED]: true,
   [StorageKeys.QUOTE_REPLY_ENABLED]: true,
   [StorageKeys.RESPONSE_COMPLETE_NOTIFICATION_ENABLED]: false,
   [StorageKeys.REMOTE_ANNOUNCEMENTS_ENABLED]: true,

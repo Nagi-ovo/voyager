@@ -27,6 +27,7 @@ import { startContextSync } from './contextSync';
 import { startDeepResearchExport } from './deepResearch/index';
 import DefaultModelManager from './defaultModel/modelLocker';
 import { startDraftSave } from './draftSave/index';
+import { startEcharts } from './echarts/index';
 import { startEdgeFinalVersionNotice } from './edgeFinalVersionNotice';
 import { startEditInputWidthAdjuster } from './editInputWidth/index';
 import { startExportButton } from './export/index';
@@ -461,6 +462,8 @@ async function initializeFeatures(): Promise<void> {
       startMermaid();
       // Initialize WaveDrom rendering (lazy-loaded timing diagrams)
       startWaveDrom();
+      // Initialize ECharts rendering (lazy-loaded charts)
+      startEcharts();
       // Initialize user message LaTeX rendering
       startUserLatex();
       await delay(LIGHT_FEATURE_INIT_DELAY);

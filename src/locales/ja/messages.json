@@ -1627,6 +1627,31 @@
     "message": "スクロールで拡大縮小 • ドラッグで移動 • ESC で閉じる",
     "description": "全画面覆いの操作ヒント"
   },
+  "enableEchartsRendering": {
+    "message": "ECharts レンダリングを有効にする",
+    "description": "ECharts rendering toggle label"
+  },
+  "enableEchartsRenderingHint": {
+    "message": "ECharts のオプションコードブロックをインタラクティブなチャートとして自動レンダリング",
+    "description": "ECharts rendering feature hint"
+  },
+  "echartsDiagramButton": {
+    "message": "📊 チャート",
+    "description": "Toggle button label to show the rendered chart"
+  },
+  "echartsCodeButton": {
+    "message": "</> コード",
+    "description": "Toggle button label to show the ECharts option source"
+  },
+  "echartsCloseFullscreen": {
+    "message": "閉じる（ESC）",
+    "description": "Fullscreen toolbar: close button title"
+  },
+  "echartsFullscreenHint": {
+    "message": "ESC キーで閉じる",
+    "description": "Fullscreen overlay usage hint"
+  },
+
   "enableHighlights": {
     "message": "ハイライトを有効化",
     "description": "Highlight feature toggle label"
