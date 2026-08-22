@@ -1,7 +1,10 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { StorageKeys } from '@/core/types/common';
 
+import { buildInstructionBlock } from '../../folderProject/instructionBlock';
 import { addPromptHistory, getPromptHistory } from '../storage';
 
 type StorageListener = (
@@ -168,6 +171,27 @@ describe('Prompt History capture and lifecycle', () => {
     });
   });
 
+  it('preserves user blank paragraphs with and without an injected instruction block', async () => {
+    await start();
+    const plain = createMainComposer('Send message');
+    plain.input.textContent = 'Plain first\n\nPlain second';
+    plain.button.click();
+
+    const injected = createMainComposer('Send message');
+    injected.input.textContent = `${buildInstructionBlock(
+      'Research',
+      'Always cite sources.',
+    )}Injected first\n\nInjected second`;
+    injected.button.click();
+
+    await vi.waitFor(async () => {
+      expect((await getPromptHistory('u:0')).map((item) => item.content).sort()).toEqual([
+        'Injected first\n\nInjected second',
+        'Plain first\n\nPlain second',
+      ]);
+    });
+  });
+
   it('deduplicates the keydown and generated button click for one send action', async () => {
     await start();
     const { input, button } = createMainComposer('Send message');
@@ -264,6 +288,29 @@ describe('Prompt History capture and lifecycle', () => {
     });
   });
 
+  it('updates reused notice accessibility semantics from success to error', async () => {
+    await start();
+    await addPromptHistory('copy me', 'sent', '/u/0/app/test');
+    document.querySelector<HTMLButtonElement>('.gv-ph-trigger')?.click();
+    await vi.waitFor(() => expect(document.querySelectorAll('.gv-ph-item')).toHaveLength(1));
+
+    const copyButton = document.querySelector<HTMLButtonElement>('.gv-ph-item-actions button');
+    copyButton?.click();
+    await vi.waitFor(() => {
+      const notice = document.querySelector('.gv-ph-notice');
+      expect(notice?.getAttribute('role')).toBe('status');
+      expect(notice?.getAttribute('aria-live')).toBe('polite');
+    });
+
+    vi.mocked(navigator.clipboard.writeText).mockRejectedValueOnce(new Error('denied'));
+    copyButton?.click();
+    await vi.waitFor(() => {
+      const notice = document.querySelector('.gv-ph-notice');
+      expect(notice?.getAttribute('role')).toBe('alert');
+      expect(notice?.getAttribute('aria-live')).toBe('assertive');
+    });
+  });
+
   it('requires confirmation and clears only the current account', async () => {
     await start();
     await addPromptHistory('account zero', 'sent', '/u/0/app/test');
@@ -298,5 +345,13 @@ describe('Prompt History capture and lifecycle', () => {
     expect(trigger?.getAttribute('aria-expanded')).toBe('true');
     expect(panel?.getAttribute('aria-labelledby')).toBe('gv-ph-title');
     expect(document.activeElement).toBe(panel);
+  });
+
+  it('places the global error notice below the trigger on short viewports', () => {
+    const css = readFileSync(resolve(process.cwd(), 'public/contentStyle.css'), 'utf8');
+
+    expect(css).toMatch(
+      /@media \(max-height: 440px\)[\s\S]*?\.gv-ph-trigger\s*\{\s*top: 12px;\s*\}[\s\S]*?\.gv-ph-global-notice\s*\{\s*top: 66px;\s*\}/,
+    );
   });
 });

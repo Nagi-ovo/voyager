@@ -14460,6 +14460,10 @@ body.gv-rtl .gv-ph-panel {
     top: 12px;
   }
 
+  .gv-ph-global-notice {
+    top: 66px;
+  }
+
   .gv-ph-panel {
     top: 64px;
     max-height: calc(100dvh - 76px);

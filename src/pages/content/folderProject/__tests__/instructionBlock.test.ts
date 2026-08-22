@@ -5,6 +5,7 @@ import {
   hasInstructionBlock,
   normalizeInstructionBlockText,
   stripInstructionBlock,
+  stripInstructionBlockPreservingWhitespace,
 } from '../instructionBlock';
 
 describe('instructionBlock', () => {
@@ -31,5 +32,22 @@ describe('instructionBlock', () => {
 
     expect(normalizeInstructionBlockText(quillText)).toContain('[System Instructions]');
     expect(hasInstructionBlock(quillText)).toBe(true);
+  });
+
+  it('keeps the existing normalized strip semantics for folder and draft callers', () => {
+    expect(stripInstructionBlock('First paragraph\n\nSecond paragraph')).toBe(
+      'First paragraph\nSecond paragraph',
+    );
+  });
+
+  it('strips the injected block without collapsing user blank paragraphs', () => {
+    const userText = 'First paragraph\n\nSecond paragraph';
+
+    expect(stripInstructionBlockPreservingWhitespace(userText)).toBe(userText);
+    expect(
+      stripInstructionBlockPreservingWhitespace(
+        `${buildInstructionBlock('Research', 'Always cite sources.')}${userText}`,
+      ),
+    ).toBe(userText);
   });
 });

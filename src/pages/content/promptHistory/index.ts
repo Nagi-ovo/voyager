@@ -11,7 +11,7 @@ import { isExtensionContextInvalidatedError } from '@/core/utils/extensionContex
 import { getTranslationSync } from '@/utils/i18n';
 
 import { findChatInput, insertTextIntoChatInput } from '../chatInput/index';
-import { stripInstructionBlock } from '../folderProject/instructionBlock';
+import { stripInstructionBlockPreservingWhitespace } from '../folderProject/instructionBlock';
 import { expandInputCollapseIfNeeded } from '../inputCollapse/index';
 import {
   findClosestSendActionButton,
@@ -151,7 +151,7 @@ function reportStorageError(error: unknown): void {
 }
 
 function capturePrompt(input: HTMLElement, type = promptTypeForInput(input)): void {
-  const content = stripInstructionBlock(readInputText(input)).trim();
+  const content = stripInstructionBlockPreservingWhitespace(readInputText(input)).trim();
   if (!content) return;
   const path = getConversationPath();
   const accountScope = getPromptHistoryAccountScope(path);
@@ -254,10 +254,10 @@ function setNotice(message: string, kind: 'ok' | 'error'): void {
   let notice = panel.querySelector<HTMLDivElement>('.gv-ph-notice');
   if (!notice) {
     notice = createEl('div', 'gv-ph-notice');
-    notice.setAttribute('role', kind === 'error' ? 'alert' : 'status');
-    notice.setAttribute('aria-live', kind === 'error' ? 'assertive' : 'polite');
     panel.appendChild(notice);
   }
+  notice.setAttribute('role', kind === 'error' ? 'alert' : 'status');
+  notice.setAttribute('aria-live', kind === 'error' ? 'assertive' : 'polite');
   notice.textContent = message;
   notice.className = `gv-ph-notice gv-ph-notice-${kind}`;
   window.clearTimeout((notice as HTMLDivElement & { _t?: number })._t);
