@@ -2651,5 +2651,69 @@
   "diagnosticsCopyFailed": {
     "message": "無法存取剪貼簿，請手動選取預覽內容或下載 JSON。"
   },
-  "diagnosticsDownloadJson": { "message": "下載 JSON" }
+  "diagnosticsDownloadJson": { "message": "下載 JSON" },
+  "promptHistoryTitle": {
+    "message": "提示詞歷史",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryEnabledHint": {
+    "message": "在此裝置上按 Gemini 帳號分別儲存已傳送和已更新的提示詞。",
+    "description": "Prompt History setting hint (#923)"
+  },
+  "promptHistoryEmpty": {
+    "message": "暫無提示詞歷史",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistorySent": {
+    "message": "已傳送",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryEdited": {
+    "message": "已修改",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryCopy": {
+    "message": "複製",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryInsert": {
+    "message": "插入",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryDelete": {
+    "message": "刪除",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryClear": {
+    "message": "清空",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryCopied": {
+    "message": "已複製",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryInserted": {
+    "message": "已插入",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryInsertFailed": {
+    "message": "插入失敗",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryCopyFailed": {
+    "message": "複製失敗",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryClearConfirm": {
+    "message": "清空目前 Gemini 帳號的提示詞歷史？",
+    "description": "Prompt History clear confirmation (#923)"
+  },
+  "promptHistoryCancel": {
+    "message": "取消",
+    "description": "Prompt History clear confirmation (#923)"
+  },
+  "promptHistoryStorageFailed": {
+    "message": "提示詞歷史儲存失敗，請檢查擴充功能儲存空間。",
+    "description": "Prompt History storage error (#923)"
+  }
 }

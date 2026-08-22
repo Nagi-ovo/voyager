@@ -19,6 +19,11 @@ export function stripInstructionBlock(text: string): string {
   return normalizeInstructionBlockText(text).replace(INSTRUCTIONS_PATTERN, '');
 }
 
+/** Remove only Voyager's injected block without rewriting the user's whitespace. */
+export function stripInstructionBlockPreservingWhitespace(text: string): string {
+  return text.replace(INSTRUCTIONS_PATTERN, '');
+}
+
 export function hasInstructionBlock(text: string): boolean {
   return INSTRUCTIONS_PATTERN.test(normalizeInstructionBlockText(text));
 }

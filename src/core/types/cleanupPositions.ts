@@ -9,6 +9,7 @@ export enum CleanupPositions {
   CleanupInputVimMode,
   CleanupSendBehavior,
   CleanupDraftSave,
+  CleanupPromptHistory,
   CleanupFork,
   CleanupGemsSidebar,
   CleanupResponseCompleteNotification,

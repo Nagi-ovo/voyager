@@ -2662,5 +2662,69 @@
   "diagnosticsCopyFailed": {
     "message": "Буфер обмена недоступен. Выделите текст вручную или скачайте JSON."
   },
-  "diagnosticsDownloadJson": { "message": "Скачать JSON" }
+  "diagnosticsDownloadJson": { "message": "Скачать JSON" },
+  "promptHistoryTitle": {
+    "message": "История запросов",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryEnabledHint": {
+    "message": "Сохранять отправленные и обновлённые запросы на этом устройстве отдельно для каждого аккаунта Gemini.",
+    "description": "Prompt History setting hint (#923)"
+  },
+  "promptHistoryEmpty": {
+    "message": "История пока пуста",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistorySent": {
+    "message": "Отправлено",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryEdited": {
+    "message": "Изменено",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryCopy": {
+    "message": "Копировать",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryInsert": {
+    "message": "Вставить",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryDelete": {
+    "message": "Удалить",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryClear": {
+    "message": "Очистить",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryCopied": {
+    "message": "Скопировано",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryInserted": {
+    "message": "Вставлено",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryInsertFailed": {
+    "message": "Ошибка вставки",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryCopyFailed": {
+    "message": "Не удалось скопировать",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryClearConfirm": {
+    "message": "Очистить историю запросов для этого аккаунта Gemini?",
+    "description": "Prompt History clear confirmation (#923)"
+  },
+  "promptHistoryCancel": {
+    "message": "Отмена",
+    "description": "Prompt History clear confirmation (#923)"
+  },
+  "promptHistoryStorageFailed": {
+    "message": "Не удалось сохранить историю. Проверьте хранилище расширения.",
+    "description": "Prompt History storage error (#923)"
+  }
 }
