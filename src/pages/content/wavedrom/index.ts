@@ -19,6 +19,8 @@
 import { StorageKeys } from '@/core/types/common';
 import { isExtensionContextInvalidatedError } from '@/core/utils/extensionContext';
 
+import { isGenericLanguageLabel } from '../mermaid/index';
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -148,6 +150,19 @@ export const _closeModalForTest = () => {
 };
 
 /**
+ * Normalise a dynamically-imported CJS module to its `module.exports` object.
+ * Bundlers wrap CJS `module.exports` as the namespace `.default`; the skins
+ * files export skin *collections* (`{ default: <tree> }` / `{ dark: <tree> }`),
+ * never a bare ONML tree — renderAny reads `skin.default` (or the first named
+ * key) before indexing into the tree, so a bare array would select the first
+ * node ('svg') and throw.
+ */
+const asCjsExports = <T>(mod: unknown): T => {
+  const exports = (mod as { default?: T }).default;
+  return exports !== undefined ? exports : (mod as T);
+};
+
+/**
  * Dynamically load WaveDrom and its skins. Result is cached after the first
  * successful load; a failed load also short-circuits further attempts.
  */
@@ -162,9 +177,9 @@ const loadWaveDrom = async (): Promise<WaveDromBundle | null> => {
       import('wavedrom/skins/default.js'),
     ]);
 
-    const WaveDrom: WaveDromAPI = (WaveDromMod.default ?? WaveDromMod) as unknown as WaveDromAPI;
-    const waveSkinDefault = (defaultMod.default ?? defaultMod) as WaveSkin;
-    const rawDarkSkin = (darkMod.default ?? darkMod) as WaveSkin;
+    const WaveDrom: WaveDromAPI = asCjsExports(WaveDromMod);
+    const waveSkinDefault = asCjsExports<WaveSkin>(defaultMod);
+    const rawDarkSkin = asCjsExports<WaveSkin>(darkMod);
 
     // Remap the dark skin once; renderAny copies the style text verbatim so
     // remapping the shared tree covers every diagram surface.
@@ -637,8 +652,16 @@ const openFullscreen = (svgHtml: string, panelBg: string) => {
     const w = intrinsic?.w ?? (svgEl.scrollWidth || svgEl.clientWidth);
     const h = intrinsic?.h ?? (svgEl.scrollHeight || svgEl.clientHeight);
     if (w > 0 && h > 0) {
-      scale = computeAutoFitScale(w, h, vw, vh);
-      initialScale = scale;
+      const fitScale = computeAutoFitScale(w, h, vw, vh);
+      // Give the SVG a definite pixel box before zooming: the overlay forces
+      // width/height to 100%, which resolves against an auto-sized flex item,
+      // so the browser would otherwise fall back to the default
+      // replaced-element viewport (300×150) while the scale is computed from
+      // the viewBox.
+      svgEl.style.width = `${w * fitScale}px`;
+      svgEl.style.height = `${h * fitScale}px`;
+      scale = 1;
+      initialScale = 1;
       applyTransform();
     }
   }
@@ -823,24 +846,30 @@ const getCodeBlockLanguage = (codeEl: Element): string | null => {
 // processCodeBlocks + lifecycle
 // ---------------------------------------------------------------------------
 
-const processCodeBlocks = () => {
+/**
+ * @internal Exported for testing.
+ */
+export const processCodeBlocks = () => {
   const codeElements = document.querySelectorAll('code[data-test-id="code-content"]');
   codeElements.forEach((codeEl) => {
     const codeText = codeEl.textContent || '';
     const language = getCodeBlockLanguage(codeEl);
 
-    // Explicit language label 'wavedrom' always renders.
-    if (language === 'wavedrom') {
+    // Explicit WaveDrom labels always render.
+    if (language === 'wavedrom' || language === 'wavejson') {
       void renderWaveDrom(codeEl as HTMLElement, codeText);
       return;
     }
 
-    // Specific non-generic language labels skip WaveJSON detection.
-    if (language && language !== 'json' && language !== 'json5' && language !== 'code') {
+    // Specific language labels (json, typescript, …) skip WaveJSON detection:
+    // WaveJSON is a niche format, and ordinary JSON output must not be
+    // mistaken for a timing diagram.
+    if (language && !isGenericLanguageLabel(language)) {
       return;
     }
 
-    // Content-based detection for unlabelled / generic blocks.
+    // Content-based detection for unlabelled / generic blocks
+    // (Code snippet, 代码段, …).
     if (isWaveJsonCode(codeText)) {
       void renderWaveDrom(codeEl as HTMLElement, codeText);
     }

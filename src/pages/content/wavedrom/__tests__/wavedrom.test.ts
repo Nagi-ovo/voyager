@@ -9,6 +9,7 @@ import {
   makeResponsiveSvg,
   moveNativeCopyButton,
   parseViewBoxSize,
+  processCodeBlocks,
   remapDarkSkinStyle,
   renderWaveSvg,
   resolveGeminiTheme,
@@ -47,12 +48,17 @@ vi.mock('wavedrom', () => ({
   },
 }));
 
+// Mock shapes mirror what the runtime sees after CJS interop: the bundler
+// wraps each skins file's module.exports as the namespace `.default`, so the
+// loader receives `{ default: <collection> }`. renderAny reads `skin.default`
+// / the first named key before indexing the tree, so a skin must always be a
+// *collection* — a bare tree would select the first node and throw.
 vi.mock('wavedrom/skins/dark.js', () => ({
   default: { dark: MOCK_DARK_SKIN_TREE },
 }));
 
 vi.mock('wavedrom/skins/default.js', () => ({
-  default: { default: { name: 'default-skin' } },
+  default: { default: ['svg', {}, ['style', {}, ''], '', ''] },
 }));
 
 vi.mock('json5', () => ({
@@ -422,5 +428,163 @@ describe('computeAutoFitScale', () => {
     expect(computeAutoFitScale(0, 100, 1840, 1040)).toBe(1);
     expect(computeAutoFitScale(100, 0, 1840, 1040)).toBe(1);
     expect(computeAutoFitScale(100, 100, 0, 1040)).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// renderWaveSvg skin collections
+// ---------------------------------------------------------------------------
+
+describe('renderWaveSvg skin collections', () => {
+  it('passes skin collections (not bare trees) to renderAny', async () => {
+    const waveDromMod = await import('wavedrom');
+    const renderAnyMock = vi.mocked(waveDromMod.default.renderAny);
+    const code = '{"signal": [{"name":"clk","wave":"p..."}]}';
+
+    await renderWaveSvg(code, false);
+    const lightSkin = renderAnyMock.mock.calls[0]?.[2] as Record<string, unknown>;
+    // renderAny reads `skin.default` / the first named key before indexing the
+    // tree; a bare ONML array would select the first node ('svg') and throw.
+    expect(lightSkin).toEqual(expect.objectContaining({ default: expect.any(Array) }));
+
+    await renderWaveSvg(code, true);
+    const darkSkin = renderAnyMock.mock.calls[1]?.[2] as Record<string, unknown>;
+    expect(darkSkin).toEqual(expect.objectContaining({ dark: expect.any(Array) }));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// processCodeBlocks language labels
+// ---------------------------------------------------------------------------
+
+describe('processCodeBlocks language labels', () => {
+  const WAVEJSON = '{"signal": [{"name":"clk","wave":"p..."}]}';
+
+  const makeCodeBlock = (language: string | null, code: string): HTMLElement => {
+    const codeBlock = document.createElement('code-block');
+    const decoration = document.createElement('div');
+    decoration.className = 'code-block-decoration';
+    if (language) {
+      const span = document.createElement('span');
+      span.textContent = language;
+      decoration.appendChild(span);
+    }
+    const codeEl = document.createElement('code');
+    codeEl.setAttribute('data-test-id', 'code-content');
+    codeEl.textContent = code;
+    codeBlock.append(decoration, codeEl);
+    document.body.appendChild(codeBlock);
+    return codeEl;
+  };
+
+  it('renders WaveJSON under an explicit wavedrom label', async () => {
+    makeCodeBlock('wavedrom', WAVEJSON);
+    processCodeBlocks();
+    await vi.waitFor(() => {
+      expect(document.querySelector('.gv-wavedrom-wrapper')).not.toBeNull();
+    });
+  });
+
+  it('renders WaveJSON under an explicit wavejson label', async () => {
+    makeCodeBlock('wavejson', WAVEJSON);
+    processCodeBlocks();
+    await vi.waitFor(() => {
+      expect(document.querySelector('.gv-wavedrom-wrapper')).not.toBeNull();
+    });
+  });
+
+  it('does not render WaveJSON inside a json-labelled block', async () => {
+    makeCodeBlock('json', WAVEJSON);
+    processCodeBlocks();
+    // The json label returns synchronously before any render is scheduled.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(document.querySelector('.gv-wavedrom-wrapper')).toBeNull();
+  });
+
+  it('renders WaveJSON under a generic localized label', async () => {
+    makeCodeBlock('代码段', WAVEJSON);
+    processCodeBlocks();
+    await vi.waitFor(() => {
+      expect(document.querySelector('.gv-wavedrom-wrapper')).not.toBeNull();
+    });
+  });
+
+  it('renders WaveJSON without any language label', async () => {
+    makeCodeBlock(null, WAVEJSON);
+    processCodeBlocks();
+    await vi.waitFor(() => {
+      expect(document.querySelector('.gv-wavedrom-wrapper')).not.toBeNull();
+    });
+  });
+
+  it('skips WaveJSON inside a specific-language block', async () => {
+    makeCodeBlock('typescript', WAVEJSON);
+    processCodeBlocks();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(document.querySelector('.gv-wavedrom-wrapper')).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Fullscreen SVG sizing and layout
+// ---------------------------------------------------------------------------
+
+describe('fullscreen SVG sizing and layout', () => {
+  it('sizes the SVG from the viewBox before zooming (no 300x150 fallback)', () => {
+    _openFullscreenForTest(
+      '<svg viewBox="0 0 800 200" width="100%" height="100%"><g/></svg>',
+      '#f9fafb',
+    );
+    const svgEl = document.querySelector('[data-testid="wavedrom-zoom-card"] svg') as SVGSVGElement;
+    // jsdom window is 1024×768; viewport after the 80px margin is 864×608.
+    // fitScale = min(864/800, 608/200) = 1.08 → definite pixel box.
+    expect(svgEl.style.width).toBe('864px');
+    expect(svgEl.style.height).toBe('216px');
+    _closeModalForTest();
+  });
+
+  it('lays out overlay, toolbar and hint for both light and dark panels', () => {
+    const themes = [
+      ['#f9fafb', 'rgb(249, 250, 251)'],
+      ['#1a1a1a', 'rgb(26, 26, 26)'],
+    ] as const;
+    for (const [bg, rgb] of themes) {
+      _openFullscreenForTest('<svg viewBox="0 0 100 50"><g/></svg>', bg);
+      const modal = document.querySelector('.gv-wavedrom-modal') as HTMLElement;
+      expect(modal).not.toBeNull();
+      // Toolbar holds the four zoom/close controls.
+      const toolbar = modal.querySelector('.gv-wavedrom-modal-toolbar') as HTMLElement;
+      expect(toolbar.querySelectorAll('button')).toHaveLength(4);
+      // Card carries the panel backdrop.
+      const card = modal.querySelector('[data-testid="wavedrom-zoom-card"]') as HTMLElement;
+      expect(card.style.background).toBe(rgb);
+      expect(modal.querySelector('.gv-wavedrom-modal-hint')).not.toBeNull();
+      _closeModalForTest();
+    }
+  });
+
+  it('injects centered overlay CSS shared by both themes', async () => {
+    // Drive the real render path so the shared styles are injected once.
+    const codeBlock = document.createElement('code-block');
+    const decoration = document.createElement('div');
+    decoration.className = 'code-block-decoration';
+    const span = document.createElement('span');
+    span.textContent = 'wavedrom';
+    decoration.appendChild(span);
+    const codeEl = document.createElement('code');
+    codeEl.setAttribute('data-test-id', 'code-content');
+    codeEl.textContent = '{"signal": [{"name":"clk","wave":"p..."}]}';
+    codeBlock.append(decoration, codeEl);
+    document.body.appendChild(codeBlock);
+
+    processCodeBlocks();
+    await vi.waitFor(() => {
+      expect(document.querySelector('.gv-wavedrom-diagram')).not.toBeNull();
+    });
+
+    const styleEl = document.getElementById('gv-wavedrom-styles') as HTMLStyleElement;
+    expect(styleEl).not.toBeNull();
+    expect(styleEl.textContent).toContain('align-items: center');
+    expect(styleEl.textContent).toContain('justify-content: center');
   });
 });

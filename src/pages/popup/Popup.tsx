@@ -449,6 +449,12 @@ const POPUP_SETTINGS_SEARCH_ITEMS = [
     'enableMermaidRendering',
     'enableMermaidRenderingHint',
   ]),
+  popupSearchTarget(
+    'general',
+    'enableWaveDromRendering',
+    ['enableWaveDromRendering', 'enableWaveDromRenderingHint'],
+    ['wavedrom wavejson timing diagram'],
+  ),
   popupSearchTarget('general', 'enableQuoteReply', ['enableQuoteReply', 'enableQuoteReplyHint']),
   popupSearchTarget('general', 'enableHighlights', ['enableHighlights', 'enableHighlightsHint']),
   popupSearchTarget('general', 'showHighlightTimelineMarkers', [
