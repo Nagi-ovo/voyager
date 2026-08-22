@@ -124,6 +124,7 @@ export const StorageKeys = {
   HIDE_PROMPT_MANAGER: 'gvHidePromptManager',
   TAB_TITLE_UPDATE_ENABLED: 'gvTabTitleUpdateEnabled',
   MERMAID_ENABLED: 'gvMermaidEnabled',
+  WAVEDROM_ENABLED: 'gvWaveDromEnabled',
   QUOTE_REPLY_ENABLED: 'gvQuoteReplyEnabled',
   RESPONSE_COMPLETE_NOTIFICATION_ENABLED: 'gvResponseCompleteNotificationEnabled',
   REMOTE_ANNOUNCEMENTS_ENABLED: 'gvRemoteAnnouncementsEnabled',

@@ -1597,6 +1597,42 @@
     "message": "Show a floating button to quote selected text when text is selected in conversations",
     "description": "Quote reply feature hint"
   },
+  "enableWaveDromRendering": {
+    "message": "Enable WaveDrom timing diagram rendering",
+    "description": "WaveDrom rendering toggle label"
+  },
+  "enableWaveDromRenderingHint": {
+    "message": "Automatically render WaveJSON code blocks as interactive timing diagrams",
+    "description": "WaveDrom rendering feature hint"
+  },
+  "wavedromDiagramButton": {
+    "message": "〜 Diagram",
+    "description": "Toggle button label to show the rendered diagram"
+  },
+  "wavedromCodeButton": {
+    "message": "</> Code",
+    "description": "Toggle button label to show the WaveJSON source"
+  },
+  "wavedromZoomIn": {
+    "message": "Zoom In",
+    "description": "Fullscreen toolbar: zoom in button title"
+  },
+  "wavedromZoomOut": {
+    "message": "Zoom Out",
+    "description": "Fullscreen toolbar: zoom out button title"
+  },
+  "wavedromResetView": {
+    "message": "Reset",
+    "description": "Fullscreen toolbar: reset view button title"
+  },
+  "wavedromCloseFullscreen": {
+    "message": "Close (ESC)",
+    "description": "Fullscreen toolbar: close button title"
+  },
+  "wavedromFullscreenHint": {
+    "message": "Scroll to zoom • Drag to pan • ESC to close",
+    "description": "Fullscreen overlay usage hint"
+  },
   "enableHighlights": {
     "message": "Enable highlights",
     "description": "Highlight feature toggle label"

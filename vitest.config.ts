@@ -18,6 +18,7 @@ export default defineConfig({
       '@locales': path.resolve(__dirname, './src/locales'),
       '@/core': path.resolve(__dirname, './src/core'),
       '@/features': path.resolve(__dirname, './src/features'),
+      'wavedrom/render-any': path.resolve(__dirname, './node_modules/wavedrom/lib/render-any.js'),
     },
   },
 });

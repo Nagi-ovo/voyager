@@ -50,6 +50,7 @@
     "clsx": "^2.1.1",
     "dompurify": "^3",
     "html-to-image": "^1.11.13",
+    "json5": "^2.2.3",
     "jszip": "^3.10.1",
     "katex": "^0.16",
     "lucide-react": "^0.553.0",
@@ -57,11 +58,13 @@
     "marked-katex-extension": "^4",
     "mermaid": "11.12.2",
     "mermaid-legacy": "npm:mermaid@9.2.2",
+    "onml": "^2.1.0",
     "prettier": "^3.6.2",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "tailwind-merge": "^3.3.1",
     "temml": "^0.13.1",
+    "wavedrom": "3.6.2",
     "webextension-polyfill": "^0.12.0"
   },
   "devDependencies": {

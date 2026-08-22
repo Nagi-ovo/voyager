@@ -1594,6 +1594,42 @@
     "message": "Показывать плавающую кнопку для цитирования выделенного текста при выделении текста в разговорах",
     "description": "Quote reply feature hint"
   },
+  "enableWaveDromRendering": {
+    "message": "Включить рендеринг временных диаграмм WaveDrom",
+    "description": "Метка переключателя WaveDrom"
+  },
+  "enableWaveDromRenderingHint": {
+    "message": "Автоматически отображает блоки кода WaveJSON в виде интерактивных временных диаграмм",
+    "description": "Описание функции WaveDrom"
+  },
+  "wavedromDiagramButton": {
+    "message": "〜 Диаграмма",
+    "description": "Подпись кнопки показа диаграммы"
+  },
+  "wavedromCodeButton": {
+    "message": "</> Код",
+    "description": "Подпись кнопки показа исходного кода WaveJSON"
+  },
+  "wavedromZoomIn": {
+    "message": "Приблизить",
+    "description": "Панель полноэкранного режима: кнопка приближения"
+  },
+  "wavedromZoomOut": {
+    "message": "Отдалить",
+    "description": "Панель полноэкранного режима: кнопка отдаления"
+  },
+  "wavedromResetView": {
+    "message": "Сброс",
+    "description": "Панель полноэкранного режима: сброс масштаба"
+  },
+  "wavedromCloseFullscreen": {
+    "message": "Закрыть (ESC)",
+    "description": "Панель полноэкранного режима: кнопка закрытия"
+  },
+  "wavedromFullscreenHint": {
+    "message": "Колесо — масштаб • Перетаскивание — перемещение • ESC — закрыть",
+    "description": "Подсказка по управлению в полноэкранном режиме"
+  },
   "enableHighlights": {
     "message": "Включить выделения",
     "description": "Highlight feature toggle label"

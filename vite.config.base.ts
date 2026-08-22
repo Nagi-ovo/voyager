@@ -46,6 +46,15 @@ export default defineConfig({
   define: {
     'import.meta.env.VOYAGER_BUILD_TARGET': JSON.stringify(buildTarget),
   },
+  resolve: {
+    alias: {
+      // The public WaveDrom entrypoint eagerly bundles its browser editor,
+      // including an eval-based parser that this renderer never calls. Import
+      // only the pinned package's render primitive so extension artifacts stay
+      // CSP-safe and store-review friendly.
+      'wavedrom/render-any': resolve(__dirname, 'node_modules/wavedrom/lib/render-any.js'),
+    },
+  },
   plugins: [
     tailwindcss(),
     tsconfigPaths(),

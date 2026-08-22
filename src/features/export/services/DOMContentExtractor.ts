@@ -51,8 +51,13 @@ const MERMAID_LIGHT_EXPORT_TEMPLATE_SELECTOR = 'template.gv-mermaid-light-export
 const MERMAID_EXPORT_CLASS = 'gv-export-mermaid';
 const MERMAID_THEME_ATTRIBUTE = 'data-gv-mermaid-theme';
 
+const WAVEDROM_WRAPPER_SELECTOR = '.gv-wavedrom-wrapper';
+const WAVEDROM_RENDERED_SVG_SELECTOR = '.gv-wavedrom-diagram svg';
+const WAVEDROM_EXPORT_CLASS = 'gv-export-wavedrom';
+
 type ExportCodeBlock =
   | { kind: 'mermaid'; element: HTMLElement }
+  | { kind: 'wavedrom'; element: HTMLElement }
   | { kind: 'code'; element: HTMLElement };
 
 interface SerializedTableCell {
@@ -479,7 +484,9 @@ export class DOMContentExtractor {
         const content =
           directExportCodeBlock.kind === 'mermaid'
             ? this.extractMermaidContent(directExportCodeBlock.element)
-            : this.extractCodeBlock(directExportCodeBlock.element);
+            : directExportCodeBlock.kind === 'wavedrom'
+              ? this.extractWavedromContent(directExportCodeBlock.element)
+              : this.extractCodeBlock(directExportCodeBlock.element);
         if (content) {
           htmlParts.push(content.html);
         }
@@ -983,11 +990,34 @@ export class DOMContentExtractor {
   }
 
   /**
-   * Find top-level Mermaid and ordinary code blocks in DOM order.
-   * Hidden source blocks inside Mermaid wrappers and nested code-block shells are excluded.
+   * Extract WaveDrom content for rich and text exports.
+   * The rendered SVG is preferred; the WaveJSON source is the fallback.
+   */
+  private static extractWavedromContent(
+    wrapper: HTMLElement,
+  ): { html: string; text: string } | null {
+    const renderedSvg = wrapper.querySelector<SVGSVGElement>(WAVEDROM_RENDERED_SVG_SELECTOR);
+    const codeBlock = wrapper.querySelector<HTMLElement>('code-block, .code-block');
+    const codeContent = codeBlock
+      ? this.extractCodeBlock(codeBlock, 'wavedrom')
+      : { html: '', text: '' };
+
+    if (renderedSvg) {
+      const exportContainer = document.createElement('div');
+      exportContainer.className = WAVEDROM_EXPORT_CLASS;
+      exportContainer.appendChild(renderedSvg.cloneNode(true));
+      return { html: exportContainer.outerHTML, text: codeContent.text };
+    }
+
+    return codeContent.text ? codeContent : null;
+  }
+
+  /**
+   * Find top-level Mermaid/WaveDrom and ordinary code blocks in DOM order.
+   * Hidden source blocks inside diagram wrappers and nested code-block shells are excluded.
    */
   private static findExportCodeBlocks(container: Element): ExportCodeBlock[] {
-    const selector = `${MERMAID_WRAPPER_SELECTOR}, code-block, .code-block`;
+    const selector = `${MERMAID_WRAPPER_SELECTOR}, ${WAVEDROM_WRAPPER_SELECTOR}, code-block, .code-block`;
     const elements = [
       ...(container.matches(selector) ? [container as HTMLElement] : []),
       ...Array.from(container.querySelectorAll<HTMLElement>(selector)),
@@ -997,7 +1027,10 @@ export class DOMContentExtractor {
       if (element.matches(MERMAID_WRAPPER_SELECTOR)) {
         return [{ kind: 'mermaid', element }];
       }
-      if (element.closest(MERMAID_WRAPPER_SELECTOR)) return [];
+      if (element.matches(WAVEDROM_WRAPPER_SELECTOR)) {
+        return [{ kind: 'wavedrom', element }];
+      }
+      if (element.closest(`${MERMAID_WRAPPER_SELECTOR}, ${WAVEDROM_WRAPPER_SELECTOR}`)) return [];
       if (element.parentElement?.closest('code-block, .code-block')) return [];
       return [{ kind: 'code', element }];
     });
@@ -1226,7 +1259,9 @@ export class DOMContentExtractor {
             const content =
               directExportCodeBlock.kind === 'mermaid'
                 ? this.extractMermaidContent(directExportCodeBlock.element)
-                : this.extractCodeBlock(directExportCodeBlock.element);
+                : directExportCodeBlock.kind === 'wavedrom'
+                  ? this.extractWavedromContent(directExportCodeBlock.element)
+                  : this.extractCodeBlock(directExportCodeBlock.element);
             if (!content?.text) return;
 
             ensureItemMarker();
@@ -1270,8 +1305,18 @@ export class DOMContentExtractor {
         wrapper.replaceWith(replacement.firstElementChild);
       }
     });
+    cleanList.querySelectorAll<HTMLElement>(WAVEDROM_WRAPPER_SELECTOR).forEach((wrapper) => {
+      const content = this.extractWavedromContent(wrapper);
+      if (!content) return;
+
+      const replacement = document.createElement('div');
+      replacement.innerHTML = content.html;
+      if (replacement.firstElementChild) {
+        wrapper.replaceWith(replacement.firstElementChild);
+      }
+    });
     cleanList.querySelectorAll<HTMLElement>('code-block, .code-block').forEach((codeBlock) => {
-      if (codeBlock.closest(MERMAID_WRAPPER_SELECTOR)) return;
+      if (codeBlock.closest(`${MERMAID_WRAPPER_SELECTOR}, ${WAVEDROM_WRAPPER_SELECTOR}`)) return;
       if (codeBlock.parentElement?.closest('code-block, .code-block')) return;
 
       const content = this.extractCodeBlock(codeBlock);
@@ -1321,7 +1366,13 @@ export class DOMContentExtractor {
       '.hide-from-message-actions',
     ].join(',');
 
-    root.querySelectorAll(selector).forEach((el) => el.remove());
+    root.querySelectorAll(selector).forEach((el) => {
+      // WaveDrom skins live in an embedded SVG stylesheet. List extraction
+      // strips UI artifacts before it replaces the wrapper with the exported
+      // SVG, so preserve that one content-bearing style element.
+      if (el.localName === 'style' && el.closest(WAVEDROM_WRAPPER_SELECTOR)) return;
+      el.remove();
+    });
   }
 
   /**

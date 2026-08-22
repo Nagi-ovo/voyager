@@ -1588,6 +1588,42 @@
     "message": "إظهار زر عائم لاقتباس النص المحدد عند تحديد نص في المحادثات",
     "description": "Quote reply feature hint"
   },
+  "enableWaveDromRendering": {
+    "message": "تفعيل عرض مخططات التوقيت WaveDrom",
+    "description": "تسمية مفتاح عرض WaveDrom"
+  },
+  "enableWaveDromRenderingHint": {
+    "message": "عرض تلقائي لكتل أكواد WaveJSON كمخططات توقيت تفاعلية",
+    "description": "وصف ميزة WaveDrom"
+  },
+  "wavedromDiagramButton": {
+    "message": "〜 المخطط",
+    "description": "تسمية زر التحويل إلى المخطط المعروض"
+  },
+  "wavedromCodeButton": {
+    "message": "</> الكود",
+    "description": "تسمية زر التحويل إلى كود WaveJSON المصدري"
+  },
+  "wavedromZoomIn": {
+    "message": "تكبير",
+    "description": "شريط أدوات ملء الشاشة: عنوان زر التكبير"
+  },
+  "wavedromZoomOut": {
+    "message": "تصغير",
+    "description": "شريط أدوات ملء الشاشة: عنوان زر التصغير"
+  },
+  "wavedromResetView": {
+    "message": "إعادة تعيين",
+    "description": "شريط أدوات ملء الشاشة: عنوان زر إعادة تعيين العرض"
+  },
+  "wavedromCloseFullscreen": {
+    "message": "إغلاق (ESC)",
+    "description": "شريط أدوات ملء الشاشة: عنوان زر الإغلاق"
+  },
+  "wavedromFullscreenHint": {
+    "message": "مرر للتكبير • اسحب للتحريك • ESC للإغلاق",
+    "description": "توجيه استخدام طبقة ملء الشاشة"
+  },
   "enableHighlights": {
     "message": "تمكين التمييز",
     "description": "Highlight feature toggle label"
