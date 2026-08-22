@@ -264,6 +264,22 @@ describe('DOMContentExtractor', () => {
     expect(extracted.text).toBe('Hello, world.');
   });
 
+  it('preserves a whitespace-only inline container between text containers', () => {
+    const assistant = document.createElement('div');
+    assistant.innerHTML = `
+      <message-content>
+        <div class="markdown">
+          <div><span>First</span><span> </span><span>Second</span></div>
+        </div>
+      </message-content>
+    `;
+
+    const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+
+    expect(extracted.text).toBe('First Second');
+    expect(extracted.html).toContain('<span> </span>');
+  });
+
   it('exports ordinary prose rendered inside an open shadow root', () => {
     const assistant = document.createElement('div');
     assistant.innerHTML = `<message-content><div class="markdown"><shadow-answer></shadow-answer></div></message-content>`;
