@@ -452,6 +452,39 @@ describe('temporary chat handoff', () => {
     expect(pendingEntryCount()).toBe(1);
   });
 
+  it('honors user cancellation while the active handoff is still writing pending state', async () => {
+    const scope = createScope();
+    history.replaceState({}, '', '/?temporary-chat=true');
+    const composer = addComposer('Draft edited by the user');
+    const toggle = document.createElement('button');
+    toggle.dataset.testid = 'temporary-chat-toggle';
+    toggle.setAttribute('aria-label', 'Close temporary chat');
+    document.body.appendChild(toggle);
+    let finishWrite!: () => void;
+    vi.mocked(browser.storage.local.set).mockImplementationOnce(
+      (items) =>
+        new Promise<void>((resolve) => {
+          finishWrite = () => {
+            for (const [key, value] of Object.entries(items)) storageState.set(key, value);
+            resolve();
+          };
+        }),
+    );
+
+    const handoff = handoffTemporaryChat(scope, {
+      mode: 'inline',
+      text: 'Do not deliver after cancellation',
+    });
+    await vi.waitFor(() => expect(finishWrite).toBeTypeOf('function'));
+    cancelPendingHandoffRecovery();
+    finishWrite();
+
+    await expect(handoff).rejects.toMatchObject({ name: 'AbortError' });
+    expect(composer.textContent).toBe('Draft edited by the user');
+    expect(isTemporaryChat()).toBe(true);
+    expect(pendingEntryCount()).toBe(0);
+  });
+
   it('redelivers when ChatGPT replaces the accepted composer after the old wait budget', async () => {
     vi.useFakeTimers();
     const scope = createScope();

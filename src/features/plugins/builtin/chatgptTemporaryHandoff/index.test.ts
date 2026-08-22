@@ -244,6 +244,31 @@ describe('ChatGPT temporary handoff plugin', () => {
     expect(document.querySelectorAll('[data-gv-chatgpt-handoff-button]')).toHaveLength(1);
   });
 
+  it('keeps the progress dialog mounted until departure bookkeeping finishes', async () => {
+    let finishHandoff!: (result: 'ready') => void;
+    mocks.handoff.mockReturnValueOnce(
+      new Promise<'ready'>((resolve) => {
+        finishHandoff = resolve;
+      }),
+    );
+    const scope = createScope();
+    await activateChatGptTemporaryHandoff(scope);
+
+    document.querySelector<HTMLButtonElement>('[data-gv-chatgpt-handoff-button]')?.click();
+    await flush();
+    document
+      .querySelector<HTMLButtonElement>('.gv-chatgpt-handoff-dialog-button--primary')
+      ?.click();
+
+    await vi.waitFor(() => expect(mocks.handoff).toHaveBeenCalledOnce());
+    expect(document.querySelector('.gv-chatgpt-handoff-spinner')).not.toBeNull();
+
+    finishHandoff('ready');
+    await vi.waitFor(() =>
+      expect(document.querySelector('.gv-chatgpt-handoff-spinner')).toBeNull(),
+    );
+  });
+
   it('keeps temporary mode open when the unsent draft still has an attachment', async () => {
     mocks.hasAttachments.mockReturnValue(true);
     const scope = createScope();

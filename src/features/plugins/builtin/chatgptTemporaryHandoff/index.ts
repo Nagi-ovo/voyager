@@ -396,34 +396,33 @@ class ChatGptTemporaryHandoffPlugin {
       const progress = showHandoffProgress(operationScope, this.copy, () =>
         this.cancelCurrentOperation(),
       );
-      let turns: ChatTurn[];
       try {
-        turns = await collectTemporaryChatTurns(operationScope.signal, expectedUrl);
+        const turns = await collectTemporaryChatTurns(operationScope.signal, expectedUrl);
+        if (turns.length === 0) {
+          showHandoffToast(this.scope, this.copy.emptyConversation, 'error');
+          return;
+        }
+
+        const plan = planHandoff(turns, this.language);
+        const preservedDraft = readCurrentComposerDraft();
+        downloadHandoffBackup(
+          buildHandoffBackup(plan.transcript, preservedDraft, this.language),
+          plan.backupFilename,
+        );
+        const result = await handoffTemporaryChat(operationScope, plan.delivery, preservedDraft);
+        if (result === 'ready') showHandoffToast(this.scope, this.copy.ready);
+        else if (result === 'leave-failed') {
+          showHandoffToast(this.scope, this.copy.leaveFailed, 'error');
+        } else if (result === 'composer-missing') {
+          showHandoffToast(this.scope, this.copy.composerMissing);
+        } else if (result === 'delivery-failed') {
+          showHandoffToast(this.scope, this.copy.deliveryFailed, 'error');
+        } else if (result === 'storage-failed') {
+          showHandoffToast(this.scope, this.copy.failed, 'error');
+        } else showHandoffToast(this.scope, this.copy.accountChanged, 'error');
       } finally {
         await progress.close();
       }
-      if (turns.length === 0) {
-        showHandoffToast(this.scope, this.copy.emptyConversation, 'error');
-        return;
-      }
-
-      const plan = planHandoff(turns, this.language);
-      const preservedDraft = readCurrentComposerDraft();
-      downloadHandoffBackup(
-        buildHandoffBackup(plan.transcript, preservedDraft, this.language),
-        plan.backupFilename,
-      );
-      const result = await handoffTemporaryChat(operationScope, plan.delivery, preservedDraft);
-      if (result === 'ready') showHandoffToast(this.scope, this.copy.ready);
-      else if (result === 'leave-failed') {
-        showHandoffToast(this.scope, this.copy.leaveFailed, 'error');
-      } else if (result === 'composer-missing') {
-        showHandoffToast(this.scope, this.copy.composerMissing);
-      } else if (result === 'delivery-failed') {
-        showHandoffToast(this.scope, this.copy.deliveryFailed, 'error');
-      } else if (result === 'storage-failed') {
-        showHandoffToast(this.scope, this.copy.failed, 'error');
-      } else showHandoffToast(this.scope, this.copy.accountChanged, 'error');
     });
   }
 

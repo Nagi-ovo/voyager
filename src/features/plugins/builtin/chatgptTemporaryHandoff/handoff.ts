@@ -74,6 +74,7 @@ export const CHATGPT_NEW_CHAT_SELECTOR =
   'a[data-testid="create-new-chat-button"], a[href="/"][data-testid*="new" i]';
 const INLINE_THRESHOLD = 5_000;
 let activeHandoffOperations = 0;
+let internalNavigationClicks = 0;
 let fallbackFilenameSequence = 0;
 let pageUnloading = false;
 let deliveredPendingToken: string | null = null;
@@ -444,9 +445,18 @@ export function discardDeliveredPendingHandoff(): void {
 }
 
 export function cancelPendingHandoffRecovery(): void {
-  if (activeHandoffOperations > 0) return;
+  if (internalNavigationClicks > 0) return;
   recoveryCancellationRevision += 1;
-  void discardPendingHandoff();
+  if (activeHandoffOperations === 0) void discardPendingHandoff();
+}
+
+function clickForHandoffNavigation(target: HTMLElement): void {
+  internalNavigationClicks += 1;
+  try {
+    target.click();
+  } finally {
+    internalNavigationClicks -= 1;
+  }
 }
 
 function dispatchPaste(input: HTMLElement, text: string | null, file: File | null): boolean {
@@ -787,14 +797,14 @@ async function waitForNormalComposer(
 export async function leaveTemporaryChat(scope: PluginScope): Promise<HTMLElement | null> {
   const toggle = document.querySelector<HTMLElement>(CHATGPT_TEMP_TOGGLE_SELECTOR);
   if (toggle) {
-    toggle.click();
+    clickForHandoffNavigation(toggle);
     const composer = await waitForNormalComposer(scope, 16);
     if (composer) return composer;
   }
 
   const newChat = document.querySelector<HTMLElement>(CHATGPT_NEW_CHAT_SELECTOR);
   const newChatPath = getChatGptNewChatPath();
-  if (newChat && newChatPath === '/') newChat.click();
+  if (newChat && newChatPath === '/') clickForHandoffNavigation(newChat);
   else location.assign(newChatPath);
 
   return await waitForNormalComposer(scope, 30);
@@ -806,6 +816,9 @@ export async function handoffTemporaryChat(
   preservedDraft?: string,
 ): Promise<HandoffResult> {
   activeHandoffOperations += 1;
+  const cancellationRevisionAtStart = recoveryCancellationRevision;
+  const handoffWasCancelled = (): boolean =>
+    cancellationRevisionAtStart !== recoveryCancellationRevision;
   let abortedByPageUnload = scope.signal.aborted && isHandoffPageUnloading();
   const rememberAbortReason = (): void => {
     abortedByPageUnload = isHandoffPageUnloading();
@@ -823,8 +836,10 @@ export async function handoffTemporaryChat(
     } catch {
       return 'storage-failed';
     }
+    if (handoffWasCancelled()) throw abortError();
     if (scope.signal.aborted) throw abortError();
     const input = await leaveTemporaryChat(scope);
+    if (handoffWasCancelled()) throw abortError();
     if (!input) {
       if (!isTemporaryChat()) return 'composer-missing';
       await discardPendingHandoff();
@@ -835,11 +850,19 @@ export async function handoffTemporaryChat(
       return 'account-mismatch';
     }
     if (scope.signal.aborted) throw abortError();
-    const deliveredInput = await deliverOnce(scope, input, delivery, pendingDraft);
+    const deliveredInput = await deliverOnce(
+      scope,
+      input,
+      delivery,
+      pendingDraft,
+      handoffWasCancelled,
+    );
+    if (handoffWasCancelled()) throw abortError();
     if (!deliveredInput || !isDeliveryComplete(deliveredInput, delivery, pendingDraft)) {
       return 'delivery-failed';
     }
     await markPendingDelivered(pending);
+    if (handoffWasCancelled()) throw abortError();
     return 'ready';
   } catch (error) {
     if (isAbortError(error) && !abortedByPageUnload) await discardPendingHandoff();

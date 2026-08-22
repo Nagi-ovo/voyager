@@ -104,6 +104,9 @@ fallback, compared multiline text against `textContent`, and stored the complete
 transcript in page-owned `sessionStorage` without invalidating resume state on
 plugin disposal. Moving the payload to extension storage without sweeping its
 key also left orphaned transcripts behind when a tab closed and lost its token.
+The primary handoff closed its blocking progress dialog before departure
+finished, while a broad active-operation guard suppressed every user
+cancellation instead of only the plugin's own navigation clicks.
 
 Fix:
 
@@ -118,8 +121,10 @@ a native New Chat action reuses the same route. Fail closed when response
 generation is active, the last mounted turn is still a user turn, or the turn
 identity snapshot changes while the shared collector materializes content.
 Mark hard navigation at `beforeunload`, before the root plugin teardown runs,
-and carry a synchronous cancellation revision across every asynchronous resume
-boundary so a late preview cannot revive discarded content.
+keep the progress dialog mounted until departure bookkeeping finishes, and carry
+a synchronous cancellation revision across every asynchronous handoff and
+resume boundary so a late write or preview cannot revive discarded content.
+Suppress cancellation only around the plugin's synchronous navigation clicks.
 Sweep expired payload keys on later handoff activity so a closed tab cannot
 retain its transcript indefinitely.
 
@@ -131,14 +136,16 @@ a reused composer node and verifies multiline content by rendered text`,
 pending state when plugin disposal cancels a resume`, `redelivers when ChatGPT
 replaces the accepted composer after the old wait budget`, and `discards
 delivered recovery state instead of replaying it on another chat route`, and
-`stops delivered recovery before the user edits the composer`), plus
+`stops delivered recovery before the user edits the composer`, and `honors user
+cancellation while the active handoff is still writing pending state`), plus
 `src/features/plugins/builtin/chatgptTemporaryHandoff/index.test.ts` (`stops
 recovery before sending clears the delivered composer`, `stops recovery before
 same-route New Chat actions`, `marks hard navigation before the root
 beforeunload teardown disposes the plugin`, `refuses handoff when the latest user turn has no
 mounted assistant yet`, and `refuses handoff when response generation starts
-during collection`), and `does not restore an attachment after the user cancels
-while its preview is mounting` in the handoff suite.
+during collection`, and `keeps the progress dialog mounted until departure
+bookkeeping finishes`), and `does not restore an attachment after the user
+cancels while its preview is mounting` in the handoff suite.
 
 Commit:
 
