@@ -138,6 +138,7 @@ afterEach(async () => {
   vi.clearAllMocks();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  Reflect.deleteProperty(document, 'execCommand');
 });
 
 describe('temporary chat handoff', () => {
@@ -283,6 +284,31 @@ describe('temporary chat handoff', () => {
     expect(browser.runtime.sendMessage).not.toHaveBeenCalledWith(
       expect.objectContaining({ type: CHATGPT_HANDOFF_CANCEL_EXPIRY_MESSAGE }),
     );
+  });
+
+  it('does not cancel recovery for synchronous beforeinput from its own composer write', async () => {
+    const scope = createScope();
+    addComposer();
+    addTemporaryExit();
+    scope.on(document, 'beforeinput', cancelPendingHandoffRecovery, { capture: true });
+    Object.defineProperty(document, 'execCommand', {
+      configurable: true,
+      value: vi.fn(() => {
+        document
+          .querySelector<HTMLElement>('#prompt-textarea')
+          ?.dispatchEvent(
+            new InputEvent('beforeinput', { bubbles: true, inputType: 'insertText' }),
+          );
+        return false;
+      }),
+    });
+
+    await expect(
+      handoffTemporaryChat(scope, { mode: 'inline', text: 'Keep this handoff' }),
+    ).resolves.toBe('ready');
+
+    expect(document.querySelector('#prompt-textarea')?.textContent).toContain('Keep this handoff');
+    expect(pendingEntryCount()).toBe(1);
   });
 
   it('accepts a reused composer node and verifies multiline content by rendered text', async () => {

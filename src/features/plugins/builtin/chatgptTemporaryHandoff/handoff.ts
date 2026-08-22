@@ -75,6 +75,7 @@ export const CHATGPT_NEW_CHAT_SELECTOR =
 const INLINE_THRESHOLD = 5_000;
 let activeHandoffOperations = 0;
 let internalNavigationClicks = 0;
+let internalComposerWrites = 0;
 let fallbackFilenameSequence = 0;
 let pageUnloading = false;
 let deliveredPendingToken: string | null = null;
@@ -445,9 +446,18 @@ export function discardDeliveredPendingHandoff(): void {
 }
 
 export function cancelPendingHandoffRecovery(): void {
-  if (internalNavigationClicks > 0) return;
+  if (internalNavigationClicks > 0 || internalComposerWrites > 0) return;
   recoveryCancellationRevision += 1;
   if (activeHandoffOperations === 0) void discardPendingHandoff();
+}
+
+function runInternalComposerWrite<T>(write: () => T): T {
+  internalComposerWrites += 1;
+  try {
+    return write();
+  } finally {
+    internalComposerWrites -= 1;
+  }
 }
 
 function clickForHandoffNavigation(target: HTMLElement): void {
@@ -474,7 +484,7 @@ function dispatchPaste(input: HTMLElement, text: string | null, file: File | nul
     const validFile = !file || (event.clipboardData?.files.length ?? 0) > 0;
     if (!validText || !validFile) return false;
     input.focus();
-    input.dispatchEvent(event);
+    runInternalComposerWrite(() => input.dispatchEvent(event));
     return true;
   } catch {
     return false;
@@ -581,7 +591,7 @@ function insertComposerText(
   const existing = readComposerText(input).trim();
   placeComposerCaret(input, placement);
   const insertion = existing ? (placement === 'start' ? `${text}\n\n` : `\n\n${text}`) : text;
-  if (!insertTextIntoChatInput(insertion, input)) return false;
+  if (!runInternalComposerWrite(() => insertTextIntoChatInput(insertion, input))) return false;
   return hasComposerSegment(input, text);
 }
 

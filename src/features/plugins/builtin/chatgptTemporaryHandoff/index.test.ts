@@ -150,6 +150,7 @@ describe('ChatGPT temporary handoff plugin', () => {
   });
 
   it('marks hard navigation before the root beforeunload teardown disposes the plugin', async () => {
+    vi.useFakeTimers();
     const scope = createScope();
     await activateChatGptTemporaryHandoff(scope);
 
@@ -158,6 +159,21 @@ describe('ChatGPT temporary handoff plugin', () => {
 
     expect(mocks.markUnloading).toHaveBeenCalledOnce();
     expect(mocks.discardPending).not.toHaveBeenCalled();
+  });
+
+  it('clears retained recovery when beforeunload is cancelled', async () => {
+    vi.useFakeTimers();
+    const scope = createScope();
+    await activateChatGptTemporaryHandoff(scope);
+
+    window.dispatchEvent(new Event('beforeunload'));
+    await scope.dispose();
+    expect(mocks.discardPending).not.toHaveBeenCalled();
+
+    await vi.runAllTimersAsync();
+
+    expect(mocks.markActive).toHaveBeenCalledOnce();
+    expect(mocks.discardPending).toHaveBeenCalledOnce();
   });
 
   it('clears the navigation marker when a cached page is restored', async () => {

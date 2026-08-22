@@ -122,7 +122,19 @@ class ChatGptTemporaryHandoffPlugin {
 
   start(): void {
     this.scope.style(CHATGPT_TEMPORARY_HANDOFF_CSS);
-    this.scope.on(window, 'beforeunload', markHandoffPageUnloading, { capture: true });
+    this.scope.on(
+      window,
+      'beforeunload',
+      () => {
+        markHandoffPageUnloading();
+        window.setTimeout(() => {
+          if (!isHandoffPageUnloading() || document.visibilityState === 'hidden') return;
+          markHandoffPageActive();
+          void discardPendingHandoff();
+        }, 0);
+      },
+      { capture: true },
+    );
     this.scope.on(window, 'pagehide', markHandoffPageUnloading, { capture: true });
     this.scope.on(window, 'pageshow', markHandoffPageActive, { capture: true });
     this.scope.on(
