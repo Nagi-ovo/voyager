@@ -592,14 +592,14 @@ describe('runtime disable lifecycle', () => {
     return addListener.mock.calls.at(-1)?.[0] as StorageChangeListener;
   };
 
-  const addWaveDromBlock = (): HTMLElement => {
+  const addWaveDromBlock = (code = WAVEJSON): HTMLElement => {
     const codeBlock = document.createElement('code-block');
     codeBlock.innerHTML = `
       <div class="code-block-decoration"><span>wavedrom</span></div>
       <pre><code data-test-id="code-content"></code></pre>
     `;
     const codeEl = codeBlock.querySelector<HTMLElement>('code')!;
-    codeEl.textContent = WAVEJSON;
+    codeEl.textContent = code;
     document.body.appendChild(codeBlock);
     return codeEl;
   };
@@ -651,6 +651,33 @@ describe('runtime disable lifecycle', () => {
       expect(codeEl.dataset.wavedromProcessing).toBe('false');
     });
     expect(document.querySelector('.gv-wavedrom-wrapper')).toBeNull();
+  });
+
+  it('drops a stale SVG and rerenders the latest source after an await', async () => {
+    const updatedWaveJson = '{"signal": [{"name":"data","wave":"x.34"}]}';
+    const stringifyMod = await import('onml/stringify.js');
+    vi.mocked(stringifyMod.default)
+      .mockReturnValueOnce('<svg viewBox="0 0 100 50"><text>stale</text></svg>')
+      .mockReturnValueOnce('<svg viewBox="0 0 100 50"><text>latest</text></svg>');
+    const codeEl = addWaveDromBlock();
+
+    processCodeBlocks();
+    expect(codeEl.dataset.wavedromProcessing).toBe('true');
+    codeEl.textContent = updatedWaveJson;
+
+    await vi.waitFor(() => {
+      expect(document.querySelector('.gv-wavedrom-diagram')?.textContent).toContain('latest');
+    });
+    expect(document.querySelector('.gv-wavedrom-diagram')?.textContent).not.toContain('stale');
+    expect(codeEl.dataset.wavedromCode).toBe(updatedWaveJson);
+
+    const renderAnyMod = await import('wavedrom/render-any');
+    expect(renderAnyMod.default).toHaveBeenCalledTimes(2);
+    expect(renderAnyMod.default).toHaveBeenLastCalledWith(
+      expect.any(Number),
+      { signal: [{ name: 'data', wave: 'x.34' }] },
+      expect.any(Object),
+    );
   });
 
   it('restores rendered source and can render again after re-enable', async () => {

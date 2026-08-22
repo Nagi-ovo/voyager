@@ -802,6 +802,12 @@ const renderWaveDrom = async (codeEl: HTMLElement, code: string) => {
       codeEl.dataset.wavedromProcessing = 'false';
       return;
     }
+    const latestCode = codeEl.textContent || '';
+    if (latestCode !== code) {
+      codeEl.dataset.wavedromProcessing = 'false';
+      void renderWaveDrom(codeEl, latestCode);
+      return;
+    }
 
     // Build or reuse the wrapper.
     let wrapper = codeBlockHost.parentElement;
