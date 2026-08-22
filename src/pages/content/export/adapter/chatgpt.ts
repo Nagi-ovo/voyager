@@ -27,6 +27,10 @@ const MATERIALIZATION_POLL_MS = 80;
 const MATERIALIZATION_IDLE_MS = 240;
 const MATERIALIZATION_REPOSITION_MS = 160;
 
+export function isChatGptResponseGenerating(root: ParentNode = document): boolean {
+  return root.querySelector(`${STOP_GENERATING_SELECTOR},${STREAMING_TURN_SELECTOR}`) !== null;
+}
+
 function resolveTurnRole(container: HTMLElement): ChatGptTurnRole {
   if (container.querySelector(USER_MESSAGE_SELECTOR)) {
     return 'user';
@@ -196,7 +200,7 @@ function isGeneratingTurn(turn: ChatGptTurnContainer): boolean {
   ) {
     return true;
   }
-  if (!document.querySelector(STOP_GENERATING_SELECTOR)) return false;
+  if (!isChatGptResponseGenerating()) return false;
   const ordered = chatgptCollectTurnContainers();
   return ordered.at(-1)?.id === turn.id && turn.role === 'assistant';
 }

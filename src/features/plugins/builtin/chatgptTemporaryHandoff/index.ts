@@ -6,6 +6,7 @@ import type { PluginSettings } from '@/features/plugins/types';
 import {
   buildChatGptTurnsForSelection,
   chatgptCollectTurnContainers,
+  isChatGptResponseGenerating,
 } from '@/pages/content/export/adapter/chatgpt';
 import { resolveExportAdapter } from '@/pages/content/export/adapter/platformAdapters';
 import { watchRouteChanges } from '@/pages/content/utils/routeWatcher';
@@ -13,6 +14,7 @@ import { getCurrentLanguage } from '@/utils/i18n';
 
 import {
   CHATGPT_COMPOSER_SELECTOR,
+  CHATGPT_NEW_CHAT_SELECTOR,
   CHATGPT_SEND_CONTROL_SELECTOR,
   CHATGPT_TEMP_TOGGLE_SELECTOR,
   buildHandoffBackup,
@@ -80,9 +82,24 @@ export async function collectTemporaryChatTurns(
   expectedUrl = location.href,
 ): Promise<ChatTurn[]> {
   DOMContentExtractor.setExportAdapter(resolveExportAdapter());
-  const selectedIds = new Set(chatgptCollectTurnContainers().map(({ id }) => id));
+  const snapshot = chatgptCollectTurnContainers();
+  if (isChatGptResponseGenerating() || snapshot.at(-1)?.role === 'user') {
+    throw new Error('chatgpt_export_response_still_generating');
+  }
+  const snapshotIds = snapshot.map(({ id }) => id);
+  const selectedIds = new Set(snapshotIds);
   if (selectedIds.size === 0) return [];
-  return await buildChatGptTurnsForSelection(selectedIds, { signal, expectedUrl });
+  const turns = await buildChatGptTurnsForSelection(selectedIds, { signal, expectedUrl });
+  const currentSnapshot = chatgptCollectTurnContainers();
+  if (
+    isChatGptResponseGenerating() ||
+    currentSnapshot.at(-1)?.role === 'user' ||
+    currentSnapshot.length !== snapshotIds.length ||
+    currentSnapshot.some(({ id }, index) => id !== snapshotIds[index])
+  ) {
+    throw new Error('chatgpt_export_conversation_changed');
+  }
+  return turns;
 }
 
 class ChatGptTemporaryHandoffPlugin {
@@ -126,7 +143,12 @@ class ChatGptTemporaryHandoffPlugin {
       'click',
       (event) => {
         const target = event.target instanceof Element ? event.target : null;
-        if (target?.closest(CHATGPT_SEND_CONTROL_SELECTOR)) discardDeliveredPendingHandoff();
+        if (
+          target?.closest(CHATGPT_SEND_CONTROL_SELECTOR) ||
+          target?.closest(CHATGPT_NEW_CHAT_SELECTOR)
+        ) {
+          discardDeliveredPendingHandoff();
+        }
       },
       { capture: true },
     );

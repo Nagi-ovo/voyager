@@ -70,7 +70,7 @@ export const CHATGPT_COMPOSER_SELECTOR = [
   ...CHATGPT_COMPOSER_SELECTORS,
   CHATGPT_GENERIC_COMPOSER_SELECTOR,
 ].join(',');
-const NEW_CHAT_SELECTOR =
+export const CHATGPT_NEW_CHAT_SELECTOR =
   'a[data-testid="create-new-chat-button"], a[href="/"][data-testid*="new" i]';
 const INLINE_THRESHOLD = 5_000;
 let activeHandoffOperations = 0;
@@ -779,7 +779,7 @@ export async function leaveTemporaryChat(scope: PluginScope): Promise<HTMLElemen
     if (composer) return composer;
   }
 
-  const newChat = document.querySelector<HTMLElement>(NEW_CHAT_SELECTOR);
+  const newChat = document.querySelector<HTMLElement>(CHATGPT_NEW_CHAT_SELECTOR);
   const newChatPath = getChatGptNewChatPath();
   if (newChat && newChatPath === '/') newChat.click();
   else location.assign(newChatPath);

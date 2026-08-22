@@ -110,9 +110,12 @@ text, and keep the payload in extension storage behind a tab-scoped token that
 is removed on cancellation, mismatch, the user's next edit or send, or expiry.
 After the first successful insertion, retain the bounded pending record on that
 exact chat route so composer mutations can recover replacements without a
-timing guess; discard it instead of replaying when the route changes. Sweep
-expired payload keys on later handoff activity so a closed tab cannot retain
-its transcript indefinitely.
+timing guess; discard it instead of replaying when the route changes or before
+a native New Chat action reuses the same route. Fail closed when response
+generation is active, the last mounted turn is still a user turn, or the turn
+identity snapshot changes while the shared collector materializes content.
+Sweep expired payload keys on later handoff activity so a closed tab cannot
+retain its transcript indefinitely.
 
 Regression test:
 
@@ -124,11 +127,40 @@ replaces the accepted composer after the old wait budget`, and `discards
 delivered recovery state instead of replaying it on another chat route`, and
 `stops delivered recovery before the user edits the composer`), plus
 `src/features/plugins/builtin/chatgptTemporaryHandoff/index.test.ts` (`stops
-recovery before sending clears the delivered composer`).
+recovery before sending clears the delivered composer`, `stops recovery before
+same-route New Chat actions`, `refuses handoff when the latest user turn has no
+mounted assistant yet`, and `refuses handoff when response generation starts
+during collection`).
 
 Commit:
 
 `fix(plugins): harden ChatGPT handoff delivery`
+
+## User export HTML must materialize multiline text
+
+Symptom:
+
+PDF and image exports collapsed line breaks inside a multiline user prompt even
+though Markdown and JSON retained the original text.
+
+Root cause:
+
+The user-content extractor escaped a multiline text part into one paragraph but
+left newline characters as HTML whitespace, which browsers collapse.
+
+Fix:
+
+Escape the text first, then serialize its newline characters as explicit
+`<br />` elements. Keep the plain-text representation unchanged.
+
+Regression test:
+
+`src/pages/content/export/adapter/__tests__/platformAdapters.test.ts` (`renders
+multiline user prompts with explicit HTML line breaks`).
+
+Commit:
+
+`fix(plugins): harden ChatGPT handoff snapshots`
 
 ## Temporary-chat handoff attachments need unique names
 

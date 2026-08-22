@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { DOMContentExtractor } from '@/features/export/services/DOMContentExtractor';
 
 import {
+  type ExportPlatformAdapter,
   chatgptExtractFormula,
   chatgptExtractInlineFormula,
   chatgptExtractUserText,
@@ -58,6 +59,25 @@ describe('ChatGPT export adapter HTML safety', () => {
     chatgptExtractUserText(message.querySelectorAll('.query-text-line'), text, message);
 
     expect(text).toEqual(['First line\nSecond line\nThird paragraph']);
+  });
+
+  it('renders multiline user prompts with explicit HTML line breaks', () => {
+    DOMContentExtractor.setExportAdapter({
+      extractUserImage: (element: HTMLElement) => element.querySelectorAll('img'),
+      extractUserText: chatgptExtractUserText,
+      getUserAttachmentCandidates: () => [],
+      extractAssistantImage: () => undefined,
+      extractFormula: () => undefined,
+      extractCodeBlock: () => undefined,
+      extractInlineFormula: () => undefined,
+    } as unknown as ExportPlatformAdapter);
+    const message = document.createElement('div');
+    message.innerHTML = '<div>First line<br>Second line</div><p>Third paragraph</p>';
+
+    const extracted = DOMContentExtractor.extractUserContent(message);
+
+    expect(extracted.text).toBe('First line\nSecond line\nThird paragraph');
+    expect(extracted.html).toBe('<p>First line<br />Second line<br />Third paragraph</p>');
   });
 
   it('escapes block formula source in attribute context', () => {

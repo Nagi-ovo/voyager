@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { PluginScope } from '@/features/plugins/runtime/pluginScope';
 
-import { activateChatGptTemporaryHandoff } from './index';
+import { activateChatGptTemporaryHandoff, collectTemporaryChatTurns } from './index';
 
 const mocks = vi.hoisted(() => ({
   temporary: true,
@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   getCurrentLanguage: vi.fn(),
   collectContainers: vi.fn(),
   buildTurns: vi.fn(),
+  isGenerating: vi.fn(),
   resolveAdapter: vi.fn(),
   buildBackup: vi.fn(),
   downloadBackup: vi.fn(),
@@ -32,6 +33,7 @@ vi.mock('@/utils/i18n', () => ({
 vi.mock('@/pages/content/export/adapter/chatgpt', () => ({
   chatgptCollectTurnContainers: mocks.collectContainers,
   buildChatGptTurnsForSelection: mocks.buildTurns,
+  isChatGptResponseGenerating: mocks.isGenerating,
 }));
 
 vi.mock('@/pages/content/export/adapter/platformAdapters', () => ({
@@ -40,6 +42,7 @@ vi.mock('@/pages/content/export/adapter/platformAdapters', () => ({
 
 vi.mock('./handoff', () => ({
   CHATGPT_COMPOSER_SELECTOR: '#prompt-textarea',
+  CHATGPT_NEW_CHAT_SELECTOR: 'a[data-testid="create-new-chat-button"]',
   CHATGPT_SEND_CONTROL_SELECTOR: '[data-testid="send-button"]',
   CHATGPT_TEMP_TOGGLE_SELECTOR: '[data-testid="temporary-chat-toggle"]',
   buildHandoffBackup: mocks.buildBackup,
@@ -83,6 +86,12 @@ beforeEach(() => {
   mocks.getCurrentLanguage.mockResolvedValue('en');
   mocks.collectContainers.mockReturnValue([
     { id: 'user-1', role: 'user', sequence: 0, container: document.createElement('div') },
+    {
+      id: 'assistant-1',
+      role: 'assistant',
+      sequence: 1,
+      container: document.createElement('div'),
+    },
   ]);
   mocks.buildTurns.mockResolvedValue([
     { user: 'Question', assistant: 'Answer', starred: false, omitEmptySections: true },
@@ -100,10 +109,12 @@ beforeEach(() => {
   mocks.resume.mockResolvedValue(null);
   mocks.discardPending.mockResolvedValue(undefined);
   mocks.pendingPreviewReady.mockResolvedValue(false);
+  mocks.isGenerating.mockReturnValue(false);
 });
 
 afterEach(async () => {
   await Promise.all(scopes.splice(0).map((scope) => scope.dispose()));
+  history.replaceState({}, '', '/');
   document.body.replaceChildren();
   document.head.querySelectorAll('style[data-gv-plugin-scope]').forEach((node) => node.remove());
   vi.useRealTimers();
@@ -205,7 +216,7 @@ describe('ChatGPT temporary handoff plugin', () => {
       ?.click();
 
     await vi.waitFor(() => expect(mocks.handoff).toHaveBeenCalledOnce());
-    expect(mocks.buildTurns).toHaveBeenCalledWith(new Set(['user-1']), {
+    expect(mocks.buildTurns).toHaveBeenCalledWith(new Set(['user-1', 'assistant-1']), {
       signal: expect.any(AbortSignal),
       expectedUrl: location.href,
     });
@@ -240,6 +251,28 @@ describe('ChatGPT temporary handoff plugin', () => {
     );
     expect(mocks.buildTurns).not.toHaveBeenCalled();
     expect(mocks.handoff).not.toHaveBeenCalled();
+  });
+
+  it('refuses handoff when the latest user turn has no mounted assistant yet', async () => {
+    mocks.collectContainers.mockReturnValue([
+      { id: 'user-1', role: 'user', sequence: 0, container: document.createElement('div') },
+    ]);
+
+    await expect(collectTemporaryChatTurns(new AbortController().signal)).rejects.toThrow(
+      'chatgpt_export_response_still_generating',
+    );
+
+    expect(mocks.buildTurns).not.toHaveBeenCalled();
+  });
+
+  it('refuses handoff when response generation starts during collection', async () => {
+    mocks.isGenerating.mockReturnValueOnce(false).mockReturnValueOnce(true);
+
+    await expect(collectTemporaryChatTurns(new AbortController().signal)).rejects.toThrow(
+      'chatgpt_export_conversation_changed',
+    );
+
+    expect(mocks.buildTurns).toHaveBeenCalledOnce();
   });
 
   it('retries a pending handoff when a late attachment preview mounts in the composer', async () => {
@@ -321,6 +354,24 @@ describe('ChatGPT temporary handoff plugin', () => {
     await activateChatGptTemporaryHandoff(createScope());
     send.click();
     form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+
+    expect(mocks.discardDeliveredPending).toHaveBeenCalledTimes(2);
+  });
+
+  it('stops recovery before same-route New Chat actions', async () => {
+    mocks.temporary = false;
+    await activateChatGptTemporaryHandoff(createScope());
+
+    for (const route of ['/', '/u/12/g/custom-gpt/']) {
+      history.replaceState({}, '', route);
+      const newChat = document.createElement('a');
+      newChat.dataset.testid = 'create-new-chat-button';
+      newChat.href = route;
+      newChat.addEventListener('click', (event) => event.preventDefault());
+      document.body.appendChild(newChat);
+      newChat.click();
+      newChat.remove();
+    }
 
     expect(mocks.discardDeliveredPending).toHaveBeenCalledTimes(2);
   });

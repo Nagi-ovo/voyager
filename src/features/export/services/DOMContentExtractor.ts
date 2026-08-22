@@ -151,7 +151,7 @@ export class DOMContentExtractor {
 
     // Add text paragraphs to HTML
     textParts.forEach((text) => {
-      htmlParts.push(`<p>${this.escapeHtml(text)}</p>`);
+      htmlParts.push(`<p>${this.escapeHtml(text).replace(/\n/g, '<br />')}</p>`);
     });
 
     result.html = htmlParts.join('\n');
