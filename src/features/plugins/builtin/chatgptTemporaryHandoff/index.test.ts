@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   hasAttachments: vi.fn(),
   plan: vi.fn(),
   resume: vi.fn(),
+  discardDeliveredPending: vi.fn(),
   discardPending: vi.fn(),
   markUnloading: vi.fn(),
   markActive: vi.fn(),
@@ -41,6 +42,7 @@ vi.mock('./handoff', () => ({
   CHATGPT_COMPOSER_SELECTOR: '#prompt-textarea',
   CHATGPT_TEMP_TOGGLE_SELECTOR: '[data-testid="temporary-chat-toggle"]',
   buildHandoffBackup: mocks.buildBackup,
+  discardDeliveredPendingHandoff: mocks.discardDeliveredPending,
   discardPendingHandoff: mocks.discardPending,
   downloadHandoffBackup: mocks.downloadBackup,
   handoffTemporaryChat: mocks.handoff,
@@ -268,9 +270,39 @@ describe('ChatGPT temporary handoff plugin', () => {
     form.appendChild(preview);
 
     await vi.waitFor(() => expect(mocks.resume).toHaveBeenCalledOnce());
+  });
+
+  it('rechecks pending delivery when the live composer content mutates', async () => {
+    mocks.temporary = false;
+    const form = document.createElement('form');
+    const composer = document.createElement('div');
+    composer.id = 'prompt-textarea';
+    composer.contentEditable = 'true';
+    composer.setAttribute('role', 'textbox');
+    form.appendChild(composer);
+    document.body.appendChild(form);
+
+    const scope = createScope();
+    await activateChatGptTemporaryHandoff(scope);
+    await vi.waitFor(() => expect(mocks.resume).toHaveBeenCalledOnce());
+    mocks.resume.mockClear();
 
     composer.appendChild(document.createTextNode('delivery mutation'));
-    await flush();
+    await vi.waitFor(() => expect(mocks.resume).toHaveBeenCalledOnce());
     expect(mocks.resume).toHaveBeenCalledOnce();
+  });
+
+  it('stops recovery before a user edit changes the delivered composer', async () => {
+    mocks.temporary = false;
+    const composer = document.createElement('div');
+    composer.id = 'prompt-textarea';
+    composer.contentEditable = 'true';
+    composer.setAttribute('role', 'textbox');
+    document.body.appendChild(composer);
+
+    await activateChatGptTemporaryHandoff(createScope());
+    composer.dispatchEvent(new InputEvent('beforeinput', { bubbles: true }));
+
+    expect(mocks.discardDeliveredPending).toHaveBeenCalledOnce();
   });
 });

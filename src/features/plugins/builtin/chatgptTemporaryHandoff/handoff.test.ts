@@ -12,6 +12,7 @@ import {
   buildHandoffBackup,
   buildHandoffTranscript,
   createHandoffFilename,
+  discardDeliveredPendingHandoff,
   discardPendingHandoff,
   getChatGptNewChatPath,
   handoffTemporaryChat,
@@ -262,7 +263,7 @@ describe('temporary chat handoff', () => {
     }
   });
 
-  it('hands an inline transcript to the normal-chat composer and clears pending state', async () => {
+  it('hands an inline transcript to the normal-chat composer and keeps bounded recovery state', async () => {
     const scope = createScope();
     addComposer();
     const getComposer = addTemporaryExit();
@@ -272,12 +273,13 @@ describe('temporary chat handoff', () => {
     ).resolves.toBe('ready');
 
     expect(getComposer()?.textContent).toContain('Continue this transcript');
-    expect(pendingEntryCount()).toBe(0);
-    expect(sessionStorage.getItem(PENDING_HANDOFF_TAB_KEY)).toBeNull();
+    expect(pendingEntryCount()).toBe(1);
+    expect(sessionStorage.getItem(PENDING_HANDOFF_TAB_KEY)).not.toBeNull();
+    expect(storedPending()).toMatchObject({ deliveredRoute: '/' });
     expect(browser.runtime.sendMessage).toHaveBeenCalledWith(
       expect.objectContaining({ type: CHATGPT_HANDOFF_SCHEDULE_EXPIRY_MESSAGE }),
     );
-    expect(browser.runtime.sendMessage).toHaveBeenCalledWith(
+    expect(browser.runtime.sendMessage).not.toHaveBeenCalledWith(
       expect.objectContaining({ type: CHATGPT_HANDOFF_CANCEL_EXPIRY_MESSAGE }),
     );
   });
@@ -304,7 +306,7 @@ describe('temporary chat handoff', () => {
     expect(composer.textContent.indexOf('First line')).toBeLessThan(
       composer.textContent.indexOf('Unsent follow-up'),
     );
-    expect(pendingEntryCount()).toBe(0);
+    expect(pendingEntryCount()).toBe(1);
   });
 
   it('ignores another page editor before the real ChatGPT composer', async () => {
@@ -412,7 +414,7 @@ describe('temporary chat handoff', () => {
     await vi.advanceTimersByTimeAsync(800);
     await expect(resume).resolves.toBe('ready');
     expect(normalComposer.textContent).toContain('Deliver after a slow mount');
-    expect(pendingEntryCount()).toBe(0);
+    expect(pendingEntryCount()).toBe(1);
   });
 
   it('restores an unsent temporary-chat draft after the new-chat fallback replaces the composer', async () => {
@@ -446,10 +448,10 @@ describe('temporary chat handoff', () => {
     expect(mountedComposer!.textContent.indexOf('Continue the saved transcript')).toBeLessThan(
       mountedComposer!.textContent.indexOf('Unsent follow-up'),
     );
-    expect(pendingEntryCount()).toBe(0);
+    expect(pendingEntryCount()).toBe(1);
   });
 
-  it('redelivers when ChatGPT replaces the accepted composer shortly after insertion', async () => {
+  it('redelivers when ChatGPT replaces the accepted composer after the old wait budget', async () => {
     vi.useFakeTimers();
     const scope = createScope();
     history.replaceState({}, '', '/?temporary-chat=true');
@@ -464,7 +466,7 @@ describe('temporary chat handoff', () => {
       window.setTimeout(() => {
         staleComposer.remove();
         replacement = addComposer();
-      }, 350);
+      }, 800);
     });
     document.body.appendChild(toggle);
 
@@ -472,14 +474,18 @@ describe('temporary chat handoff', () => {
       mode: 'inline',
       text: 'Continue the stable transcript',
     });
-    await vi.advanceTimersByTimeAsync(1_200);
+    await vi.advanceTimersByTimeAsync(600);
 
     await expect(handoff).resolves.toBe('ready');
+    expect(pendingEntryCount()).toBe(1);
+
+    await vi.advanceTimersByTimeAsync(300);
+    await expect(resumePendingHandoff(scope)).resolves.toBeNull();
     const settledComposer = document.querySelector<HTMLElement>('#prompt-textarea');
     expect(settledComposer).toBe(replacement);
     expect(settledComposer?.textContent).toContain('Continue the stable transcript');
     expect(settledComposer?.textContent).toContain('Unsent follow-up');
-    expect(pendingEntryCount()).toBe(0);
+    expect(pendingEntryCount()).toBe(1);
   });
 
   it('rejects a handoff when leaving temporary mode switches accounts', async () => {
@@ -549,6 +555,50 @@ describe('temporary chat handoff', () => {
     expect(composer.textContent).toContain('data');
     expect(composer.textContent).toContain('Recovered handoff');
     expect(composer.lastChild?.textContent).toBe('a');
+  });
+
+  it('restores a draft separately when the transcript already contains the exact draft line', async () => {
+    const composer = addComposer();
+    seedPending(
+      { mode: 'inline', text: 'Recovered handoff\n\nFollow up\n\nEarlier answer' },
+      Date.now(),
+      'route:default',
+      'Follow up',
+    );
+
+    await expect(resumePendingHandoff(createScope())).resolves.toBe('ready');
+
+    expect(composer.textContent?.match(/Follow up/g)).toHaveLength(2);
+    expect(composer.lastChild?.textContent).toBe('Follow up');
+  });
+
+  it('discards delivered recovery state instead of replaying it on another chat route', async () => {
+    const composer = addComposer('Current chat draft');
+    seedPending({ mode: 'inline', text: 'Old delivered handoff' });
+    const storageKey = currentPendingStorageKey()!;
+    storageState.set(storageKey, {
+      ...(storageState.get(storageKey) as object),
+      deliveredRoute: '/c/old-chat',
+    });
+    history.replaceState({}, '', '/c/new-chat');
+
+    await expect(resumePendingHandoff(createScope())).resolves.toBeNull();
+
+    expect(composer.textContent).toBe('Current chat draft');
+    expect(pendingEntryCount()).toBe(0);
+  });
+
+  it('stops delivered recovery before the user edits the composer', async () => {
+    const composer = addComposer();
+    seedPending({ mode: 'inline', text: 'Recovered handoff' });
+    await expect(resumePendingHandoff(createScope())).resolves.toBe('ready');
+
+    discardDeliveredPendingHandoff();
+    await vi.waitFor(() => expect(pendingEntryCount()).toBe(0));
+
+    composer.textContent = 'User replacement';
+    await expect(resumePendingHandoff(createScope())).resolves.toBeNull();
+    expect(composer.textContent).toBe('User replacement');
   });
 
   it('finishes attachment delivery in the live composer when ChatGPT replaces the editor', async () => {

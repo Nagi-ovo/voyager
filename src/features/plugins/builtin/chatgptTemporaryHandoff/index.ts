@@ -15,6 +15,7 @@ import {
   CHATGPT_COMPOSER_SELECTOR,
   CHATGPT_TEMP_TOGGLE_SELECTOR,
   buildHandoffBackup,
+  discardDeliveredPendingHandoff,
   discardPendingHandoff,
   downloadHandoffBackup,
   handoffTemporaryChat,
@@ -105,6 +106,20 @@ class ChatGptTemporaryHandoffPlugin {
     this.scope.style(CHATGPT_TEMPORARY_HANDOFF_CSS);
     this.scope.on(window, 'pagehide', markHandoffPageUnloading, { capture: true });
     this.scope.on(window, 'pageshow', markHandoffPageActive, { capture: true });
+    this.scope.on(
+      document,
+      'beforeinput',
+      (event) => {
+        const target = event.target instanceof Element ? event.target : null;
+        if (
+          target?.matches(CHATGPT_COMPOSER_SELECTOR) ||
+          target?.closest(CHATGPT_COMPOSER_SELECTOR)
+        ) {
+          discardDeliveredPendingHandoff();
+        }
+      },
+      { capture: true },
+    );
     this.scope.effect(
       () => () => (isHandoffPageUnloading() ? undefined : discardPendingHandoff()),
       'discard-chatgpt-temporary-handoff-on-disable',
@@ -115,12 +130,16 @@ class ChatGptTemporaryHandoffPlugin {
       {
         childList: true,
         subtree: true,
+        characterData: true,
         attributes: true,
         attributeFilter: ['aria-label', 'aria-pressed', 'data-testid', 'title'],
       },
       (records) => {
-        if (this.mutationsMountComposer(records)) {
+        const mountedComposer = this.mutationsMountComposer(records);
+        if (mountedComposer) {
           this.attachmentPreviewResumeTriggered = false;
+        }
+        if (mountedComposer || this.mutationsTouchComposerContent(records)) {
           this.tryResumePendingHandoff();
         } else if (this.mutationsTouchComposerForm(records)) {
           this.tryResumeWhenAttachmentReady();
@@ -163,6 +182,15 @@ class ChatGptTemporaryHandoffPlugin {
           node.querySelector(CHATGPT_COMPOSER_SELECTOR) !== null
         );
       });
+    });
+  }
+
+  private mutationsTouchComposerContent(records: readonly MutationRecord[]): boolean {
+    return records.some((record) => {
+      const target = record.target instanceof Element ? record.target : record.target.parentElement;
+      return Boolean(
+        target?.matches(CHATGPT_COMPOSER_SELECTOR) || target?.closest(CHATGPT_COMPOSER_SELECTOR),
+      );
     });
   }
 

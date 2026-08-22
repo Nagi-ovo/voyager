@@ -107,21 +107,25 @@ Fix:
 Resolve only ChatGPT composer candidates in selector-priority order, accept a
 usable same-node composer after temporary mode ends, compare normalized rendered
 text, and keep the payload in extension storage behind a tab-scoped token that
-is removed on success, cancellation, mismatch, or expiry. Sweep expired payload
-keys on later handoff activity so a closed tab cannot retain its transcript
-indefinitely.
+is removed on cancellation, mismatch, the user's next edit, or expiry. After the first successful
+insertion, retain the bounded pending record on that exact chat route so
+composer mutations can recover replacements without a timing guess; discard it
+instead of replaying when the route changes. Sweep expired payload keys on later
+handoff activity so a closed tab cannot retain its transcript indefinitely.
 
 Regression test:
 
 `src/features/plugins/builtin/chatgptTemporaryHandoff/handoff.test.ts` (`accepts
 a reused composer node and verifies multiline content by rendered text`,
 `ignores another page editor before the real ChatGPT composer`, and `clears
-pending state when plugin disposal cancels a resume`, and `sweeps an expired
-orphan after its tab-scoped token is lost`).
+pending state when plugin disposal cancels a resume`, `redelivers when ChatGPT
+replaces the accepted composer after the old wait budget`, and `discards
+delivered recovery state instead of replaying it on another chat route`, and
+`stops delivered recovery before the user edits the composer`).
 
 Commit:
 
-`fix(plugins): harden ChatGPT temporary handoff recovery`
+`fix(plugins): harden ChatGPT handoff delivery`
 
 ## Temporary-chat handoff attachments need unique names
 
