@@ -1245,7 +1245,9 @@ export class DOMContentExtractor {
             const content =
               directExportCodeBlock.kind === 'mermaid'
                 ? this.extractMermaidContent(directExportCodeBlock.element)
-                : this.extractCodeBlock(directExportCodeBlock.element);
+                : directExportCodeBlock.kind === 'wavedrom'
+                  ? this.extractWavedromContent(directExportCodeBlock.element)
+                  : this.extractCodeBlock(directExportCodeBlock.element);
             if (!content?.text) return;
 
             ensureItemMarker();
@@ -1350,7 +1352,13 @@ export class DOMContentExtractor {
       '.hide-from-message-actions',
     ].join(',');
 
-    root.querySelectorAll(selector).forEach((el) => el.remove());
+    root.querySelectorAll(selector).forEach((el) => {
+      // WaveDrom skins live in an embedded SVG stylesheet. List extraction
+      // strips UI artifacts before it replaces the wrapper with the exported
+      // SVG, so preserve that one content-bearing style element.
+      if (el.localName === 'style' && el.closest(WAVEDROM_WRAPPER_SELECTOR)) return;
+      el.remove();
+    });
   }
 
   /**

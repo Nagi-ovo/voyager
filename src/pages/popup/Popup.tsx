@@ -105,6 +105,7 @@ import {
 import WidthSlider from './components/WidthSlider';
 import { useFormulaCopyPopupSettings } from './hooks/useFormulaCopyPopupSettings';
 import { usePopupScrollRestoration } from './hooks/usePopupScrollRestoration';
+import { useWaveDromPopupSettings } from './hooks/useWaveDromPopupSettings';
 import {
   type SettingsSearchItem,
   getSettingsSearchMatches,
@@ -774,7 +775,6 @@ interface SettingsUpdate {
   inputCollapseWhenNotEmpty?: boolean;
   inputVimModeEnabled?: boolean;
   mermaidEnabled?: boolean;
-  wavedromEnabled?: boolean;
   quoteReplyEnabled?: boolean;
   highlightEnabled?: boolean;
   highlightTimelineMarkersEnabled?: boolean;
@@ -944,6 +944,22 @@ function ParagraphSpacingControl({
 
 export default function Popup({ sourceTabId }: PopupProps = {}) {
   const { t, language } = useLanguage();
+  const setSyncStorage = useCallback(async (payload: Record<string, unknown>) => {
+    try {
+      await browser.storage.sync.set(payload);
+      return;
+    } catch {
+      // Fallback to chrome.* if polyfill is unavailable in this context.
+    }
+
+    await new Promise<void>((resolve) => {
+      try {
+        chrome.storage?.sync?.set(payload, () => resolve());
+      } catch {
+        resolve();
+      }
+    });
+  }, []);
   const [mode, setMode] = useState<ScrollMode>('flow');
   const [timelineStyle, setTimelineStyle] = useState<TimelineStyle>('dots');
   const [hideContainer, setHideContainer] = useState<boolean>(false);
@@ -987,7 +1003,11 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
   // badge on the floating ball instead of auto-popping the modal.
   const [changelogBadgeMode, setChangelogBadgeMode] = useState<boolean>(false);
   const [mermaidEnabled, setMermaidEnabled] = useState<boolean>(true);
-  const [wavedromEnabled, setWavedromEnabled] = useState<boolean>(true);
+  const {
+    enabled: wavedromEnabled,
+    hydrateFromStorage: hydrateWavedromEnabled,
+    setEnabledFromUser: setWavedromEnabledFromUser,
+  } = useWaveDromPopupSettings(setSyncStorage);
   const [showMessageTimestamps, setShowMessageTimestamps] = useState<boolean>(false);
   const [quoteReplyEnabled, setQuoteReplyEnabled] = useState<boolean>(true);
 
@@ -1305,23 +1325,6 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
     };
   }, []);
 
-  const setSyncStorage = useCallback(async (payload: Record<string, unknown>) => {
-    try {
-      await browser.storage.sync.set(payload);
-      return;
-    } catch {
-      // Fallback to chrome.* if polyfill is unavailable in this context.
-    }
-
-    await new Promise<void>((resolve) => {
-      try {
-        chrome.storage?.sync?.set(payload, () => resolve());
-      } catch {
-        resolve();
-      }
-    });
-  }, []);
-
   const handleFormulaCopyEnabledChange = useCallback(
     (enabled: boolean) => {
       setFormulaCopyEnabledFromUser(enabled);
@@ -1388,8 +1391,6 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
         payload[StorageKeys.INPUT_VIM_MODE] = settings.inputVimModeEnabled;
       if (typeof settings.mermaidEnabled === 'boolean')
         payload.gvMermaidEnabled = settings.mermaidEnabled;
-      if (typeof settings.wavedromEnabled === 'boolean')
-        payload[StorageKeys.WAVEDROM_ENABLED] = settings.wavedromEnabled;
       if (typeof settings.quoteReplyEnabled === 'boolean')
         payload.gvQuoteReplyEnabled = settings.quoteReplyEnabled;
       if (typeof settings.highlightEnabled === 'boolean') {
@@ -2046,7 +2047,7 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
             void setSyncStorage({ [StorageKeys.TAB_TITLE_UPDATE_ENABLED]: false });
           }
           setMermaidEnabled(res?.gvMermaidEnabled !== false);
-          setWavedromEnabled(res?.[StorageKeys.WAVEDROM_ENABLED] !== false);
+          hydrateWavedromEnabled(res?.[StorageKeys.WAVEDROM_ENABLED]);
           setQuoteReplyEnabled(res?.gvQuoteReplyEnabled !== false);
           setHighlightEnabled(res?.[StorageKeys.HIGHLIGHT_ENABLED] === true);
           setHighlightTimelineMarkersEnabled(
@@ -2169,7 +2170,7 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
         },
       );
     } catch {}
-  }, [hydrateFormulaCopySettings, setSyncStorage]);
+  }, [hydrateFormulaCopySettings, hydrateWavedromEnabled, setSyncStorage]);
 
   // Validate and normalize URL
   const normalizeUrl = useCallback((url: string): string | null => {
@@ -4267,8 +4268,7 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
                     id="wavedrom-enabled"
                     checked={wavedromEnabled}
                     onChange={(e) => {
-                      setWavedromEnabled(e.target.checked);
-                      apply({ wavedromEnabled: e.target.checked });
+                      setWavedromEnabledFromUser(e.target.checked);
                     }}
                   />
                 </div>,

@@ -1,8 +1,11 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { StorageKeys } from '@/core/types/common';
 
 import {
   _closeModalForTest,
   _openFullscreenForTest,
+  _resetWaveDromLifecycleForTest,
   _resetWaveDromLoader,
   computeAutoFitScale,
   isWaveJsonCode,
@@ -14,6 +17,7 @@ import {
   renderWaveSvg,
   resolveGeminiTheme,
   resolveWaveRenderTheme,
+  startWaveDrom,
 } from '../index';
 
 // ---------------------------------------------------------------------------
@@ -41,11 +45,12 @@ const MOCK_DARK_SKIN_TREE = [
   ['g', {}, ''],
 ];
 
-vi.mock('wavedrom', () => ({
-  default: {
-    renderAny: vi.fn(() => ['svg', {}, '']),
-    onml: { stringify: vi.fn(() => '<svg viewBox="0 0 100 50"><g/></svg>') },
-  },
+vi.mock('wavedrom/render-any', () => ({
+  default: vi.fn(() => ['svg', {}, '']),
+}));
+
+vi.mock('onml/stringify.js', () => ({
+  default: vi.fn(() => '<svg viewBox="0 0 100 50"><g/></svg>'),
 }));
 
 // Mock shapes mirror what the runtime sees after CJS interop: the bundler
@@ -70,6 +75,7 @@ vi.mock('json5', () => ({
 // ---------------------------------------------------------------------------
 
 beforeEach(() => {
+  _resetWaveDromLifecycleForTest();
   _resetWaveDromLoader();
   _closeModalForTest();
   vi.clearAllMocks();
@@ -77,6 +83,11 @@ beforeEach(() => {
   document.body.className = '';
   document.documentElement.className = '';
   document.documentElement.removeAttribute('data-theme');
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+  _resetWaveDromLifecycleForTest();
 });
 
 // ---------------------------------------------------------------------------
@@ -303,6 +314,20 @@ describe('_openFullscreenForTest', () => {
     expect(document.querySelector('.gv-wavedrom-modal')).toBeNull();
     vi.useRealTimers();
   });
+
+  it('does not let a stale close timer tear down a newly opened modal', () => {
+    vi.useFakeTimers();
+    _openFullscreenForTest('<svg viewBox="0 0 50 50"><g/></svg>', '#f9fafb');
+    vi.runAllTimers();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+
+    _closeModalForTest();
+    _openFullscreenForTest('<svg viewBox="0 0 100 50"><g/></svg>', '#f9fafb');
+    vi.advanceTimersByTime(400);
+
+    expect(document.querySelectorAll('.gv-wavedrom-modal')).toHaveLength(1);
+    _closeModalForTest();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -311,8 +336,8 @@ describe('_openFullscreenForTest', () => {
 
 describe('renderWaveSvg sanitisation', () => {
   it('strips script and event handlers from library-generated SVG', async () => {
-    const waveDromMod = await import('wavedrom');
-    vi.mocked(waveDromMod.default.onml.stringify).mockReturnValue(
+    const stringifyMod = await import('onml/stringify.js');
+    vi.mocked(stringifyMod.default).mockReturnValue(
       '<svg viewBox="0 0 100 50"><script>alert(1)</script><g onload="alert(2)"><text>ok</text></g></svg>',
     );
     const svg = await renderWaveSvg('{"signal": [{"name":"clk","wave":"p..."}]}', false);
@@ -324,8 +349,8 @@ describe('renderWaveSvg sanitisation', () => {
   });
 
   it('keeps the dark-skin <style> block when sanitising', async () => {
-    const waveDromMod = await import('wavedrom');
-    vi.mocked(waveDromMod.default.onml.stringify).mockReturnValue(
+    const stringifyMod = await import('onml/stringify.js');
+    vi.mocked(stringifyMod.default).mockReturnValue(
       '<svg viewBox="0 0 100 50"><defs><style>.s6{fill:#000000}</style></defs><g/></svg>',
     );
     const svg = await renderWaveSvg('{"signal": [{"name":"clk","wave":"p..."}]}', true);
@@ -339,23 +364,27 @@ describe('renderWaveSvg sanitisation', () => {
 // ---------------------------------------------------------------------------
 
 describe('moveNativeCopyButton', () => {
-  const makeWrapper = (): { wrapper: HTMLElement; parent: HTMLElement; toolbar: HTMLElement } => {
-    const wrapper = document.createElement('div');
+  const makeCodeBlock = (): {
+    codeBlockHost: HTMLElement;
+    parent: HTMLElement;
+    toolbar: HTMLElement;
+  } => {
+    const codeBlockHost = document.createElement('code-block');
     const parent = document.createElement('div');
-    parent.appendChild(wrapper);
+    parent.appendChild(codeBlockHost);
     const toolbar = document.createElement('div');
-    return { wrapper, parent, toolbar };
+    return { codeBlockHost, parent, toolbar };
   };
 
   it('moves a .copy-button into the toolbar and resets its positioning', () => {
-    const { wrapper, parent, toolbar } = makeWrapper();
+    const { codeBlockHost, toolbar } = makeCodeBlock();
     const copyBtn = document.createElement('button');
     copyBtn.className = 'copy-button';
     copyBtn.style.position = 'absolute';
     copyBtn.style.top = '8px';
-    parent.appendChild(copyBtn);
+    codeBlockHost.appendChild(copyBtn);
 
-    const moved = moveNativeCopyButton(wrapper, toolbar);
+    const moved = moveNativeCopyButton(codeBlockHost, toolbar);
     expect(moved).toBe(copyBtn);
     expect(toolbar.contains(copyBtn)).toBe(true);
     expect(copyBtn.style.position).toBe('static');
@@ -366,21 +395,36 @@ describe('moveNativeCopyButton', () => {
   });
 
   it('prefers the .buttons container when present', () => {
-    const { wrapper, parent, toolbar } = makeWrapper();
+    const { codeBlockHost, toolbar } = makeCodeBlock();
     const buttons = document.createElement('div');
     buttons.className = 'buttons';
-    parent.appendChild(buttons);
-    parent.appendChild(
+    codeBlockHost.appendChild(buttons);
+    codeBlockHost.appendChild(
       Object.assign(document.createElement('button'), { className: 'copy-button' }),
     );
 
-    expect(moveNativeCopyButton(wrapper, toolbar)).toBe(buttons);
+    expect(moveNativeCopyButton(codeBlockHost, toolbar)).toBe(buttons);
     expect(toolbar.contains(buttons)).toBe(true);
   });
 
   it('returns null when no native copy button exists', () => {
-    const { wrapper, toolbar } = makeWrapper();
-    expect(moveNativeCopyButton(wrapper, toolbar)).toBeNull();
+    const { codeBlockHost, toolbar } = makeCodeBlock();
+    expect(moveNativeCopyButton(codeBlockHost, toolbar)).toBeNull();
+  });
+
+  it('does not steal controls from a sibling WaveDrom block', () => {
+    const first = makeCodeBlock();
+    const second = makeCodeBlock();
+    const firstButtons = document.createElement('div');
+    firstButtons.className = 'buttons';
+    const secondButtons = document.createElement('div');
+    secondButtons.className = 'buttons';
+    first.codeBlockHost.appendChild(firstButtons);
+    second.codeBlockHost.appendChild(secondButtons);
+
+    expect(moveNativeCopyButton(second.codeBlockHost, second.toolbar)).toBe(secondButtons);
+    expect(first.codeBlockHost.contains(firstButtons)).toBe(true);
+    expect(second.toolbar.contains(firstButtons)).toBe(false);
   });
 });
 
@@ -437,8 +481,8 @@ describe('computeAutoFitScale', () => {
 
 describe('renderWaveSvg skin collections', () => {
   it('passes skin collections (not bare trees) to renderAny', async () => {
-    const waveDromMod = await import('wavedrom');
-    const renderAnyMock = vi.mocked(waveDromMod.default.renderAny);
+    const renderAnyMod = await import('wavedrom/render-any');
+    const renderAnyMock = vi.mocked(renderAnyMod.default);
     const code = '{"signal": [{"name":"clk","wave":"p..."}]}';
 
     await renderWaveSvg(code, false);
@@ -522,6 +566,136 @@ describe('processCodeBlocks language labels', () => {
     processCodeBlocks();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(document.querySelector('.gv-wavedrom-wrapper')).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Runtime disable lifecycle
+// ---------------------------------------------------------------------------
+
+describe('runtime disable lifecycle', () => {
+  const WAVEJSON = '{"signal": [{"name":"clk","wave":"p..."}]}';
+
+  type StorageChangeListener = (
+    changes: Record<string, { oldValue?: unknown; newValue?: unknown }>,
+    areaName: string,
+  ) => void;
+
+  const startEnabled = (): StorageChangeListener => {
+    const storageGet = chrome.storage.sync.get as unknown as ReturnType<typeof vi.fn>;
+    storageGet.mockImplementation(
+      (_defaults: Record<string, unknown>, callback: (result: Record<string, unknown>) => void) =>
+        callback({ [StorageKeys.WAVEDROM_ENABLED]: true }),
+    );
+    startWaveDrom();
+    const addListener = chrome.storage.onChanged.addListener as unknown as ReturnType<typeof vi.fn>;
+    return addListener.mock.calls.at(-1)?.[0] as StorageChangeListener;
+  };
+
+  const addWaveDromBlock = (): HTMLElement => {
+    const codeBlock = document.createElement('code-block');
+    codeBlock.innerHTML = `
+      <div class="code-block-decoration"><span>wavedrom</span></div>
+      <pre><code data-test-id="code-content"></code></pre>
+    `;
+    const codeEl = codeBlock.querySelector<HTMLElement>('code')!;
+    codeEl.textContent = WAVEJSON;
+    document.body.appendChild(codeBlock);
+    return codeEl;
+  };
+
+  const disable = (listener: StorageChangeListener): void => {
+    listener(
+      {
+        [StorageKeys.WAVEDROM_ENABLED]: { oldValue: true, newValue: false },
+      },
+      'sync',
+    );
+  };
+
+  const enable = (listener: StorageChangeListener): void => {
+    listener(
+      {
+        [StorageKeys.WAVEDROM_ENABLED]: { oldValue: false, newValue: true },
+      },
+      'sync',
+    );
+  };
+
+  it('clears a queued debounced render when disabled', async () => {
+    vi.useFakeTimers();
+    const onStorageChanged = startEnabled();
+    addWaveDromBlock();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(vi.getTimerCount()).toBeGreaterThan(0);
+
+    disable(onStorageChanged);
+    expect(vi.getTimerCount()).toBe(0);
+    await vi.advanceTimersByTimeAsync(1000);
+
+    const renderAnyMod = await import('wavedrom/render-any');
+    expect(renderAnyMod.default).not.toHaveBeenCalled();
+    expect(document.querySelector('.gv-wavedrom-wrapper')).toBeNull();
+  });
+
+  it('drops an in-flight render that resolves after disable', async () => {
+    const onStorageChanged = startEnabled();
+    const codeEl = addWaveDromBlock();
+
+    processCodeBlocks();
+    expect(codeEl.dataset.wavedromProcessing).toBe('true');
+    disable(onStorageChanged);
+
+    await vi.waitFor(() => {
+      expect(codeEl.dataset.wavedromProcessing).toBe('false');
+    });
+    expect(document.querySelector('.gv-wavedrom-wrapper')).toBeNull();
+  });
+
+  it('restores rendered source and can render again after re-enable', async () => {
+    const onStorageChanged = startEnabled();
+    const codeEl = addWaveDromBlock();
+    const codeBlockHost = codeEl.closest<HTMLElement>('code-block')!;
+    const decoration = codeBlockHost.querySelector<HTMLElement>('.code-block-decoration')!;
+    const nativeButtons = document.createElement('div');
+    nativeButtons.className = 'buttons';
+    nativeButtons.setAttribute(
+      'style',
+      'position: absolute; top: 8px; right: 12px; margin-top: 3px; color: red;',
+    );
+    const beforeButtons = document.createElement('span');
+    beforeButtons.textContent = 'before';
+    const afterButtons = document.createElement('span');
+    afterButtons.textContent = 'after';
+    decoration.append(beforeButtons, nativeButtons, afterButtons);
+    const originalChildren = Array.from(decoration.childNodes);
+    const originalStyle = nativeButtons.getAttribute('style');
+
+    processCodeBlocks();
+    await vi.waitFor(() => {
+      expect(document.querySelector('.gv-wavedrom-wrapper')).not.toBeNull();
+    });
+    expect(document.querySelector('.gv-wavedrom-toggle')?.contains(nativeButtons)).toBe(true);
+    expect(document.getElementById('gv-wavedrom-styles')).not.toBeNull();
+    _openFullscreenForTest('<svg viewBox="0 0 50 50"><g/></svg>', '#f9fafb');
+    expect(document.querySelector('.gv-wavedrom-modal')).not.toBeNull();
+
+    disable(onStorageChanged);
+
+    expect(document.querySelector('.gv-wavedrom-wrapper')).toBeNull();
+    expect(document.querySelector('.gv-wavedrom-modal')).toBeNull();
+    expect(document.getElementById('gv-wavedrom-styles')).toBeNull();
+    expect(codeBlockHost.style.display).toBe('');
+    expect(Array.from(decoration.childNodes)).toEqual(originalChildren);
+    expect(nativeButtons.getAttribute('style')).toBe(originalStyle);
+    expect(codeEl.dataset.wavedromCode).toBeUndefined();
+
+    enable(onStorageChanged);
+    await vi.waitFor(() => {
+      expect(document.querySelector('.gv-wavedrom-wrapper')).not.toBeNull();
+    });
+    expect(document.getElementById('gv-wavedrom-styles')).not.toBeNull();
   });
 });
 

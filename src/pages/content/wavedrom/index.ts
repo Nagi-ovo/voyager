@@ -171,13 +171,16 @@ const loadWaveDrom = async (): Promise<WaveDromBundle | null> => {
   if (bundleLoadFailed) return null;
 
   try {
-    const [WaveDromMod, darkMod, defaultMod] = await Promise.all([
-      import('wavedrom'),
+    const [renderAnyMod, stringifyMod, darkMod, defaultMod] = await Promise.all([
+      import('wavedrom/render-any'),
+      import('onml/stringify.js'),
       import('wavedrom/skins/dark.js'),
       import('wavedrom/skins/default.js'),
     ]);
 
-    const WaveDrom: WaveDromAPI = asCjsExports(WaveDromMod);
+    const renderAny = asCjsExports<WaveDromAPI['renderAny']>(renderAnyMod);
+    const stringify = asCjsExports<WaveDromAPI['onml']['stringify']>(stringifyMod);
+    const WaveDrom: WaveDromAPI = { renderAny, onml: { stringify } };
     const waveSkinDefault = asCjsExports<WaveSkin>(defaultMod);
     const rawDarkSkin = asCjsExports<WaveSkin>(darkMod);
 
@@ -576,6 +579,8 @@ const openFullscreen = (svgHtml: string, panelBg: string) => {
   const handleKeyDown = (e: KeyboardEvent) => {
     if (e.key === 'Escape') closeModal();
   };
+  let closeTimer: ReturnType<typeof setTimeout> | null = null;
+  let revealFrame: number | null = null;
 
   // Single registration point: every listener (including the document-level
   // keydown/mousemove/mouseup) is removed together on close, so no listener
@@ -596,11 +601,19 @@ const openFullscreen = (svgHtml: string, panelBg: string) => {
   };
 
   const destroyModal = () => {
+    if (closeTimer !== null) {
+      clearTimeout(closeTimer);
+      closeTimer = null;
+    }
+    if (revealFrame !== null) {
+      cancelAnimationFrame(revealFrame);
+      revealFrame = null;
+    }
     removeListeners();
     handleMouseUp();
     modal.remove();
-    currentModal = null;
-    closeActiveModal = null;
+    if (currentModal === modal) currentModal = null;
+    if (closeActiveModal === destroyModal) closeActiveModal = null;
   };
   const closeModal = () => {
     if (closing) return;
@@ -608,11 +621,7 @@ const openFullscreen = (svgHtml: string, panelBg: string) => {
     removeListeners();
     handleMouseUp();
     modal.classList.remove('visible');
-    setTimeout(() => {
-      modal.remove();
-      currentModal = null;
-      closeActiveModal = null;
-    }, 300);
+    closeTimer = setTimeout(destroyModal, 300);
   };
   closeActiveModal = destroyModal;
 
@@ -666,7 +675,8 @@ const openFullscreen = (svgHtml: string, panelBg: string) => {
     }
   }
 
-  requestAnimationFrame(() => {
+  revealFrame = requestAnimationFrame(() => {
+    revealFrame = null;
     modal.classList.add('visible');
   });
 };
@@ -703,6 +713,14 @@ export const resolveGeminiTheme = (doc: Document, prefersDark: boolean): 'light'
 const getAppTheme = (): 'light' | 'dark' =>
   resolveGeminiTheme(document, window.matchMedia('(prefers-color-scheme: dark)').matches);
 
+interface NativeControlPlacement {
+  parent: Node | null;
+  nextSibling: Node | null;
+  styleAttribute: string | null;
+}
+
+const nativeControlPlacements = new WeakMap<HTMLElement, NativeControlPlacement>();
+
 /**
  * Move Gemini's native code-block copy button into the toggle toolbar.
  * The toolbar overlays the code block in Code view, so a native copy button
@@ -712,27 +730,55 @@ const getAppTheme = (): 'light' | 'dark' =>
  * @internal Exported for testing.
  */
 export const moveNativeCopyButton = (
-  wrapper: HTMLElement,
+  codeBlockHost: HTMLElement,
   target: HTMLElement,
 ): HTMLElement | null => {
-  const parentElement = wrapper.parentElement;
   const nativeCopyBtn =
-    parentElement?.querySelector('.buttons') || parentElement?.querySelector('.copy-button');
+    codeBlockHost.querySelector('.buttons') || codeBlockHost.querySelector('.copy-button');
   if (!nativeCopyBtn) return null;
+  const nativeCopyElement = nativeCopyBtn as HTMLElement;
+  if (!nativeControlPlacements.has(nativeCopyElement)) {
+    nativeControlPlacements.set(nativeCopyElement, {
+      parent: nativeCopyElement.parentNode,
+      nextSibling: nativeCopyElement.nextSibling,
+      styleAttribute: nativeCopyElement.getAttribute('style'),
+    });
+  }
   // Reset positioning that might conflict with the toolbar layout.
-  (nativeCopyBtn as HTMLElement).style.position = 'static';
-  (nativeCopyBtn as HTMLElement).style.top = 'auto';
-  (nativeCopyBtn as HTMLElement).style.right = 'auto';
-  (nativeCopyBtn as HTMLElement).style.marginTop = '0';
-  target.appendChild(nativeCopyBtn);
-  return nativeCopyBtn as HTMLElement;
+  nativeCopyElement.style.position = 'static';
+  nativeCopyElement.style.top = 'auto';
+  nativeCopyElement.style.right = 'auto';
+  nativeCopyElement.style.marginTop = '0';
+  target.appendChild(nativeCopyElement);
+  return nativeCopyElement;
 };
 
+const restoreNativeCopyButton = (nativeCopyElement: HTMLElement): boolean => {
+  const placement = nativeControlPlacements.get(nativeCopyElement);
+  if (!placement) return false;
+
+  if (placement.styleAttribute === null) nativeCopyElement.removeAttribute('style');
+  else nativeCopyElement.setAttribute('style', placement.styleAttribute);
+
+  if (placement.parent) {
+    const insertionPoint =
+      placement.nextSibling?.parentNode === placement.parent ? placement.nextSibling : null;
+    placement.parent.insertBefore(nativeCopyElement, insertionPoint);
+  }
+  nativeControlPlacements.delete(nativeCopyElement);
+  return true;
+};
+
+let wavedromEnabled = true;
+let renderGeneration = 0;
+
 const renderWaveDrom = async (codeEl: HTMLElement, code: string) => {
+  if (!wavedromEnabled) return;
   if (codeEl.dataset.wavedromCode === code) return;
   if (codeEl.dataset.wavedromProcessing === 'true') return;
 
   codeEl.dataset.wavedromProcessing = 'true';
+  const generationAtStart = renderGeneration;
 
   try {
     const codeBlockHost = codeEl.closest('code-block') as HTMLElement;
@@ -752,6 +798,10 @@ const renderWaveDrom = async (codeEl: HTMLElement, code: string) => {
       codeEl.dataset.wavedromProcessing = 'false';
       return;
     }
+    if (!wavedromEnabled || generationAtStart !== renderGeneration) {
+      codeEl.dataset.wavedromProcessing = 'false';
+      return;
+    }
 
     // Build or reuse the wrapper.
     let wrapper = codeBlockHost.parentElement;
@@ -766,7 +816,7 @@ const renderWaveDrom = async (codeEl: HTMLElement, code: string) => {
 
       // Move the native copy button into the toolbar so it is not covered by
       // the overlay in Code view (same fix as the Mermaid renderer).
-      moveNativeCopyButton(wrapper, toggleContainer);
+      moveNativeCopyButton(codeBlockHost, toggleContainer);
 
       const diagramBtn = document.createElement('button');
       diagramBtn.textContent = t('wavedromDiagramButton', '〜 Diagram');
@@ -876,8 +926,60 @@ export const processCodeBlocks = () => {
   });
 };
 
-let wavedromEnabled = true;
 let observer: MutationObserver | null = null;
+let pendingProcessTimer: ReturnType<typeof setTimeout> | null = null;
+
+const teardownRenderedWaveDrom = () => {
+  closeActiveModal?.();
+  document.querySelectorAll<HTMLElement>('.gv-wavedrom-wrapper').forEach((wrapper) => {
+    const codeBlockHost = wrapper.querySelector<HTMLElement>(':scope > code-block');
+    if (!codeBlockHost) {
+      wrapper.remove();
+      return;
+    }
+
+    const nativeCopyBtn =
+      wrapper.querySelector<HTMLElement>('.gv-wavedrom-toggle .buttons') ??
+      wrapper.querySelector<HTMLElement>('.gv-wavedrom-toggle .copy-button');
+    if (nativeCopyBtn && !restoreNativeCopyButton(nativeCopyBtn)) {
+      // A wrapper can survive an extension hot reload while the module-level
+      // WeakMap cannot. Preserve the control in that recovery case even though
+      // its pre-reload sibling position is no longer knowable.
+      (codeBlockHost.querySelector('.code-block-decoration') ?? codeBlockHost).appendChild(
+        nativeCopyBtn,
+      );
+    }
+
+    codeBlockHost.style.display = '';
+    codeBlockHost
+      .querySelectorAll<HTMLElement>('code[data-test-id="code-content"]')
+      .forEach((code) => {
+        delete code.dataset.wavedromCode;
+        delete code.dataset.wavedromProcessing;
+      });
+    wrapper.parentElement?.insertBefore(codeBlockHost, wrapper);
+    wrapper.remove();
+  });
+};
+
+const disableWaveDrom = () => {
+  wavedromEnabled = false;
+  renderGeneration += 1;
+  observer?.disconnect();
+  observer = null;
+  if (pendingProcessTimer !== null) {
+    clearTimeout(pendingProcessTimer);
+    pendingProcessTimer = null;
+  }
+  teardownRenderedWaveDrom();
+  document.getElementById(STYLES_ID)?.remove();
+};
+
+/** @internal Reset the renderer lifecycle between tests. */
+export const _resetWaveDromLifecycleForTest = () => {
+  disableWaveDrom();
+  wavedromEnabled = true;
+};
 
 /**
  * Start the WaveDrom renderer (called from the content script entry point).
@@ -891,6 +993,7 @@ export const startWaveDrom = () => {
       if (wavedromEnabled) {
         initializeWaveDrom();
       } else {
+        disableWaveDrom();
         console.log('[Gemini Voyager] WaveDrom rendering is disabled');
       }
     });
@@ -908,8 +1011,7 @@ export const startWaveDrom = () => {
           initializeWaveDrom();
           console.log('[Gemini Voyager] WaveDrom rendering enabled');
         } else {
-          observer?.disconnect();
-          observer = null;
+          disableWaveDrom();
           console.log('[Gemini Voyager] WaveDrom rendering disabled');
         }
       }
@@ -925,11 +1027,13 @@ const initializeWaveDrom = () => {
   processCodeBlocks();
 
   if (!observer) {
-    let timeout: ReturnType<typeof setTimeout>;
     const debouncedProcess = () => {
       if (!wavedromEnabled) return;
-      clearTimeout(timeout);
-      timeout = setTimeout(processCodeBlocks, 1000);
+      if (pendingProcessTimer !== null) clearTimeout(pendingProcessTimer);
+      pendingProcessTimer = setTimeout(() => {
+        pendingProcessTimer = null;
+        if (wavedromEnabled) processCodeBlocks();
+      }, 1000);
     };
 
     observer = new MutationObserver(debouncedProcess);

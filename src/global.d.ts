@@ -60,3 +60,13 @@ declare module 'wavedrom/skins/dark.js' {
   const skin: import('wavedrom').WaveSkin;
   export default skin;
 }
+
+declare module 'wavedrom/render-any' {
+  const renderAny: typeof import('wavedrom').renderAny;
+  export default renderAny;
+}
+
+declare module 'onml/stringify.js' {
+  const stringify: (tree: import('wavedrom').OnmlTree) => string;
+  export default stringify;
+}

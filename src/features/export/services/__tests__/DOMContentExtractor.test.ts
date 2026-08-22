@@ -490,6 +490,43 @@ describe('DOMContentExtractor', () => {
     );
   });
 
+  it('preserves WaveDrom skin styles and fenced source inside list items', () => {
+    const assistant = document.createElement('div');
+    assistant.innerHTML = `
+      <message-content>
+        <div class="markdown">
+          <ul>
+            <li>
+              Timing diagram
+              <div class="gv-wavedrom-wrapper">
+                <code-block style="display: none;">
+                  <div class="code-block-decoration">wavedrom</div>
+                  <pre><code role="text">{"signal": [{"name":"clk","wave":"p..."}]}</code></pre>
+                </code-block>
+                <div class="gv-wavedrom-toggle"><button>Diagram</button></div>
+                <div class="gv-wavedrom-diagram">
+                  <svg viewBox="0 0 800 200">
+                    <style>.s1{fill:#fff;stroke:#000}</style>
+                    <g class="s1"><text>clk</text></g>
+                  </svg>
+                </div>
+              </div>
+            </li>
+          </ul>
+        </div>
+      </message-content>
+    `;
+
+    const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+
+    expect(extracted.html).toContain('class="gv-export-wavedrom"');
+    expect(extracted.html).toContain('<style>.s1{fill:#fff;stroke:#000}</style>');
+    expect(extracted.html).not.toContain('gv-wavedrom-toggle');
+    expect(extracted.text).toContain(
+      '- Timing diagram\n  ```wavedrom\n  {"signal": [{"name":"clk","wave":"p..."}]}\n  ```',
+    );
+  });
+
   it('reaches a rendered Mermaid wrapper through an intervening container', () => {
     const assistant = document.createElement('div');
     assistant.innerHTML = `
