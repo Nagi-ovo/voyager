@@ -18,7 +18,7 @@ import {
   CHATGPT_SEND_CONTROL_SELECTOR,
   CHATGPT_TEMP_TOGGLE_SELECTOR,
   buildHandoffBackup,
-  discardDeliveredPendingHandoff,
+  cancelPendingHandoffRecovery,
   discardPendingHandoff,
   downloadHandoffBackup,
   handoffTemporaryChat,
@@ -122,6 +122,7 @@ class ChatGptTemporaryHandoffPlugin {
 
   start(): void {
     this.scope.style(CHATGPT_TEMPORARY_HANDOFF_CSS);
+    this.scope.on(window, 'beforeunload', markHandoffPageUnloading, { capture: true });
     this.scope.on(window, 'pagehide', markHandoffPageUnloading, { capture: true });
     this.scope.on(window, 'pageshow', markHandoffPageActive, { capture: true });
     this.scope.on(
@@ -133,7 +134,7 @@ class ChatGptTemporaryHandoffPlugin {
           target?.matches(CHATGPT_COMPOSER_SELECTOR) ||
           target?.closest(CHATGPT_COMPOSER_SELECTOR)
         ) {
-          discardDeliveredPendingHandoff();
+          cancelPendingHandoffRecovery();
         }
       },
       { capture: true },
@@ -147,7 +148,7 @@ class ChatGptTemporaryHandoffPlugin {
           target?.closest(CHATGPT_SEND_CONTROL_SELECTOR) ||
           target?.closest(CHATGPT_NEW_CHAT_SELECTOR)
         ) {
-          discardDeliveredPendingHandoff();
+          cancelPendingHandoffRecovery();
         }
       },
       { capture: true },
@@ -157,7 +158,7 @@ class ChatGptTemporaryHandoffPlugin {
       'submit',
       (event) => {
         const form = event.target instanceof HTMLFormElement ? event.target : null;
-        if (form?.querySelector(CHATGPT_COMPOSER_SELECTOR)) discardDeliveredPendingHandoff();
+        if (form?.querySelector(CHATGPT_COMPOSER_SELECTOR)) cancelPendingHandoffRecovery();
       },
       { capture: true },
     );

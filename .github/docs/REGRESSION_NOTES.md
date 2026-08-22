@@ -93,6 +93,9 @@ Symptom:
 Leaving temporary mode could fail when ChatGPT reused its composer node, write
 the transcript into another page editor, or replay a cancelled handoff after the
 plugin was re-enabled. Multiline insertion could also be misreported as failed.
+Hard-navigation teardown could delete a valid payload before the destination
+loaded, while a slow attachment preview could restore content after the user
+had already cancelled recovery by editing the composer.
 
 Root cause:
 
@@ -114,6 +117,9 @@ timing guess; discard it instead of replaying when the route changes or before
 a native New Chat action reuses the same route. Fail closed when response
 generation is active, the last mounted turn is still a user turn, or the turn
 identity snapshot changes while the shared collector materializes content.
+Mark hard navigation at `beforeunload`, before the root plugin teardown runs,
+and carry a synchronous cancellation revision across every asynchronous resume
+boundary so a late preview cannot revive discarded content.
 Sweep expired payload keys on later handoff activity so a closed tab cannot
 retain its transcript indefinitely.
 
@@ -128,9 +134,11 @@ delivered recovery state instead of replaying it on another chat route`, and
 `stops delivered recovery before the user edits the composer`), plus
 `src/features/plugins/builtin/chatgptTemporaryHandoff/index.test.ts` (`stops
 recovery before sending clears the delivered composer`, `stops recovery before
-same-route New Chat actions`, `refuses handoff when the latest user turn has no
+same-route New Chat actions`, `marks hard navigation before the root
+beforeunload teardown disposes the plugin`, `refuses handoff when the latest user turn has no
 mounted assistant yet`, and `refuses handoff when response generation starts
-during collection`).
+during collection`), and `does not restore an attachment after the user cancels
+while its preview is mounting` in the handoff suite.
 
 Commit:
 

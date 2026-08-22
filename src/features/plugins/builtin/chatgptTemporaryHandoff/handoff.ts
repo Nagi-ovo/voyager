@@ -77,6 +77,7 @@ let activeHandoffOperations = 0;
 let fallbackFilenameSequence = 0;
 let pageUnloading = false;
 let deliveredPendingToken: string | null = null;
+let recoveryCancellationRevision = 0;
 
 export function markHandoffPageUnloading(): void {
   pageUnloading = true;
@@ -439,7 +440,12 @@ async function readPending(): Promise<PendingHandoff | null> {
 export function discardDeliveredPendingHandoff(): void {
   const token = readPendingTabToken();
   if (!token || token !== deliveredPendingToken) return;
-  deliveredPendingToken = null;
+  cancelPendingHandoffRecovery();
+}
+
+export function cancelPendingHandoffRecovery(): void {
+  if (activeHandoffOperations > 0) return;
+  recoveryCancellationRevision += 1;
   void discardPendingHandoff();
 }
 
@@ -636,9 +642,12 @@ async function dispatchAttachmentAndVerify(
   scope: PluginScope,
   input: HTMLElement,
   file: File,
+  isCancelled: () => boolean,
 ): Promise<HTMLElement | null> {
+  if (isCancelled()) return null;
   if (hasAttachmentPreview(input, file.name)) return input;
   if (!dispatchPaste(input, null, file)) return null;
+  if (isCancelled()) return null;
   const immediateComposer = currentComposer();
   if (immediateComposer && hasAttachmentPreview(immediateComposer, file.name)) {
     return immediateComposer;
@@ -647,6 +656,7 @@ async function dispatchAttachmentAndVerify(
   const deadline = Date.now() + 1_200;
   while (Date.now() < deadline) {
     await wait(scope, 60);
+    if (isCancelled()) return null;
     const liveComposer = currentComposer();
     if (liveComposer && hasAttachmentPreview(liveComposer, file.name)) return liveComposer;
   }
@@ -658,7 +668,9 @@ async function deliverOnce(
   input: HTMLElement,
   delivery: HandoffDelivery,
   draft?: string,
+  isCancelled: () => boolean = () => false,
 ): Promise<HTMLElement | null> {
+  if (isCancelled()) return null;
   let deliveryInput = input;
   let initialText = normalizeComposerText(readComposerText(deliveryInput));
   const expectedDraft = draft ? normalizeComposerText(draft) : '';
@@ -672,8 +684,9 @@ async function deliverOnce(
     );
   } else {
     const file = new File([delivery.attachment], delivery.filename, { type: 'text/markdown' });
-    const liveInput = await dispatchAttachmentAndVerify(scope, deliveryInput, file);
+    const liveInput = await dispatchAttachmentAndVerify(scope, deliveryInput, file, isCancelled);
     if (!liveInput) return null;
+    if (isCancelled()) return null;
     deliveryInput = liveInput;
     initialText = normalizeComposerText(readComposerText(deliveryInput));
     draftAlreadyPresent = expectedDraft.length > 0 && initialText === expectedDraft;
@@ -689,7 +702,7 @@ async function deliverOnce(
     !expectedDraft ||
     hasOrderedComposerSegments(deliveryInput, deliveryText, draft!) ||
     insertComposerText(deliveryInput, draft!, 'end');
-  return delivered && draftPreserved ? deliveryInput : null;
+  return delivered && draftPreserved && !isCancelled() ? deliveryInput : null;
 }
 
 function isDeliveryComplete(
@@ -845,6 +858,9 @@ export async function pendingAttachmentPreviewReady(): Promise<boolean> {
 }
 
 export async function resumePendingHandoff(scope: PluginScope): Promise<PendingHandoffResult> {
+  const recoveryRevisionAtStart = recoveryCancellationRevision;
+  const recoveryWasCancelled = (): boolean =>
+    recoveryRevisionAtStart !== recoveryCancellationRevision;
   let abortedByPageUnload = scope.signal.aborted && isHandoffPageUnloading();
   const rememberAbortReason = (): void => {
     abortedByPageUnload = isHandoffPageUnloading();
@@ -853,10 +869,13 @@ export async function resumePendingHandoff(scope: PluginScope): Promise<PendingH
   try {
     while (activeHandoffOperations > 0) {
       if (scope.signal.aborted) throw abortError();
+      if (recoveryWasCancelled()) return null;
       await wait(scope, 120);
     }
     if (scope.signal.aborted) throw abortError();
+    if (recoveryWasCancelled()) return null;
     const pending = await readPending();
+    if (recoveryWasCancelled()) return null;
     if (!pending) return null;
     if (
       Date.now() - pending.storedAt > PENDING_HANDOFF_TTL_MS ||
@@ -875,12 +894,21 @@ export async function resumePendingHandoff(scope: PluginScope): Promise<PendingH
     }
     if (isTemporaryChat()) return null;
     const input = await findComposer(scope, 6_000);
+    if (recoveryWasCancelled()) return null;
     if (!input) return null;
     if (pending.deliveredRoute && isDeliveryComplete(input, pending.delivery, pending.draft)) {
       return null;
     }
     if (scope.signal.aborted) throw abortError();
-    const deliveredInput = await deliverOnce(scope, input, pending.delivery, pending.draft);
+    if (recoveryWasCancelled()) return null;
+    const deliveredInput = await deliverOnce(
+      scope,
+      input,
+      pending.delivery,
+      pending.draft,
+      recoveryWasCancelled,
+    );
+    if (recoveryWasCancelled()) return null;
     if (!deliveredInput || !isDeliveryComplete(deliveredInput, pending.delivery, pending.draft)) {
       return 'delivery-failed';
     }

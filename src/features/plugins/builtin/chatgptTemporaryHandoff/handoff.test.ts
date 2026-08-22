@@ -11,6 +11,7 @@ import {
   PENDING_HANDOFF_TAB_KEY,
   buildHandoffBackup,
   buildHandoffTranscript,
+  cancelPendingHandoffRecovery,
   createHandoffFilename,
   discardDeliveredPendingHandoff,
   discardPendingHandoff,
@@ -663,6 +664,64 @@ describe('temporary chat handoff', () => {
     expect(oldComposer.isConnected).toBe(false);
     expect(liveComposer?.textContent).toContain('Read the saved handoff');
     expect(liveComposer?.lastChild?.textContent).toBe('Unsent follow-up');
+  });
+
+  it('does not restore an attachment after the user cancels while its preview is mounting', async () => {
+    vi.useFakeTimers();
+    class TestDataTransfer {
+      private readonly transferredFiles: File[] = [];
+      readonly items = {
+        add: (file: File) => {
+          this.transferredFiles.push(file);
+        },
+      };
+      readonly setData = vi.fn();
+      get files(): File[] {
+        return this.transferredFiles;
+      }
+    }
+    class TestClipboardEvent extends Event {
+      readonly clipboardData: TestDataTransfer;
+      constructor(type: string, init: EventInit & { clipboardData: TestDataTransfer }) {
+        super(type, init);
+        this.clipboardData = init.clipboardData;
+      }
+    }
+    vi.stubGlobal('DataTransfer', TestDataTransfer);
+    vi.stubGlobal('ClipboardEvent', TestClipboardEvent);
+
+    const form = document.createElement('form');
+    const composer = document.createElement('div');
+    composer.id = 'prompt-textarea';
+    composer.contentEditable = 'true';
+    composer.setAttribute('role', 'textbox');
+    form.appendChild(composer);
+    document.body.appendChild(form);
+    const paste = vi.fn(() => {
+      window.setTimeout(() => {
+        const preview = document.createElement('div');
+        preview.dataset.testid = 'attachment-preview';
+        preview.textContent = 'slow-handoff.md';
+        form.appendChild(preview);
+      }, 300);
+    });
+    composer.addEventListener('paste', paste);
+    seedPending({
+      mode: 'attachment',
+      directive: 'Do not restore this directive',
+      attachment: '# Old transcript',
+      filename: 'slow-handoff.md',
+    });
+
+    const resume = resumePendingHandoff(createScope());
+    await vi.advanceTimersByTimeAsync(0);
+    expect(paste).toHaveBeenCalledOnce();
+    cancelPendingHandoffRecovery();
+    await vi.advanceTimersByTimeAsync(500);
+
+    await expect(resume).resolves.toBeNull();
+    expect(composer.textContent).not.toContain('Do not restore this directive');
+    expect(pendingEntryCount()).toBe(0);
   });
 
   it('removes an expired pending payload without touching the composer', async () => {

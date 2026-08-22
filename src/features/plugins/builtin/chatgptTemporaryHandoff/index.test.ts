@@ -13,12 +13,12 @@ const mocks = vi.hoisted(() => ({
   isGenerating: vi.fn(),
   resolveAdapter: vi.fn(),
   buildBackup: vi.fn(),
+  cancelPendingRecovery: vi.fn(),
   downloadBackup: vi.fn(),
   handoff: vi.fn(),
   hasAttachments: vi.fn(),
   plan: vi.fn(),
   resume: vi.fn(),
-  discardDeliveredPending: vi.fn(),
   discardPending: vi.fn(),
   markUnloading: vi.fn(),
   markActive: vi.fn(),
@@ -46,7 +46,7 @@ vi.mock('./handoff', () => ({
   CHATGPT_SEND_CONTROL_SELECTOR: '[data-testid="send-button"]',
   CHATGPT_TEMP_TOGGLE_SELECTOR: '[data-testid="temporary-chat-toggle"]',
   buildHandoffBackup: mocks.buildBackup,
-  discardDeliveredPendingHandoff: mocks.discardDeliveredPending,
+  cancelPendingHandoffRecovery: mocks.cancelPendingRecovery,
   discardPendingHandoff: mocks.discardPending,
   downloadHandoffBackup: mocks.downloadBackup,
   handoffTemporaryChat: mocks.handoff,
@@ -142,6 +142,17 @@ describe('ChatGPT temporary handoff plugin', () => {
     await activateChatGptTemporaryHandoff(scope);
 
     window.dispatchEvent(new Event('pagehide'));
+    await scope.dispose();
+
+    expect(mocks.markUnloading).toHaveBeenCalledOnce();
+    expect(mocks.discardPending).not.toHaveBeenCalled();
+  });
+
+  it('marks hard navigation before the root beforeunload teardown disposes the plugin', async () => {
+    const scope = createScope();
+    await activateChatGptTemporaryHandoff(scope);
+
+    window.dispatchEvent(new Event('beforeunload'));
     await scope.dispose();
 
     expect(mocks.markUnloading).toHaveBeenCalledOnce();
@@ -337,7 +348,7 @@ describe('ChatGPT temporary handoff plugin', () => {
     await activateChatGptTemporaryHandoff(createScope());
     composer.dispatchEvent(new InputEvent('beforeinput', { bubbles: true }));
 
-    expect(mocks.discardDeliveredPending).toHaveBeenCalledOnce();
+    expect(mocks.cancelPendingRecovery).toHaveBeenCalledOnce();
   });
 
   it('stops recovery before sending clears the delivered composer', async () => {
@@ -355,7 +366,7 @@ describe('ChatGPT temporary handoff plugin', () => {
     send.click();
     form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
 
-    expect(mocks.discardDeliveredPending).toHaveBeenCalledTimes(2);
+    expect(mocks.cancelPendingRecovery).toHaveBeenCalledTimes(2);
   });
 
   it('stops recovery before same-route New Chat actions', async () => {
@@ -373,6 +384,6 @@ describe('ChatGPT temporary handoff plugin', () => {
       newChat.remove();
     }
 
-    expect(mocks.discardDeliveredPending).toHaveBeenCalledTimes(2);
+    expect(mocks.cancelPendingRecovery).toHaveBeenCalledTimes(2);
   });
 });
