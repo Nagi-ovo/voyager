@@ -2625,6 +2625,10 @@
     "message": "سجل المطالبات",
     "description": "Prompt History panel text (#923)"
   },
+  "promptHistoryEnabledHint": {
+    "message": "حفظ المطالبات المرسلة والمحدّثة على هذا الجهاز بشكل منفصل لكل حساب Gemini.",
+    "description": "Prompt History setting hint (#923)"
+  },
   "promptHistoryEmpty": {
     "message": "لا يوجد سجل بعد",
     "description": "Prompt History panel text (#923)"
@@ -2664,5 +2668,21 @@
   "promptHistoryInsertFailed": {
     "message": "فشل الإدراج",
     "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryCopyFailed": {
+    "message": "فشل النسخ",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryClearConfirm": {
+    "message": "هل تريد مسح سجل المطالبات لحساب Gemini هذا؟",
+    "description": "Prompt History clear confirmation (#923)"
+  },
+  "promptHistoryCancel": {
+    "message": "إلغاء",
+    "description": "Prompt History clear confirmation (#923)"
+  },
+  "promptHistoryStorageFailed": {
+    "message": "تعذّر حفظ سجل المطالبات. تحقّق من مساحة تخزين الإضافة.",
+    "description": "Prompt History storage error (#923)"
   }
 }

@@ -1,39 +1,109 @@
 /**
- * Prompt History Storage (#923)
+ * Account-scoped prompt history storage (#923).
  *
- * Persists sent/edited prompts to chrome.storage.local so users can recover
- * prompts that Gemini may have swallowed on error. Each entry is a single
- * prompt occurrence keyed by id; the list is bounded by MAX_ITEMS (oldest
- * pruned first) so storage usage stays bounded.
+ * Every occurrence has its own storage key. Independent keys keep concurrent
+ * captures from different tabs from overwriting each other, while the account
+ * prefix keeps Gemini's /u/<index> profiles isolated.
  */
 import { StorageKeys } from '@/core/types/common';
-import { isExtensionContextInvalidatedError } from '@/core/utils/extensionContext';
 
 export type PromptHistoryType = 'sent' | 'edited';
 
 export interface PromptHistoryItem {
   id: string;
+  accountScope: string;
   content: string;
   timestamp: number;
   path: string;
   type: PromptHistoryType;
 }
 
-const LOG_PREFIX = '[PromptHistory]';
+interface StoredPromptHistoryItem {
+  key: string;
+  item: PromptHistoryItem;
+  bytes: number;
+}
 
-/** Maximum number of history entries to keep (oldest pruned first). */
+const HISTORY_KEY_SEPARATOR = ':';
+const DEFAULT_ACCOUNT_INDEX = '0';
+const DEDUPLICATION_WINDOW_MS = 10_000;
+
+/** Maximum number of history entries across all Gemini accounts. */
 export const MAX_ITEMS = 500;
 
-/** Per-entry content length cap to keep storage usage bounded. */
-export const MAX_CONTENT_LENGTH = 50000;
+/** Maximum bytes reserved for prompt history across all Gemini accounts. */
+export const MAX_TOTAL_BYTES = 2 * 1024 * 1024;
 
-/** Prune only every N saves to avoid scanning storage on every write. */
-const PRUNE_EVERY_N_SAVES = 20;
+/** Per-entry content length cap. */
+export const MAX_CONTENT_LENGTH = 50_000;
 
-let saveCount = 0;
+function runtimeError(): Error | null {
+  const message = chrome.runtime?.lastError?.message;
+  return message ? new Error(message) : null;
+}
 
-function getStorageKey(): string {
-  return StorageKeys.PROMPT_HISTORY_ITEMS;
+function localGetAll(): Promise<Record<string, unknown>> {
+  return new Promise((resolve, reject) => {
+    try {
+      if (!chrome.storage?.local?.get) {
+        reject(new Error('Local extension storage is unavailable'));
+        return;
+      }
+      chrome.storage.local.get(null, (result) => {
+        const error = runtimeError();
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve(result ?? {});
+      });
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
+function localSet(items: Record<string, unknown>): Promise<void> {
+  return new Promise((resolve, reject) => {
+    try {
+      if (!chrome.storage?.local?.set) {
+        reject(new Error('Local extension storage is unavailable'));
+        return;
+      }
+      chrome.storage.local.set(items, () => {
+        const error = runtimeError();
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve();
+      });
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
+function localRemove(keys: string[]): Promise<void> {
+  if (keys.length === 0) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    try {
+      if (!chrome.storage?.local?.remove) {
+        reject(new Error('Local extension storage is unavailable'));
+        return;
+      }
+      chrome.storage.local.remove(keys, () => {
+        const error = runtimeError();
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve();
+      });
+    } catch (error) {
+      reject(error);
+    }
+  });
 }
 
 function isEntry(value: unknown): value is PromptHistoryItem {
@@ -41,130 +111,133 @@ function isEntry(value: unknown): value is PromptHistoryItem {
   const entry = value as Record<string, unknown>;
   return (
     typeof entry.id === 'string' &&
+    typeof entry.accountScope === 'string' &&
     typeof entry.content === 'string' &&
     typeof entry.timestamp === 'number' &&
+    Number.isFinite(entry.timestamp) &&
     typeof entry.path === 'string' &&
     (entry.type === 'sent' || entry.type === 'edited')
   );
 }
 
-/**
- * Read all stored history entries, newest first.
- */
-export async function getPromptHistory(): Promise<PromptHistoryItem[]> {
-  return new Promise((resolve) => {
-    try {
-      chrome.storage?.local?.get(getStorageKey(), (result) => {
-        const raw = result?.[getStorageKey()];
-        if (!Array.isArray(raw)) {
-          resolve([]);
-          return;
-        }
-        const entries = raw.filter(isEntry);
-        entries.sort((a, b) => b.timestamp - a.timestamp);
-        resolve(entries);
-      });
-    } catch (error) {
-      if (isExtensionContextInvalidatedError(error)) {
-        resolve([]);
-        return;
-      }
-      console.warn(LOG_PREFIX, 'Failed to read history:', error);
-      resolve([]);
-    }
+function estimateEntryBytes(key: string, item: PromptHistoryItem): number {
+  return new TextEncoder().encode(JSON.stringify({ [key]: item })).byteLength;
+}
+
+function historyRootPrefix(): string {
+  return `${StorageKeys.PROMPT_HISTORY_ITEMS}${HISTORY_KEY_SEPARATOR}`;
+}
+
+export function getPromptHistoryAccountScope(pathname: string): string {
+  const accountIndex = pathname.match(/^\/u\/(\d+)(?:\/|$)/)?.[1] ?? DEFAULT_ACCOUNT_INDEX;
+  return `u:${accountIndex}`;
+}
+
+export function getPromptHistoryStoragePrefix(accountScope: string): string {
+  return `${historyRootPrefix()}${accountScope}${HISTORY_KEY_SEPARATOR}`;
+}
+
+export function isPromptHistoryStorageKey(key: string): boolean {
+  return key.startsWith(historyRootPrefix());
+}
+
+export function isPromptHistoryStorageKeyForAccount(key: string, accountScope: string): boolean {
+  return key.startsWith(getPromptHistoryStoragePrefix(accountScope));
+}
+
+function getStoredEntries(items: Record<string, unknown>): StoredPromptHistoryItem[] {
+  return Object.entries(items).flatMap(([key, value]) => {
+    if (!isPromptHistoryStorageKey(key) || !isEntry(value)) return [];
+    const expectedPrefix = getPromptHistoryStoragePrefix(value.accountScope);
+    if (!key.startsWith(expectedPrefix) || !key.endsWith(value.id)) return [];
+    return [{ key, item: value, bytes: estimateEntryBytes(key, value) }];
   });
 }
 
+function getItemKey(item: PromptHistoryItem): string {
+  return `${getPromptHistoryStoragePrefix(item.accountScope)}${item.id}`;
+}
+
+/** Read one Gemini account's history, newest first. */
+export async function getPromptHistory(accountScope: string): Promise<PromptHistoryItem[]> {
+  const stored = getStoredEntries(await localGetAll());
+  return stored
+    .filter(({ item }) => item.accountScope === accountScope)
+    .map(({ item }) => item)
+    .sort((a, b) => b.timestamp - a.timestamp);
+}
+
 /**
- * Append a prompt occurrence to the history. The entry is deduplicated so a
- * burst of identical writes (e.g. repeated send-intent hits) only records the
- * first occurrence within a short window.
+ * Store one prompt occurrence. The independent item key makes concurrent tab
+ * writes additive; the follow-up pruning pass only removes exact oldest keys.
  */
 export async function addPromptHistory(
   content: string,
   type: PromptHistoryType,
   path: string,
+  accountScope = getPromptHistoryAccountScope(path),
 ): Promise<void> {
   const trimmed = content.trim();
   if (!trimmed) return;
 
+  const now = Date.now();
+  const boundedContent = trimmed.slice(0, MAX_CONTENT_LENGTH);
+  const existing = await getPromptHistory(accountScope);
+  const duplicate = existing.some(
+    (item) =>
+      item.content === boundedContent &&
+      item.path === path &&
+      item.type === type &&
+      now - item.timestamp >= 0 &&
+      now - item.timestamp < DEDUPLICATION_WINDOW_MS,
+  );
+  if (duplicate) return;
+
   const item: PromptHistoryItem = {
     id: crypto.randomUUID(),
-    content: trimmed.slice(0, MAX_CONTENT_LENGTH),
-    timestamp: Date.now(),
+    accountScope,
+    content: boundedContent,
+    timestamp: now,
     path,
     type,
   };
 
-  const items = await getPromptHistory();
+  await localSet({ [getItemKey(item)]: item });
+  await prunePromptHistory();
+}
 
-  // De-duplicate: skip if an identical entry was just recorded within 10s.
-  const now = item.timestamp;
-  const duplicate = items.some(
-    (existing) =>
-      existing.content === item.content &&
-      existing.path === item.path &&
-      now - existing.timestamp < 10_000,
+/** Remove one exact item without reading or rewriting its siblings. */
+export async function removePromptHistoryItem(id: string, accountScope: string): Promise<void> {
+  await localRemove([`${getPromptHistoryStoragePrefix(accountScope)}${id}`]);
+}
+
+/** Clear only the active Gemini account's prompt history. */
+export async function clearPromptHistory(accountScope: string): Promise<void> {
+  const items = await localGetAll();
+  const keys = Object.keys(items).filter((key) =>
+    isPromptHistoryStorageKeyForAccount(key, accountScope),
   );
-  if (duplicate) return;
-
-  const next = [item, ...items].slice(0, MAX_ITEMS);
-
-  try {
-    chrome.storage?.local?.set({ [getStorageKey()]: next }, () => {
-      if (chrome.runtime.lastError) {
-        console.warn(LOG_PREFIX, 'Failed to save history:', chrome.runtime.lastError.message);
-        return;
-      }
-      saveCount++;
-      if (saveCount % PRUNE_EVERY_N_SAVES === 0) {
-        pruneHistory();
-      }
-    });
-  } catch (error) {
-    if (isExtensionContextInvalidatedError(error)) return;
-    console.warn(LOG_PREFIX, 'Failed to save history:', error);
-  }
+  await localRemove(keys);
 }
 
-/**
- * Remove a single history entry by id.
- */
-export async function removePromptHistoryItem(id: string): Promise<void> {
-  const items = await getPromptHistory();
-  const next = items.filter((entry) => entry.id !== id);
-  if (next.length === items.length) return;
-  try {
-    chrome.storage?.local?.set({ [getStorageKey()]: next });
-  } catch (error) {
-    if (isExtensionContextInvalidatedError(error)) return;
-    console.warn(LOG_PREFIX, 'Failed to remove history item:', error);
-  }
-}
+/** Bound total prompt-history count and encoded size across all accounts. */
+export async function prunePromptHistory(): Promise<void> {
+  const entries = getStoredEntries(await localGetAll()).sort(
+    (a, b) => b.item.timestamp - a.item.timestamp,
+  );
+  let retainedBytes = 0;
+  const removeKeys: string[] = [];
 
-/**
- * Clear the entire prompt history.
- */
-export async function clearPromptHistory(): Promise<void> {
-  try {
-    chrome.storage?.local?.remove(getStorageKey());
-  } catch (error) {
-    if (isExtensionContextInvalidatedError(error)) return;
-    console.warn(LOG_PREFIX, 'Failed to clear history:', error);
-  }
-}
-
-/**
- * Bound storage usage in case of a storage reset or concurrent writes.
- */
-export function pruneHistory(): void {
-  void getPromptHistory().then((items) => {
-    if (items.length <= MAX_ITEMS) return;
-    try {
-      chrome.storage?.local?.set({ [getStorageKey()]: items.slice(0, MAX_ITEMS) });
-    } catch (error) {
-      if (isExtensionContextInvalidatedError(error)) return;
-      console.warn(LOG_PREFIX, 'Failed to prune history:', error);
+  entries.forEach((entry, index) => {
+    const withinCount = index < MAX_ITEMS;
+    const withinBytes = retainedBytes + entry.bytes <= MAX_TOTAL_BYTES;
+    if (withinCount && withinBytes) {
+      retainedBytes += entry.bytes;
+      return;
     }
+    removeKeys.push(entry.key);
   });
+
+  if (removeKeys.length === 0) return;
+  await localRemove(removeKeys);
 }

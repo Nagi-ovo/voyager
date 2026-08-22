@@ -2620,16 +2620,20 @@
     "message": "提示词历史",
     "description": "Prompt History panel text (#923)"
   },
+  "promptHistoryEnabledHint": {
+    "message": "在此设备上按 Gemini 账号分别保存已发送和已更新的提示词。",
+    "description": "Prompt History setting hint (#923)"
+  },
   "promptHistoryEmpty": {
     "message": "暂无提示词历史",
     "description": "Prompt History panel text (#923)"
   },
   "promptHistorySent": {
-    "message": "发送",
+    "message": "已发送",
     "description": "Prompt History panel text (#923)"
   },
   "promptHistoryEdited": {
-    "message": "修改",
+    "message": "已修改",
     "description": "Prompt History panel text (#923)"
   },
   "promptHistoryCopy": {
@@ -2659,5 +2663,21 @@
   "promptHistoryInsertFailed": {
     "message": "插入失败",
     "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryCopyFailed": {
+    "message": "复制失败",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryClearConfirm": {
+    "message": "清空当前 Gemini 账号的提示词历史？",
+    "description": "Prompt History clear confirmation (#923)"
+  },
+  "promptHistoryCancel": {
+    "message": "取消",
+    "description": "Prompt History clear confirmation (#923)"
+  },
+  "promptHistoryStorageFailed": {
+    "message": "提示词历史保存失败，请检查扩展存储空间。",
+    "description": "Prompt History storage error (#923)"
   }
 }

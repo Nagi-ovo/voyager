@@ -401,6 +401,10 @@ const POPUP_SETTINGS_SEARCH_ITEMS = [
     'hidePromptManager',
     'hidePromptManagerHint',
   ]),
+  popupSearchTarget('promptManager', 'promptHistoryEnabled', [
+    'promptHistoryTitle',
+    'promptHistoryEnabledHint',
+  ]),
   popupSearchTarget(
     'promptManager',
     'slashPromptEnabled',
@@ -762,6 +766,7 @@ interface SettingsUpdate {
   watermarkDownloadEnabled?: boolean;
   watermarkPreviewEnabled?: boolean;
   hidePromptManager?: boolean;
+  promptHistoryEnabled?: boolean;
   slashPromptEnabled?: boolean;
   promptInsertOnClickEnabled?: boolean;
   inputCollapseEnabled?: boolean;
@@ -966,6 +971,7 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
   const [watermarkDownloadEnabled, setWatermarkDownloadEnabled] = useState<boolean>(true);
   const [watermarkPreviewEnabled, setWatermarkPreviewEnabled] = useState<boolean>(true);
   const [hidePromptManager, setHidePromptManager] = useState<boolean>(false);
+  const [promptHistoryEnabled, setPromptHistoryEnabled] = useState<boolean>(false);
   const [slashPromptEnabled, setSlashPromptEnabled] = useState<boolean>(true);
   const [promptInsertOnClickEnabled, setPromptInsertOnClickEnabled] = useState<boolean>(false);
   const [promptMigrationStatus, setPromptMigrationStatus] = useState<{
@@ -1368,6 +1374,8 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
       }
       if (typeof settings.hidePromptManager === 'boolean')
         payload.gvHidePromptManager = settings.hidePromptManager;
+      if (typeof settings.promptHistoryEnabled === 'boolean')
+        payload[StorageKeys.PROMPT_HISTORY_ENABLED] = settings.promptHistoryEnabled;
       if (typeof settings.slashPromptEnabled === 'boolean')
         payload[StorageKeys.SLASH_PROMPT_ENABLED] = settings.slashPromptEnabled;
       if (typeof settings.promptInsertOnClickEnabled === 'boolean')
@@ -1945,6 +1953,7 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
           [StorageKeys.WATERMARK_DOWNLOAD_ENABLED]: null,
           [StorageKeys.WATERMARK_PREVIEW_ENABLED]: null,
           gvHidePromptManager: false,
+          [StorageKeys.PROMPT_HISTORY_ENABLED]: false,
           [StorageKeys.SLASH_PROMPT_ENABLED]: true,
           [StorageKeys.PROMPT_INSERT_ON_CLICK]: false,
           gvInputCollapseEnabled: false,
@@ -2026,6 +2035,7 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
             setWatermarkPreviewEnabled(watermarkSettings.preview);
           }
           setHidePromptManager(!!res?.gvHidePromptManager);
+          setPromptHistoryEnabled(res?.[StorageKeys.PROMPT_HISTORY_ENABLED] === true);
           setSlashPromptEnabled(res?.[StorageKeys.SLASH_PROMPT_ENABLED] !== false);
           setPromptInsertOnClickEnabled(res?.[StorageKeys.PROMPT_INSERT_ON_CLICK] === true);
           setInputCollapseEnabled(res?.gvInputCollapseEnabled !== false);
@@ -3970,6 +3980,31 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
                     onChange={(e) => {
                       setHidePromptManager(e.target.checked);
                       apply({ hidePromptManager: e.target.checked });
+                    }}
+                  />
+                </div>,
+              )}
+              {renderSetting(
+                'promptManager',
+                'promptHistoryEnabled',
+                <div className="group flex items-center justify-between">
+                  <div className="flex-1">
+                    <Label
+                      htmlFor="prompt-history-enabled"
+                      className="group-hover:text-primary cursor-pointer text-sm font-medium transition-colors"
+                    >
+                      {t('promptHistoryTitle')}
+                    </Label>
+                    <p className="text-muted-foreground mt-1 text-xs">
+                      {t('promptHistoryEnabledHint')}
+                    </p>
+                  </div>
+                  <Switch
+                    id="prompt-history-enabled"
+                    checked={promptHistoryEnabled}
+                    onChange={(event) => {
+                      setPromptHistoryEnabled(event.target.checked);
+                      apply({ promptHistoryEnabled: event.target.checked });
                     }}
                   />
                 </div>,

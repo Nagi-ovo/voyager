@@ -2622,6 +2622,10 @@
     "message": "프롬프트 기록",
     "description": "Prompt History panel text (#923)"
   },
+  "promptHistoryEnabledHint": {
+    "message": "전송하거나 업데이트한 프롬프트를 이 기기에 Gemini 계정별로 저장합니다.",
+    "description": "Prompt History setting hint (#923)"
+  },
   "promptHistoryEmpty": {
     "message": "아직 기록이 없습니다",
     "description": "Prompt History panel text (#923)"
@@ -2661,5 +2665,21 @@
   "promptHistoryInsertFailed": {
     "message": "삽입 실패",
     "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryCopyFailed": {
+    "message": "복사 실패",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryClearConfirm": {
+    "message": "이 Gemini 계정의 프롬프트 기록을 비울까요?",
+    "description": "Prompt History clear confirmation (#923)"
+  },
+  "promptHistoryCancel": {
+    "message": "취소",
+    "description": "Prompt History clear confirmation (#923)"
+  },
+  "promptHistoryStorageFailed": {
+    "message": "프롬프트 기록을 저장하지 못했습니다. 확장 프로그램 저장공간을 확인하세요.",
+    "description": "Prompt History storage error (#923)"
   }
 }

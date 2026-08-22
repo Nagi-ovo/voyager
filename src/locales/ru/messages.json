@@ -2631,6 +2631,10 @@
     "message": "История запросов",
     "description": "Prompt History panel text (#923)"
   },
+  "promptHistoryEnabledHint": {
+    "message": "Сохранять отправленные и обновлённые запросы на этом устройстве отдельно для каждого аккаунта Gemini.",
+    "description": "Prompt History setting hint (#923)"
+  },
   "promptHistoryEmpty": {
     "message": "История пока пуста",
     "description": "Prompt History panel text (#923)"
@@ -2670,5 +2674,21 @@
   "promptHistoryInsertFailed": {
     "message": "Ошибка вставки",
     "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryCopyFailed": {
+    "message": "Не удалось скопировать",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryClearConfirm": {
+    "message": "Очистить историю запросов для этого аккаунта Gemini?",
+    "description": "Prompt History clear confirmation (#923)"
+  },
+  "promptHistoryCancel": {
+    "message": "Отмена",
+    "description": "Prompt History clear confirmation (#923)"
+  },
+  "promptHistoryStorageFailed": {
+    "message": "Не удалось сохранить историю. Проверьте хранилище расширения.",
+    "description": "Prompt History storage error (#923)"
   }
 }

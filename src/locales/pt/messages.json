@@ -2631,6 +2631,10 @@
     "message": "Histórico de prompts",
     "description": "Prompt History panel text (#923)"
   },
+  "promptHistoryEnabledHint": {
+    "message": "Salva neste dispositivo os prompts enviados e atualizados, separados por conta do Gemini.",
+    "description": "Prompt History setting hint (#923)"
+  },
   "promptHistoryEmpty": {
     "message": "Nenhum histórico ainda",
     "description": "Prompt History panel text (#923)"
@@ -2670,5 +2674,21 @@
   "promptHistoryInsertFailed": {
     "message": "Falha ao inserir",
     "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryCopyFailed": {
+    "message": "Falha ao copiar",
+    "description": "Prompt History panel text (#923)"
+  },
+  "promptHistoryClearConfirm": {
+    "message": "Limpar o histórico de prompts desta conta do Gemini?",
+    "description": "Prompt History clear confirmation (#923)"
+  },
+  "promptHistoryCancel": {
+    "message": "Cancelar",
+    "description": "Prompt History clear confirmation (#923)"
+  },
+  "promptHistoryStorageFailed": {
+    "message": "Não foi possível salvar o histórico. Verifique o armazenamento da extensão.",
+    "description": "Prompt History storage error (#923)"
   }
 }

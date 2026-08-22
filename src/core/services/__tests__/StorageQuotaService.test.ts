@@ -109,6 +109,8 @@ describe('StorageQuotaService', () => {
   it('measures local and sync separately and classifies explicit keys and prefixes', async () => {
     const localValues = {
       [StorageKeys.PROMPT_ITEMS]: [{ id: 'prompt' }],
+      [StorageKeys.PROMPT_HISTORY_ITEMS]: [{ id: 'unshipped-legacy-prompt-history' }],
+      [`${StorageKeys.PROMPT_HISTORY_ITEMS}:u:0:item-id`]: { id: 'item-id' },
       [StorageKeys.FOLDER_DATA]: { folders: [] },
       [`${StorageKeys.FOLDER_DATA}:acct:abc`]: { folders: [] },
       [`${StorageKeys.TIMELINE_HIERARCHY}:acct:def`]: { conversations: {} },
@@ -152,7 +154,11 @@ describe('StorageQuotaService', () => {
     expect(snapshot.softCapMb).toBe(50);
     expect(snapshot.softCapBytes).toBe(50 * MEBIBYTE);
 
-    expect(category(snapshot, 'prompts').keys).toEqual([StorageKeys.PROMPT_ITEMS]);
+    expect(category(snapshot, 'prompts').keys).toEqual([
+      StorageKeys.PROMPT_ITEMS,
+      StorageKeys.PROMPT_HISTORY_ITEMS,
+      `${StorageKeys.PROMPT_HISTORY_ITEMS}:u:0:item-id`,
+    ]);
     expect(category(snapshot, 'folders').keys).toEqual([
       StorageKeys.FOLDER_DATA,
       `${StorageKeys.FOLDER_DATA}:acct:abc`,
