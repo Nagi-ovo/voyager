@@ -40,6 +40,7 @@ vi.mock('@/pages/content/export/adapter/platformAdapters', () => ({
 
 vi.mock('./handoff', () => ({
   CHATGPT_COMPOSER_SELECTOR: '#prompt-textarea',
+  CHATGPT_SEND_CONTROL_SELECTOR: '[data-testid="send-button"]',
   CHATGPT_TEMP_TOGGLE_SELECTOR: '[data-testid="temporary-chat-toggle"]',
   buildHandoffBackup: mocks.buildBackup,
   discardDeliveredPendingHandoff: mocks.discardDeliveredPending,
@@ -304,5 +305,23 @@ describe('ChatGPT temporary handoff plugin', () => {
     composer.dispatchEvent(new InputEvent('beforeinput', { bubbles: true }));
 
     expect(mocks.discardDeliveredPending).toHaveBeenCalledOnce();
+  });
+
+  it('stops recovery before sending clears the delivered composer', async () => {
+    mocks.temporary = false;
+    const form = document.createElement('form');
+    const composer = document.createElement('div');
+    composer.id = 'prompt-textarea';
+    const send = document.createElement('button');
+    send.type = 'button';
+    send.dataset.testid = 'send-button';
+    form.append(composer, send);
+    document.body.appendChild(form);
+
+    await activateChatGptTemporaryHandoff(createScope());
+    send.click();
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+
+    expect(mocks.discardDeliveredPending).toHaveBeenCalledTimes(2);
   });
 });

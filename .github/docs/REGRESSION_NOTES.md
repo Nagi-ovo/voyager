@@ -107,11 +107,12 @@ Fix:
 Resolve only ChatGPT composer candidates in selector-priority order, accept a
 usable same-node composer after temporary mode ends, compare normalized rendered
 text, and keep the payload in extension storage behind a tab-scoped token that
-is removed on cancellation, mismatch, the user's next edit, or expiry. After the first successful
-insertion, retain the bounded pending record on that exact chat route so
-composer mutations can recover replacements without a timing guess; discard it
-instead of replaying when the route changes. Sweep expired payload keys on later
-handoff activity so a closed tab cannot retain its transcript indefinitely.
+is removed on cancellation, mismatch, the user's next edit or send, or expiry.
+After the first successful insertion, retain the bounded pending record on that
+exact chat route so composer mutations can recover replacements without a
+timing guess; discard it instead of replaying when the route changes. Sweep
+expired payload keys on later handoff activity so a closed tab cannot retain
+its transcript indefinitely.
 
 Regression test:
 
@@ -121,7 +122,9 @@ a reused composer node and verifies multiline content by rendered text`,
 pending state when plugin disposal cancels a resume`, `redelivers when ChatGPT
 replaces the accepted composer after the old wait budget`, and `discards
 delivered recovery state instead of replaying it on another chat route`, and
-`stops delivered recovery before the user edits the composer`).
+`stops delivered recovery before the user edits the composer`), plus
+`src/features/plugins/builtin/chatgptTemporaryHandoff/index.test.ts` (`stops
+recovery before sending clears the delivered composer`).
 
 Commit:
 

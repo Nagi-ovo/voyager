@@ -62,7 +62,7 @@ const CHATGPT_COMPOSER_SELECTORS = [
   'form[data-testid*="composer" i] [contenteditable="true"][role="textbox"]',
 ] as const;
 const CHATGPT_GENERIC_COMPOSER_SELECTOR = 'main form [contenteditable="true"][role="textbox"]';
-const CHATGPT_SEND_CONTROL_SELECTOR = [
+export const CHATGPT_SEND_CONTROL_SELECTOR = [
   'button[data-testid="send-button"]',
   'button[data-testid="composer-submit-button"]',
 ].join(',');

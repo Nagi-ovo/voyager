@@ -13,6 +13,7 @@ import { getCurrentLanguage } from '@/utils/i18n';
 
 import {
   CHATGPT_COMPOSER_SELECTOR,
+  CHATGPT_SEND_CONTROL_SELECTOR,
   CHATGPT_TEMP_TOGGLE_SELECTOR,
   buildHandoffBackup,
   discardDeliveredPendingHandoff,
@@ -117,6 +118,24 @@ class ChatGptTemporaryHandoffPlugin {
         ) {
           discardDeliveredPendingHandoff();
         }
+      },
+      { capture: true },
+    );
+    this.scope.on(
+      document,
+      'click',
+      (event) => {
+        const target = event.target instanceof Element ? event.target : null;
+        if (target?.closest(CHATGPT_SEND_CONTROL_SELECTOR)) discardDeliveredPendingHandoff();
+      },
+      { capture: true },
+    );
+    this.scope.on(
+      document,
+      'submit',
+      (event) => {
+        const form = event.target instanceof HTMLFormElement ? event.target : null;
+        if (form?.querySelector(CHATGPT_COMPOSER_SELECTOR)) discardDeliveredPendingHandoff();
       },
       { capture: true },
     );
