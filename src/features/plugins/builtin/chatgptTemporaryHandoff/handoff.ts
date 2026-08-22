@@ -71,7 +71,7 @@ export const CHATGPT_COMPOSER_SELECTOR = [
   CHATGPT_GENERIC_COMPOSER_SELECTOR,
 ].join(',');
 export const CHATGPT_NEW_CHAT_SELECTOR =
-  'a[data-testid="create-new-chat-button"], a[href="/"][data-testid*="new" i]';
+  'a[data-testid="create-new-chat-button"], a[href="/"], a[href^="/u/"][href$="/"]';
 const INLINE_THRESHOLD = 5_000;
 let activeHandoffOperations = 0;
 let internalNavigationClicks = 0;

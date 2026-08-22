@@ -42,7 +42,8 @@ vi.mock('@/pages/content/export/adapter/platformAdapters', () => ({
 
 vi.mock('./handoff', () => ({
   CHATGPT_COMPOSER_SELECTOR: '#prompt-textarea',
-  CHATGPT_NEW_CHAT_SELECTOR: 'a[data-testid="create-new-chat-button"]',
+  CHATGPT_NEW_CHAT_SELECTOR:
+    'a[data-testid="create-new-chat-button"], a[href="/"], a[href^="/u/"][href$="/"]',
   CHATGPT_SEND_CONTROL_SELECTOR: '[data-testid="send-button"]',
   CHATGPT_TEMP_TOGGLE_SELECTOR: '[data-testid="temporary-chat-toggle"]',
   buildHandoffBackup: mocks.buildBackup,
@@ -398,11 +399,13 @@ describe('ChatGPT temporary handoff plugin', () => {
     mocks.temporary = false;
     await activateChatGptTemporaryHandoff(createScope());
 
-    for (const route of ['/', '/u/12/g/custom-gpt/']) {
+    for (const [route, newChatHref] of [
+      ['/', '/'],
+      ['/u/12/g/custom-gpt/', '/u/12/'],
+    ]) {
       history.replaceState({}, '', route);
       const newChat = document.createElement('a');
-      newChat.dataset.testid = 'create-new-chat-button';
-      newChat.href = route;
+      newChat.href = newChatHref;
       newChat.addEventListener('click', (event) => event.preventDefault());
       document.body.appendChild(newChat);
       newChat.click();
