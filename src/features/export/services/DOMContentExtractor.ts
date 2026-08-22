@@ -398,6 +398,20 @@ export class DOMContentExtractor {
   ): void {
     const children = Array.from(container.children);
     const appendInlineContent = (processed: ProcessedInlineContent): void => {
+      const isWhitespaceOnly =
+        !processed.html &&
+        !processed.text &&
+        (processed.hasLeadingWhitespace || processed.hasTrailingWhitespace);
+
+      if (isWhitespaceOnly) {
+        const previousText = textParts.at(-1) ?? '';
+        if (previousText && !/\s$/.test(previousText)) {
+          htmlParts.push('<span> </span>');
+          textParts.push(' ');
+        }
+        return;
+      }
+
       if (processed.html) {
         htmlParts.push(`<span>${processed.html}</span>`);
       }
