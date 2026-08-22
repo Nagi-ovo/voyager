@@ -5,6 +5,7 @@ export const PENDING_HANDOFF_TTL_MS = 60_000;
 
 export const CHATGPT_HANDOFF_SCHEDULE_EXPIRY_MESSAGE = 'gv.chatgptTemporaryHandoff.scheduleExpiry';
 export const CHATGPT_HANDOFF_CANCEL_EXPIRY_MESSAGE = 'gv.chatgptTemporaryHandoff.cancelExpiry';
+export const CHATGPT_HANDOFF_GET_TAB_ID_MESSAGE = 'gv.chatgptTemporaryHandoff.getTabId';
 export const CHATGPT_HANDOFF_EXPIRY_ALARM_PREFIX = 'gv-chatgpt-handoff-expiry:';
 
 export function isPendingHandoffStorageKey(value: unknown): value is string {

@@ -1,6 +1,7 @@
 import { type Mock, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  chatGptHandoffTabIdResponse,
   handleChatGptHandoffExpiryMessage,
   reconcileChatGptHandoffExpiryAlarms,
   startChatGptTemporaryHandoffBackgroundService,
@@ -39,6 +40,12 @@ beforeEach(() => {
 });
 
 describe('ChatGPT temporary handoff expiry service', () => {
+  it('returns only a validated sender tab ID for handoff ownership', () => {
+    expect(chatGptHandoffTabIdResponse(42)).toEqual({ ok: true, tabId: 42 });
+    expect(chatGptHandoffTabIdResponse(undefined)).toEqual({ ok: false });
+    expect(chatGptHandoffTabIdResponse(-1)).toEqual({ ok: false });
+  });
+
   it('schedules and cancels a one-time expiry alarm for a validated storage key', async () => {
     const expiresAt = NOW + PENDING_HANDOFF_TTL_MS;
 

@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   CHATGPT_HANDOFF_CANCEL_EXPIRY_MESSAGE,
+  CHATGPT_HANDOFF_GET_TAB_ID_MESSAGE,
   CHATGPT_HANDOFF_SCHEDULE_EXPIRY_MESSAGE,
 } from '@/features/plugins/builtin/chatgptTemporaryHandoff/storage';
 import { PLUGIN_CONTENT_SCRIPT_SYNC_MESSAGE } from '@/features/plugins/runtime/messages';
@@ -22,6 +23,9 @@ describe('background runtime message routing', () => {
       isHandledBackgroundRuntimeMessage({ type: CHATGPT_HANDOFF_SCHEDULE_EXPIRY_MESSAGE }),
     ).toBe(true);
     expect(isHandledBackgroundRuntimeMessage({ type: CHATGPT_HANDOFF_CANCEL_EXPIRY_MESSAGE })).toBe(
+      true,
+    );
+    expect(isHandledBackgroundRuntimeMessage({ type: CHATGPT_HANDOFF_GET_TAB_ID_MESSAGE })).toBe(
       true,
     );
 

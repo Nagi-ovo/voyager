@@ -23,6 +23,7 @@ import {
   downloadHandoffBackup,
   handoffTemporaryChat,
   hasCurrentComposerAttachments,
+  isCurrentComposerAttachmentRemovalControl,
   isHandoffPageUnloading,
   isTemporaryChat,
   markHandoffPageActive,
@@ -158,7 +159,8 @@ class ChatGptTemporaryHandoffPlugin {
         const target = event.target instanceof Element ? event.target : null;
         if (
           target?.closest(CHATGPT_SEND_CONTROL_SELECTOR) ||
-          target?.closest(CHATGPT_NEW_CHAT_SELECTOR)
+          target?.closest(CHATGPT_NEW_CHAT_SELECTOR) ||
+          (target && isCurrentComposerAttachmentRemovalControl(target))
         ) {
           cancelPendingHandoffRecovery();
         }

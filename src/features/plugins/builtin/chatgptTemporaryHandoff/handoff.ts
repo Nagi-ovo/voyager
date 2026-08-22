@@ -8,6 +8,7 @@ import type { AppLanguage } from '@/utils/language';
 import { getTemporaryHandoffCopy } from './i18n';
 import {
   CHATGPT_HANDOFF_CANCEL_EXPIRY_MESSAGE,
+  CHATGPT_HANDOFF_GET_TAB_ID_MESSAGE,
   CHATGPT_HANDOFF_SCHEDULE_EXPIRY_MESSAGE,
   PENDING_HANDOFF_KEY,
   PENDING_HANDOFF_STORAGE_PREFIX,
@@ -37,6 +38,7 @@ interface PendingHandoff {
   readonly draft?: string;
   readonly storedAt: number;
   readonly accountScope: string;
+  readonly tabId: number;
   readonly deliveredRoute?: string;
 }
 
@@ -296,18 +298,54 @@ function ensurePendingTabToken(): string {
   return token;
 }
 
-export async function discardPendingHandoff(): Promise<void> {
-  const token = readPendingTabToken();
+function detachPendingHandoffTab(): void {
   deliveredPendingToken = null;
   try {
     sessionStorage.removeItem(PENDING_HANDOFF_TAB_KEY);
-    // Remove the legacy page-owned payload left by earlier revisions of this PR.
     sessionStorage.removeItem(PENDING_HANDOFF_KEY);
   } catch {
     // Storage can be unavailable in locked-down browsing contexts.
   }
-  if (!token) return;
+}
+
+async function readCurrentExtensionTabId(): Promise<number | null> {
+  try {
+    const response = (await browser.runtime.sendMessage({
+      type: CHATGPT_HANDOFF_GET_TAB_ID_MESSAGE,
+    })) as { ok?: unknown; tabId?: unknown } | undefined;
+    return response?.ok === true &&
+      typeof response.tabId === 'number' &&
+      Number.isInteger(response.tabId) &&
+      response.tabId >= 0
+      ? response.tabId
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function discardPendingHandoff(): Promise<void> {
+  const token = readPendingTabToken();
+  if (!token) {
+    detachPendingHandoffTab();
+    return;
+  }
   const storageKey = pendingStorageKey(token);
+  try {
+    const [currentTabId, stored] = await Promise.all([
+      readCurrentExtensionTabId(),
+      browser.storage.local.get(storageKey),
+    ]);
+    const ownerTabId = (stored[storageKey] as Partial<PendingHandoff> | undefined)?.tabId;
+    if (currentTabId === null || (typeof ownerTabId === 'number' && ownerTabId !== currentTabId)) {
+      detachPendingHandoffTab();
+      return;
+    }
+  } catch {
+    detachPendingHandoffTab();
+    return;
+  }
+  detachPendingHandoffTab();
   let removed = false;
   try {
     await browser.storage.local.remove(storageKey);
@@ -334,6 +372,15 @@ async function writePending(
   try {
     deliveredPendingToken = null;
     await sweepExpiredPendingHandoffs();
+    const tabId = await readCurrentExtensionTabId();
+    if (tabId === null) throw new Error('Unable to bind pending handoff to the current tab');
+    const copiedToken = readPendingTabToken();
+    if (copiedToken) {
+      const copiedKey = pendingStorageKey(copiedToken);
+      const copied = await browser.storage.local.get(copiedKey);
+      const copiedTabId = (copied[copiedKey] as Partial<PendingHandoff> | undefined)?.tabId;
+      if (typeof copiedTabId === 'number' && copiedTabId !== tabId) detachPendingHandoffTab();
+    }
     const token = ensurePendingTabToken();
     const storageKey = pendingStorageKey(token);
     const storedAt = Date.now();
@@ -342,6 +389,7 @@ async function writePending(
       ...(draft ? { draft } : {}),
       storedAt,
       accountScope,
+      tabId,
     } satisfies PendingHandoff;
     await browser.storage.local.set({
       [storageKey]: pending,
@@ -367,7 +415,7 @@ async function markPendingDelivered(pending: PendingHandoff): Promise<void> {
   try {
     const stored = await browser.storage.local.get(storageKey);
     const current = stored[storageKey] as Partial<PendingHandoff> | undefined;
-    if (current?.storedAt !== pending.storedAt) return;
+    if (current?.storedAt !== pending.storedAt || current.tabId !== pending.tabId) return;
     await browser.storage.local.set({
       [storageKey]: { ...pending, deliveredRoute: readHandoffRoute() } satisfies PendingHandoff,
     });
@@ -388,11 +436,23 @@ async function readPending(): Promise<PendingHandoff | null> {
     const key = pendingStorageKey(token);
     const result = await browser.storage.local.get(key);
     const parsed = result[key] as Partial<PendingHandoff> | undefined;
+    const tabId = await readCurrentExtensionTabId();
+    if (tabId === null) {
+      detachPendingHandoffTab();
+      return null;
+    }
+    if (typeof parsed?.tabId === 'number' && parsed.tabId !== tabId) {
+      detachPendingHandoffTab();
+      return null;
+    }
     if (
       !parsed ||
       typeof parsed.storedAt !== 'number' ||
       !Number.isFinite(parsed.storedAt) ||
       typeof parsed.accountScope !== 'string' ||
+      typeof parsed.tabId !== 'number' ||
+      !Number.isInteger(parsed.tabId) ||
+      parsed.tabId < 0 ||
       (parsed.draft !== undefined && typeof parsed.draft !== 'string') ||
       (parsed.deliveredRoute !== undefined && typeof parsed.deliveredRoute !== 'string') ||
       !parsed.delivery
@@ -414,6 +474,7 @@ async function readPending(): Promise<PendingHandoff | null> {
         draft,
         storedAt: parsed.storedAt,
         accountScope: parsed.accountScope,
+        tabId: parsed.tabId,
         deliveredRoute: parsed.deliveredRoute,
       };
     }
@@ -428,6 +489,7 @@ async function readPending(): Promise<PendingHandoff | null> {
         draft,
         storedAt: parsed.storedAt,
         accountScope: parsed.accountScope,
+        tabId: parsed.tabId,
         deliveredRoute: parsed.deliveredRoute,
       };
     }
@@ -656,6 +718,33 @@ export function hasCurrentComposerAttachments(): boolean {
       /(attachment|file)/.test(testId) && !/(add|button|input|menu|picker|upload)/.test(testId)
     );
   });
+}
+
+export function isCurrentComposerAttachmentRemovalControl(target: Element): boolean {
+  const control = target.closest<HTMLElement>('button, [role="button"]');
+  const input = currentComposer();
+  const form = input?.closest('form');
+  if (!control || !form?.isConnected || !form.contains(control)) return false;
+
+  const controlLabel = [
+    control.dataset.testid,
+    control.getAttribute('aria-label'),
+    control.getAttribute('title'),
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+  if (
+    /(remove|delete|discard|close).*(attachment|file|upload)/.test(controlLabel) ||
+    /(attachment|file|upload).*(remove|delete|discard|close)/.test(controlLabel)
+  ) {
+    return true;
+  }
+
+  const preview = control.closest<HTMLElement>(
+    '[data-attachment-id], [data-file-id], [data-testid*="attachment" i], [data-testid*="file" i]',
+  );
+  return preview !== null && preview !== control && form.contains(preview);
 }
 
 async function dispatchAttachmentAndVerify(

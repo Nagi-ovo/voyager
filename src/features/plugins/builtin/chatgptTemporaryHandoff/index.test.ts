@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   downloadBackup: vi.fn(),
   handoff: vi.fn(),
   hasAttachments: vi.fn(),
+  isAttachmentRemovalControl: vi.fn(),
   plan: vi.fn(),
   resume: vi.fn(),
   discardPending: vi.fn(),
@@ -52,6 +53,7 @@ vi.mock('./handoff', () => ({
   downloadHandoffBackup: mocks.downloadBackup,
   handoffTemporaryChat: mocks.handoff,
   hasCurrentComposerAttachments: mocks.hasAttachments,
+  isCurrentComposerAttachmentRemovalControl: mocks.isAttachmentRemovalControl,
   isHandoffPageUnloading: () => mocks.unloading,
   isTemporaryChat: () => mocks.temporary,
   markHandoffPageUnloading: () => {
@@ -105,6 +107,7 @@ beforeEach(() => {
   });
   mocks.handoff.mockResolvedValue('ready');
   mocks.hasAttachments.mockReturnValue(false);
+  mocks.isAttachmentRemovalControl.mockReturnValue(false);
   mocks.buildBackup.mockReturnValue('## User\n\nQuestion\n\n## Unsent draft\n\nUnsent follow-up');
   mocks.readDraft.mockReturnValue('Unsent follow-up');
   mocks.resume.mockResolvedValue(null);
@@ -409,6 +412,24 @@ describe('ChatGPT temporary handoff plugin', () => {
     form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
 
     expect(mocks.cancelPendingRecovery).toHaveBeenCalledTimes(2);
+  });
+
+  it('stops recovery before the user removes a delivered attachment', async () => {
+    mocks.temporary = false;
+    const form = document.createElement('form');
+    const composer = document.createElement('div');
+    composer.id = 'prompt-textarea';
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.dataset.testid = 'remove-file-button';
+    form.append(composer, remove);
+    document.body.appendChild(form);
+    mocks.isAttachmentRemovalControl.mockImplementation((target: Element) => target === remove);
+
+    await activateChatGptTemporaryHandoff(createScope());
+    remove.click();
+
+    expect(mocks.cancelPendingRecovery).toHaveBeenCalledOnce();
   });
 
   it('stops recovery before same-route New Chat actions', async () => {

@@ -20,6 +20,14 @@ interface HandoffExpiryMessage {
   };
 }
 
+export function chatGptHandoffTabIdResponse(
+  tabId: unknown,
+): { ok: true; tabId: number } | { ok: false } {
+  return typeof tabId === 'number' && Number.isInteger(tabId) && tabId >= 0
+    ? { ok: true, tabId }
+    : { ok: false };
+}
+
 export function isChatGptHandoffExpiryMessage(message: unknown): message is HandoffExpiryMessage {
   if (!message || typeof message !== 'object') return false;
   const type = (message as { type?: unknown }).type;

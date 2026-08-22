@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import browser from 'webextension-polyfill';
 
 import type { ChatTurn } from '@/features/export/types/export';
@@ -18,6 +18,7 @@ import {
   getChatGptNewChatPath,
   handoffTemporaryChat,
   hasCurrentComposerAttachments,
+  isCurrentComposerAttachmentRemovalControl,
   isTemporaryChat,
   markHandoffPageActive,
   markHandoffPageUnloading,
@@ -27,6 +28,7 @@ import {
 import { getTemporaryHandoffCopy } from './i18n';
 import {
   CHATGPT_HANDOFF_CANCEL_EXPIRY_MESSAGE,
+  CHATGPT_HANDOFF_GET_TAB_ID_MESSAGE,
   CHATGPT_HANDOFF_SCHEDULE_EXPIRY_MESSAGE,
 } from './storage';
 
@@ -50,12 +52,24 @@ vi.mock('webextension-polyfill', () => ({
       },
     },
     runtime: {
-      sendMessage: vi.fn(async () => ({ ok: true })),
+      sendMessage: vi.fn(async (message: { type?: string }) =>
+        message.type === CHATGPT_HANDOFF_GET_TAB_ID_MESSAGE
+          ? { ok: true, tabId: 42 }
+          : { ok: true },
+      ),
     },
   },
 }));
 
 const scopes: PluginScope[] = [];
+
+beforeEach(() => {
+  vi.mocked(browser.runtime.sendMessage).mockImplementation(async (message: unknown) =>
+    (message as { type?: string }).type === CHATGPT_HANDOFF_GET_TAB_ID_MESSAGE
+      ? { ok: true, tabId: 42 }
+      : { ok: true },
+  );
+});
 
 function currentPendingStorageKey(): string | null {
   const token = sessionStorage.getItem(PENDING_HANDOFF_TAB_KEY);
@@ -83,6 +97,7 @@ function seedPending(
     delivery,
     storedAt,
     accountScope,
+    tabId: 42,
     ...(draft ? { draft } : {}),
   });
 }
@@ -245,6 +260,26 @@ describe('temporary chat handoff', () => {
     expect(hasCurrentComposerAttachments()).toBe(true);
   });
 
+  it('recognizes only attachment removal controls in the active composer', () => {
+    const form = document.createElement('form');
+    const composer = document.createElement('div');
+    composer.id = 'prompt-textarea';
+    composer.contentEditable = 'true';
+    composer.setAttribute('role', 'textbox');
+    const preview = document.createElement('div');
+    preview.dataset.testid = 'file-upload-preview';
+    const remove = document.createElement('button');
+    remove.setAttribute('aria-label', 'Remove file');
+    preview.appendChild(remove);
+    const add = document.createElement('button');
+    add.dataset.testid = 'add-files-button';
+    form.append(composer, preview, add);
+    document.body.appendChild(form);
+
+    expect(isCurrentComposerAttachmentRemovalControl(remove)).toBe(true);
+    expect(isCurrentComposerAttachmentRemovalControl(add)).toBe(false);
+  });
+
   it('gives separate handoffs unique filenames even at the same instant', () => {
     const now = new Date('2026-08-13T12:34:56.789Z');
     const first = createHandoffFilename(now, 'first-nonce');
@@ -397,7 +432,11 @@ describe('temporary chat handoff', () => {
     toggle.setAttribute('aria-label', 'Close temporary chat');
     const click = vi.spyOn(toggle, 'click');
     document.body.appendChild(toggle);
-    vi.mocked(browser.runtime.sendMessage).mockResolvedValueOnce({ ok: false });
+    vi.mocked(browser.runtime.sendMessage).mockImplementation(async (message: unknown) =>
+      (message as { type?: string }).type === CHATGPT_HANDOFF_SCHEDULE_EXPIRY_MESSAGE
+        ? { ok: false }
+        : { ok: true, tabId: 42 },
+    );
 
     await expect(
       handoffTemporaryChat(scope, { mode: 'inline', text: 'Keep this private' }),
@@ -604,6 +643,50 @@ describe('temporary chat handoff', () => {
     expect(composer.querySelector('strong')?.textContent).toBe('First paragraph');
     expect(composer.querySelectorAll('p')).toHaveLength(2);
     expect(composer.textContent).toContain('Recovered handoff');
+  });
+
+  it('detaches a copied tab without deleting the original tab pending handoff', async () => {
+    const composer = addComposer('Duplicate tab draft');
+    seedPending({ mode: 'inline', text: 'Original tab handoff' });
+    const originalToken = sessionStorage.getItem(PENDING_HANDOFF_TAB_KEY)!;
+    vi.mocked(browser.runtime.sendMessage).mockImplementation(async (message: unknown) =>
+      (message as { type?: string }).type === CHATGPT_HANDOFF_GET_TAB_ID_MESSAGE
+        ? { ok: true, tabId: 43 }
+        : { ok: true },
+    );
+
+    await expect(resumePendingHandoff(createScope())).resolves.toBeNull();
+
+    expect(composer.textContent).toBe('Duplicate tab draft');
+    expect(sessionStorage.getItem(PENDING_HANDOFF_TAB_KEY)).toBeNull();
+    expect(pendingEntryCount()).toBe(1);
+
+    sessionStorage.setItem(PENDING_HANDOFF_TAB_KEY, originalToken);
+    vi.mocked(browser.runtime.sendMessage).mockImplementation(async (message: unknown) =>
+      (message as { type?: string }).type === CHATGPT_HANDOFF_GET_TAB_ID_MESSAGE
+        ? { ok: true, tabId: 42 }
+        : { ok: true },
+    );
+    composer.textContent = '';
+    await expect(resumePendingHandoff(createScope())).resolves.toBe('ready');
+    expect(composer.textContent).toContain('Original tab handoff');
+  });
+
+  it('does not let cancellation in a copied tab delete the original tab pending handoff', async () => {
+    seedPending({ mode: 'inline', text: 'Original tab handoff' });
+    vi.mocked(browser.runtime.sendMessage).mockImplementation(async (message: unknown) =>
+      (message as { type?: string }).type === CHATGPT_HANDOFF_GET_TAB_ID_MESSAGE
+        ? { ok: true, tabId: 43 }
+        : { ok: true },
+    );
+
+    cancelPendingHandoffRecovery();
+    await vi.waitFor(() => expect(sessionStorage.getItem(PENDING_HANDOFF_TAB_KEY)).toBeNull());
+
+    expect(pendingEntryCount()).toBe(1);
+    expect(browser.runtime.sendMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: CHATGPT_HANDOFF_CANCEL_EXPIRY_MESSAGE }),
+    );
   });
 
   it('restores a short draft as its own segment instead of matching an unrelated substring', async () => {

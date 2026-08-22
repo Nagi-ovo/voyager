@@ -56,10 +56,12 @@ import {
 } from '@/features/backup/services/HighlightImportExportService';
 import { PromptImportExportService } from '@/features/backup/services/PromptImportExportService';
 import {
+  chatGptHandoffTabIdResponse,
   handleChatGptHandoffExpiryMessage,
   isChatGptHandoffExpiryMessage,
   startChatGptTemporaryHandoffBackgroundService,
 } from '@/features/plugins/builtin/chatgptTemporaryHandoff/background';
+import { CHATGPT_HANDOFF_GET_TAB_ID_MESSAGE } from '@/features/plugins/builtin/chatgptTemporaryHandoff/storage';
 import { computeNudgeDomains, normalizeIconResourcePath } from '@/features/plugins/promptNudge';
 import { PLUGIN_CONTENT_SCRIPT_SYNC_MESSAGE } from '@/features/plugins/runtime/messages';
 import {
@@ -1781,6 +1783,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
       if (isChatGptHandoffExpiryMessage(message)) {
         sendResponse(await handleChatGptHandoffExpiryMessage(message));
+        return;
+      }
+
+      if (message?.type === CHATGPT_HANDOFF_GET_TAB_ID_MESSAGE) {
+        sendResponse(chatGptHandoffTabIdResponse(sender.tab?.id));
         return;
       }
 
