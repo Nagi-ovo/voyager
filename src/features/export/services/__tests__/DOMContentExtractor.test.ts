@@ -5,6 +5,7 @@ import { Marked, marked } from 'marked';
 import markedKatex from 'marked-katex-extension';
 import { describe, expect, it, vi } from 'vitest';
 
+import { provideEChartsDataUrl } from '@/pages/content/echarts/exportBridge';
 import { resolveExportAdapter } from '@/pages/content/export/adapter/platformAdapters';
 
 import { DOMContentExtractor } from '../DOMContentExtractor';
@@ -658,6 +659,56 @@ describe('DOMContentExtractor', () => {
       );
     } finally {
       toDataURLSpy.mockRestore();
+    }
+  });
+
+  it('uses the live ECharts composited export instead of dropping stacked canvas layers', () => {
+    const canvasReadback = vi
+      .spyOn(HTMLCanvasElement.prototype, 'toDataURL')
+      .mockReturnValue('data:image/png;base64,FIRST_LAYER_ONLY');
+    const assistant = document.createElement('div');
+    assistant.innerHTML = `
+      <message-content>
+        <div class="markdown">
+          <div class="gv-echarts-wrapper">
+            <code-block style="display: none;">
+              <div class="code-block-decoration">echarts</div>
+              <pre><code role="text">{"series": [{"type": "pie", "zlevel": 2, "data": [1]}]}</code></pre>
+            </code-block>
+            <div class="gv-echarts-diagram">
+              <canvas width="800" height="400"></canvas>
+              <canvas width="800" height="400"></canvas>
+            </div>
+          </div>
+        </div>
+      </message-content>
+    `;
+    const diagram = assistant.querySelector<HTMLElement>('.gv-echarts-diagram')!;
+    const firstCanvas = assistant.querySelector('canvas')!;
+    vi.spyOn(firstCanvas, 'getBoundingClientRect').mockReturnValue({
+      width: 400,
+      height: 200,
+      top: 0,
+      right: 400,
+      bottom: 200,
+      left: 0,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+    const getComposite = vi.fn(() => 'data:image/png;base64,ALL_LAYERS');
+    const stopProviding = provideEChartsDataUrl(diagram, getComposite);
+
+    try {
+      const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+
+      expect(getComposite).toHaveBeenCalledTimes(1);
+      expect(canvasReadback).not.toHaveBeenCalled();
+      expect(extracted.html).toContain('src="data:image/png;base64,ALL_LAYERS"');
+      expect(extracted.html).toContain('width="400"');
+    } finally {
+      stopProviding();
+      canvasReadback.mockRestore();
     }
   });
 

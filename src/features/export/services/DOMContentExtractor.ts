@@ -2,6 +2,7 @@
  * DOM Content Extractor
  * Extracts rich content from Gemini's DOM structure preserving formatting
  */
+import { requestEChartsDataUrl } from '../../../pages/content/echarts/exportBridge';
 import type { ExportPlatformAdapter } from '../../../pages/content/export/adapter/platformAdapters';
 import type { ExportAttachment } from '../types/export';
 
@@ -56,6 +57,7 @@ const WAVEDROM_RENDERED_SVG_SELECTOR = '.gv-wavedrom-diagram svg';
 const WAVEDROM_EXPORT_CLASS = 'gv-export-wavedrom';
 
 const ECHARTS_WRAPPER_SELECTOR = '.gv-echarts-wrapper';
+const ECHARTS_RENDERED_DIAGRAM_SELECTOR = '.gv-echarts-diagram';
 const ECHARTS_RENDERED_CANVAS_SELECTOR = '.gv-echarts-diagram canvas';
 const ECHARTS_EXPORT_CLASS = 'gv-export-echarts';
 
@@ -1036,12 +1038,18 @@ export class DOMContentExtractor {
       ? this.extractCodeBlock(codeBlock, 'echarts')
       : { html: '', text: '' };
 
+    const diagram = renderedWrapper.querySelector<HTMLElement>(ECHARTS_RENDERED_DIAGRAM_SELECTOR);
     if (canvas && canvas.width > 0 && canvas.height > 0) {
       try {
+        const liveExport = diagram
+          ? requestEChartsDataUrl(diagram)
+          : { handled: false, dataUrl: null };
+        const dataUrl = liveExport.handled ? liveExport.dataUrl : canvas.toDataURL('image/png');
+        if (!dataUrl) throw new Error('ECharts composited export unavailable');
         const exportContainer = document.createElement('div');
         exportContainer.className = ECHARTS_EXPORT_CLASS;
         const img = document.createElement('img');
-        img.src = canvas.toDataURL('image/png');
+        img.src = dataUrl;
         img.alt = 'Chart';
         const inlineWidth = canvas.style.width.endsWith('px')
           ? Number.parseFloat(canvas.style.width)

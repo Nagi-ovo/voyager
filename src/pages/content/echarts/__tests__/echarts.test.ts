@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { StorageKeys } from '@/core/types/common';
 
+import { requestEChartsDataUrl } from '../exportBridge';
 import {
   _closeModalForTest,
   _openFullscreenForTest,
@@ -23,6 +24,7 @@ import {
 
 const makeFakeInstance = () => ({
   setOption: vi.fn(),
+  getDataURL: vi.fn(() => 'data:image/png;base64,COMPOSITED'),
   resize: vi.fn(),
   dispose: vi.fn(),
 });
@@ -194,6 +196,26 @@ describe('isEChartsOptionObject', () => {
     ).toBe(false);
   });
 
+  it('rejects image-backed symbols and graphic images before they can load', () => {
+    expect(
+      isEChartsOptionObject({
+        series: [{ type: 'pie', symbol: 'image://https://attacker.example/pixel' }],
+      }),
+    ).toBe(false);
+    expect(
+      isEChartsOptionObject({
+        series: [{ type: 'pie', data: [1] }],
+        graphic: [{ type: 'image', style: { image: 'https://attacker.example/pixel' } }],
+      }),
+    ).toBe(false);
+    expect(
+      isEChartsOptionObject({
+        baseOption: { timeline: {}, series: [{ type: 'pie', data: [1] }] },
+        options: [{ series: [{ symbol: 'image://https://attacker.example/pixel' }] }],
+      }),
+    ).toBe(false);
+  });
+
   it('rejects a series entry without a chart type', () => {
     expect(isEChartsOptionObject({ series: [{ name: 'a', data: [1] }] })).toBe(false);
   });
@@ -263,6 +285,19 @@ describe('isEChartsOptionCode', () => {
     expect(isEChartsOptionCode('{"series": {"type": "graph", "coordinateSystem": "geo"}}')).toBe(
       false,
     );
+  });
+
+  it('rejects image-backed options during the synchronous detection pass', () => {
+    expect(
+      isEChartsOptionCode(
+        '{"series": {"type": "pie", "symbol": "image://https://attacker.example/pixel"}}',
+      ),
+    ).toBe(false);
+    expect(
+      isEChartsOptionCode(
+        '{"series": {"type": "pie"}, "graphic": {"style": {"image": "https://attacker.example/pixel"}}}',
+      ),
+    ).toBe(false);
   });
 
   it('rejects plain JSON without a series key', () => {
@@ -645,6 +680,39 @@ describe('render flow', () => {
     );
   });
 
+  it('removes active title links from every option layer before rendering', async () => {
+    addEChartsBlock(`{
+      "title": { "text": "Top", "link": "javascript:alert(1)", "target": "self" },
+      "baseOption": {
+        "timeline": { "data": ["2026"] },
+        "xAxis": {},
+        "title": { "text": "Base", "sublink": "javascript:alert(2)", "subtarget": "self" },
+        "series": [{ "type": "bar", "data": [1] }]
+      },
+      "options": [{ "title": { "text": "State", "link": "javascript:alert(3)" } }],
+      "media": [{ "option": { "title": { "text": "Media", "sublink": "javascript:alert(1)" } } }]
+    }`);
+    processCodeBlocks();
+
+    await vi.waitFor(() => {
+      expect(document.querySelector('.gv-echarts-diagram')).not.toBeNull();
+    });
+    const echartsMod = await import('../runtime');
+    const fakeInstance = vi.mocked(echartsMod.init).mock.results.at(-1)?.value;
+    const safeOption = fakeInstance.setOption.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(safeOption['title']).toEqual({ text: 'Top' });
+    expect((safeOption['baseOption'] as Record<string, unknown>)['title']).toEqual({
+      text: 'Base',
+    });
+    expect((safeOption['options'] as Array<Record<string, unknown>>)[0]?.['title']).toEqual({
+      text: 'State',
+    });
+    const mediaOption = (safeOption['media'] as Array<Record<string, unknown>>)[0]?.[
+      'option'
+    ] as Record<string, unknown>;
+    expect(mediaOption['title']).toEqual({ text: 'Media' });
+  });
+
   it('disposes a new instance when applying the option throws', async () => {
     const echartsMod = await import('../runtime');
     const failedInstance = makeFakeInstance();
@@ -688,6 +756,28 @@ describe('render flow', () => {
     expect(codeEl.dataset.echartsCode).toBe(PIE_OPTION);
     expect(codeEl.dataset.echartsTheme).toBe('light');
     expect(codeEl.dataset.echartsProcessing).toBe('false');
+  });
+
+  it('provides a composited PNG from the live ECharts instance for export', async () => {
+    addEChartsBlock(PIE_OPTION);
+    processCodeBlocks();
+
+    await vi.waitFor(() => {
+      expect(document.querySelector('.gv-echarts-diagram')).not.toBeNull();
+    });
+    const diagram = document.querySelector<HTMLElement>('.gv-echarts-diagram')!;
+    const echartsMod = await import('../runtime');
+    const fakeInstance = vi.mocked(echartsMod.init).mock.results.at(-1)?.value;
+
+    expect(requestEChartsDataUrl(diagram)).toEqual({
+      handled: true,
+      dataUrl: 'data:image/png;base64,COMPOSITED',
+    });
+    expect(fakeInstance.getDataURL).toHaveBeenCalledWith({
+      type: 'png',
+      pixelRatio: 1,
+      backgroundColor: '#f9fafb',
+    });
   });
 
   it('moves the native copy button into the toggle', async () => {
@@ -936,6 +1026,31 @@ describe('fullscreen overlay', () => {
     expect(diagramContainer.parentElement).toBe(wrapper);
     expect(fakeInstance.resize).toHaveBeenCalledTimes(2);
     vi.useRealTimers();
+  });
+
+  it('exposes modal semantics, traps focus, and restores the fullscreen trigger', async () => {
+    await addRenderedEChartsBlock();
+    const fullscreenBtn = document.querySelector<HTMLButtonElement>('[data-action="fullscreen"]')!;
+    fullscreenBtn.focus();
+    fullscreenBtn.click();
+
+    const modal = document.querySelector<HTMLElement>('.gv-echarts-modal')!;
+    const closeBtn = modal.querySelector<HTMLButtonElement>('button')!;
+    expect(modal.getAttribute('role')).toBe('dialog');
+    expect(modal.getAttribute('aria-modal')).toBe('true');
+    expect(modal.getAttribute('aria-label')).toBe('echartsFullscreenButton');
+    expect(closeBtn.getAttribute('aria-label')).toBe('echartsCloseFullscreen');
+    expect(document.activeElement).toBe(closeBtn);
+
+    const outside = document.createElement('button');
+    document.body.appendChild(outside);
+    outside.focus();
+    expect(document.activeElement).toBe(closeBtn);
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+    expect(document.activeElement).toBe(closeBtn);
+
+    _closeModalForTest();
+    expect(document.activeElement).toBe(fullscreenBtn);
   });
 
   it('opens a modal with the chart panel background colour', async () => {

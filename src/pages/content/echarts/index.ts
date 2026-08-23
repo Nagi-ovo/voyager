@@ -26,6 +26,7 @@ import { isExtensionContextInvalidatedError } from '@/core/utils/extensionContex
 
 import { isGenericLanguageLabel } from '../mermaid/index';
 import { resolveGeminiTheme } from '../wavedrom/index';
+import { provideEChartsDataUrl } from './exportBridge';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -190,6 +191,7 @@ export const stripEChartsAssignment = (raw: string): string => {
 export const isEChartsOptionObject = (obj: unknown): obj is Record<string, unknown> => {
   if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return false;
   const o = obj as Record<string, unknown>;
+  if (containsEChartsImageSource(o)) return false;
   const baseOption = o['baseOption'];
   const validationRoot =
     baseOption !== null && typeof baseOption === 'object' && !Array.isArray(baseOption)
@@ -253,6 +255,42 @@ export const isEChartsOptionObject = (obj: unknown): obj is Record<string, unkno
   return STRUCTURE_KEYS.some((key) => key in validationRoot);
 };
 
+/**
+ * JSON chart options must never trigger an implicit image request. ECharts can
+ * load images from both `image://…` symbols and object properties named
+ * `image` (for example `graphic.style.image`). Reject those options entirely;
+ * image-backed charts are outside this renderer's deliberately narrow scope.
+ */
+const containsEChartsImageSource = (value: unknown, key = ''): boolean => {
+  if (typeof value === 'string') {
+    return key.toLowerCase() === 'image' || /^image:\/\//i.test(value.trim());
+  }
+  if (Array.isArray(value)) return value.some((entry) => containsEChartsImageSource(entry));
+  if (value === null || typeof value !== 'object') return false;
+  return Object.entries(value).some(([entryKey, entry]) =>
+    containsEChartsImageSource(entry, entryKey),
+  );
+};
+
+const stripTitleLinksInLayer = (option: Record<string, unknown>): Record<string, unknown> => {
+  const stripLinkFields = (entry: unknown): unknown => {
+    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) return entry;
+    const safeEntry = { ...(entry as Record<string, unknown>) };
+    delete safeEntry['link'];
+    delete safeEntry['sublink'];
+    delete safeEntry['target'];
+    delete safeEntry['subtarget'];
+    return safeEntry;
+  };
+
+  const title = option['title'];
+  if (Array.isArray(title)) return { ...option, title: title.map(stripLinkFields) };
+  if (title !== null && typeof title === 'object') {
+    return { ...option, title: stripLinkFields(title) };
+  }
+  return option;
+};
+
 const forceRichTextTooltipsInLayer = (option: Record<string, unknown>): Record<string, unknown> => {
   const tooltip = option['tooltip'];
   const series = option['series'];
@@ -280,13 +318,16 @@ const forceRichTextTooltipsInLayer = (option: Record<string, unknown>): Record<s
   return hasSeriesTooltip ? { ...option, tooltip: { renderMode: 'richText' } } : option;
 };
 
-const forceRichTextTooltips = (option: Record<string, unknown>): Record<string, unknown> => {
-  let safeOption = forceRichTextTooltipsInLayer(option);
+const sanitizeEChartsOption = (option: Record<string, unknown>): Record<string, unknown> => {
+  const sanitizeLayer = (layer: Record<string, unknown>): Record<string, unknown> =>
+    forceRichTextTooltipsInLayer(stripTitleLinksInLayer(layer));
+
+  let safeOption = sanitizeLayer(option);
   const baseOption = option['baseOption'];
   if (baseOption !== null && typeof baseOption === 'object' && !Array.isArray(baseOption)) {
     safeOption = {
       ...safeOption,
-      baseOption: forceRichTextTooltipsInLayer(baseOption as Record<string, unknown>),
+      baseOption: sanitizeLayer(baseOption as Record<string, unknown>),
     };
   }
 
@@ -296,7 +337,7 @@ const forceRichTextTooltips = (option: Record<string, unknown>): Record<string, 
       ...safeOption,
       options: timelineOptions.map((entry) =>
         entry !== null && typeof entry === 'object' && !Array.isArray(entry)
-          ? forceRichTextTooltipsInLayer(entry as Record<string, unknown>)
+          ? sanitizeLayer(entry as Record<string, unknown>)
           : entry,
       ),
     };
@@ -315,7 +356,7 @@ const forceRichTextTooltips = (option: Record<string, unknown>): Record<string, 
           !Array.isArray(mediaOption)
           ? {
               ...mediaEntry,
-              option: forceRichTextTooltipsInLayer(mediaOption as Record<string, unknown>),
+              option: sanitizeLayer(mediaOption as Record<string, unknown>),
             }
           : entry;
       }),
@@ -335,6 +376,7 @@ export const isEChartsOptionCode = (code: string): boolean => {
   const trimmed = code.trim();
   if (trimmed.length < 20) return false;
   if (/["']?geo["']?\s*:/.test(trimmed)) return false;
+  if (/image:\/\//i.test(trimmed) || /["']?image["']?\s*:/.test(trimmed)) return false;
 
   const coordinateSystems = [
     ...trimmed.matchAll(/["']?coordinateSystem["']?\s*:\s*["']([a-zA-Z0-9]+)["']/g),
@@ -467,7 +509,7 @@ const renderChartToContainer = (
     // `backgroundColor` from the chart option would otherwise paint over the
     // panel; keep the deterministic backdrop so text stays readable.
     instance.setOption(
-      { ...forceRichTextTooltips(parsed), backgroundColor: PANEL_BG[renderTheme] },
+      { ...sanitizeEChartsOption(parsed), backgroundColor: PANEL_BG[renderTheme] },
       true,
     );
     chartInstances.set(container, instance);
@@ -638,16 +680,24 @@ const createStyles = () => {
  */
 const openFullscreen = (chartContainer: HTMLElement) => {
   if (currentModal) return;
+  const previousFocus =
+    document.activeElement instanceof HTMLElement ? document.activeElement : null;
 
   const modal = document.createElement('div');
   modal.className = 'gv-echarts-modal';
+  modal.setAttribute('role', 'dialog');
+  modal.setAttribute('aria-modal', 'true');
+  modal.setAttribute('aria-label', t('echartsFullscreenButton', 'Fullscreen'));
 
   const toolbar = document.createElement('div');
   toolbar.className = 'gv-echarts-modal-toolbar';
 
   const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
   closeBtn.innerHTML = '✕';
-  closeBtn.title = t('echartsCloseFullscreen', 'Close (ESC)');
+  const closeLabel = t('echartsCloseFullscreen', 'Close (ESC)');
+  closeBtn.title = closeLabel;
+  closeBtn.setAttribute('aria-label', closeLabel);
 
   toolbar.appendChild(closeBtn);
 
@@ -712,11 +762,11 @@ const openFullscreen = (chartContainer: HTMLElement) => {
       fullscreenWrapper = null;
     }
     chartInstances.get(chartContainer)?.resize();
+    if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true });
   };
   const closeModal = () => {
     if (closing) return;
     closing = true;
-    removeListeners();
     modal.classList.remove('visible');
     closeTimer = setTimeout(destroyModal, 300);
   };
@@ -728,7 +778,16 @@ const openFullscreen = (chartContainer: HTMLElement) => {
   });
   on(document, 'keydown', (e) => {
     if (e.key === 'Escape') closeModal();
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      closeBtn.focus({ preventScroll: true });
+    }
   });
+  on(document, 'focusin', (e) => {
+    if (!modal.contains(e.target as Node)) closeBtn.focus({ preventScroll: true });
+  });
+
+  closeBtn.focus({ preventScroll: true });
 
   // Size the canvas against the card, then fade in.
   revealFrame = requestAnimationFrame(() => {
@@ -913,6 +972,20 @@ const renderEcharts = async (codeEl: HTMLElement, code: string) => {
       const diagramContainer = document.createElement('div');
       diagramContainer.className = 'gv-echarts-diagram';
       wrapper.appendChild(diagramContainer);
+      provideEChartsDataUrl(diagramContainer, () => {
+        try {
+          const instance = chartInstances.get(diagramContainer);
+          if (!instance) return null;
+          return instance.getDataURL({
+            type: 'png',
+            pixelRatio: 1,
+            backgroundColor:
+              diagramContainer.style.getPropertyValue('--gv-echarts-panel-bg') || PANEL_BG.light,
+          });
+        } catch {
+          return null;
+        }
+      });
 
       codeBlockHost.style.display = 'none';
 
