@@ -1043,7 +1043,11 @@ export class DOMContentExtractor {
         const img = document.createElement('img');
         img.src = canvas.toDataURL('image/png');
         img.alt = 'Chart';
-        const displayWidth = canvas.getBoundingClientRect().width || canvas.clientWidth;
+        const inlineWidth = canvas.style.width.endsWith('px')
+          ? Number.parseFloat(canvas.style.width)
+          : 0;
+        const displayWidth =
+          canvas.getBoundingClientRect().width || canvas.clientWidth || inlineWidth;
         if (displayWidth > 0) {
           img.width = Math.round(displayWidth);
           img.style.maxWidth = '100%';

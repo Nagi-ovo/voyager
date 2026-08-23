@@ -180,9 +180,7 @@ export const isEChartsOptionObject = (obj: unknown): obj is Record<string, unkno
   const o = obj as Record<string, unknown>;
 
   const series = o['series'];
-  if (!Array.isArray(series) || series.length === 0) return false;
-
-  const first = series[0];
+  const first = Array.isArray(series) ? series[0] : series;
   if (!first || typeof first !== 'object' || Array.isArray(first)) return false;
   const type = (first as Record<string, unknown>)['type'];
   if (typeof type !== 'string') return false;
@@ -191,6 +189,33 @@ export const isEChartsOptionObject = (obj: unknown): obj is Record<string, unkno
 
   if (AXIS_FREE_TYPES.has(normalizedType)) return true;
   return STRUCTURE_KEYS.some((key) => key in o);
+};
+
+const forceRichTextTooltips = (option: Record<string, unknown>): Record<string, unknown> => {
+  const tooltip = option['tooltip'];
+  const series = option['series'];
+  const seriesEntries = Array.isArray(series) ? series : [series];
+  const hasSeriesTooltip = seriesEntries.some(
+    (entry) =>
+      entry !== null && typeof entry === 'object' && !Array.isArray(entry) && 'tooltip' in entry,
+  );
+
+  if (Array.isArray(tooltip)) {
+    return {
+      ...option,
+      tooltip: tooltip.map((entry) =>
+        entry !== null && typeof entry === 'object' && !Array.isArray(entry)
+          ? { ...entry, renderMode: 'richText' }
+          : entry,
+      ),
+    };
+  }
+
+  if (tooltip !== null && typeof tooltip === 'object') {
+    return { ...option, tooltip: { ...tooltip, renderMode: 'richText' } };
+  }
+
+  return hasSeriesTooltip ? { ...option, tooltip: { renderMode: 'richText' } } : option;
 };
 
 /**
@@ -328,7 +353,10 @@ const renderChartToContainer = (
   try {
     // `backgroundColor` from the chart option would otherwise paint over the
     // panel; keep the deterministic backdrop so text stays readable.
-    instance.setOption({ ...parsed, backgroundColor: PANEL_BG[renderTheme] }, true);
+    instance.setOption(
+      { ...forceRichTextTooltips(parsed), backgroundColor: PANEL_BG[renderTheme] },
+      true,
+    );
     chartInstances.set(container, instance);
   } catch (error) {
     // `setOption` can reject malformed LLM output or an option that requires a

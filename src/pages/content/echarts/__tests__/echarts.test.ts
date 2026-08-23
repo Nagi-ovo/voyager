@@ -133,6 +133,10 @@ describe('isEChartsOptionObject', () => {
     expect(isEChartsOptionObject(JSON.parse(PIE_OPTION))).toBe(true);
   });
 
+  it('accepts a single series object', () => {
+    expect(isEChartsOptionObject({ series: { type: 'pie', data: [{ value: 1 }] } })).toBe(true);
+  });
+
   it.each([
     ['calendar', { calendar: {}, series: [{ type: 'heatmap', data: [] }] }],
     ['parallel', { parallel: {}, series: [{ type: 'parallel', data: [] }] }],
@@ -471,6 +475,53 @@ describe('render flow', () => {
       document.querySelector('.gv-echarts-diagram'),
       undefined,
       { renderer: 'canvas' },
+    );
+  });
+
+  it('forces untrusted tooltip markup through the rich-text renderer', async () => {
+    addEChartsBlock(`{
+      "tooltip": {
+        "renderMode": "html",
+        "formatter": "<img src=x onerror=alert(1)>"
+      },
+      "series": { "type": "pie", "data": [{ "value": 1 }] }
+    }`);
+    processCodeBlocks();
+
+    await vi.waitFor(() => {
+      expect(document.querySelector('.gv-echarts-diagram')).not.toBeNull();
+    });
+    const echartsMod = await import('../runtime');
+    const fakeInstance = vi.mocked(echartsMod.init).mock.results.at(-1)?.value;
+    expect(fakeInstance.setOption).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tooltip: expect.objectContaining({
+          formatter: '<img src=x onerror=alert(1)>',
+          renderMode: 'richText',
+        }),
+      }),
+      true,
+    );
+  });
+
+  it('forces series-level tooltip formatters through the rich-text renderer', async () => {
+    addEChartsBlock(`{
+      "series": {
+        "type": "pie",
+        "tooltip": { "formatter": "<b>{b}</b>" },
+        "data": [{ "value": 1 }]
+      }
+    }`);
+    processCodeBlocks();
+
+    await vi.waitFor(() => {
+      expect(document.querySelector('.gv-echarts-diagram')).not.toBeNull();
+    });
+    const echartsMod = await import('../runtime');
+    const fakeInstance = vi.mocked(echartsMod.init).mock.results.at(-1)?.value;
+    expect(fakeInstance.setOption).toHaveBeenCalledWith(
+      expect.objectContaining({ tooltip: { renderMode: 'richText' } }),
+      true,
     );
   });
 

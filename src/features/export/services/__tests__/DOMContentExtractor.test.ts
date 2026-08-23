@@ -719,6 +719,37 @@ describe('DOMContentExtractor', () => {
     }
   });
 
+  it('preserves the ECharts CSS width when exporting from code view', () => {
+    const toDataURLSpy = vi
+      .spyOn(HTMLCanvasElement.prototype, 'toDataURL')
+      .mockReturnValue('data:image/png;base64,HIDDEN');
+    try {
+      const assistant = document.createElement('div');
+      assistant.innerHTML = `
+        <message-content>
+          <div class="markdown">
+            <div class="gv-echarts-wrapper">
+              <code-block>
+                <div class="code-block-decoration">echarts</div>
+                <pre><code role="text">{"series": {"type": "pie", "data": [{"value": 1}]}}</code></pre>
+              </code-block>
+              <div class="gv-echarts-diagram" style="display: none;">
+                <canvas width="800" height="400" style="width: 400px; height: 200px;"></canvas>
+              </div>
+            </div>
+          </div>
+        </message-content>
+      `;
+
+      const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+
+      expect(extracted.html).toContain('src="data:image/png;base64,HIDDEN"');
+      expect(extracted.html).toContain('width="400"');
+    } finally {
+      toDataURLSpy.mockRestore();
+    }
+  });
+
   it('falls back to option source when a rendered ECharts canvas is unavailable', () => {
     const assistant = document.createElement('div');
     assistant.innerHTML = `

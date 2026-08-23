@@ -47,6 +47,7 @@ import {
   VisualMapComponent,
 } from 'echarts/components';
 import { init, use as registerECharts } from 'echarts/core';
+import { LabelLayout } from 'echarts/features';
 import { CanvasRenderer } from 'echarts/renderers';
 
 registerECharts([
@@ -94,6 +95,7 @@ registerECharts([
   TooltipComponent,
   TransformComponent,
   VisualMapComponent,
+  LabelLayout,
   CanvasRenderer,
 ]);
 
