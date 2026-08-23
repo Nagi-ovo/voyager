@@ -258,6 +258,12 @@ describe('temporary chat handoff', () => {
     preview.dataset.testid = 'attachment-preview';
     form.appendChild(preview);
     expect(hasCurrentComposerAttachments()).toBe(true);
+
+    preview.dataset.testid = 'file-upload-preview';
+    expect(hasCurrentComposerAttachments()).toBe(true);
+
+    preview.dataset.testid = 'upload-file-picker';
+    expect(hasCurrentComposerAttachments()).toBe(false);
   });
 
   it('recognizes only attachment removal controls in the active composer', () => {

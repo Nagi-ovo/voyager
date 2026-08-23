@@ -711,6 +711,7 @@ export function hasCurrentComposerAttachments(): boolean {
       return true;
     }
     const testId = candidate.dataset.testid?.toLowerCase() || '';
+    if (/(attachment|file|upload)/.test(testId) && /preview/.test(testId)) return true;
     return (
       /(attachment|file)/.test(testId) && !/(add|button|input|menu|picker|upload)/.test(testId)
     );
