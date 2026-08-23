@@ -631,12 +631,25 @@ describe('DOMContentExtractor', () => {
           </div>
         </message-content>
       `;
+      const canvas = assistant.querySelector('canvas')!;
+      vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
+        width: 400,
+        height: 200,
+        top: 0,
+        right: 400,
+        bottom: 200,
+        left: 0,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      });
 
       const extracted = DOMContentExtractor.extractAssistantContent(assistant);
 
       expect(extracted.hasCode).toBe(true);
       expect(extracted.html).toContain('class="gv-export-echarts"');
       expect(extracted.html).toContain('<img src="data:image/png;base64,TESTDATA"');
+      expect(extracted.html).toContain('width="400"');
       expect(extracted.html).not.toContain('<pre><code');
       expect(extracted.html).not.toContain('gv-echarts-toggle');
       expect(extracted.text).toContain(
@@ -644,6 +657,63 @@ describe('DOMContentExtractor', () => {
       );
     } finally {
       toDataURLSpy.mockRestore();
+    }
+  });
+
+  it('snapshots the live ECharts canvas inside list items', () => {
+    const clonedCanvasReadback = vi
+      .spyOn(HTMLCanvasElement.prototype, 'toDataURL')
+      .mockImplementation(() => {
+        throw new Error('A cloned canvas has no rendered pixels');
+      });
+    try {
+      const assistant = document.createElement('div');
+      assistant.innerHTML = `
+        <message-content>
+          <div class="markdown">
+            <ul>
+              <li>
+                <span>Chart</span>
+                <div class="gv-echarts-wrapper">
+                  <code-block style="display: none;">
+                    <div class="code-block-decoration">echarts</div>
+                    <pre><code role="text">{"series": [{"type": "pie", "data": [{"value": 1}]}]}</code></pre>
+                  </code-block>
+                  <div class="gv-echarts-toggle"><button>Diagram</button></div>
+                  <div class="gv-echarts-diagram"><canvas width="800" height="400"></canvas></div>
+                </div>
+              </li>
+            </ul>
+          </div>
+        </message-content>
+      `;
+      const liveCanvas = assistant.querySelector('canvas')!;
+      const liveReadback = vi.fn(() => 'data:image/png;base64,LIVE');
+      Object.defineProperty(liveCanvas, 'toDataURL', { value: liveReadback });
+      vi.spyOn(liveCanvas, 'getBoundingClientRect').mockReturnValue({
+        width: 400,
+        height: 200,
+        top: 0,
+        right: 400,
+        bottom: 200,
+        left: 0,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      });
+
+      const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+
+      expect(liveReadback).toHaveBeenCalledWith('image/png');
+      expect(extracted.html).toContain('class="gv-export-echarts"');
+      expect(extracted.html).toContain('src="data:image/png;base64,LIVE"');
+      expect(extracted.html).toContain('width="400"');
+      expect(extracted.html).not.toContain('gv-echarts-wrapper');
+      expect(extracted.text).toContain(
+        '- Chart\n  ```echarts\n  {"series": [{"type": "pie", "data": [{"value": 1}]}]}\n  ```',
+      );
+    } finally {
+      clonedCanvasReadback.mockRestore();
     }
   });
 

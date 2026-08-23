@@ -1026,8 +1026,11 @@ export class DOMContentExtractor {
    */
   private static extractEchartsContent(
     wrapper: HTMLElement,
+    renderedWrapper: HTMLElement = wrapper,
   ): { html: string; text: string } | null {
-    const canvas = wrapper.querySelector<HTMLCanvasElement>(ECHARTS_RENDERED_CANVAS_SELECTOR);
+    const canvas = renderedWrapper.querySelector<HTMLCanvasElement>(
+      ECHARTS_RENDERED_CANVAS_SELECTOR,
+    );
     const codeBlock = wrapper.querySelector<HTMLElement>('code-block, .code-block');
     const codeContent = codeBlock
       ? this.extractCodeBlock(codeBlock, 'echarts')
@@ -1039,6 +1042,12 @@ export class DOMContentExtractor {
         exportContainer.className = ECHARTS_EXPORT_CLASS;
         const img = document.createElement('img');
         img.src = canvas.toDataURL('image/png');
+        const displayWidth = canvas.getBoundingClientRect().width || canvas.clientWidth;
+        if (displayWidth > 0) {
+          img.width = Math.round(displayWidth);
+          img.style.maxWidth = '100%';
+          img.style.height = 'auto';
+        }
         exportContainer.appendChild(img);
         return { html: exportContainer.outerHTML, text: codeContent.text };
       } catch {
@@ -1340,6 +1349,9 @@ export class DOMContentExtractor {
       }
     });
 
+    const liveEchartsWrappers = Array.from(
+      element.querySelectorAll<HTMLElement>(ECHARTS_WRAPPER_SELECTOR),
+    );
     const cleanList = element.cloneNode(true) as HTMLElement;
     this.stripExportArtifacts(cleanList);
     cleanList.querySelectorAll<HTMLElement>(MERMAID_WRAPPER_SELECTOR).forEach((wrapper) => {
@@ -1362,8 +1374,8 @@ export class DOMContentExtractor {
         wrapper.replaceWith(replacement.firstElementChild);
       }
     });
-    cleanList.querySelectorAll<HTMLElement>(ECHARTS_WRAPPER_SELECTOR).forEach((wrapper) => {
-      const content = this.extractEchartsContent(wrapper);
+    cleanList.querySelectorAll<HTMLElement>(ECHARTS_WRAPPER_SELECTOR).forEach((wrapper, index) => {
+      const content = this.extractEchartsContent(wrapper, liveEchartsWrappers[index] ?? wrapper);
       if (!content) return;
 
       const replacement = document.createElement('div');

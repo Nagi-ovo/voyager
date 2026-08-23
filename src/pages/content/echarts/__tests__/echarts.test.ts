@@ -27,7 +27,7 @@ const makeFakeInstance = () => ({
   dispose: vi.fn(),
 });
 
-vi.mock('echarts', () => ({
+vi.mock('../runtime', () => ({
   init: vi.fn(() => makeFakeInstance()),
 }));
 
@@ -389,7 +389,7 @@ describe('render flow', () => {
     await vi.waitFor(() => {
       expect(document.querySelector('.gv-echarts-diagram')).not.toBeNull();
     });
-    const echartsMod = await import('echarts');
+    const echartsMod = await import('../runtime');
     const initMock = vi.mocked(echartsMod.init);
     expect(initMock).toHaveBeenCalledTimes(1);
     expect(initMock).toHaveBeenCalledWith(document.querySelector('.gv-echarts-diagram'), 'dark', {
@@ -405,6 +405,27 @@ describe('render flow', () => {
     );
   });
 
+  it('keeps the renderer backdrop when the option supplies its own background', async () => {
+    const darkHost = document.createElement('div');
+    darkHost.className = 'theme-host dark-theme';
+    document.body.appendChild(darkHost);
+    addEChartsBlock(`{
+      "backgroundColor": "hotpink",
+      "series": [{ "type": "pie", "data": [{ "value": 1 }] }]
+    }`);
+    processCodeBlocks();
+
+    await vi.waitFor(() => {
+      expect(document.querySelector('.gv-echarts-diagram')).not.toBeNull();
+    });
+    const echartsMod = await import('../runtime');
+    const fakeInstance = vi.mocked(echartsMod.init).mock.results.at(-1)?.value;
+    expect(fakeInstance.setOption).toHaveBeenCalledWith(
+      expect.objectContaining({ backgroundColor: '#1a1a1a' }),
+      true,
+    );
+  });
+
   it('inits with no theme on a light page', async () => {
     const lightHost = document.createElement('div');
     lightHost.className = 'theme-host light-theme';
@@ -415,7 +436,7 @@ describe('render flow', () => {
     await vi.waitFor(() => {
       expect(document.querySelector('.gv-echarts-diagram')).not.toBeNull();
     });
-    const echartsMod = await import('echarts');
+    const echartsMod = await import('../runtime');
     expect(vi.mocked(echartsMod.init)).toHaveBeenCalledWith(
       document.querySelector('.gv-echarts-diagram'),
       undefined,
@@ -473,7 +494,7 @@ describe('render flow', () => {
     await vi.waitFor(() => {
       expect(codeEl.dataset.echartsCode).toBe(PIE_OPTION);
     });
-    const echartsMod = await import('echarts');
+    const echartsMod = await import('../runtime');
     const initMock = vi.mocked(echartsMod.init);
     expect(initMock).toHaveBeenCalledTimes(1);
     const firstInstance = initMock.mock.results[0]?.value;
@@ -489,6 +510,64 @@ describe('render flow', () => {
     });
     expect(initMock).toHaveBeenCalledTimes(2);
     expect(firstInstance.dispose).toHaveBeenCalled();
+  });
+
+  it('renders only the latest source when it changes during async parsing', async () => {
+    const codeEl = addEChartsBlock(PIE_OPTION);
+    processCodeBlocks();
+
+    const latest = `{
+  "series": [{ "type": "pie", "data": [{ "value": 9, "name": "latest" }] }]
+}`;
+    codeEl.textContent = latest;
+
+    await vi.waitFor(() => {
+      expect(codeEl.dataset.echartsCode).toBe(latest);
+    });
+    const echartsMod = await import('../runtime');
+    const initMock = vi.mocked(echartsMod.init);
+    expect(initMock).toHaveBeenCalledTimes(1);
+    expect(initMock.mock.results[0]?.value.setOption).toHaveBeenCalledWith(
+      expect.objectContaining({
+        series: [{ type: 'pie', data: [{ value: 9, name: 'latest' }] }],
+      }),
+      true,
+    );
+  });
+
+  it('restores source view when a rendered option becomes invalid', async () => {
+    const codeEl = addEChartsBlock(PIE_OPTION);
+    const codeBlockHost = codeEl.closest<HTMLElement>('code-block')!;
+    processCodeBlocks();
+    await vi.waitFor(() => {
+      expect(document.querySelector('.gv-echarts-wrapper')).not.toBeNull();
+    });
+    const echartsMod = await import('../runtime');
+    const instance = vi.mocked(echartsMod.init).mock.results.at(-1)?.value;
+
+    codeEl.textContent = '{ "ordinary": true }';
+    processCodeBlocks();
+
+    await vi.waitFor(() => {
+      expect(document.querySelector('.gv-echarts-wrapper')).toBeNull();
+    });
+    expect(codeBlockHost.style.display).toBe('');
+    expect(instance.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('restores source view when the block receives a specific non-ECharts label', async () => {
+    const codeEl = addEChartsBlock(PIE_OPTION);
+    const codeBlockHost = codeEl.closest<HTMLElement>('code-block')!;
+    processCodeBlocks();
+    await vi.waitFor(() => {
+      expect(document.querySelector('.gv-echarts-wrapper')).not.toBeNull();
+    });
+
+    codeBlockHost.querySelector('.code-block-decoration span')!.textContent = 'json';
+    processCodeBlocks();
+
+    expect(document.querySelector('.gv-echarts-wrapper')).toBeNull();
+    expect(codeBlockHost.style.display).toBe('');
   });
 });
 
@@ -521,10 +600,14 @@ describe('theme switching', () => {
     await vi.waitFor(() => {
       expect(codeEl.dataset.echartsTheme).toBe('light');
     });
-    const echartsMod = await import('echarts');
+    const echartsMod = await import('../runtime');
     const initMock = vi.mocked(echartsMod.init);
     expect(initMock).toHaveBeenCalledTimes(1);
     const lightInstance = initMock.mock.results[0]?.value;
+    const diagramContainer = document.querySelector('.gv-echarts-diagram') as HTMLElement;
+    diagramContainer.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    const modalCard = document.querySelector('.gv-echarts-modal-card') as HTMLElement;
+    expect(modalCard.style.getPropertyValue('--gv-echarts-panel-bg')).toBe('#f9fafb');
 
     host.className = 'theme-host dark-theme';
     // The MutationObserver debounces; a manual pass stands in for it.
@@ -534,12 +617,11 @@ describe('theme switching', () => {
       expect(codeEl.dataset.echartsTheme).toBe('dark');
     });
     expect(initMock).toHaveBeenCalledTimes(2);
-    expect(initMock).toHaveBeenLastCalledWith(
-      document.querySelector('.gv-echarts-diagram'),
-      'dark',
-      { renderer: 'canvas' },
-    );
+    expect(initMock).toHaveBeenLastCalledWith(diagramContainer, 'dark', { renderer: 'canvas' });
     expect(lightInstance.dispose).toHaveBeenCalled();
+    expect(diagramContainer.style.getPropertyValue('--gv-echarts-panel-bg')).toBe('#1a1a1a');
+    expect(modalCard.style.getPropertyValue('--gv-echarts-panel-bg')).toBe('#1a1a1a');
+    _closeModalForTest();
   });
 
   it('honours an explicit light theme even when the media query is dark', async () => {
@@ -552,7 +634,7 @@ describe('theme switching', () => {
     await vi.waitFor(() => {
       expect(codeEl.dataset.echartsTheme).toBe('light');
     });
-    const echartsMod = await import('echarts');
+    const echartsMod = await import('../runtime');
     expect(vi.mocked(echartsMod.init)).toHaveBeenCalledWith(
       document.querySelector('.gv-echarts-diagram'),
       undefined,
@@ -598,7 +680,7 @@ describe('fullscreen overlay', () => {
 
     // The rAF after open resizes the canvas against the card.
     vi.runAllTimers();
-    const echartsMod = await import('echarts');
+    const echartsMod = await import('../runtime');
     const fakeInstance = vi.mocked(echartsMod.init).mock.results.at(-1)?.value;
     expect(fakeInstance.resize).toHaveBeenCalled();
 
@@ -611,14 +693,45 @@ describe('fullscreen overlay', () => {
     vi.useRealTimers();
   });
 
-  it('opens a modal with the supplied panel background colour', async () => {
-    _openFullscreenForTest(document.createElement('div'), '#1a1a1a');
+  it('opens a modal with the chart panel background colour', async () => {
+    const diagramContainer = document.createElement('div');
+    diagramContainer.style.setProperty('--gv-echarts-panel-bg', '#1a1a1a');
+    _openFullscreenForTest(diagramContainer);
     const card = document.querySelector('.gv-echarts-modal-card') as HTMLElement;
     expect(card).not.toBeNull();
-    // jsdom normalises #1a1a1a → rgb(26,26,26)
-    expect(card.style.background).toBe('rgb(26, 26, 26)');
+    expect(card.style.getPropertyValue('--gv-echarts-panel-bg')).toBe('#1a1a1a');
     expect(document.querySelector('.gv-echarts-modal-hint')).not.toBeNull();
     _closeModalForTest();
+  });
+
+  it('closes the fullscreen chart and disposes it when Gemini removes its host', async () => {
+    const diagramContainer = await addRenderedEChartsBlock();
+    const wrapper = diagramContainer.parentElement as HTMLElement;
+    diagramContainer.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    const echartsMod = await import('../runtime');
+    const instance = vi.mocked(echartsMod.init).mock.results.at(-1)?.value;
+
+    wrapper.remove();
+    processCodeBlocks();
+
+    expect(document.querySelector('.gv-echarts-modal')).toBeNull();
+    expect(instance.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not let an old close timer remove a newer modal', async () => {
+    vi.useFakeTimers();
+    const firstContainer = await addRenderedEChartsBlock();
+    firstContainer.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    _closeModalForTest();
+
+    const secondContainer = document.createElement('div');
+    _openFullscreenForTest(secondContainer);
+    vi.advanceTimersByTime(400);
+
+    expect(document.querySelector('.gv-echarts-modal')).not.toBeNull();
+    _closeModalForTest();
+    vi.useRealTimers();
   });
 });
 
@@ -675,6 +788,27 @@ describe('runtime disable lifecycle', () => {
     );
   };
 
+  it('does not let a late storage snapshot overwrite a newer disable event', async () => {
+    let storageCallback: ((result: Record<string, unknown>) => void) | undefined;
+    const storageGet = chrome.storage.sync.get as unknown as ReturnType<typeof vi.fn>;
+    storageGet.mockImplementation(
+      (_defaults: Record<string, unknown>, callback: (result: Record<string, unknown>) => void) => {
+        storageCallback = callback;
+      },
+    );
+    startEcharts();
+    const addListener = chrome.storage.onChanged.addListener as unknown as ReturnType<typeof vi.fn>;
+    const onStorageChanged = addListener.mock.calls.at(-1)?.[0] as StorageChangeListener;
+    addEChartsBlock();
+
+    disable(onStorageChanged);
+    storageCallback?.({ [StorageKeys.ECHARTS_ENABLED]: true });
+    processCodeBlocks();
+    await Promise.resolve();
+
+    expect(document.querySelector('.gv-echarts-wrapper')).toBeNull();
+  });
+
   it('clears a queued debounced render when disabled', async () => {
     vi.useFakeTimers();
     const onStorageChanged = startEnabled();
@@ -687,7 +821,7 @@ describe('runtime disable lifecycle', () => {
     expect(vi.getTimerCount()).toBe(0);
     await vi.advanceTimersByTimeAsync(1000);
 
-    const echartsMod = await import('echarts');
+    const echartsMod = await import('../runtime');
     expect(echartsMod.init).not.toHaveBeenCalled();
     expect(document.querySelector('.gv-echarts-wrapper')).toBeNull();
   });
@@ -704,6 +838,41 @@ describe('runtime disable lifecycle', () => {
       expect(codeEl.dataset.echartsProcessing).toBe('false');
     });
     expect(document.querySelector('.gv-echarts-wrapper')).toBeNull();
+  });
+
+  it('disposes and unobserves a chart whose Gemini host was removed', async () => {
+    const originalResizeObserver = globalThis.ResizeObserver;
+    const observe = vi.fn();
+    const unobserve = vi.fn();
+    const disconnect = vi.fn();
+    class ResizeObserverMock {
+      constructor(_callback: ResizeObserverCallback) {}
+      observe = observe;
+      unobserve = unobserve;
+      disconnect = disconnect;
+    }
+    globalThis.ResizeObserver = ResizeObserverMock as unknown as typeof ResizeObserver;
+
+    try {
+      startEnabled();
+      addEChartsBlock();
+      processCodeBlocks();
+      await vi.waitFor(() => {
+        expect(document.querySelector('.gv-echarts-wrapper')).not.toBeNull();
+      });
+      const diagramContainer = document.querySelector('.gv-echarts-diagram') as HTMLElement;
+      const echartsMod = await import('../runtime');
+      const instance = vi.mocked(echartsMod.init).mock.results.at(-1)?.value;
+      expect(observe).toHaveBeenCalledWith(diagramContainer);
+
+      document.querySelector('.gv-echarts-wrapper')?.remove();
+      processCodeBlocks();
+
+      expect(unobserve).toHaveBeenCalledWith(diagramContainer);
+      expect(instance.dispose).toHaveBeenCalledTimes(1);
+    } finally {
+      globalThis.ResizeObserver = originalResizeObserver;
+    }
   });
 
   it('restores rendered source and can render again after re-enable', async () => {

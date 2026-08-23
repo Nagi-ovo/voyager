@@ -2194,7 +2194,7 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
         },
       );
     } catch {}
-  }, [hydrateFormulaCopySettings, hydrateWavedromEnabled, setSyncStorage]);
+  }, [hydrateEchartsEnabled, hydrateFormulaCopySettings, hydrateWavedromEnabled, setSyncStorage]);
 
   // Validate and normalize URL
   const normalizeUrl = useCallback((url: string): string | null => {

@@ -10,10 +10,10 @@
  *
  * Theme notes:
  *  - The theme follows Gemini's active theme ('auto' policy): the built-in
- *    'dark' theme is used on dark pages. ECharts' full build registers the
- *    'dark' theme on load (lib/core/echarts.js), so no extra registration is
- *    needed. The diagram panel uses the same deterministic backdrops as the
- *    WaveDrom renderer so chart text stays readable on either Gemini theme.
+ *    'dark' theme is used on dark pages. The modular ECharts core registers
+ *    that theme and the local runtime registers only the chart/component
+ *    primitives this renderer supports. The diagram panel uses the same
+ *    deterministic backdrops as the WaveDrom renderer.
  *  - Parsing is JSON5-lenient (comments, trailing commas, single quotes,
  *    unquoted keys) with a brace-extraction fallback, but deliberately avoids
  *    evaluating code: LLM-generated options are untrusted input and an eval
@@ -31,7 +31,7 @@ import { resolveGeminiTheme } from '../wavedrom/index';
 // Types
 // ---------------------------------------------------------------------------
 
-type EChartsModule = typeof import('echarts');
+type EChartsModule = typeof import('./runtime');
 type EChartsInstance = ReturnType<EChartsModule['init']>;
 
 /** ECharts theme policy (follows the app theme). */
@@ -89,7 +89,6 @@ const CHART_TYPES = new Set([
   'scatter',
   'effectscatter',
   'radar',
-  'map',
   'tree',
   'treemap',
   'sunburst',
@@ -267,16 +266,16 @@ export const _resetEChartsLoader = () => {
 
 /**
  * Dynamically load ECharts. Result is cached after the first successful load;
- * a failed load also short-circuits further attempts. The full ESM build is
- * imported as-is: it registers every chart/component/renderer and the built-in
- * 'dark' theme on load, so no per-chart registration is needed here.
+ * a failed load also short-circuits further attempts. The local modular entry
+ * registers supported chart/component primitives without pulling ECharts'
+ * unused geo parser into the extension bundle.
  */
 const loadECharts = async (): Promise<EChartsModule | null> => {
   if (echartsModule) return echartsModule;
   if (echartsLoadFailed) return null;
 
   try {
-    echartsModule = await import('echarts');
+    echartsModule = await import('./runtime');
     return echartsModule;
   } catch (err) {
     echartsLoadFailed = true;
@@ -324,7 +323,7 @@ const renderChartToContainer = (
   const instance = echartsModule.init(container, theme, { renderer: 'canvas' });
   // `backgroundColor` from the chart option would otherwise paint over the
   // panel; keep the deterministic backdrop so text stays readable.
-  instance.setOption({ backgroundColor: PANEL_BG[renderTheme], ...parsed }, true);
+  instance.setOption({ ...parsed, backgroundColor: PANEL_BG[renderTheme] }, true);
   chartInstances.set(container, instance);
 };
 
@@ -334,7 +333,7 @@ const renderChartToContainer = (
 
 const STYLES_ID = 'gv-echarts-styles';
 
-const createStyles = (panelBg: string) => {
+const createStyles = () => {
   const existing = document.getElementById(STYLES_ID);
   if (existing) return;
 
@@ -384,7 +383,7 @@ const createStyles = (panelBg: string) => {
       height: ${CHART_HEIGHT}px;
       padding: 16px;
       box-sizing: border-box;
-      background-color: ${panelBg};
+      background-color: var(--gv-echarts-panel-bg, ${PANEL_BG.light});
       cursor: zoom-in;
       overflow: hidden;
     }
@@ -480,7 +479,7 @@ const createStyles = (panelBg: string) => {
  * would lose the live instance), resized to the card, and moved back — and
  * resized again — on close.
  */
-const openFullscreen = (chartContainer: HTMLElement, panelBg: string) => {
+const openFullscreen = (chartContainer: HTMLElement) => {
   if (currentModal) return;
 
   const modal = document.createElement('div');
@@ -497,7 +496,11 @@ const openFullscreen = (chartContainer: HTMLElement, panelBg: string) => {
 
   const card = document.createElement('div');
   card.className = 'gv-echarts-modal-card';
-  card.style.background = panelBg;
+  card.style.background = `var(--gv-echarts-panel-bg, ${PANEL_BG.light})`;
+  card.style.setProperty(
+    '--gv-echarts-panel-bg',
+    chartContainer.style.getPropertyValue('--gv-echarts-panel-bg') || PANEL_BG.light,
+  );
 
   const wrapper = chartContainer.parentElement as HTMLElement | null;
   card.appendChild(chartContainer);
@@ -646,6 +649,7 @@ const restoreNativeCopyButton = (nativeCopyElement: HTMLElement): boolean => {
 
 let echartsEnabled = true;
 let renderGeneration = 0;
+let settingChangeRevision = 0;
 
 const renderEcharts = async (codeEl: HTMLElement, code: string) => {
   if (!echartsEnabled) return;
@@ -668,11 +672,16 @@ const renderEcharts = async (codeEl: HTMLElement, code: string) => {
 
     const panelBg = PANEL_BG[renderTheme];
 
-    createStyles(panelBg);
+    createStyles();
 
     const parsed = await parseEChartsOption(code);
     if (!parsed) {
-      codeEl.dataset.echartsProcessing = 'false';
+      const wrapper = codeBlockHost.parentElement;
+      if (wrapper?.classList.contains('gv-echarts-wrapper')) {
+        teardownEchartsWrapper(wrapper);
+      } else {
+        codeEl.dataset.echartsProcessing = 'false';
+      }
       return;
     }
     if (!echartsEnabled || generationAtStart !== renderGeneration) {
@@ -688,11 +697,22 @@ const renderEcharts = async (codeEl: HTMLElement, code: string) => {
 
     const echarts = await loadECharts();
     if (!echarts) {
-      codeEl.dataset.echartsProcessing = 'false';
+      const wrapper = codeBlockHost.parentElement;
+      if (wrapper?.classList.contains('gv-echarts-wrapper')) {
+        teardownEchartsWrapper(wrapper);
+      } else {
+        codeEl.dataset.echartsProcessing = 'false';
+      }
       return;
     }
     if (!echartsEnabled || generationAtStart !== renderGeneration) {
       codeEl.dataset.echartsProcessing = 'false';
+      return;
+    }
+    const latestCodeAfterLoad = codeEl.textContent || '';
+    if (latestCodeAfterLoad !== code) {
+      codeEl.dataset.echartsProcessing = 'false';
+      void renderEcharts(codeEl, latestCodeAfterLoad);
       return;
     }
 
@@ -749,28 +769,40 @@ const renderEcharts = async (codeEl: HTMLElement, code: string) => {
       codeBtn.addEventListener('click', () => updateView('code'));
 
       diagramContainer.addEventListener('click', () => {
-        openFullscreen(diagramContainer, panelBg);
+        openFullscreen(diagramContainer);
       });
 
       chartResizeObserver?.observe(diagramContainer);
     }
 
-    const diagramContainer = wrapper.querySelector('.gv-echarts-diagram') as HTMLElement | null;
+    const diagramContainer =
+      (wrapper.querySelector('.gv-echarts-diagram') as HTMLElement | null) ??
+      (fullscreenWrapper === wrapper
+        ? (currentModal?.querySelector<HTMLElement>('.gv-echarts-diagram') ?? null)
+        : null);
     if (!diagramContainer) {
-      codeEl.dataset.echartsProcessing = 'false';
+      teardownEchartsWrapper(wrapper);
       return;
     }
 
+    diagramContainer.style.setProperty('--gv-echarts-panel-bg', panelBg);
+    if (diagramContainer.parentElement?.classList.contains('gv-echarts-modal-card')) {
+      diagramContainer.parentElement.style.setProperty('--gv-echarts-panel-bg', panelBg);
+    }
     renderChartToContainer(diagramContainer, parsed, renderTheme);
 
     codeEl.dataset.echartsCode = code;
     codeEl.dataset.echartsTheme = renderTheme;
     codeEl.dataset.echartsProcessing = 'false';
-    console.log('[Gemini Voyager] ECharts diagram rendered');
   } catch {
-    codeEl.dataset.echartsProcessing = 'false';
     const codeBlockHost = codeEl.closest('code-block') as HTMLElement;
-    if (codeBlockHost) codeBlockHost.style.display = '';
+    const wrapper = codeBlockHost?.parentElement;
+    if (wrapper?.classList.contains('gv-echarts-wrapper')) {
+      teardownEchartsWrapper(wrapper);
+    } else {
+      codeEl.dataset.echartsProcessing = 'false';
+      if (codeBlockHost) codeBlockHost.style.display = '';
+    }
   }
 };
 
@@ -796,6 +828,7 @@ const getCodeBlockLanguage = (codeEl: Element): string | null => {
  * @internal Exported for testing.
  */
 export const processCodeBlocks = () => {
+  cleanupDetachedChartInstances();
   const codeElements = document.querySelectorAll('code[data-test-id="code-content"]');
   codeElements.forEach((codeEl) => {
     const codeText = codeEl.textContent || '';
@@ -811,6 +844,8 @@ export const processCodeBlocks = () => {
     // ECharts options are a niche format, and ordinary JSON output must not
     // be mistaken for a chart.
     if (language && !isGenericLanguageLabel(language)) {
+      const wrapper = codeEl.closest<HTMLElement>('.gv-echarts-wrapper');
+      if (wrapper) teardownEchartsWrapper(wrapper);
       return;
     }
 
@@ -818,6 +853,9 @@ export const processCodeBlocks = () => {
     // (Code snippet, 代码段, …).
     if (isEChartsOptionCode(codeText)) {
       void renderEcharts(codeEl as HTMLElement, codeText);
+    } else {
+      const wrapper = codeEl.closest<HTMLElement>('.gv-echarts-wrapper');
+      if (wrapper) teardownEchartsWrapper(wrapper);
     }
   });
 };
@@ -826,41 +864,62 @@ let observer: MutationObserver | null = null;
 let pendingProcessTimer: ReturnType<typeof setTimeout> | null = null;
 let chartResizeObserver: ResizeObserver | null = null;
 
+function disposeChartContainer(container: HTMLElement): void {
+  chartResizeObserver?.unobserve(container);
+  chartInstances.get(container)?.dispose();
+  chartInstances.delete(container);
+}
+
+function teardownEchartsWrapper(wrapper: HTMLElement): void {
+  if (fullscreenWrapper === wrapper) closeActiveModal?.();
+
+  const diagramContainer = wrapper.querySelector<HTMLElement>(':scope > .gv-echarts-diagram');
+  if (diagramContainer) disposeChartContainer(diagramContainer);
+
+  const codeBlockHost = wrapper.querySelector<HTMLElement>(':scope > code-block');
+  if (!codeBlockHost) {
+    wrapper.remove();
+    return;
+  }
+
+  const nativeCopyBtn =
+    wrapper.querySelector<HTMLElement>('.gv-echarts-toggle .buttons') ??
+    wrapper.querySelector<HTMLElement>('.gv-echarts-toggle .copy-button');
+  if (nativeCopyBtn && !restoreNativeCopyButton(nativeCopyBtn)) {
+    // A wrapper can survive an extension hot reload while the module-level
+    // WeakMap cannot. Preserve the control in that recovery case even though
+    // its pre-reload sibling position is no longer knowable.
+    (codeBlockHost.querySelector('.code-block-decoration') ?? codeBlockHost).appendChild(
+      nativeCopyBtn,
+    );
+  }
+
+  codeBlockHost.style.display = '';
+  codeBlockHost
+    .querySelectorAll<HTMLElement>('code[data-test-id="code-content"]')
+    .forEach((code) => {
+      delete code.dataset.echartsCode;
+      delete code.dataset.echartsTheme;
+      delete code.dataset.echartsProcessing;
+    });
+  wrapper.parentElement?.insertBefore(codeBlockHost, wrapper);
+  wrapper.remove();
+}
+
+const cleanupDetachedChartInstances = (): void => {
+  if (fullscreenWrapper && !fullscreenWrapper.isConnected) closeActiveModal?.();
+  for (const container of chartInstances.keys()) {
+    if (!container.isConnected) disposeChartContainer(container);
+  }
+};
+
 const teardownRenderedEcharts = () => {
   closeActiveModal?.();
-  for (const [container, instance] of chartInstances) {
-    instance.dispose();
+  for (const container of chartInstances.keys()) {
+    disposeChartContainer(container);
   }
-  chartInstances.clear();
   document.querySelectorAll<HTMLElement>('.gv-echarts-wrapper').forEach((wrapper) => {
-    const codeBlockHost = wrapper.querySelector<HTMLElement>(':scope > code-block');
-    if (!codeBlockHost) {
-      wrapper.remove();
-      return;
-    }
-
-    const nativeCopyBtn =
-      wrapper.querySelector<HTMLElement>('.gv-echarts-toggle .buttons') ??
-      wrapper.querySelector<HTMLElement>('.gv-echarts-toggle .copy-button');
-    if (nativeCopyBtn && !restoreNativeCopyButton(nativeCopyBtn)) {
-      // A wrapper can survive an extension hot reload while the module-level
-      // WeakMap cannot. Preserve the control in that recovery case even though
-      // its pre-reload sibling position is no longer knowable.
-      (codeBlockHost.querySelector('.code-block-decoration') ?? codeBlockHost).appendChild(
-        nativeCopyBtn,
-      );
-    }
-
-    codeBlockHost.style.display = '';
-    codeBlockHost
-      .querySelectorAll<HTMLElement>('code[data-test-id="code-content"]')
-      .forEach((code) => {
-        delete code.dataset.echartsCode;
-        delete code.dataset.echartsTheme;
-        delete code.dataset.echartsProcessing;
-      });
-    wrapper.parentElement?.insertBefore(codeBlockHost, wrapper);
-    wrapper.remove();
+    teardownEchartsWrapper(wrapper);
   });
 };
 
@@ -881,6 +940,7 @@ const disableEcharts = () => {
 
 /** @internal Reset the renderer lifecycle between tests. */
 export const _resetEchartsLifecycleForTest = () => {
+  settingChangeRevision += 1;
   disableEcharts();
   echartsEnabled = true;
 };
@@ -891,14 +951,15 @@ export const _resetEchartsLifecycleForTest = () => {
  * invalidated, and an unguarded call would throw on the page.
  */
 export const startEcharts = () => {
+  const readRevision = settingChangeRevision;
   try {
     chrome.storage?.sync?.get({ [StorageKeys.ECHARTS_ENABLED]: true }, (result) => {
+      if (readRevision !== settingChangeRevision) return;
       echartsEnabled = result?.[StorageKeys.ECHARTS_ENABLED] !== false;
       if (echartsEnabled) {
         initializeEcharts();
       } else {
         disableEcharts();
-        console.log('[Gemini Voyager] ECharts rendering is disabled');
       }
     });
   } catch (err) {
@@ -910,13 +971,12 @@ export const startEcharts = () => {
   try {
     chrome.storage?.onChanged?.addListener((changes, areaName) => {
       if (areaName === 'sync' && changes[StorageKeys.ECHARTS_ENABLED]) {
+        settingChangeRevision += 1;
         echartsEnabled = changes[StorageKeys.ECHARTS_ENABLED].newValue !== false;
         if (echartsEnabled) {
           initializeEcharts();
-          console.log('[Gemini Voyager] ECharts rendering enabled');
         } else {
           disableEcharts();
-          console.log('[Gemini Voyager] ECharts rendering disabled');
         }
       }
     });
@@ -959,6 +1019,4 @@ const initializeEcharts = () => {
       }
     });
   }
-
-  console.log('[Gemini Voyager] ECharts integration started');
 };
