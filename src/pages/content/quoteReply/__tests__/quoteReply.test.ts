@@ -95,7 +95,9 @@ describe('quote reply', () => {
 
     document.body.innerHTML = `
       <main>
-        <p id="source">Hello world</p>
+        <div class="conversation-container">
+          <model-response><message-content><p id="source">Hello world</p></message-content></model-response>
+        </div>
       </main>
       <div id="input-container">
         <rich-textarea>
@@ -166,6 +168,28 @@ describe('quote reply', () => {
     triggerQuoteReply();
 
     expect(expandInputCollapseIfNeeded).toHaveBeenCalledTimes(1);
+
+    cleanup();
+  });
+
+  it('does not show Quote Reply for Gemini new-chat greeting text', () => {
+    document.querySelector('main')!.innerHTML = '<h1>Your move, Ivaris!</h1>';
+    const greeting = document.querySelector('h1');
+    if (!(greeting?.firstChild instanceof Text)) {
+      throw new Error('Expected greeting text node.');
+    }
+
+    const selection = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(greeting);
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+
+    const cleanup = startQuoteReply({ highlightEnabled: false });
+    document.dispatchEvent(new MouseEvent('mouseup'));
+    vi.runAllTimers();
+
+    expect(document.querySelector('.gv-quote-btn')).toBeNull();
 
     cleanup();
   });

@@ -10,6 +10,7 @@ import {
   normalizeHighlightColorPalette,
 } from '@/core/types/highlight';
 import { getBrowserName } from '@/core/utils/browser';
+import { getAssistantTurnSelectors, getUserTurnSelectors } from '@/core/utils/selectors';
 
 import { getTranslationSync } from '../../../utils/i18n';
 import { findChatInput } from '../chatInput/index';
@@ -54,6 +55,11 @@ const EDIT_COLOR_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="14" heig
 const STYLE_ID = 'gemini-voyager-quote-reply-style';
 const HIGHLIGHT_PREVIEW_CLASS = 'gv-highlight-selection-preview-active';
 const HIGHLIGHT_PREVIEW_COLOR_PROPERTY = '--gv-highlight-selection-preview-color';
+const QUOTEABLE_MESSAGE_SELECTOR = [
+  '.conversation-container',
+  ...getUserTurnSelectors(),
+  ...getAssistantTurnSelectors(),
+].join(', ');
 
 function getHighlightPreviewBackground(color: HighlightColor): string {
   const hex = getHighlightColorHex(color);
@@ -1007,7 +1013,14 @@ export function startQuoteReply(options: QuoteReplyOptions = {}) {
         return;
       }
 
-      // Also check if we are selecting code block content? Might be fine.
+      // Only conversation turns are quoteable. Gemini also renders a greeting and
+      // prompt suggestions inside <main> on the new-chat screen, but those are not
+      // messages and must not expose Quote Reply.
+      if (!element?.closest(QUOTEABLE_MESSAGE_SELECTOR)) {
+        hideButton();
+        currentSelectionRange = null;
+        return;
+      }
 
       const range = selection.getRangeAt(0);
       currentSelectionRange = range.cloneRange();
