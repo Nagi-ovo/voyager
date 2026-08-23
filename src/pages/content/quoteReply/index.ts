@@ -1016,13 +1016,20 @@ export function startQuoteReply(options: QuoteReplyOptions = {}) {
       // Only conversation turns are quoteable. Gemini also renders a greeting and
       // prompt suggestions inside <main> on the new-chat screen, but those are not
       // messages and must not expose Quote Reply.
-      if (!element?.closest(QUOTEABLE_MESSAGE_SELECTOR)) {
+      const range = selection.getRangeAt(0);
+      const commonAncestor =
+        range.commonAncestorContainer instanceof Element
+          ? range.commonAncestorContainer
+          : range.commonAncestorContainer.parentElement;
+      if (
+        !element?.closest(QUOTEABLE_MESSAGE_SELECTOR) ||
+        !commonAncestor?.closest(QUOTEABLE_MESSAGE_SELECTOR)
+      ) {
         hideButton();
         currentSelectionRange = null;
         return;
       }
 
-      const range = selection.getRangeAt(0);
       currentSelectionRange = range.cloneRange();
       const canHighlight =
         highlightEnabled && (highlightManager?.canCreateFromRange(range) ?? false);

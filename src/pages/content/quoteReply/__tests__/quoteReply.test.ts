@@ -194,6 +194,45 @@ describe('quote reply', () => {
     cleanup();
   });
 
+  it.each([
+    ['message to greeting', 'source', 'greeting'],
+    ['greeting to message', 'greeting', 'source'],
+  ])('does not show Quote Reply for a selection spanning %s', (_direction, anchorId, focusId) => {
+    document
+      .querySelector('main')!
+      .insertAdjacentHTML('afterbegin', '<h1 id="greeting">Your move, Ivaris!</h1>');
+    const anchorNode = document.getElementById(anchorId)?.firstChild;
+    const focusNode = document.getElementById(focusId)?.firstChild;
+    const greetingNode = document.getElementById('greeting')?.firstChild;
+    const sourceNode = document.getElementById('source')?.firstChild;
+    if (!(anchorNode instanceof Text) || !(focusNode instanceof Text)) {
+      throw new Error('Expected selection boundary text nodes.');
+    }
+    if (!(greetingNode instanceof Text) || !(sourceNode instanceof Text)) {
+      throw new Error('Expected ordered range boundary text nodes.');
+    }
+
+    const range = document.createRange();
+    range.setStart(greetingNode, 0);
+    range.setEnd(sourceNode, sourceNode.length);
+    vi.spyOn(window, 'getSelection').mockReturnValue({
+      anchorNode,
+      focusNode,
+      rangeCount: 1,
+      isCollapsed: false,
+      toString: () => range.toString(),
+      getRangeAt: () => range,
+    } as unknown as Selection);
+
+    const cleanup = startQuoteReply({ highlightEnabled: false });
+    document.dispatchEvent(new MouseEvent('mouseup'));
+    vi.runAllTimers();
+
+    expect(document.querySelector('.gv-quote-btn')).toBeNull();
+
+    cleanup();
+  });
+
   it('does not blur or refocus the contenteditable input after quote insertion', () => {
     const cleanup = startQuoteReply();
     const input = document.getElementById('input');
