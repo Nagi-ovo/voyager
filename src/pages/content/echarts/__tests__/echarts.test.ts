@@ -137,6 +137,20 @@ describe('isEChartsOptionObject', () => {
     expect(isEChartsOptionObject({ series: { type: 'pie', data: [{ value: 1 }] } })).toBe(true);
   });
 
+  it('accepts a standard timeline option through baseOption', () => {
+    expect(
+      isEChartsOptionObject({
+        baseOption: {
+          timeline: { axisType: 'category', data: ['2025', '2026'] },
+          xAxis: { type: 'category' },
+          yAxis: { type: 'value' },
+          series: [{ type: 'bar', data: [1] }],
+        },
+        options: [{ series: [{ data: [2] }] }],
+      }),
+    ).toBe(true);
+  });
+
   it.each([
     ['calendar', { calendar: {}, series: [{ type: 'heatmap', data: [] }] }],
     ['parallel', { parallel: {}, series: [{ type: 'parallel', data: [] }] }],
@@ -149,6 +163,35 @@ describe('isEChartsOptionObject', () => {
 
   it('rejects geo coordinates because the safe modular runtime does not register them', () => {
     expect(isEChartsOptionObject({ geo: {}, series: [{ type: 'scatter', data: [] }] })).toBe(false);
+    expect(
+      isEChartsOptionObject({
+        geo: {},
+        series: { type: 'graph', coordinateSystem: 'geo', data: [] },
+      }),
+    ).toBe(false);
+  });
+
+  it('rejects an unsupported explicit coordinate system before axis-free detection', () => {
+    expect(
+      isEChartsOptionObject({
+        series: { type: 'graph', coordinateSystem: 'geo', data: [] },
+      }),
+    ).toBe(false);
+  });
+
+  it('rejects unsupported coordinates in timeline and responsive overrides', () => {
+    expect(
+      isEChartsOptionObject({
+        baseOption: { timeline: {}, series: [{ type: 'graph', data: [] }] },
+        options: [{ series: [{ coordinateSystem: 'geo' }] }],
+      }),
+    ).toBe(false);
+    expect(
+      isEChartsOptionObject({
+        series: [{ type: 'graph', data: [] }],
+        media: [{ query: { maxWidth: 500 }, option: { geo: {} } }],
+      }),
+    ).toBe(false);
   });
 
   it('rejects a series entry without a chart type', () => {
@@ -182,6 +225,21 @@ describe('isEChartsOptionCode', () => {
     expect(isEChartsOptionCode(PIE_OPTION)).toBe(true);
   });
 
+  it('detects a standard timeline option through baseOption', () => {
+    expect(
+      isEChartsOptionCode(
+        JSON.stringify({
+          baseOption: {
+            timeline: { data: ['2025', '2026'] },
+            xAxis: {},
+            series: [{ type: 'bar', data: [1] }],
+          },
+          options: [{ series: [{ data: [2] }] }],
+        }),
+      ),
+    ).toBe(true);
+  });
+
   it.each([
     ['calendar', { calendar: {}, series: [{ type: 'heatmap', data: [] }] }],
     ['parallel', { parallel: {}, series: [{ type: 'parallel', data: [] }] }],
@@ -194,6 +252,15 @@ describe('isEChartsOptionCode', () => {
 
   it('rejects geo coordinates because the safe modular runtime does not register them', () => {
     expect(isEChartsOptionCode('{"geo": {}, "series": [{"type": "scatter", "data": []}]}')).toBe(
+      false,
+    );
+    expect(
+      isEChartsOptionCode('{"geo": {}, "series": {"type": "graph", "coordinateSystem": "geo"}}'),
+    ).toBe(false);
+  });
+
+  it('rejects an unsupported explicit coordinate system before axis-free detection', () => {
+    expect(isEChartsOptionCode('{"series": {"type": "graph", "coordinateSystem": "geo"}}')).toBe(
       false,
     );
   });
@@ -225,6 +292,19 @@ describe('parseEChartsOption', () => {
   it('parses a plain JSON option', async () => {
     const parsed = await parseEChartsOption(BAR_OPTION);
     expect(parsed).toEqual(JSON.parse(BAR_OPTION));
+  });
+
+  it('keeps the full timeline option after validating baseOption', async () => {
+    const option = {
+      baseOption: {
+        timeline: { data: ['2025', '2026'] },
+        xAxis: {},
+        series: [{ type: 'bar', data: [1] }],
+      },
+      options: [{ series: [{ data: [2] }] }],
+    };
+
+    expect(await parseEChartsOption(JSON.stringify(option))).toEqual(option);
   });
 
   it('parses JSON5 comments and trailing commas', async () => {
@@ -525,6 +605,46 @@ describe('render flow', () => {
     );
   });
 
+  it('forces tooltip rendering in timeline and responsive option layers', async () => {
+    addEChartsBlock(`{
+      "baseOption": {
+        "timeline": { "data": ["2026"] },
+        "xAxis": {},
+        "tooltip": { "renderMode": "html", "formatter": "<b>base</b>" },
+        "series": [{ "type": "bar", "data": [1] }]
+      },
+      "options": [{ "tooltip": { "formatter": "<b>state</b>" } }],
+      "media": [{ "option": { "tooltip": { "formatter": "<b>media</b>" } } }]
+    }`);
+    processCodeBlocks();
+
+    await vi.waitFor(() => {
+      expect(document.querySelector('.gv-echarts-diagram')).not.toBeNull();
+    });
+    const echartsMod = await import('../runtime');
+    const fakeInstance = vi.mocked(echartsMod.init).mock.results.at(-1)?.value;
+    expect(fakeInstance.setOption).toHaveBeenCalledWith(
+      expect.objectContaining({
+        baseOption: expect.objectContaining({
+          tooltip: expect.objectContaining({ renderMode: 'richText' }),
+        }),
+        options: [
+          expect.objectContaining({
+            tooltip: expect.objectContaining({ renderMode: 'richText' }),
+          }),
+        ],
+        media: [
+          expect.objectContaining({
+            option: expect.objectContaining({
+              tooltip: expect.objectContaining({ renderMode: 'richText' }),
+            }),
+          }),
+        ],
+      }),
+      true,
+    );
+  });
+
   it('disposes a new instance when applying the option throws', async () => {
     const echartsMod = await import('../runtime');
     const failedInstance = makeFakeInstance();
@@ -561,6 +681,9 @@ describe('render flow', () => {
     expect(toggle).not.toBeNull();
     expect(toggle.querySelector('[data-view="diagram"]')?.textContent).toContain('Diagram');
     expect(toggle.querySelector('[data-view="code"]')?.textContent).toContain('Code');
+    expect(toggle.querySelector('[data-action="fullscreen"]')?.getAttribute('aria-label')).toBe(
+      'echartsFullscreenButton',
+    );
     expect(wrapper.querySelector('.gv-echarts-diagram')).not.toBeNull();
     expect(codeEl.dataset.echartsCode).toBe(PIE_OPTION);
     expect(codeEl.dataset.echartsTheme).toBe('light');
@@ -707,7 +830,7 @@ describe('theme switching', () => {
     expect(initMock).toHaveBeenCalledTimes(1);
     const lightInstance = initMock.mock.results[0]?.value;
     const diagramContainer = document.querySelector('.gv-echarts-diagram') as HTMLElement;
-    diagramContainer.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    document.querySelector<HTMLButtonElement>('[data-action="fullscreen"]')!.click();
     const modalCard = document.querySelector('.gv-echarts-modal-card') as HTMLElement;
     expect(modalCard.style.getPropertyValue('--gv-echarts-panel-bg')).toBe('#f9fafb');
 
@@ -743,6 +866,26 @@ describe('theme switching', () => {
       { renderer: 'canvas' },
     );
   });
+
+  it('uses the latest theme when it changes during asynchronous loading', async () => {
+    const host = document.createElement('div');
+    host.className = 'theme-host light-theme';
+    document.body.appendChild(host);
+    const codeEl = addEChartsBlock(PIE_OPTION);
+
+    processCodeBlocks();
+    host.className = 'theme-host dark-theme';
+
+    await vi.waitFor(() => {
+      expect(codeEl.dataset.echartsTheme).toBe('dark');
+    });
+    const echartsMod = await import('../runtime');
+    expect(vi.mocked(echartsMod.init)).toHaveBeenCalledWith(
+      document.querySelector('.gv-echarts-diagram'),
+      'dark',
+      { renderer: 'canvas' },
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -775,7 +918,7 @@ describe('fullscreen overlay', () => {
     const diagramContainer = await addRenderedEChartsBlock();
     const wrapper = diagramContainer.parentElement as HTMLElement;
 
-    diagramContainer.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    document.querySelector<HTMLButtonElement>('[data-action="fullscreen"]')!.click();
     const modal = document.querySelector('.gv-echarts-modal') as HTMLElement;
     expect(modal).not.toBeNull();
     expect(diagramContainer.parentElement?.classList.contains('gv-echarts-modal-card')).toBe(true);
@@ -806,10 +949,30 @@ describe('fullscreen overlay', () => {
     _closeModalForTest();
   });
 
+  it('keeps canvas clicks available for inline ECharts interactions', async () => {
+    const diagramContainer = await addRenderedEChartsBlock();
+
+    diagramContainer.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    expect(document.querySelector('.gv-echarts-modal')).toBeNull();
+  });
+
+  it('disables fullscreen while the source view is visible', async () => {
+    await addRenderedEChartsBlock();
+    const codeBtn = document.querySelector<HTMLButtonElement>('[data-view="code"]')!;
+    const fullscreenBtn = document.querySelector<HTMLButtonElement>('[data-action="fullscreen"]')!;
+
+    codeBtn.click();
+    expect(fullscreenBtn.disabled).toBe(true);
+    fullscreenBtn.click();
+
+    expect(document.querySelector('.gv-echarts-modal')).toBeNull();
+  });
+
   it('closes the fullscreen chart and disposes it when Gemini removes its host', async () => {
     const diagramContainer = await addRenderedEChartsBlock();
     const wrapper = diagramContainer.parentElement as HTMLElement;
-    diagramContainer.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    document.querySelector<HTMLButtonElement>('[data-action="fullscreen"]')!.click();
     const echartsMod = await import('../runtime');
     const instance = vi.mocked(echartsMod.init).mock.results.at(-1)?.value;
 
@@ -822,8 +985,8 @@ describe('fullscreen overlay', () => {
 
   it('does not let an old close timer remove a newer modal', async () => {
     vi.useFakeTimers();
-    const firstContainer = await addRenderedEChartsBlock();
-    firstContainer.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await addRenderedEChartsBlock();
+    document.querySelector<HTMLButtonElement>('[data-action="fullscreen"]')!.click();
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     _closeModalForTest();
 

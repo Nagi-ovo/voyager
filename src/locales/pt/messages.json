@@ -1646,6 +1646,10 @@
     "message": "</> Código",
     "description": "Toggle button label to show the ECharts option source"
   },
+  "echartsFullscreenButton": {
+    "message": "Tela cheia",
+    "description": "Button title to open an ECharts diagram in fullscreen"
+  },
   "echartsCloseFullscreen": {
     "message": "Fechar (ESC)",
     "description": "Fullscreen toolbar: close button title"

@@ -1646,6 +1646,10 @@
     "message": "</> Код",
     "description": "Toggle button label to show the ECharts option source"
   },
+  "echartsFullscreenButton": {
+    "message": "На весь экран",
+    "description": "Button title to open an ECharts diagram in fullscreen"
+  },
   "echartsCloseFullscreen": {
     "message": "Закрыть (ESC)",
     "description": "Fullscreen toolbar: close button title"

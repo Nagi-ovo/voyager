@@ -121,6 +121,19 @@ const AXIS_FREE_TYPES = new Set([
   'sankey',
 ]);
 
+/** Coordinate systems available in the intentionally narrow modular runtime. */
+const SUPPORTED_COORDINATE_SYSTEMS = new Set([
+  'cartesian2d',
+  'polar',
+  'radar',
+  'calendar',
+  'parallel',
+  'singleaxis',
+  'matrix',
+  'none',
+  'view',
+]);
+
 /** Coordinate-system / structure keys that anchor axis-based charts. */
 const STRUCTURE_KEYS = [
   'xAxis',
@@ -167,31 +180,80 @@ export const stripEChartsAssignment = (raw: string): string => {
 };
 
 /**
- * Strong-shape check: an ECharts option must carry a `series` array whose
- * first entry has a known chart `type`, plus (for axis-based charts) at least
- * one coordinate-system key. A bare object with a `series` key but no chart
- * type — or a chart type without axes — is rejected, so ordinary JSON output
- * is not misdetected.
+ * Strong-shape check: an ECharts option (or timeline `baseOption`) must carry
+ * one or more known series types, plus a registered structure key for
+ * axis-based charts. Unsupported coordinates are rejected across timeline and
+ * responsive overrides before ECharts sees them.
  *
  * @internal Exported for testing.
  */
 export const isEChartsOptionObject = (obj: unknown): obj is Record<string, unknown> => {
   if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return false;
   const o = obj as Record<string, unknown>;
+  const baseOption = o['baseOption'];
+  const validationRoot =
+    baseOption !== null && typeof baseOption === 'object' && !Array.isArray(baseOption)
+      ? (baseOption as Record<string, unknown>)
+      : o;
 
-  const series = o['series'];
-  const first = Array.isArray(series) ? series[0] : series;
-  if (!first || typeof first !== 'object' || Array.isArray(first)) return false;
-  const type = (first as Record<string, unknown>)['type'];
-  if (typeof type !== 'string') return false;
-  const normalizedType = type.toLowerCase();
-  if (!CHART_TYPES.has(normalizedType)) return false;
+  const timelineOptions = Array.isArray(o['options']) ? o['options'] : [];
+  const mediaOptions = Array.isArray(o['media'])
+    ? o['media'].map((entry) =>
+        entry !== null && typeof entry === 'object' && !Array.isArray(entry)
+          ? (entry as Record<string, unknown>)['option']
+          : undefined,
+      )
+    : [];
+  const optionLayers = [o, validationRoot, ...timelineOptions, ...mediaOptions].filter(
+    (entry): entry is Record<string, unknown> =>
+      entry !== null && typeof entry === 'object' && !Array.isArray(entry),
+  );
+  const hasUnsupportedRuntimeSeries = optionLayers.some((layer) => {
+    // GeoComponent is deliberately absent from the extension-safe runtime.
+    if ('geo' in layer) return true;
 
-  if (AXIS_FREE_TYPES.has(normalizedType)) return true;
-  return STRUCTURE_KEYS.some((key) => key in o);
+    const layerSeries = layer['series'];
+    const entries = Array.isArray(layerSeries) ? layerSeries : [layerSeries];
+    return entries.some((entry) => {
+      if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) return false;
+      const seriesOption = entry as Record<string, unknown>;
+      const type = seriesOption['type'];
+      if (
+        type !== undefined &&
+        (typeof type !== 'string' || !CHART_TYPES.has(type.toLowerCase()))
+      ) {
+        return true;
+      }
+      const coordinateSystem = seriesOption['coordinateSystem'];
+      return (
+        coordinateSystem !== undefined &&
+        (typeof coordinateSystem !== 'string' ||
+          !SUPPORTED_COORDINATE_SYSTEMS.has(coordinateSystem.toLowerCase()))
+      );
+    });
+  });
+  if (hasUnsupportedRuntimeSeries) return false;
+
+  const series = validationRoot['series'];
+  const seriesEntries = Array.isArray(series) ? series : [series];
+  if (seriesEntries.length === 0) return false;
+
+  const chartTypes: string[] = [];
+  for (const entry of seriesEntries) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return false;
+    const seriesOption = entry as Record<string, unknown>;
+    const type = seriesOption['type'];
+    if (typeof type !== 'string') return false;
+    const normalizedType = type.toLowerCase();
+    if (!CHART_TYPES.has(normalizedType)) return false;
+    chartTypes.push(normalizedType);
+  }
+
+  if (chartTypes.some((type) => AXIS_FREE_TYPES.has(type))) return true;
+  return STRUCTURE_KEYS.some((key) => key in validationRoot);
 };
 
-const forceRichTextTooltips = (option: Record<string, unknown>): Record<string, unknown> => {
+const forceRichTextTooltipsInLayer = (option: Record<string, unknown>): Record<string, unknown> => {
   const tooltip = option['tooltip'];
   const series = option['series'];
   const seriesEntries = Array.isArray(series) ? series : [series];
@@ -218,6 +280,50 @@ const forceRichTextTooltips = (option: Record<string, unknown>): Record<string, 
   return hasSeriesTooltip ? { ...option, tooltip: { renderMode: 'richText' } } : option;
 };
 
+const forceRichTextTooltips = (option: Record<string, unknown>): Record<string, unknown> => {
+  let safeOption = forceRichTextTooltipsInLayer(option);
+  const baseOption = option['baseOption'];
+  if (baseOption !== null && typeof baseOption === 'object' && !Array.isArray(baseOption)) {
+    safeOption = {
+      ...safeOption,
+      baseOption: forceRichTextTooltipsInLayer(baseOption as Record<string, unknown>),
+    };
+  }
+
+  const timelineOptions = option['options'];
+  if (Array.isArray(timelineOptions)) {
+    safeOption = {
+      ...safeOption,
+      options: timelineOptions.map((entry) =>
+        entry !== null && typeof entry === 'object' && !Array.isArray(entry)
+          ? forceRichTextTooltipsInLayer(entry as Record<string, unknown>)
+          : entry,
+      ),
+    };
+  }
+
+  const media = option['media'];
+  if (Array.isArray(media)) {
+    safeOption = {
+      ...safeOption,
+      media: media.map((entry) => {
+        if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) return entry;
+        const mediaEntry = entry as Record<string, unknown>;
+        const mediaOption = mediaEntry['option'];
+        return mediaOption !== null &&
+          typeof mediaOption === 'object' &&
+          !Array.isArray(mediaOption)
+          ? {
+              ...mediaEntry,
+              option: forceRichTextTooltipsInLayer(mediaOption as Record<string, unknown>),
+            }
+          : entry;
+      }),
+    };
+  }
+  return safeOption;
+};
+
 /**
  * Fast, synchronous content check for unlabelled / generically-labelled code
  * blocks. Uses regex only (no JSON5 parse) so the MutationObserver pass stays
@@ -228,6 +334,13 @@ const forceRichTextTooltips = (option: Record<string, unknown>): Record<string, 
 export const isEChartsOptionCode = (code: string): boolean => {
   const trimmed = code.trim();
   if (trimmed.length < 20) return false;
+  if (/["']?geo["']?\s*:/.test(trimmed)) return false;
+
+  const coordinateSystems = [
+    ...trimmed.matchAll(/["']?coordinateSystem["']?\s*:\s*["']([a-zA-Z0-9]+)["']/g),
+  ].map((match) => match[1].toLowerCase());
+  if (coordinateSystems.some((value) => !SUPPORTED_COORDINATE_SYSTEMS.has(value))) return false;
+
   // Fast path: top-level series key.
   if (!/["']?series["']?\s*:/.test(trimmed)) return false;
 
@@ -424,8 +537,12 @@ const createStyles = () => {
       padding: 16px;
       box-sizing: border-box;
       background-color: var(--gv-echarts-panel-bg, ${PANEL_BG.light});
-      cursor: zoom-in;
       overflow: hidden;
+    }
+
+    .gv-echarts-toggle button:disabled {
+      cursor: not-allowed;
+      opacity: 0.45;
     }
 
     /* Fullscreen modal */
@@ -693,11 +810,11 @@ let settingChangeRevision = 0;
 
 const renderEcharts = async (codeEl: HTMLElement, code: string) => {
   if (!echartsEnabled) return;
-  const appTheme = getAppTheme();
-  const renderTheme = resolveEChartsRenderTheme(THEME_MODE, appTheme);
+  const requestedRenderTheme = resolveEChartsRenderTheme(THEME_MODE, getAppTheme());
   // Skip when nothing changed — the theme is part of the key so an explicit
   // Gemini theme switch re-renders existing charts in the new theme.
-  if (codeEl.dataset.echartsCode === code && codeEl.dataset.echartsTheme === renderTheme) return;
+  if (codeEl.dataset.echartsCode === code && codeEl.dataset.echartsTheme === requestedRenderTheme)
+    return;
   if (codeEl.dataset.echartsProcessing === 'true') return;
 
   codeEl.dataset.echartsProcessing = 'true';
@@ -709,8 +826,6 @@ const renderEcharts = async (codeEl: HTMLElement, code: string) => {
       codeEl.dataset.echartsProcessing = 'false';
       return;
     }
-
-    const panelBg = PANEL_BG[renderTheme];
 
     createStyles();
 
@@ -756,6 +871,11 @@ const renderEcharts = async (codeEl: HTMLElement, code: string) => {
       return;
     }
 
+    // Parsing and the modular runtime load are asynchronous. Re-read Gemini's
+    // theme now so a switch during either await is not lost.
+    const renderTheme = resolveEChartsRenderTheme(THEME_MODE, getAppTheme());
+    const panelBg = PANEL_BG[renderTheme];
+
     // Build or reuse the wrapper.
     let wrapper = codeBlockHost.parentElement;
     if (!wrapper?.classList.contains('gv-echarts-wrapper')) {
@@ -780,7 +900,14 @@ const renderEcharts = async (codeEl: HTMLElement, code: string) => {
       codeBtn.textContent = t('echartsCodeButton', '</> Code');
       codeBtn.dataset.view = 'code';
 
-      toggleContainer.append(diagramBtn, codeBtn);
+      const fullscreenBtn = document.createElement('button');
+      fullscreenBtn.textContent = '⛶';
+      fullscreenBtn.dataset.action = 'fullscreen';
+      const fullscreenLabel = t('echartsFullscreenButton', 'Fullscreen');
+      fullscreenBtn.title = fullscreenLabel;
+      fullscreenBtn.setAttribute('aria-label', fullscreenLabel);
+
+      toggleContainer.append(diagramBtn, codeBtn, fullscreenBtn);
       wrapper.appendChild(toggleContainer);
 
       const diagramContainer = document.createElement('div');
@@ -795,6 +922,7 @@ const renderEcharts = async (codeEl: HTMLElement, code: string) => {
           diagramContainer.style.display = 'block';
           diagramBtn.classList.add('active');
           codeBtn.classList.remove('active');
+          fullscreenBtn.disabled = false;
           // The canvas is sized 0 while hidden; resize after reveal.
           chartInstances.get(diagramContainer)?.resize();
         } else {
@@ -802,13 +930,14 @@ const renderEcharts = async (codeEl: HTMLElement, code: string) => {
           diagramContainer.style.display = 'none';
           diagramBtn.classList.remove('active');
           codeBtn.classList.add('active');
+          fullscreenBtn.disabled = true;
         }
       };
 
       diagramBtn.addEventListener('click', () => updateView('diagram'));
       codeBtn.addEventListener('click', () => updateView('code'));
 
-      diagramContainer.addEventListener('click', () => {
+      fullscreenBtn.addEventListener('click', () => {
         openFullscreen(diagramContainer);
       });
 

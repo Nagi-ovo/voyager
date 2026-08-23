@@ -1635,6 +1635,10 @@
     "message": "</> 代码",
     "description": "Toggle button label to show the ECharts option source"
   },
+  "echartsFullscreenButton": {
+    "message": "全屏",
+    "description": "Button title to open an ECharts diagram in fullscreen"
+  },
   "echartsCloseFullscreen": {
     "message": "关闭（ESC）",
     "description": "Fullscreen toolbar: close button title"
