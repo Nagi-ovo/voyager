@@ -2,7 +2,10 @@
  * DOM Content Extractor
  * Extracts rich content from Gemini's DOM structure preserving formatting
  */
-import { requestEChartsDataUrl } from '../../../pages/content/echarts/exportBridge';
+import {
+  requestEChartsDataUrl,
+  resolveEChartsExportContainer,
+} from '../../../pages/content/echarts/exportBridge';
 import type { ExportPlatformAdapter } from '../../../pages/content/export/adapter/platformAdapters';
 import type { ExportAttachment } from '../types/export';
 
@@ -1030,15 +1033,15 @@ export class DOMContentExtractor {
     wrapper: HTMLElement,
     renderedWrapper: HTMLElement = wrapper,
   ): { html: string; text: string } | null {
-    const canvas = renderedWrapper.querySelector<HTMLCanvasElement>(
-      ECHARTS_RENDERED_CANVAS_SELECTOR,
-    );
+    const diagram =
+      resolveEChartsExportContainer(renderedWrapper) ??
+      renderedWrapper.querySelector<HTMLElement>(ECHARTS_RENDERED_DIAGRAM_SELECTOR);
+    const canvas = diagram?.querySelector<HTMLCanvasElement>(ECHARTS_RENDERED_CANVAS_SELECTOR);
     const codeBlock = wrapper.querySelector<HTMLElement>('code-block, .code-block');
     const codeContent = codeBlock
       ? this.extractCodeBlock(codeBlock, 'echarts')
       : { html: '', text: '' };
 
-    const diagram = renderedWrapper.querySelector<HTMLElement>(ECHARTS_RENDERED_DIAGRAM_SELECTOR);
     if (canvas && canvas.width > 0 && canvas.height > 0) {
       try {
         const liveExport = diagram
@@ -1050,7 +1053,11 @@ export class DOMContentExtractor {
         exportContainer.className = ECHARTS_EXPORT_CLASS;
         const img = document.createElement('img');
         img.src = dataUrl;
-        img.alt = 'Chart';
+        const chartDescription =
+          diagram?.getAttribute('aria-label')?.trim() ||
+          canvas.getAttribute('aria-label')?.trim() ||
+          diagram?.querySelector<HTMLElement>('[aria-label]')?.getAttribute('aria-label')?.trim();
+        img.alt = chartDescription || 'Chart';
         const inlineWidth = canvas.style.width.endsWith('px')
           ? Number.parseFloat(canvas.style.width)
           : 0;

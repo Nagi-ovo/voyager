@@ -153,6 +153,39 @@ describe('isEChartsOptionObject', () => {
     ).toBe(true);
   });
 
+  it('accepts a complete chart series supplied by a responsive media option', () => {
+    expect(
+      isEChartsOptionObject({
+        baseOption: { title: { text: 'Responsive chart' } },
+        media: [
+          {
+            query: { maxWidth: 600 },
+            option: { series: [{ type: 'pie', data: [{ value: 1 }] }] },
+          },
+        ],
+      }),
+    ).toBe(true);
+  });
+
+  it('accepts an axis structure supplied by a responsive override layer', () => {
+    expect(
+      isEChartsOptionObject({
+        series: [{ type: 'bar', data: [1] }],
+        media: [{ query: { maxWidth: 600 }, option: { xAxis: {}, yAxis: {} } }],
+      }),
+    ).toBe(true);
+  });
+
+  it('ignores malformed override entries while finding a responsive axis structure', () => {
+    expect(
+      isEChartsOptionObject({
+        series: [{ type: 'bar', data: [1] }],
+        options: [null],
+        media: [null, { option: { xAxis: {}, yAxis: {} } }],
+      }),
+    ).toBe(true);
+  });
+
   it.each([
     ['calendar', { calendar: {}, series: [{ type: 'heatmap', data: [] }] }],
     ['parallel', { parallel: {}, series: [{ type: 'parallel', data: [] }] }],
@@ -575,6 +608,42 @@ describe('render flow', () => {
     );
   });
 
+  it('keeps the renderer backdrop in every timeline and responsive option layer', async () => {
+    const darkHost = document.createElement('div');
+    darkHost.className = 'theme-host dark-theme';
+    document.body.appendChild(darkHost);
+    addEChartsBlock(`{
+      "backgroundColor": "top",
+      "baseOption": {
+        "backgroundColor": "base",
+        "timeline": { "data": ["2026"] },
+        "xAxis": {},
+        "series": [{ "type": "bar", "data": [1] }]
+      },
+      "options": [{ "backgroundColor": "state", "series": [{ "data": [2] }] }],
+      "media": [{ "option": { "backgroundColor": "media" } }]
+    }`);
+    processCodeBlocks();
+
+    await vi.waitFor(() => {
+      expect(document.querySelector('.gv-echarts-diagram')).not.toBeNull();
+    });
+    const echartsMod = await import('../runtime');
+    const fakeInstance = vi.mocked(echartsMod.init).mock.results.at(-1)?.value;
+    const safeOption = fakeInstance.setOption.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(safeOption['backgroundColor']).toBe('#1a1a1a');
+    expect((safeOption['baseOption'] as Record<string, unknown>)['backgroundColor']).toBe(
+      '#1a1a1a',
+    );
+    expect((safeOption['options'] as Array<Record<string, unknown>>)[0]?.['backgroundColor']).toBe(
+      '#1a1a1a',
+    );
+    const mediaOption = (safeOption['media'] as Array<Record<string, unknown>>)[0]?.[
+      'option'
+    ] as Record<string, unknown>;
+    expect(mediaOption['backgroundColor']).toBe('#1a1a1a');
+  });
+
   it('inits with no theme on a light page', async () => {
     const lightHost = document.createElement('div');
     lightHost.className = 'theme-host light-theme';
@@ -623,7 +692,7 @@ describe('render flow', () => {
     addEChartsBlock(`{
       "series": {
         "type": "pie",
-        "tooltip": { "formatter": "<b>{b}</b>" },
+        "tooltip": { "renderMode": "html", "formatter": "<img src=x>" },
         "data": [{ "value": 1 }]
       }
     }`);
@@ -635,7 +704,15 @@ describe('render flow', () => {
     const echartsMod = await import('../runtime');
     const fakeInstance = vi.mocked(echartsMod.init).mock.results.at(-1)?.value;
     expect(fakeInstance.setOption).toHaveBeenCalledWith(
-      expect.objectContaining({ tooltip: { renderMode: 'richText' } }),
+      expect.objectContaining({
+        tooltip: { renderMode: 'richText' },
+        series: expect.objectContaining({
+          tooltip: {
+            formatter: '<img src=x>',
+            renderMode: 'richText',
+          },
+        }),
+      }),
       true,
     );
   });
@@ -660,17 +737,21 @@ describe('render flow', () => {
     const fakeInstance = vi.mocked(echartsMod.init).mock.results.at(-1)?.value;
     expect(fakeInstance.setOption).toHaveBeenCalledWith(
       expect.objectContaining({
+        aria: { enabled: true },
         baseOption: expect.objectContaining({
+          aria: { enabled: true },
           tooltip: expect.objectContaining({ renderMode: 'richText' }),
         }),
         options: [
           expect.objectContaining({
+            aria: { enabled: true },
             tooltip: expect.objectContaining({ renderMode: 'richText' }),
           }),
         ],
         media: [
           expect.objectContaining({
             option: expect.objectContaining({
+              aria: { enabled: true },
               tooltip: expect.objectContaining({ renderMode: 'richText' }),
             }),
           }),
@@ -713,6 +794,96 @@ describe('render flow', () => {
     expect(mediaOption['title']).toEqual({ text: 'Media' });
   });
 
+  it('removes series-data navigation from every option layer', async () => {
+    addEChartsBlock(`{
+      "series": {
+        "type": "treemap",
+        "nodeClick": "link",
+        "data": [{ "value": 1, "link": "javascript:alert(1)", "target": "self" }]
+      },
+      "baseOption": {
+        "timeline": { "data": ["2026"] },
+        "series": [{
+          "type": "sunburst",
+          "nodeClick": "link",
+          "data": [{
+            "value": 1,
+            "link": "javascript:alert(2)",
+            "children": [{ "value": 2, "link": "javascript:alert(3)", "target": "blank" }]
+          }]
+        }]
+      },
+      "options": [{
+        "series": [{ "nodeClick": "link", "data": [{ "value": 3, "link": "javascript:alert(4)" }] }]
+      }],
+      "media": [{
+        "option": {
+          "series": [{ "nodeClick": "link", "data": [{ "value": 4, "target": "self" }] }]
+        }
+      }]
+    }`);
+    processCodeBlocks();
+
+    await vi.waitFor(() => {
+      expect(document.querySelector('.gv-echarts-diagram')).not.toBeNull();
+    });
+    const echartsMod = await import('../runtime');
+    const fakeInstance = vi.mocked(echartsMod.init).mock.results.at(-1)?.value;
+    const safeOption = fakeInstance.setOption.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(safeOption['series']).toEqual({ type: 'treemap', data: [{ value: 1 }] });
+    expect((safeOption['baseOption'] as Record<string, unknown>)['series']).toEqual([
+      {
+        type: 'sunburst',
+        data: [{ value: 1, children: [{ value: 2 }] }],
+      },
+    ]);
+    expect((safeOption['options'] as Array<Record<string, unknown>>)[0]?.['series']).toEqual([
+      { data: [{ value: 3 }] },
+    ]);
+    const mediaOption = (safeOption['media'] as Array<Record<string, unknown>>)[0]?.[
+      'option'
+    ] as Record<string, unknown>;
+    expect(mediaOption['series']).toEqual([{ data: [{ value: 4 }] }]);
+  });
+
+  it('removes HTML-bearing toolbox data views from every option layer', async () => {
+    addEChartsBlock(`{
+      "toolbox": [{ "feature": { "dataView": { "lang": ["<img src=x>"] }, "saveAsImage": {} } }],
+      "baseOption": {
+        "timeline": { "data": ["2026"] },
+        "xAxis": {},
+        "toolbox": { "feature": { "dataView": { "lang": ["<b>base</b>"] } } },
+        "series": [{ "type": "bar", "data": [1] }]
+      },
+      "options": [{ "toolbox": { "feature": { "dataView": { "lang": ["state"] } } } }],
+      "media": [{ "option": { "toolbox": { "feature": { "dataView": { "lang": ["media"] } } } } }]
+    }`);
+    processCodeBlocks();
+
+    await vi.waitFor(() => {
+      expect(document.querySelector('.gv-echarts-diagram')).not.toBeNull();
+    });
+    const echartsMod = await import('../runtime');
+    const fakeInstance = vi.mocked(echartsMod.init).mock.results.at(-1)?.value;
+    const safeOption = fakeInstance.setOption.mock.calls[0]?.[0] as Record<string, unknown>;
+    const topToolbox = (safeOption['toolbox'] as Array<Record<string, unknown>>)[0]!;
+    expect(topToolbox['feature']).toEqual({ saveAsImage: {} });
+    const baseToolbox = (safeOption['baseOption'] as Record<string, unknown>)['toolbox'] as Record<
+      string,
+      unknown
+    >;
+    expect(baseToolbox['feature']).toEqual({});
+    const stateToolbox = (safeOption['options'] as Array<Record<string, unknown>>)[0]?.[
+      'toolbox'
+    ] as Record<string, unknown>;
+    expect(stateToolbox['feature']).toEqual({});
+    const responsiveOption = (safeOption['media'] as Array<Record<string, unknown>>)[0]?.[
+      'option'
+    ] as Record<string, unknown>;
+    const responsiveToolbox = responsiveOption['toolbox'] as Record<string, unknown>;
+    expect(responsiveToolbox['feature']).toEqual({});
+  });
+
   it('disposes a new instance when applying the option throws', async () => {
     const echartsMod = await import('../runtime');
     const failedInstance = makeFakeInstance();
@@ -747,8 +918,14 @@ describe('render flow', () => {
     expect(codeBlockHost.style.display).toBe('none');
     const toggle = wrapper.querySelector('.gv-echarts-toggle') as HTMLElement;
     expect(toggle).not.toBeNull();
+    expect(wrapper.firstElementChild).toBe(toggle);
+    expect(getComputedStyle(toggle).position).not.toBe('absolute');
     expect(toggle.querySelector('[data-view="diagram"]')?.textContent).toContain('Diagram');
     expect(toggle.querySelector('[data-view="code"]')?.textContent).toContain('Code');
+    expect(toggle.querySelector('[data-view="diagram"]')?.getAttribute('aria-pressed')).toBe(
+      'true',
+    );
+    expect(toggle.querySelector('[data-view="code"]')?.getAttribute('aria-pressed')).toBe('false');
     expect(toggle.querySelector('[data-action="fullscreen"]')?.getAttribute('aria-label')).toBe(
       'echartsFullscreenButton',
     );
@@ -756,6 +933,18 @@ describe('render flow', () => {
     expect(codeEl.dataset.echartsCode).toBe(PIE_OPTION);
     expect(codeEl.dataset.echartsTheme).toBe('light');
     expect(codeEl.dataset.echartsProcessing).toBe('false');
+    const echartsMod = await import('../runtime');
+    const fakeInstance = vi.mocked(echartsMod.init).mock.results.at(-1)?.value;
+    expect(fakeInstance.setOption).toHaveBeenCalledWith(
+      expect.objectContaining({ aria: { enabled: true } }),
+      true,
+    );
+
+    (toggle.querySelector('[data-view="code"]') as HTMLButtonElement).click();
+    expect(toggle.querySelector('[data-view="diagram"]')?.getAttribute('aria-pressed')).toBe(
+      'false',
+    );
+    expect(toggle.querySelector('[data-view="code"]')?.getAttribute('aria-pressed')).toBe('true');
   });
 
   it('provides a composited PNG from the live ECharts instance for export', async () => {
@@ -850,6 +1039,37 @@ describe('render flow', () => {
     );
   });
 
+  it('retries when an incomplete source becomes valid during a failed parse', async () => {
+    const codeEl = addEChartsBlock('{ "series": [{ "type": "pie", "data": [');
+    processCodeBlocks();
+    expect(codeEl.dataset.echartsProcessing).toBe('true');
+
+    codeEl.textContent = PIE_OPTION;
+
+    await vi.waitFor(() => {
+      expect(codeEl.dataset.echartsCode).toBe(PIE_OPTION);
+    });
+    const echartsMod = await import('../runtime');
+    expect(vi.mocked(echartsMod.init)).toHaveBeenCalledTimes(1);
+  });
+
+  it('abandons an in-flight generic render when Gemini finalizes a specific label', async () => {
+    const codeEl = addEChartsBlock(PIE_OPTION, '代码段');
+    const language = codeEl.closest('code-block')!.querySelector('.code-block-decoration span')!;
+    processCodeBlocks();
+    expect(codeEl.dataset.echartsProcessing).toBe('true');
+
+    language.textContent = 'json';
+    processCodeBlocks();
+
+    await vi.waitFor(() => {
+      expect(codeEl.dataset.echartsProcessing).toBe('false');
+    });
+    const echartsMod = await import('../runtime');
+    expect(vi.mocked(echartsMod.init)).not.toHaveBeenCalled();
+    expect(document.querySelector('.gv-echarts-wrapper')).toBeNull();
+  });
+
   it('restores source view when a rendered option becomes invalid', async () => {
     const codeEl = addEChartsBlock(PIE_OPTION);
     const codeBlockHost = codeEl.closest<HTMLElement>('code-block')!;
@@ -937,6 +1157,38 @@ describe('theme switching', () => {
     expect(diagramContainer.style.getPropertyValue('--gv-echarts-panel-bg')).toBe('#1a1a1a');
     expect(modalCard.style.getPropertyValue('--gv-echarts-panel-bg')).toBe('#1a1a1a');
     _closeModalForTest();
+  });
+
+  it('defers a theme rerender until Code view reveals the diagram again', async () => {
+    const host = document.createElement('div');
+    host.className = 'theme-host light-theme';
+    document.body.appendChild(host);
+    const codeEl = addEChartsBlock(PIE_OPTION);
+    processCodeBlocks();
+    await vi.waitFor(() => {
+      expect(codeEl.dataset.echartsTheme).toBe('light');
+    });
+    const echartsMod = await import('../runtime');
+    const initMock = vi.mocked(echartsMod.init);
+    const diagram = document.querySelector<HTMLElement>('.gv-echarts-diagram')!;
+
+    document.querySelector<HTMLButtonElement>('[data-view="code"]')!.click();
+    host.className = 'theme-host dark-theme';
+    processCodeBlocks();
+    await vi.waitFor(() => {
+      expect(codeEl.dataset.echartsProcessing).toBe('false');
+    });
+
+    expect(diagram.style.display).toBe('none');
+    expect(initMock).toHaveBeenCalledTimes(1);
+    expect(requestEChartsDataUrl(diagram).dataUrl).toBe('data:image/png;base64,COMPOSITED');
+
+    document.querySelector<HTMLButtonElement>('[data-view="diagram"]')!.click();
+    await vi.waitFor(() => {
+      expect(codeEl.dataset.echartsTheme).toBe('dark');
+    });
+    expect(initMock).toHaveBeenCalledTimes(2);
+    expect(initMock).toHaveBeenLastCalledWith(diagram, 'dark', { renderer: 'canvas' });
   });
 
   it('honours an explicit light theme even when the media query is dark', async () => {
@@ -1220,6 +1472,40 @@ describe('runtime disable lifecycle', () => {
     expect(document.querySelector('.gv-echarts-wrapper')).toBeNull();
   });
 
+  it('drops an in-flight render whose Gemini host detaches during async loading', async () => {
+    startEnabled();
+    const codeEl = addEChartsBlock();
+    const codeBlockHost = codeEl.closest<HTMLElement>('code-block')!;
+
+    processCodeBlocks();
+    expect(codeEl.dataset.echartsProcessing).toBe('true');
+    codeBlockHost.remove();
+
+    await vi.waitFor(() => {
+      expect(codeEl.dataset.echartsProcessing).toBe('false');
+    });
+    const echartsMod = await import('../runtime');
+    expect(echartsMod.init).not.toHaveBeenCalled();
+    expect(document.querySelector('.gv-echarts-wrapper')).toBeNull();
+  });
+
+  it('restarts an in-flight render after a rapid disable and re-enable', async () => {
+    const onStorageChanged = startEnabled();
+    const codeEl = addEChartsBlock();
+
+    processCodeBlocks();
+    expect(codeEl.dataset.echartsProcessing).toBe('true');
+    disable(onStorageChanged);
+    enable(onStorageChanged);
+
+    await vi.waitFor(() => {
+      expect(document.querySelector('.gv-echarts-wrapper')).not.toBeNull();
+    });
+    expect(codeEl.dataset.echartsProcessing).toBe('false');
+    const echartsMod = await import('../runtime');
+    expect(echartsMod.init).toHaveBeenCalledTimes(1);
+  });
+
   it('disposes and unobserves a chart whose Gemini host was removed', async () => {
     const originalResizeObserver = globalThis.ResizeObserver;
     const observe = vi.fn();
@@ -1250,6 +1536,70 @@ describe('runtime disable lifecycle', () => {
 
       expect(unobserve).toHaveBeenCalledWith(diagramContainer);
       expect(instance.dispose).toHaveBeenCalledTimes(1);
+    } finally {
+      globalThis.ResizeObserver = originalResizeObserver;
+    }
+  });
+
+  it('tears down a connected wrapper after Gemini removes only its source host', async () => {
+    startEnabled();
+    const codeEl = addEChartsBlock();
+    const codeBlockHost = codeEl.closest<HTMLElement>('code-block')!;
+    processCodeBlocks();
+
+    await vi.waitFor(() => {
+      expect(document.querySelector('.gv-echarts-wrapper')).not.toBeNull();
+    });
+    const wrapper = document.querySelector<HTMLElement>('.gv-echarts-wrapper')!;
+    const echartsMod = await import('../runtime');
+    const instance = vi.mocked(echartsMod.init).mock.results.at(-1)?.value;
+
+    codeBlockHost.remove();
+    expect(wrapper.isConnected).toBe(true);
+    processCodeBlocks();
+
+    expect(wrapper.isConnected).toBe(false);
+    expect(instance.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not resize a chart to zero while Code view is visible', async () => {
+    const originalResizeObserver = globalThis.ResizeObserver;
+    let resizeCallback: ResizeObserverCallback | undefined;
+    class ResizeObserverMock {
+      constructor(callback: ResizeObserverCallback) {
+        resizeCallback = callback;
+      }
+      observe = vi.fn();
+      unobserve = vi.fn();
+      disconnect = vi.fn();
+    }
+    globalThis.ResizeObserver = ResizeObserverMock as unknown as typeof ResizeObserver;
+
+    try {
+      startEnabled();
+      addEChartsBlock();
+      processCodeBlocks();
+      await vi.waitFor(() => {
+        expect(document.querySelector('.gv-echarts-diagram')).not.toBeNull();
+      });
+      const diagram = document.querySelector<HTMLElement>('.gv-echarts-diagram')!;
+      const echartsMod = await import('../runtime');
+      const fakeInstance = vi.mocked(echartsMod.init).mock.results.at(-1)?.value;
+
+      document.querySelector<HTMLButtonElement>('[data-view="code"]')!.click();
+      fakeInstance.resize.mockClear();
+      resizeCallback?.(
+        [
+          {
+            target: diagram,
+            contentRect: { width: 0, height: 0 },
+          } as unknown as ResizeObserverEntry,
+        ],
+        {} as ResizeObserver,
+      );
+
+      expect(diagram.style.display).toBe('none');
+      expect(fakeInstance.resize).not.toHaveBeenCalled();
     } finally {
       globalThis.ResizeObserver = originalResizeObserver;
     }

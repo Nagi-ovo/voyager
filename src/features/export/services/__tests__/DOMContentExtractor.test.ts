@@ -712,6 +712,88 @@ describe('DOMContentExtractor', () => {
     }
   });
 
+  it('exports the live chart while its diagram is moved into fullscreen', () => {
+    const canvasReadback = vi
+      .spyOn(HTMLCanvasElement.prototype, 'toDataURL')
+      .mockReturnValue('data:image/png;base64,FIRST_LAYER_ONLY');
+    const assistant = document.createElement('div');
+    assistant.innerHTML = `
+      <message-content>
+        <div class="markdown">
+          <div class="gv-echarts-wrapper">
+            <code-block style="display: none;">
+              <div class="code-block-decoration">echarts</div>
+              <pre><code role="text">{"series": [{"type": "pie", "data": [1]}]}</code></pre>
+            </code-block>
+            <div class="gv-echarts-diagram"><canvas width="800" height="400"></canvas></div>
+          </div>
+        </div>
+      </message-content>
+    `;
+    const wrapper = assistant.querySelector<HTMLElement>('.gv-echarts-wrapper')!;
+    const diagram = assistant.querySelector<HTMLElement>('.gv-echarts-diagram')!;
+    const canvas = diagram.querySelector('canvas')!;
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
+      width: 400,
+      height: 200,
+      top: 0,
+      right: 400,
+      bottom: 200,
+      left: 0,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+    const fullscreen = document.createElement('div');
+    document.body.appendChild(fullscreen);
+    fullscreen.appendChild(diagram);
+    const getComposite = vi.fn(() => 'data:image/png;base64,FULLSCREEN');
+    const stopProviding = provideEChartsDataUrl(diagram, getComposite, wrapper);
+
+    try {
+      const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+
+      expect(getComposite).toHaveBeenCalledTimes(1);
+      expect(canvasReadback).not.toHaveBeenCalled();
+      expect(extracted.html).toContain('src="data:image/png;base64,FULLSCREEN"');
+      expect(extracted.html).not.toContain('<pre><code');
+    } finally {
+      stopProviding();
+      fullscreen.remove();
+      canvasReadback.mockRestore();
+    }
+  });
+
+  it('uses the generated ECharts description as the exported image alt text', () => {
+    const canvasReadback = vi
+      .spyOn(HTMLCanvasElement.prototype, 'toDataURL')
+      .mockReturnValue('data:image/png;base64,ACCESSIBLE');
+    const assistant = document.createElement('div');
+    assistant.innerHTML = `
+      <message-content>
+        <div class="markdown">
+          <div class="gv-echarts-wrapper">
+            <code-block style="display: none;">
+              <div class="code-block-decoration">echarts</div>
+              <pre><code role="text">{"series": [{"type": "pie", "data": [1]}]}</code></pre>
+            </code-block>
+            <div class="gv-echarts-diagram" aria-label="A pie chart showing Cats &amp; Dogs">
+              <canvas width="800" height="400"></canvas>
+            </div>
+          </div>
+        </div>
+      </message-content>
+    `;
+
+    try {
+      const extracted = DOMContentExtractor.extractAssistantContent(assistant);
+
+      expect(extracted.html).toContain('alt="A pie chart showing Cats &amp; Dogs"');
+    } finally {
+      canvasReadback.mockRestore();
+    }
+  });
+
   it('snapshots the live ECharts canvas inside list items', () => {
     const clonedCanvasReadback = vi
       .spyOn(HTMLCanvasElement.prototype, 'toDataURL')

@@ -236,23 +236,36 @@ export const isEChartsOptionObject = (obj: unknown): obj is Record<string, unkno
   });
   if (hasUnsupportedRuntimeSeries) return false;
 
-  const series = validationRoot['series'];
-  const seriesEntries = Array.isArray(series) ? series : [series];
-  if (seriesEntries.length === 0) return false;
+  const candidateLayers =
+    'series' in validationRoot
+      ? [validationRoot]
+      : [...timelineOptions, ...mediaOptions].filter(
+          (layer): layer is Record<string, unknown> =>
+            layer !== null &&
+            typeof layer === 'object' &&
+            !Array.isArray(layer) &&
+            'series' in layer,
+        );
 
-  const chartTypes: string[] = [];
-  for (const entry of seriesEntries) {
-    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return false;
-    const seriesOption = entry as Record<string, unknown>;
-    const type = seriesOption['type'];
-    if (typeof type !== 'string') return false;
-    const normalizedType = type.toLowerCase();
-    if (!CHART_TYPES.has(normalizedType)) return false;
-    chartTypes.push(normalizedType);
-  }
+  return candidateLayers.some((layer) => {
+    const series = layer['series'];
+    const seriesEntries = Array.isArray(series) ? series : [series];
+    if (seriesEntries.length === 0) return false;
 
-  if (chartTypes.some((type) => AXIS_FREE_TYPES.has(type))) return true;
-  return STRUCTURE_KEYS.some((key) => key in validationRoot);
+    const chartTypes: string[] = [];
+    for (const entry of seriesEntries) {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return false;
+      const type = (entry as Record<string, unknown>)['type'];
+      if (typeof type !== 'string') return false;
+      const normalizedType = type.toLowerCase();
+      if (!CHART_TYPES.has(normalizedType)) return false;
+      chartTypes.push(normalizedType);
+    }
+
+    if (chartTypes.some((type) => AXIS_FREE_TYPES.has(type))) return true;
+    const structureLayers = layer === validationRoot ? optionLayers : [validationRoot, layer];
+    return STRUCTURE_KEYS.some((key) => structureLayers.some((entry) => key in entry));
+  });
 };
 
 /**
@@ -291,6 +304,56 @@ const stripTitleLinksInLayer = (option: Record<string, unknown>): Record<string,
   return option;
 };
 
+const stripDataViewInLayer = (option: Record<string, unknown>): Record<string, unknown> => {
+  const stripFeature = (entry: unknown): unknown => {
+    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) return entry;
+    const toolbox = entry as Record<string, unknown>;
+    const feature = toolbox['feature'];
+    if (feature === null || typeof feature !== 'object' || Array.isArray(feature)) return entry;
+    const safeFeature = { ...(feature as Record<string, unknown>) };
+    delete safeFeature['dataView'];
+    return { ...toolbox, feature: safeFeature };
+  };
+
+  const toolbox = option['toolbox'];
+  if (Array.isArray(toolbox)) return { ...option, toolbox: toolbox.map(stripFeature) };
+  if (toolbox !== null && typeof toolbox === 'object') {
+    return { ...option, toolbox: stripFeature(toolbox) };
+  }
+  return option;
+};
+
+const stripSeriesNavigationInLayer = (option: Record<string, unknown>): Record<string, unknown> => {
+  const stripDataNavigation = (entry: unknown): unknown => {
+    if (Array.isArray(entry)) return entry.map(stripDataNavigation);
+    if (entry === null || typeof entry !== 'object') return entry;
+    const safeEntry = { ...(entry as Record<string, unknown>) };
+    delete safeEntry['link'];
+    delete safeEntry['target'];
+    if ('children' in safeEntry) {
+      safeEntry['children'] = stripDataNavigation(safeEntry['children']);
+    }
+    return safeEntry;
+  };
+
+  const stripSeriesNavigation = (entry: unknown): unknown => {
+    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) return entry;
+    const safeEntry = { ...(entry as Record<string, unknown>) };
+    if (safeEntry['nodeClick'] === 'link') delete safeEntry['nodeClick'];
+    if ('data' in safeEntry) safeEntry['data'] = stripDataNavigation(safeEntry['data']);
+    return safeEntry;
+  };
+
+  const series = option['series'];
+  if (Array.isArray(series)) {
+    return { ...option, series: series.map(stripSeriesNavigation) };
+  }
+  if (series !== null && typeof series === 'object') {
+    return { ...option, series: stripSeriesNavigation(series) };
+  }
+  return option;
+};
+
 const forceRichTextTooltipsInLayer = (option: Record<string, unknown>): Record<string, unknown> => {
   const tooltip = option['tooltip'];
   const series = option['series'];
@@ -300,27 +363,65 @@ const forceRichTextTooltipsInLayer = (option: Record<string, unknown>): Record<s
       entry !== null && typeof entry === 'object' && !Array.isArray(entry) && 'tooltip' in entry,
   );
 
+  const forceTooltipRenderMode = (entry: unknown): unknown => {
+    if (Array.isArray(entry)) return entry.map(forceTooltipRenderMode);
+    return entry !== null && typeof entry === 'object'
+      ? { ...(entry as Record<string, unknown>), renderMode: 'richText' }
+      : entry;
+  };
+
+  const forceSeriesTooltip = (entry: unknown): unknown => {
+    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) return entry;
+    const seriesEntry = entry as Record<string, unknown>;
+    return 'tooltip' in seriesEntry
+      ? { ...seriesEntry, tooltip: forceTooltipRenderMode(seriesEntry['tooltip']) }
+      : entry;
+  };
+
+  const safeOption = hasSeriesTooltip
+    ? {
+        ...option,
+        series: Array.isArray(series) ? series.map(forceSeriesTooltip) : forceSeriesTooltip(series),
+      }
+    : option;
+
   if (Array.isArray(tooltip)) {
     return {
-      ...option,
-      tooltip: tooltip.map((entry) =>
-        entry !== null && typeof entry === 'object' && !Array.isArray(entry)
-          ? { ...entry, renderMode: 'richText' }
-          : entry,
-      ),
+      ...safeOption,
+      tooltip: forceTooltipRenderMode(tooltip),
     };
   }
 
   if (tooltip !== null && typeof tooltip === 'object') {
-    return { ...option, tooltip: { ...tooltip, renderMode: 'richText' } };
+    return { ...safeOption, tooltip: forceTooltipRenderMode(tooltip) };
   }
 
-  return hasSeriesTooltip ? { ...option, tooltip: { renderMode: 'richText' } } : option;
+  return hasSeriesTooltip ? { ...safeOption, tooltip: { renderMode: 'richText' } } : safeOption;
 };
 
-const sanitizeEChartsOption = (option: Record<string, unknown>): Record<string, unknown> => {
-  const sanitizeLayer = (layer: Record<string, unknown>): Record<string, unknown> =>
-    forceRichTextTooltipsInLayer(stripTitleLinksInLayer(layer));
+const enableAriaInLayer = (option: Record<string, unknown>): Record<string, unknown> => {
+  const aria = option['aria'];
+  return {
+    ...option,
+    aria:
+      aria !== null && typeof aria === 'object' && !Array.isArray(aria)
+        ? { ...(aria as Record<string, unknown>), enabled: true }
+        : { enabled: true },
+  };
+};
+
+const sanitizeEChartsOption = (
+  option: Record<string, unknown>,
+  backgroundColor: string,
+): Record<string, unknown> => {
+  const sanitizeLayer = (layer: Record<string, unknown>): Record<string, unknown> => ({
+    ...enableAriaInLayer(
+      forceRichTextTooltipsInLayer(
+        stripSeriesNavigationInLayer(stripTitleLinksInLayer(stripDataViewInLayer(layer))),
+      ),
+    ),
+    backgroundColor,
+  });
 
   let safeOption = sanitizeLayer(option);
   const baseOption = option['baseOption'];
@@ -508,10 +609,7 @@ const renderChartToContainer = (
   try {
     // `backgroundColor` from the chart option would otherwise paint over the
     // panel; keep the deterministic backdrop so text stays readable.
-    instance.setOption(
-      { ...sanitizeEChartsOption(parsed), backgroundColor: PANEL_BG[renderTheme] },
-      true,
-    );
+    instance.setOption(sanitizeEChartsOption(parsed, PANEL_BG[renderTheme]), true);
     chartInstances.set(container, instance);
   } catch (error) {
     // `setOption` can reject malformed LLM output or an option that requires a
@@ -540,13 +638,11 @@ const createStyles = () => {
     }
 
     .gv-echarts-toggle {
-      position: absolute;
-      top: 8px;
-      right: 8px;
-      z-index: 10;
       display: flex;
       align-items: center;
       gap: 4px;
+      width: fit-content;
+      margin: 8px 8px 4px auto;
       background: var(--gemini-surface-container, rgba(0,0,0,0.05));
       border-radius: 8px;
       padding: 2px;
@@ -817,8 +913,8 @@ const nativeControlPlacements = new WeakMap<HTMLElement, NativeControlPlacement>
 
 /**
  * Move Gemini's native code-block copy button into the toggle toolbar.
- * The toolbar overlays the code block in Code view, so a native copy button
- * left in place gets covered. Mirrors the WaveDrom renderer's approach.
+ * Keeping the native control in the renderer toolbar prevents duplicate copy
+ * affordances while preserving Gemini's implementation and exact teardown.
  *
  * @returns the moved button, or null when no native copy button was found.
  * @internal Exported for testing.
@@ -867,8 +963,15 @@ let echartsEnabled = true;
 let renderGeneration = 0;
 let settingChangeRevision = 0;
 
+const finishStaleRender = (codeEl: HTMLElement) => {
+  codeEl.dataset.echartsProcessing = 'false';
+  if (echartsEnabled && codeEl.isConnected) {
+    void renderEcharts(codeEl, codeEl.textContent || '');
+  }
+};
+
 const renderEcharts = async (codeEl: HTMLElement, code: string) => {
-  if (!echartsEnabled) return;
+  if (!echartsEnabled || !isEChartsLanguageEligible(codeEl)) return;
   const requestedRenderTheme = resolveEChartsRenderTheme(THEME_MODE, getAppTheme());
   // Skip when nothing changed — the theme is part of the key so an explicit
   // Gemini theme switch re-renders existing charts in the new theme.
@@ -890,6 +993,18 @@ const renderEcharts = async (codeEl: HTMLElement, code: string) => {
 
     const parsed = await parseEChartsOption(code);
     if (!parsed) {
+      const latestCode = codeEl.textContent || '';
+      if (
+        latestCode !== code &&
+        echartsEnabled &&
+        generationAtStart === renderGeneration &&
+        codeEl.isConnected &&
+        codeBlockHost.isConnected
+      ) {
+        codeEl.dataset.echartsProcessing = 'false';
+        void renderEcharts(codeEl, latestCode);
+        return;
+      }
       const wrapper = codeBlockHost.parentElement;
       if (wrapper?.classList.contains('gv-echarts-wrapper')) {
         teardownEchartsWrapper(wrapper);
@@ -898,8 +1013,12 @@ const renderEcharts = async (codeEl: HTMLElement, code: string) => {
       }
       return;
     }
-    if (!echartsEnabled || generationAtStart !== renderGeneration) {
+    if (!codeEl.isConnected || !codeBlockHost.isConnected) {
       codeEl.dataset.echartsProcessing = 'false';
+      return;
+    }
+    if (!echartsEnabled || generationAtStart !== renderGeneration) {
+      finishStaleRender(codeEl);
       return;
     }
     const latestCode = codeEl.textContent || '';
@@ -919,14 +1038,27 @@ const renderEcharts = async (codeEl: HTMLElement, code: string) => {
       }
       return;
     }
-    if (!echartsEnabled || generationAtStart !== renderGeneration) {
+    if (!codeEl.isConnected || !codeBlockHost.isConnected) {
       codeEl.dataset.echartsProcessing = 'false';
+      return;
+    }
+    if (!echartsEnabled || generationAtStart !== renderGeneration) {
+      finishStaleRender(codeEl);
       return;
     }
     const latestCodeAfterLoad = codeEl.textContent || '';
     if (latestCodeAfterLoad !== code) {
       codeEl.dataset.echartsProcessing = 'false';
       void renderEcharts(codeEl, latestCodeAfterLoad);
+      return;
+    }
+    if (!isEChartsLanguageEligible(codeEl)) {
+      const wrapper = codeBlockHost.parentElement;
+      if (wrapper?.classList.contains('gv-echarts-wrapper')) {
+        teardownEchartsWrapper(wrapper);
+      } else {
+        codeEl.dataset.echartsProcessing = 'false';
+      }
       return;
     }
 
@@ -954,10 +1086,12 @@ const renderEcharts = async (codeEl: HTMLElement, code: string) => {
       diagramBtn.textContent = t('echartsDiagramButton', '📊 Diagram');
       diagramBtn.className = 'active';
       diagramBtn.dataset.view = 'diagram';
+      diagramBtn.setAttribute('aria-pressed', 'true');
 
       const codeBtn = document.createElement('button');
       codeBtn.textContent = t('echartsCodeButton', '</> Code');
       codeBtn.dataset.view = 'code';
+      codeBtn.setAttribute('aria-pressed', 'false');
 
       const fullscreenBtn = document.createElement('button');
       fullscreenBtn.textContent = '⛶';
@@ -967,25 +1101,29 @@ const renderEcharts = async (codeEl: HTMLElement, code: string) => {
       fullscreenBtn.setAttribute('aria-label', fullscreenLabel);
 
       toggleContainer.append(diagramBtn, codeBtn, fullscreenBtn);
-      wrapper.appendChild(toggleContainer);
+      wrapper.insertBefore(toggleContainer, codeBlockHost);
 
       const diagramContainer = document.createElement('div');
       diagramContainer.className = 'gv-echarts-diagram';
       wrapper.appendChild(diagramContainer);
-      provideEChartsDataUrl(diagramContainer, () => {
-        try {
-          const instance = chartInstances.get(diagramContainer);
-          if (!instance) return null;
-          return instance.getDataURL({
-            type: 'png',
-            pixelRatio: 1,
-            backgroundColor:
-              diagramContainer.style.getPropertyValue('--gv-echarts-panel-bg') || PANEL_BG.light,
-          });
-        } catch {
-          return null;
-        }
-      });
+      provideEChartsDataUrl(
+        diagramContainer,
+        () => {
+          try {
+            const instance = chartInstances.get(diagramContainer);
+            if (!instance) return null;
+            return instance.getDataURL({
+              type: 'png',
+              pixelRatio: 1,
+              backgroundColor:
+                diagramContainer.style.getPropertyValue('--gv-echarts-panel-bg') || PANEL_BG.light,
+            });
+          } catch {
+            return null;
+          }
+        },
+        wrapper,
+      );
 
       codeBlockHost.style.display = 'none';
 
@@ -995,7 +1133,10 @@ const renderEcharts = async (codeEl: HTMLElement, code: string) => {
           diagramContainer.style.display = 'block';
           diagramBtn.classList.add('active');
           codeBtn.classList.remove('active');
+          diagramBtn.setAttribute('aria-pressed', 'true');
+          codeBtn.setAttribute('aria-pressed', 'false');
           fullscreenBtn.disabled = false;
+          void renderEcharts(codeEl, codeEl.textContent || '');
           // The canvas is sized 0 while hidden; resize after reveal.
           chartInstances.get(diagramContainer)?.resize();
         } else {
@@ -1003,6 +1144,8 @@ const renderEcharts = async (codeEl: HTMLElement, code: string) => {
           diagramContainer.style.display = 'none';
           diagramBtn.classList.remove('active');
           codeBtn.classList.add('active');
+          diagramBtn.setAttribute('aria-pressed', 'false');
+          codeBtn.setAttribute('aria-pressed', 'true');
           fullscreenBtn.disabled = true;
         }
       };
@@ -1031,6 +1174,10 @@ const renderEcharts = async (codeEl: HTMLElement, code: string) => {
     if (diagramContainer.parentElement?.classList.contains('gv-echarts-modal-card')) {
       diagramContainer.parentElement.style.setProperty('--gv-echarts-panel-bg', panelBg);
     }
+    if (diagramContainer.style.display === 'none') {
+      codeEl.dataset.echartsProcessing = 'false';
+      return;
+    }
     renderChartToContainer(diagramContainer, parsed, renderTheme);
 
     codeEl.dataset.echartsCode = code;
@@ -1052,7 +1199,7 @@ const renderEcharts = async (codeEl: HTMLElement, code: string) => {
 // Language label helpers (mirrors wavedrom module)
 // ---------------------------------------------------------------------------
 
-const getCodeBlockLanguage = (codeEl: Element): string | null => {
+function getCodeBlockLanguage(codeEl: Element): string | null {
   const codeBlock = codeEl.closest('.code-block, code-block');
   if (!codeBlock) return null;
   const decoration = codeBlock.querySelector('.code-block-decoration');
@@ -1060,7 +1207,18 @@ const getCodeBlockLanguage = (codeEl: Element): string | null => {
   const langSpan = decoration.querySelector(':scope > span');
   const language = langSpan?.textContent?.trim().toLowerCase();
   return language || null;
-};
+}
+
+function isEChartsLanguageEligible(codeEl: Element): boolean {
+  const language = getCodeBlockLanguage(codeEl);
+  return (
+    !language ||
+    language === 'echarts' ||
+    language === 'echart' ||
+    language === 'chart' ||
+    isGenericLanguageLabel(language)
+  );
+}
 
 // ---------------------------------------------------------------------------
 // processCodeBlocks + lifecycle
@@ -1151,7 +1309,16 @@ function teardownEchartsWrapper(wrapper: HTMLElement): void {
 const cleanupDetachedChartInstances = (): void => {
   if (fullscreenWrapper && !fullscreenWrapper.isConnected) closeActiveModal?.();
   for (const container of chartInstances.keys()) {
-    if (!container.isConnected) disposeChartContainer(container);
+    if (!container.isConnected) {
+      disposeChartContainer(container);
+      continue;
+    }
+    const wrapper =
+      container.closest<HTMLElement>('.gv-echarts-wrapper') ??
+      (currentModal?.contains(container) ? fullscreenWrapper : null);
+    if (wrapper && !wrapper.querySelector(':scope > code-block')) {
+      teardownEchartsWrapper(wrapper);
+    }
   }
 };
 
@@ -1257,7 +1424,15 @@ const initializeEcharts = () => {
   if (!chartResizeObserver && typeof ResizeObserver !== 'undefined') {
     chartResizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
-        chartInstances.get(entry.target as HTMLElement)?.resize();
+        const container = entry.target as HTMLElement;
+        if (
+          container.style.display === 'none' ||
+          entry.contentRect.width <= 0 ||
+          entry.contentRect.height <= 0
+        ) {
+          continue;
+        }
+        chartInstances.get(container)?.resize();
       }
     });
   }
