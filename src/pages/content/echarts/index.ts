@@ -125,14 +125,20 @@ const AXIS_FREE_TYPES = new Set([
 const STRUCTURE_KEYS = [
   'xAxis',
   'yAxis',
-  'geo',
   'radar',
   'polar',
   'angleAxis',
   'radiusAxis',
   'grid',
   'timeline',
+  'calendar',
+  'parallel',
+  'parallelAxis',
+  'singleAxis',
+  'matrix',
 ] as const;
+
+const STRUCTURE_KEY_PATTERN = new RegExp(`["']?(?:${STRUCTURE_KEYS.join('|')})["']?\\s*:`);
 
 /**
  * Strip JS variable-assignment wrappers and fence markers from ECharts source
@@ -210,9 +216,7 @@ export const isEChartsOptionCode = (code: string): boolean => {
   // Axis-free chart types are recognised by their type alone; the rest need a
   // coordinate-system key.
   if (chartTypes.some((t) => AXIS_FREE_TYPES.has(t))) return true;
-  return /["']?(?:xAxis|yAxis|geo|radar|polar|angleAxis|radiusAxis|grid|timeline)["']?\s*:/.test(
-    trimmed,
-  );
+  return STRUCTURE_KEY_PATTERN.test(trimmed);
 };
 
 /**
@@ -321,10 +325,18 @@ const renderChartToContainer = (
 
   const theme = renderTheme === 'dark' ? 'dark' : undefined;
   const instance = echartsModule.init(container, theme, { renderer: 'canvas' });
-  // `backgroundColor` from the chart option would otherwise paint over the
-  // panel; keep the deterministic backdrop so text stays readable.
-  instance.setOption({ ...parsed, backgroundColor: PANEL_BG[renderTheme] }, true);
-  chartInstances.set(container, instance);
+  try {
+    // `backgroundColor` from the chart option would otherwise paint over the
+    // panel; keep the deterministic backdrop so text stays readable.
+    instance.setOption({ ...parsed, backgroundColor: PANEL_BG[renderTheme] }, true);
+    chartInstances.set(container, instance);
+  } catch (error) {
+    // `setOption` can reject malformed LLM output or an option that requires a
+    // component outside the intentionally narrow runtime. The instance is not
+    // in `chartInstances` yet, so dispose it here before the outer teardown.
+    instance.dispose();
+    throw error;
+  }
 };
 
 // ---------------------------------------------------------------------------

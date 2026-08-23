@@ -649,6 +649,7 @@ describe('DOMContentExtractor', () => {
       expect(extracted.hasCode).toBe(true);
       expect(extracted.html).toContain('class="gv-export-echarts"');
       expect(extracted.html).toContain('<img src="data:image/png;base64,TESTDATA"');
+      expect(extracted.html).toContain('alt="Chart"');
       expect(extracted.html).toContain('width="400"');
       expect(extracted.html).not.toContain('<pre><code');
       expect(extracted.html).not.toContain('gv-echarts-toggle');
@@ -707,6 +708,7 @@ describe('DOMContentExtractor', () => {
       expect(liveReadback).toHaveBeenCalledWith('image/png');
       expect(extracted.html).toContain('class="gv-export-echarts"');
       expect(extracted.html).toContain('src="data:image/png;base64,LIVE"');
+      expect(extracted.html).toContain('alt="Chart"');
       expect(extracted.html).toContain('width="400"');
       expect(extracted.html).not.toContain('gv-echarts-wrapper');
       expect(extracted.text).toContain(

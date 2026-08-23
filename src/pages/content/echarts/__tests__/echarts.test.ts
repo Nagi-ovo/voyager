@@ -133,6 +133,20 @@ describe('isEChartsOptionObject', () => {
     expect(isEChartsOptionObject(JSON.parse(PIE_OPTION))).toBe(true);
   });
 
+  it.each([
+    ['calendar', { calendar: {}, series: [{ type: 'heatmap', data: [] }] }],
+    ['parallel', { parallel: {}, series: [{ type: 'parallel', data: [] }] }],
+    ['parallelAxis', { parallelAxis: [], series: [{ type: 'parallel', data: [] }] }],
+    ['singleAxis', { singleAxis: {}, series: [{ type: 'themeriver', data: [] }] }],
+    ['matrix', { matrix: {}, series: [{ type: 'scatter', data: [] }] }],
+  ])('accepts the registered %s coordinate system', (_name, option) => {
+    expect(isEChartsOptionObject(option)).toBe(true);
+  });
+
+  it('rejects geo coordinates because the safe modular runtime does not register them', () => {
+    expect(isEChartsOptionObject({ geo: {}, series: [{ type: 'scatter', data: [] }] })).toBe(false);
+  });
+
   it('rejects a series entry without a chart type', () => {
     expect(isEChartsOptionObject({ series: [{ name: 'a', data: [1] }] })).toBe(false);
   });
@@ -162,6 +176,22 @@ describe('isEChartsOptionCode', () => {
 
   it('detects an axis-free chart by its type alone', () => {
     expect(isEChartsOptionCode(PIE_OPTION)).toBe(true);
+  });
+
+  it.each([
+    ['calendar', { calendar: {}, series: [{ type: 'heatmap', data: [] }] }],
+    ['parallel', { parallel: {}, series: [{ type: 'parallel', data: [] }] }],
+    ['parallelAxis', { parallelAxis: [], series: [{ type: 'parallel', data: [] }] }],
+    ['singleAxis', { singleAxis: {}, series: [{ type: 'themeriver', data: [] }] }],
+    ['matrix', { matrix: {}, series: [{ type: 'scatter', data: [] }] }],
+  ])('detects the registered %s coordinate system', (_name, option) => {
+    expect(isEChartsOptionCode(JSON.stringify(option))).toBe(true);
+  });
+
+  it('rejects geo coordinates because the safe modular runtime does not register them', () => {
+    expect(isEChartsOptionCode('{"geo": {}, "series": [{"type": "scatter", "data": []}]}')).toBe(
+      false,
+    );
   });
 
   it('rejects plain JSON without a series key', () => {
@@ -442,6 +472,27 @@ describe('render flow', () => {
       undefined,
       { renderer: 'canvas' },
     );
+  });
+
+  it('disposes a new instance when applying the option throws', async () => {
+    const echartsMod = await import('../runtime');
+    const failedInstance = makeFakeInstance();
+    failedInstance.setOption.mockImplementationOnce(() => {
+      throw new Error('unsupported option');
+    });
+    vi.mocked(echartsMod.init).mockImplementationOnce(
+      () => failedInstance as unknown as ReturnType<typeof echartsMod.init>,
+    );
+    const codeEl = addEChartsBlock(PIE_OPTION);
+    const codeBlockHost = codeEl.closest<HTMLElement>('code-block')!;
+
+    processCodeBlocks();
+
+    await vi.waitFor(() => {
+      expect(failedInstance.dispose).toHaveBeenCalledTimes(1);
+    });
+    expect(document.querySelector('.gv-echarts-wrapper')).toBeNull();
+    expect(codeBlockHost.style.display).toBe('');
   });
 
   it('builds the wrapper, toggle and diagram container and hides the source', async () => {

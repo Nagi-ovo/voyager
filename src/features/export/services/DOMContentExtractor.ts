@@ -1042,6 +1042,7 @@ export class DOMContentExtractor {
         exportContainer.className = ECHARTS_EXPORT_CLASS;
         const img = document.createElement('img');
         img.src = canvas.toDataURL('image/png');
+        img.alt = 'Chart';
         const displayWidth = canvas.getBoundingClientRect().width || canvas.clientWidth;
         if (displayWidth > 0) {
           img.width = Math.round(displayWidth);
