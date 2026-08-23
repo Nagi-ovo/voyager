@@ -86,6 +86,124 @@ Commit:
 
 `fix(export): address ChatGPT export review findings`
 
+## Temporary-chat handoff state must stay private and tab-scoped
+
+Symptom:
+
+Leaving temporary mode could fail when ChatGPT reused its composer node, write
+the transcript into another page editor, or replay a cancelled handoff after the
+plugin was re-enabled. Multiline insertion could also be misreported as failed.
+Hard-navigation teardown could delete a valid payload before the destination
+loaded, while a slow attachment preview could restore content after the user
+had already cancelled recovery by editing the composer.
+
+Root cause:
+
+The handoff relied on composer node replacement and an unconstrained textbox
+fallback, compared multiline text against `textContent`, and stored the complete
+transcript in page-owned `sessionStorage` without invalidating resume state on
+plugin disposal. Moving the payload to extension storage without sweeping its
+key also left orphaned transcripts behind when a tab closed and lost its token.
+The primary handoff closed its blocking progress dialog before departure
+finished, while a broad active-operation guard suppressed every user
+cancellation instead of only the plugin's own navigation clicks.
+
+Fix:
+
+Resolve only ChatGPT composer candidates in selector-priority order, accept a
+usable same-node composer after temporary mode ends, compare normalized rendered
+text, and keep the payload in extension storage behind a tab-scoped token that
+is removed on cancellation, mismatch, the user's next edit or send, or expiry.
+After the first successful insertion, retain the bounded pending record on that
+exact chat route so composer mutations can recover replacements without a
+timing guess; discard it instead of replaying when the route changes or before
+a native New Chat action reuses the same route. Fail closed when response
+generation is active, the last mounted turn is still a user turn, or the turn
+identity snapshot changes while the shared collector materializes content.
+Mark hard navigation at `beforeunload`, before the root plugin teardown runs,
+keep the progress dialog mounted until departure bookkeeping finishes, and carry
+a synchronous cancellation revision across every asynchronous handoff and
+resume boundary so a late write or preview cannot revive discarded content.
+Suppress cancellation only around the plugin's synchronous navigation clicks.
+Sweep expired payload keys on later handoff activity so a closed tab cannot
+retain its transcript indefinitely.
+
+Regression test:
+
+`src/features/plugins/builtin/chatgptTemporaryHandoff/handoff.test.ts` (`accepts
+a reused composer node and verifies multiline content by rendered text`,
+`ignores another page editor before the real ChatGPT composer`, and `clears
+pending state when plugin disposal cancels a resume`, `redelivers when ChatGPT
+replaces the accepted composer after the old wait budget`, and `discards
+delivered recovery state instead of replaying it on another chat route`, and
+`stops delivered recovery before the user edits the composer`, and `honors user
+cancellation while the active handoff is still writing pending state`), plus
+`src/features/plugins/builtin/chatgptTemporaryHandoff/index.test.ts` (`stops
+recovery before sending clears the delivered composer`, `stops recovery before
+same-route New Chat actions`, `marks hard navigation before the root
+beforeunload teardown disposes the plugin`, `refuses handoff when the latest user turn has no
+mounted assistant yet`, and `refuses handoff when response generation starts
+during collection`, and `keeps the progress dialog mounted until departure
+bookkeeping finishes`), and `does not restore an attachment after the user
+cancels while its preview is mounting` in the handoff suite.
+
+Commit:
+
+`fix(plugins): harden ChatGPT handoff delivery`
+
+## User export HTML must materialize multiline text
+
+Symptom:
+
+PDF and image exports collapsed line breaks inside a multiline user prompt even
+though Markdown and JSON retained the original text.
+
+Root cause:
+
+The user-content extractor escaped a multiline text part into one paragraph but
+left newline characters as HTML whitespace, which browsers collapse.
+
+Fix:
+
+Escape the text first, then serialize its newline characters as explicit
+`<br />` elements. Keep the plain-text representation unchanged.
+
+Regression test:
+
+`src/pages/content/export/adapter/__tests__/platformAdapters.test.ts` (`renders
+multiline user prompts with explicit HTML line breaks`).
+
+Commit:
+
+`fix(plugins): harden ChatGPT handoff snapshots`
+
+## Temporary-chat handoff attachments need unique names
+
+Symptom:
+
+A second long temporary-chat handoff could reuse the first attachment preview
+and insert only the new instruction, silently handing the old transcript to the
+new chat.
+
+Root cause:
+
+Attachment recovery treats a visible matching filename as proof that the file
+was already delivered, while the original filename contained only the date.
+
+Fix:
+
+Give every handoff a timestamp plus nonce and reuse that identity for both the
+downloaded backup and the composer attachment.
+
+Regression test:
+
+`src/features/plugins/builtin/chatgptTemporaryHandoff/handoff.test.ts`
+(`gives separate handoffs unique filenames even at the same instant`).
+
+Commit:
+
+`feat(plugins): add ChatGPT temporary chat handoff`
+
 ## Export fetch limits must not delete rendered content
 
 Symptom:

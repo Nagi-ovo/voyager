@@ -56,14 +56,59 @@ function getUserAttachmentCandidates(element: HTMLElement): HTMLElement[] | unde
   );
 }
 
-function extractUserText(
+const USER_TEXT_BLOCK_TAGS = new Set([
+  'ADDRESS',
+  'BLOCKQUOTE',
+  'DIV',
+  'H1',
+  'H2',
+  'H3',
+  'H4',
+  'H5',
+  'H6',
+  'LI',
+  'P',
+  'PRE',
+]);
+
+function readStructuredUserText(root: HTMLElement): string {
+  const parts: string[] = [];
+  const appendLineBreak = (): void => {
+    if (parts.length > 0 && !parts.at(-1)?.endsWith('\n')) parts.push('\n');
+  };
+  const visit = (node: Node): void => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      parts.push((node.textContent || '').replace(/\r\n?/g, '\n').replace(/[^\S\n]+/g, ' '));
+      return;
+    }
+    if (!(node instanceof Element)) return;
+    if (node.tagName === 'BR') {
+      parts.push('\n');
+      return;
+    }
+    const block = USER_TEXT_BLOCK_TAGS.has(node.tagName);
+    if (block) appendLineBreak();
+    node.childNodes.forEach(visit);
+    if (block) appendLineBreak();
+  };
+
+  root.childNodes.forEach(visit);
+  return parts
+    .join('')
+    .replace(/[\u200b\u00a0]/g, ' ')
+    .replace(/ *\n */g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+export function chatgptExtractUserText(
   _textLines: NodeListOf<HTMLElement>,
   textParts: string[],
   element: HTMLElement,
 ): void {
   const contentOnly = element.cloneNode(true) as HTMLElement;
   getUserAttachmentCandidates(contentOnly)?.forEach((candidate) => candidate.remove());
-  const fallback = DOMContentExtractor.normalizeText(contentOnly.textContent || '');
+  const fallback = readStructuredUserText(contentOnly);
   if (fallback) textParts.push(fallback);
 }
 
@@ -176,7 +221,7 @@ export function buildChatGptAdapter(site: SiteAdapter): ExportPlatformAdapter {
     shouldPreloadHistory: () => false,
     resolveConversationRoot: resolveRoot,
     extractUserImage,
-    extractUserText,
+    extractUserText: chatgptExtractUserText,
     getUserAttachmentCandidates,
     extractAssistantImage,
     extractFormula: chatgptExtractFormula,

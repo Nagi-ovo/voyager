@@ -55,6 +55,13 @@ import {
   highlightImportExportService,
 } from '@/features/backup/services/HighlightImportExportService';
 import { PromptImportExportService } from '@/features/backup/services/PromptImportExportService';
+import {
+  chatGptHandoffTabIdResponse,
+  handleChatGptHandoffExpiryMessage,
+  isChatGptHandoffExpiryMessage,
+  startChatGptTemporaryHandoffBackgroundService,
+} from '@/features/plugins/builtin/chatgptTemporaryHandoff/background';
+import { CHATGPT_HANDOFF_GET_TAB_ID_MESSAGE } from '@/features/plugins/builtin/chatgptTemporaryHandoff/storage';
 import { computeNudgeDomains, normalizeIconResourcePath } from '@/features/plugins/promptNudge';
 import { PLUGIN_CONTENT_SCRIPT_SYNC_MESSAGE } from '@/features/plugins/runtime/messages';
 import {
@@ -111,6 +118,7 @@ const responseCompleteNotificationTargets = new Map<
 >();
 let nativeOpenConversationPort: ReturnType<typeof browser.runtime.connectNative> | null = null;
 const remoteAnnouncementService = startRemoteAnnouncementBackgroundService();
+startChatGptTemporaryHandoffBackgroundService();
 startStorageQuotaWarningBackgroundService();
 
 async function disableRetiredTabTitleUpdateSetting(): Promise<void> {
@@ -1770,6 +1778,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (message?.type === PLUGIN_CONTENT_SCRIPT_SYNC_MESSAGE) {
         await syncPluginContentScripts();
         sendResponse({ ok: true });
+        return;
+      }
+
+      if (isChatGptHandoffExpiryMessage(message)) {
+        sendResponse(await handleChatGptHandoffExpiryMessage(message));
+        return;
+      }
+
+      if (message?.type === CHATGPT_HANDOFF_GET_TAB_ID_MESSAGE) {
+        sendResponse(chatGptHandoffTabIdResponse(sender.tab?.id));
         return;
       }
 

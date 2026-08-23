@@ -10,6 +10,7 @@ import {
   startChatGptExportPlugin,
   stopChatGptExportPlugin,
 } from '@/features/plugins/builtin/chatgptExport/runtime';
+import { activateChatGptTemporaryHandoff } from '@/features/plugins/builtin/chatgptTemporaryHandoff';
 import {
   activateClaudeTimeline,
   updateClaudeTimelineSettings,
@@ -35,6 +36,9 @@ export const NATIVE_HANDLER_BINDINGS: Readonly<Record<string, NativeHandler>> = 
   'voyager.chatgpt-export': {
     start: startChatGptExportPlugin,
     stop: stopChatGptExportPlugin,
+  },
+  'voyager.chatgpt-temporary-handoff': {
+    activate: activateChatGptTemporaryHandoff,
   },
 };
 

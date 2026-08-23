@@ -252,6 +252,59 @@ export const BUILTIN_PLUGINS: readonly PluginManifest[] = [
     matches: ['https://chatgpt.com/*', 'https://chat.openai.com/*'],
     contributes: {},
   },
+  {
+    id: 'voyager.chatgpt-temporary-handoff',
+    name: 'ChatGPT · Temporary Chat Handoff',
+    version: '1.0.0',
+    description: 'Save a temporary ChatGPT conversation and continue it safely in a normal chat.',
+    i18n: {
+      zh: {
+        name: 'ChatGPT · 临时对话反悔',
+        description: '保存临时 ChatGPT 对话，并安全地转到普通聊天继续。',
+      },
+      zh_TW: {
+        name: 'ChatGPT · 暫時對話反悔',
+        description: '儲存暫時 ChatGPT 對話，並安全地轉到一般聊天繼續。',
+      },
+      ja: {
+        name: 'ChatGPT · 一時チャット引き継ぎ',
+        description: '一時チャットを保存し、通常のチャットへ安全に引き継ぎます。',
+      },
+      ko: {
+        name: 'ChatGPT · 임시 채팅 이어가기',
+        description: '임시 ChatGPT 대화를 저장하고 일반 채팅에서 안전하게 이어갑니다.',
+      },
+      fr: {
+        name: 'ChatGPT · Transfert du chat temporaire',
+        description:
+          'Enregistre une discussion temporaire et la poursuit en toute sécurité dans un chat normal.',
+      },
+      es: {
+        name: 'ChatGPT · Transferir chat temporal',
+        description:
+          'Guarda una conversación temporal y la continúa de forma segura en un chat normal.',
+      },
+      pt: {
+        name: 'ChatGPT · Transferir chat temporário',
+        description: 'Salva uma conversa temporária e continua com segurança em um chat normal.',
+      },
+      ru: {
+        name: 'ChatGPT · Перенос временного чата',
+        description: 'Сохраняет временный диалог и безопасно продолжает его в обычном чате.',
+      },
+      ar: {
+        name: 'ChatGPT · نقل المحادثة المؤقتة',
+        description: 'يحفظ محادثة مؤقتة ويتابعها بأمان في دردشة عادية.',
+      },
+    },
+    author: 'voyager-official',
+    category: 'productivity',
+    license: 'GPL-3.0-or-later',
+    engine: '>=1.2.0',
+    tier: 'declarative',
+    matches: ['https://chatgpt.com/*', 'https://chat.openai.com/*'],
+    contributes: {},
+  },
 ];
 
 /**

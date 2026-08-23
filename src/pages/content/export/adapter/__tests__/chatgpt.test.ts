@@ -5,6 +5,7 @@ import { DOMContentExtractor } from '@/features/export/services/DOMContentExtrac
 import {
   buildChatGptTurnsForSelection,
   chatgptCollectTurnContainers,
+  isChatGptResponseGenerating,
   resolveChatGptSelectionRoles,
 } from '../chatgpt';
 import type { ExportPlatformAdapter } from '../platformAdapters';
@@ -69,6 +70,21 @@ afterEach(() => {
 });
 
 describe('chatgptCollectTurnContainers', () => {
+  it('detects response generation before an assistant turn mounts', () => {
+    expect(isChatGptResponseGenerating()).toBe(false);
+
+    const stopButton = document.createElement('button');
+    stopButton.dataset.testid = 'stop-button';
+    document.body.appendChild(stopButton);
+    expect(isChatGptResponseGenerating()).toBe(true);
+
+    stopButton.remove();
+    const streamingTurn = document.createElement('div');
+    streamingTurn.setAttribute('data-message-streaming', 'true');
+    document.body.appendChild(streamingTurn);
+    expect(isChatGptResponseGenerating()).toBe(true);
+  });
+
   it('ignores ChatGPT virtual-list root without dropping the first real turn', () => {
     document.body.innerHTML = `
       <div data-turn-id-container="client-created-root"></div>

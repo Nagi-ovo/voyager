@@ -47,6 +47,19 @@ describe('BUILTIN_PLUGINS', () => {
     expect(exportPlugin?.i18n?.zh?.name).toBe('ChatGPT · 对话导出');
   });
 
+  it('keeps temporary-chat handoff separate from conversation export', () => {
+    const handoff = BUILTIN_PLUGINS.find(
+      (plugin) => plugin.id === 'voyager.chatgpt-temporary-handoff',
+    );
+    expect(handoff).toBeDefined();
+    expect(handoff?.matches).toEqual(['https://chatgpt.com/*', 'https://chat.openai.com/*']);
+    expect(handoff?.contributes.styles ?? []).toEqual([]);
+    expect(handoff?.contributes.domOps ?? []).toEqual([]);
+    expect(handoff?.i18n?.zh?.name).toBe('ChatGPT · 临时对话反悔');
+    expect(handoff?.i18n?.zh_TW?.name).toBe('ChatGPT · 暫時對話反悔');
+    expect(handoff?.id).not.toBe('voyager.chatgpt-export');
+  });
+
   it('includes the Claude timeline native function plugin', () => {
     const timeline = BUILTIN_PLUGINS.find((m) => m.id === 'voyager.claude-timeline');
     expect(timeline).toBeDefined();
