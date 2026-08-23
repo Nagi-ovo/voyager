@@ -326,8 +326,8 @@ async function readCurrentExtensionTabId(): Promise<number | null> {
 
 export async function discardPendingHandoff(): Promise<void> {
   const token = readPendingTabToken();
+  detachPendingHandoffTab();
   if (!token) {
-    detachPendingHandoffTab();
     return;
   }
   const storageKey = pendingStorageKey(token);
@@ -338,14 +338,11 @@ export async function discardPendingHandoff(): Promise<void> {
     ]);
     const ownerTabId = (stored[storageKey] as Partial<PendingHandoff> | undefined)?.tabId;
     if (currentTabId === null || (typeof ownerTabId === 'number' && ownerTabId !== currentTabId)) {
-      detachPendingHandoffTab();
       return;
     }
   } catch {
-    detachPendingHandoffTab();
     return;
   }
-  detachPendingHandoffTab();
   let removed = false;
   try {
     await browser.storage.local.remove(storageKey);

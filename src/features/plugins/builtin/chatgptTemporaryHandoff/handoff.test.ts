@@ -689,6 +689,28 @@ describe('temporary chat handoff', () => {
     );
   });
 
+  it('blocks a new resume synchronously while cancellation cleanup is still pending', async () => {
+    const composer = addComposer('User replacement');
+    seedPending({ mode: 'inline', text: 'Do not restore after cancellation' });
+    let resolveTabId!: (value: { ok: true; tabId: number }) => void;
+    vi.mocked(browser.runtime.sendMessage).mockImplementation((message: unknown) =>
+      (message as { type?: string }).type === CHATGPT_HANDOFF_GET_TAB_ID_MESSAGE
+        ? new Promise((resolve) => {
+            resolveTabId = resolve;
+          })
+        : Promise.resolve({ ok: true }),
+    );
+
+    cancelPendingHandoffRecovery();
+    expect(sessionStorage.getItem(PENDING_HANDOFF_TAB_KEY)).toBeNull();
+    await expect(resumePendingHandoff(createScope())).resolves.toBeNull();
+    expect(composer.textContent).toBe('User replacement');
+    expect(pendingEntryCount()).toBe(1);
+
+    resolveTabId({ ok: true, tabId: 42 });
+    await vi.waitFor(() => expect(pendingEntryCount()).toBe(0));
+  });
+
   it('restores a short draft as its own segment instead of matching an unrelated substring', async () => {
     const composer = addComposer('data');
     seedPending({ mode: 'inline', text: 'Recovered handoff' }, Date.now(), 'route:default', 'a');
