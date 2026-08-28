@@ -105,6 +105,8 @@ Add any site in the extension popup and the Prompt Manager follows you there, lo
   <img src="docs/public/assets/prompt-manager-deepseek-harness.png" alt="Prompt Manager running inside DeepSeek Harness" width="720">
 </p>
 
+For source-backed DeepSeek Harness runtime troubleshooting beyond the extension layer, see the independent [DeepSeek Harness Handbook](https://github.com/sandbaseai/deepseek-harness-handbook) and its [hosted field guide](https://sandbaseai.github.io/deepseek-harness-handbook/).
+
 ### 🎨 Personalization
 
 - Open the extension popup and find **Visual Effects** to switch between `Off`, `Snow`, `Sakura`, and `Rain`.
