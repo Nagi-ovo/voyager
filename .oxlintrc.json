@@ -24,8 +24,16 @@
   ],
   "rules": {
     "react/rules-of-hooks": "error",
+    // Deliberately left below the category. The React team ships this one as a
+    // warning because it cannot see through refs or stable dispatch identities,
+    // and a false positive here should not be able to block a build.
     "react/exhaustive-deps": "warn",
-    "no-unused-vars": ["warn", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
+    // An explicit severity outranks the category, so this has to say "error" to
+    // inherit it. Leaving it at "warn" is how the orphaned five-function chain in
+    // export/index.ts survived: eslint had been reporting it for as long as the
+    // rule existed, and a warning nobody reads stops anything from accumulating.
+    // Prefix a binding with _ when it is genuinely meant to stay unused.
+    "no-unused-vars": ["error", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
     "typescript/no-explicit-any": "warn",
     "no-console": ["warn", { "allow": ["warn", "error"] }],
 

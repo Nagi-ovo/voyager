@@ -117,6 +117,30 @@ describe('oxlint fails the build on the correctness category', () => {
     // An error has to be a non-zero exit, or CI would never notice it.
     expect(result.status).not.toBe(0);
   });
+
+  it('fails on an unused binding, which an explicit severity can silently exempt', () => {
+    // no-unused-vars carries options, so it has to name a severity, and that
+    // severity outranks the category. Written as "warn" it drops out of the gate
+    // without anything else changing -- which is how a five-function dead chain
+    // survived in export/index.ts.
+    const filePath = writeFixture(
+      'unused.ts',
+      'export function keep(): number {\n  const unused = 1;\n  const _ignored = 2;\n  return 3;\n}\n',
+    );
+
+    const result = spawnSync(oxlintBin, ['-c', oxlintConfig, '-f', 'json', filePath], {
+      encoding: 'utf8',
+    });
+    const payload = JSON.parse(result.stdout);
+    const unused = (payload.diagnostics ?? payload).filter(
+      (entry) => entry.code === 'eslint(no-unused-vars)',
+    );
+
+    // Only the plain binding: the _-prefixed one stays exempt.
+    expect(unused).toHaveLength(1);
+    expect(unused[0].severity).toBe('error');
+    expect(result.status).not.toBe(0);
+  });
 });
 
 describe('oxfmt reproduces the prettier import ordering', () => {
