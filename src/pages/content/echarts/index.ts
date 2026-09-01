@@ -511,7 +511,7 @@ export const parseEChartsOption = async (code: string): Promise<Record<string, u
   if (!code) return null;
   const cleaned = stripEChartsAssignment(code);
 
-  const [JSON5Mod] = await Promise.all([import('json5')]);
+  const JSON5Mod = await import('json5');
   const parse = JSON5Mod.default?.parse ?? JSON5Mod.parse;
 
   try {

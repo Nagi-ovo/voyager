@@ -105,7 +105,7 @@ async function assignIssue({ github, context, username, approvedBy }) {
       ...issueParams(context),
       assignees: [username],
     });
-  } catch (error) {
+  } catch {
     await comment({
       github,
       context,

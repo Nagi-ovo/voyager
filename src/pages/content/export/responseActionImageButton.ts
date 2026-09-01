@@ -7,7 +7,6 @@ export type ResponseActionCopyImageOptions = {
 const COPY_BUTTON_TEST_ID = 'copy-button';
 const MORE_BUTTON_TEST_ID = 'more-menu-button';
 const COPY_IMAGE_BUTTON_TEST_ID = 'gv-copy-image-button';
-const COPY_IMAGE_ICON_NAME = 'image';
 const COPY_ICON_NAME = 'content_copy';
 const COPY_BUTTON_ARIA_PATTERNS = [/^copy\b/i, /复制/];
 const ACTION_BUTTON_SELECTOR = 'button, gem-icon-button, [role="button"]';

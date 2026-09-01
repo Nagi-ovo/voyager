@@ -184,7 +184,6 @@ function navigateToSavedLibraryItem(item: SavedLibraryItem): boolean {
       : new Event('popstate'),
   );
   return true;
-  window.dispatchEvent(new Event('hashchange'));
 }
 
 function detectPageTheme(): PMTheme {
@@ -1623,8 +1622,7 @@ export async function startPromptManager(): Promise<{ destroy: () => void }> {
       const selectedTagList = Array.from(selectedTags);
       const nameConflictIds = getPromptNameConflictIds(items);
       const filtered = items.filter((it) => {
-        const okTag =
-          selectedTagList.length === 0 || selectedTagList.every((t) => it.tags.includes(t));
+        const okTag = selectedTagList.every((t) => it.tags.includes(t));
         if (!okTag) return false;
         if (!q) return true;
         // Include the user-authored name so searching for the label shown in

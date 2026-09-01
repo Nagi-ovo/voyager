@@ -5,7 +5,7 @@
  * container, falling back to `document.body`.
  */
 import type { ExportPlatformAdapter } from './adapter/platformAdapters';
-import { filterOutDeepResearchImmersiveNodes, resolveConversationRoot } from './conversationDom';
+import { resolveConversationRoot } from './conversationDom';
 
 /**
  * Resolve the conversation root element for the current platform.

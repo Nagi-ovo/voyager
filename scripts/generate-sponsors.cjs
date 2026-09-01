@@ -19,7 +19,6 @@ const ROOT = path.resolve(__dirname, '..');
 const FRIENDS_PATH = path.join(ROOT, 'sponsorkit', 'sponsors.json');
 const OUTPUT_DIR = path.join(ROOT, 'docs', 'public', 'assets');
 const OUTPUT_PATH = path.join(OUTPUT_DIR, 'sponsors.svg');
-const OUTPUT_PNG_PATH = path.join(OUTPUT_DIR, 'sponsors.png');
 const SPONSORS_URL = 'https://github.com/sponsors/Nagi-ovo';
 const OWNER_LOGIN = 'Nagi-ovo';
 const GRAPHQL_ENDPOINT = 'https://api.github.com/graphql';
@@ -359,7 +358,7 @@ async function avatarDataUri(url) {
 }
 
 async function embedAvatarData(sponsors) {
-  const results = await Promise.allSettled(
+  await Promise.allSettled(
     sponsors.map(async (sponsor) => {
       if (!sponsor.avatarUrl) return;
       sponsor.avatar = await avatarDataUri(sponsor.avatarUrl);

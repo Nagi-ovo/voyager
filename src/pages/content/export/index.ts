@@ -841,27 +841,6 @@ async function loadDictionaries(): Promise<Record<AppLanguage, Record<string, st
   }
 }
 
-/**
- * Extract human-readable conversation title from the current page
- * Used for JSON/Markdown metadata so all formats share the same title.
- * Mirrors the logic used by PDFPrintService.getConversationTitle.
- */
-function isMeaningfulConversationTitle(title: string | null | undefined): title is string {
-  const t = (title || '').trim();
-  if (!t) return false;
-  if (
-    t === 'Untitled Conversation' ||
-    t === 'Gemini' ||
-    t === 'Google Gemini' ||
-    t === 'Google AI Studio' ||
-    t === 'New chat'
-  ) {
-    return false;
-  }
-  if (t.startsWith('Gemini -') || t.startsWith('Google AI Studio -')) return false;
-  return true;
-}
-
 function extractConversationIdFromUrl(): string | null {
   const appMatch = window.location.pathname.match(/\/app\/([^/?#]+)/);
   if (appMatch?.[1]) return appMatch[1];
@@ -882,93 +861,6 @@ function extractConversationIdFromHref(href: string): string | null {
   } catch {
     return null;
   }
-}
-
-function isGemLabel(text: string | null | undefined): boolean {
-  const t = (text || '').trim().toLowerCase();
-  return t === 'gem' || t === 'gems';
-}
-
-function extractTitleFromLinkText(link?: HTMLAnchorElement | null): string | null {
-  if (!link) return null;
-  const text = (link.innerText || '').trim();
-  if (!text) return null;
-  const parts = text
-    .split('\n')
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .filter((s) => !isGemLabel(s))
-    .filter((s) => s.length >= 2);
-  if (parts.length === 0) return null;
-  return parts.reduce((a, b) => (b.length > a.length ? b : a), parts[0]) || null;
-}
-
-function extractTitleFromConversationElement(conversationEl: HTMLElement): string | null {
-  const scope =
-    (conversationEl.closest('[data-test-id="conversation"]') as HTMLElement) || conversationEl;
-  const bySelector = scope.querySelector(
-    '.gds-label-l, .conversation-title-text, [data-test-id="conversation-title"], h3',
-  );
-  const selectorTitle = bySelector?.textContent?.trim();
-  if (isMeaningfulConversationTitle(selectorTitle) && !isGemLabel(selectorTitle)) {
-    return selectorTitle;
-  }
-
-  const link = scope.querySelector(
-    'a[href*="/app/"], a[href*="/gem/"]',
-  ) as HTMLAnchorElement | null;
-  const ariaTitle = link?.getAttribute('aria-label')?.trim();
-  if (isMeaningfulConversationTitle(ariaTitle) && !isGemLabel(ariaTitle)) {
-    return ariaTitle;
-  }
-  const linkTitle = link?.getAttribute('title')?.trim();
-  if (isMeaningfulConversationTitle(linkTitle) && !isGemLabel(linkTitle)) {
-    return linkTitle;
-  }
-  const fromLinkText = extractTitleFromLinkText(link);
-  if (isMeaningfulConversationTitle(fromLinkText)) {
-    return fromLinkText;
-  }
-
-  const label = scope.querySelector('.gds-body-m, .gds-label-m, .subtitle');
-  const labelText = label?.textContent?.trim();
-  if (isMeaningfulConversationTitle(labelText) && !isGemLabel(labelText)) {
-    return labelText;
-  }
-
-  const raw = scope.textContent?.trim() || '';
-  if (!raw) return null;
-  const firstLine =
-    raw
-      .split('\n')
-      .map((s) => s.trim())
-      .filter(Boolean)[0] || raw;
-  if (isMeaningfulConversationTitle(firstLine) && !isGemLabel(firstLine)) {
-    return firstLine.slice(0, 80);
-  }
-
-  return null;
-}
-
-function extractTitleFromNativeSidebarByConversationId(conversationId: string): string | null {
-  const escapedConversationId = escapeCssAttributeValue(conversationId);
-  const byJslog = document.querySelector(
-    `[data-test-id="conversation"][jslog*="c_${escapedConversationId}"]`,
-  ) as HTMLElement | null;
-  if (byJslog) {
-    const title = extractTitleFromConversationElement(byJslog);
-    if (title) return title;
-  }
-
-  const byHrefLink = document.querySelector(
-    `[data-test-id="conversation"] a[href*="${escapedConversationId}"]`,
-  ) as HTMLElement | null;
-  if (byHrefLink) {
-    const title = extractTitleFromConversationElement(byHrefLink);
-    if (title) return title;
-  }
-
-  return null;
 }
 
 function escapeCssAttributeValue(value: string): string {
