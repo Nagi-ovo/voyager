@@ -967,9 +967,9 @@ export default defineConfig({
             ],
           },
         ],
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        // oxlint-disable-next-line typescript/no-explicit-any
       }) as any,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // oxlint-disable-next-line typescript/no-explicit-any
       GitChangelogMarkdownSection() as any,
     ],
     ssr: {

@@ -1,5 +1,5 @@
 #!/bin/bash
-# PostToolUse hook: run eslint on the edited .ts/.tsx file, surface failures.
+# PostToolUse hook: run oxlint on the edited .ts/.tsx file, surface failures.
 
 input=$(cat)
 file_path=$(printf '%s' "$input" \
@@ -18,7 +18,7 @@ if ! command -v bunx >/dev/null 2>&1; then
   exit 0
 fi
 
-output=$(bunx eslint "$file_path" 2>&1)
+output=$(bunx oxlint "$file_path" 2>&1)
 status=$?
 if [ $status -ne 0 ]; then
   printf '%s\n' "$output" | tail -30 >&2
