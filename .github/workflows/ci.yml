@@ -94,7 +94,16 @@ jobs:
         with:
           bun-version: '1.3.12'
       - run: bun install --frozen-lockfile
-      - run: bun run format:check
+      # oxfmt replaced Prettier, so contributors whose editor still formats with
+      # Prettier will trip this. Print the exact diff instead of only the file
+      # list, so the fix does not require reproducing the failure locally.
+      - name: Check formatting
+        run: |
+          if bun run format:check; then exit 0; fi
+          echo "::error::Formatting differs from oxfmt. Run 'bun run format' and commit the result."
+          bun run format > /dev/null
+          git --no-pager diff --color
+          exit 1
       - run: bun run regressions:check
 
   # ── Lint (oxlint) ────────────────────────────────────────────────────

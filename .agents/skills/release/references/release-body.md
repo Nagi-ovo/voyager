@@ -226,7 +226,7 @@ fix(timeline): persist node hierarchy per account
 fix(folder): nested folder moves (#547)
 fix(firefox): permission request handling (#567)
 chore: sponsor update          ← skip
-style: prettier                 ← skip
+style: oxfmt                    ← skip
 ```
 
 Two of the five commits are external PRs (#547 chang-xinhai, #567 LinJHS), so this is a Flavor 2 release — keep the `By` column and use it for attribution. Produces:
