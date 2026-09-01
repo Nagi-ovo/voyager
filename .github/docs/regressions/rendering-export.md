@@ -149,3 +149,21 @@ output.
 - **Guard:** `src/features/formulaCopy/FormulaCopyService.test.ts`
   (`copies current ChatGPT block KaTeX from data-math-source without MathML` and
   `copies current ChatGPT inline KaTeX from data-math-source as inline LaTeX`).
+
+## Zero-width sanitising must not strip the emoji joiner
+
+- **Trap:** Mermaid diagram labels containing a composed emoji rendered as its separate glyphs --
+  `👨‍👩‍👦` came out as `👨👩👦`, `🏳️‍🌈` as `🏳️🌈`. `normalizeWhitespace` strips zero-width
+  characters so stray invisibles from model output cannot break the parser, and U+200D sat in that
+  character class alongside U+200B and U+200C. But U+200D is the zero-width _joiner_: it is what
+  holds an emoji sequence together, so removing every occurrence splits the sequence. The rule that
+  surfaced it (`no-misleading-character-class`) had never been enabled under the old ESLint config,
+  which extended no recommended set.
+- **Rule:** Strip U+200D only when it is not joining two emoji, checking the neighbouring code
+  points and skipping variation selectors and skin-tone modifiers on the way back. Walk the string
+  with `Array.from`, never by UTF-16 index, so astral emoji stay in one piece. The other zero-width
+  characters keep their unconditional removal.
+- **Guard:** `src/pages/content/mermaid/__tests__/mermaid.test.ts`
+  (`should keep the joiner that holds an emoji sequence together`,
+  `should still remove a joiner that only touches an emoji on one side`, and the original
+  `should remove zero-width joiner`, which pins the stray-joiner case that motivated the strip).

@@ -1,3 +1,5 @@
+/* oxlint-disable no-unsafe-optional-chaining -- `mermaid?.render` is undefined only when
+   loadMermaid() failed, and letting that throw is how these tests report it. */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -654,6 +656,24 @@ B --> C`;
     it('should remove zero-width joiner', () => {
       const input = 'graph\u200DTD';
       expect(normalizeWhitespace(input)).toBe('graphTD');
+    });
+
+    it('should keep the joiner that holds an emoji sequence together', () => {
+      // Stripping every U+200D splits these into their component glyphs, so a
+      // node label like `A["\u{1F468}\u200D\u{1F469}\u200D\u{1F466} team"]`
+      // would render as three separate people.
+      const family = '\u{1F468}\u200D\u{1F469}\u200D\u{1F466}';
+      expect(normalizeWhitespace(family)).toBe(family);
+
+      // The flag sequence puts a variation selector between the emoji and the
+      // joiner, so the lookback has to skip it.
+      const flag = '\u{1F3F3}\uFE0F\u200D\u{1F308}';
+      expect(normalizeWhitespace(flag)).toBe(flag);
+    });
+
+    it('should still remove a joiner that only touches an emoji on one side', () => {
+      expect(normalizeWhitespace('a\u200D\u{1F44D}')).toBe('a\u{1F44D}');
+      expect(normalizeWhitespace('\u{1F44D}\u200Db')).toBe('\u{1F44D}b');
     });
 
     it('should remove BOM character', () => {

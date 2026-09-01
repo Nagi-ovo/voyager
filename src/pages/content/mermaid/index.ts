@@ -655,13 +655,40 @@ export const _openFullscreenForTest = openFullscreen;
 /**
  * @internal Exported for testing
  */
+const PICTOGRAPHIC = /\p{Extended_Pictographic}/u;
+/** Variation selectors and skin-tone modifiers sit between an emoji and its joiner. */
+const EMOJI_MODIFIER = /\uFE0F|\p{Emoji_Modifier}/u;
+
+/**
+ * A zero-width joiner is only meaningful when it actually joins two emoji, as in
+ * a family or flag sequence. Anywhere else it is invisible noise that breaks the
+ * Mermaid parser, so it should be stripped like the other zero-width characters.
+ */
+const joinsEmoji = (source: string, index: number): boolean => {
+  // Array.from splits by code point, so an astral emoji stays in one piece.
+  const before = Array.from(source.slice(0, index));
+  let previous = before.pop();
+  while (previous !== undefined && EMOJI_MODIFIER.test(previous)) previous = before.pop();
+  const next = Array.from(source.slice(index + 1))[0];
+  return (
+    previous !== undefined &&
+    next !== undefined &&
+    PICTOGRAPHIC.test(previous) &&
+    PICTOGRAPHIC.test(next)
+  );
+};
+
 export const normalizeWhitespace = (code: string): string => {
   return (
     code
       // Replace various special space characters with standard space
       .replace(/[\u00A0\u2002\u2003\u2009\u3000]/g, ' ')
       // Remove zero-width characters that can cause issues
-      .replace(/[\u200B\u200C\u200D\uFEFF]/g, '')
+      .replace(/[\u200B\u200C\uFEFF]/g, '')
+      // Strip stray joiners, but keep the ones holding an emoji sequence together
+      .replace(/\u200D/gu, (match, index: number, source: string) =>
+        joinsEmoji(source, index) ? match : '',
+      )
   );
 };
 
