@@ -122,7 +122,7 @@ bun install
 | `bun run build`       | Build de production pour Chrome                       |
 | `bun run build:edge`  | Build et paquet Edge indépendants                     |
 | `bun run build:all`   | Builds Chrome + Firefox + Safari                      |
-| `bun run lint`        | Exécuter ESLint avec correction automatique           |
+| `bun run lint`        | Exécuter oxlint avec correction automatique           |
 | `bun run typecheck`   | Exécuter la vérification de type TypeScript           |
 | `bun run test`        | Exécuter la suite de tests                            |
 | `bun run verify:pr`   | Vérification automatisée locale standard d'une PR     |

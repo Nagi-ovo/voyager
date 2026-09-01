@@ -122,7 +122,7 @@ bun install
 | `bun run build`       | Chrome 用のプロダクションビルド           |
 | `bun run build:edge`  | Edge の独立ビルドとパッケージ作成         |
 | `bun run build:all`   | Chrome + Firefox + Safari のビルド        |
-| `bun run lint`        | ESLint を実行して自動修正                 |
+| `bun run lint`        | oxlint を実行して自動修正                 |
 | `bun run typecheck`   | TypeScript の型チェックを実行             |
 | `bun run test`        | テストスイートを実行                      |
 | `bun run verify:pr`   | 標準のローカル PR 自動検証                |

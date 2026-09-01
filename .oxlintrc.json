@@ -1,0 +1,29 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc", "react", "jsx-a11y"],
+  "env": { "browser": true, "builtin": true },
+  "settings": { "react": { "version": "19.1.0" } },
+  "ignorePatterns": [
+    "dist_*/**",
+    "output/**",
+    "node_modules/**",
+    "docs/.vitepress/cache/**",
+    "docs/.vitepress/dist/**",
+    "coverage/**",
+    "gemini-voyager-sync/**",
+    "gemini-voyager-formal/**",
+    ".agent/**",
+    ".github/sponsors/**",
+    "public/**",
+    "Voyager/**",
+    ".build/**",
+    "safari/Models/dmg_source/**"
+  ],
+  "rules": {
+    "react/rules-of-hooks": "error",
+    "react/exhaustive-deps": "warn",
+    "no-unused-vars": ["warn", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
+    "typescript/no-explicit-any": "warn",
+    "no-console": ["warn", { "allow": ["warn", "error"] }]
+  }
+}

@@ -8,8 +8,9 @@ fi
 
 files=()
 while IFS= read -r -d '' file; do
-  # Prettier rejects symbolic links passed as explicit file arguments.
-  # Their contents are formatted through their canonical targets instead.
+  # oxfmt follows symbolic links and would format the link target, which may
+  # be an ignored file. Their contents are formatted through their canonical
+  # targets instead.
   if [ -L "$file" ]; then
     continue
   fi
@@ -37,6 +38,6 @@ if [ "${#dirty[@]}" -ne 0 ]; then
   exit 1
 fi
 
-bun x prettier --write --ignore-unknown "${files[@]}"
+bun x oxfmt --no-error-on-unmatched-pattern "${files[@]}"
 git add -- "${files[@]}"
 git diff --cached --check

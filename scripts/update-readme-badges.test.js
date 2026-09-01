@@ -79,7 +79,7 @@ describe('README badge publishing', () => {
     );
     const coreFilter = workflow.slice(
       workflow.indexOf('            core:'),
-      workflow.indexOf('\n\n  # ── Prettier'),
+      workflow.indexOf('\n\n  # ── Format'),
     );
 
     for (const path of docsToolingPaths) {

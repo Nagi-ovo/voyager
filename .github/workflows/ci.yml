@@ -82,7 +82,7 @@ jobs:
               - '!.gitignore'
               - '!.gitattributes'
 
-  # ── Prettier ───────────────────────────────────────────────────────────
+  # ── Format (oxfmt) ───────────────────────────────────────────────────
   format:
     name: Format
     runs-on: ubuntu-latest
@@ -97,7 +97,7 @@ jobs:
       - run: bun run format:check
       - run: bun run regressions:check
 
-  # ── ESLint ─────────────────────────────────────────────────────────────
+  # ── Lint (oxlint) ────────────────────────────────────────────────────
   lint:
     name: Lint
     needs: changes

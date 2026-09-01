@@ -17,7 +17,7 @@
  * after you approve, paste the printed token into the CHROME_REFRESH_TOKEN secret.
  */
 
-/* eslint-disable no-console -- one-off local CLI helper; printing to the terminal is its whole job */
+/* oxlint-disable no-console -- one-off local CLI helper; printing to the terminal is its whole job */
 
 let clientId = process.env.CLIENT_ID;
 let clientSecret = process.env.CLIENT_SECRET;

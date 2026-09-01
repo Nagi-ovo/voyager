@@ -129,7 +129,7 @@ bun install
 | `bun run build`       | Chrome 生产构建                  |
 | `bun run build:edge`  | Edge 独立构建与打包              |
 | `bun run build:all`   | Chrome + Firefox + Safari 构建   |
-| `bun run lint`        | 运行 ESLint 并自动修复           |
+| `bun run lint`        | 运行 oxlint 并自动修复           |
 | `bun run typecheck`   | 运行 TypeScript 类型检查         |
 | `bun run test`        | 运行测试套件                     |
 | `bun run verify:pr`   | 标准本地 PR 自动验证             |
@@ -422,7 +422,7 @@ bun install
 | `bun run build`       | Production build for Chrome                   |
 | `bun run build:edge`  | Standalone Edge build and package             |
 | `bun run build:all`   | Chrome + Firefox + Safari builds              |
-| `bun run lint`        | Run ESLint with auto-fix                      |
+| `bun run lint`        | Run oxlint with auto-fix                      |
 | `bun run typecheck`   | Run TypeScript type checking                  |
 | `bun run test`        | Run test suite                                |
 | `bun run verify:pr`   | Standard local PR automation                  |

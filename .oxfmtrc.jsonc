@@ -1,0 +1,68 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "semi": true,
+  "singleQuote": true,
+  "tabWidth": 2,
+  "useTabs": false,
+  "printWidth": 100,
+  "trailingComma": "all",
+  "endOfLine": "lf",
+  // Keep package.json key order under manual control.
+  "sortPackageJson": false,
+  // Replaces prettier-plugin-tailwindcss (same algorithm).
+  "sortTailwindcss": true,
+  // Replaces @trivago/prettier-plugin-sort-imports. Groups mirror the old
+  // `importOrder`; `ignoreCase: false` keeps trivago's ASCII ordering
+  // (uppercase before lowercase) so existing import blocks stay untouched.
+  "sortImports": {
+    "newlinesBetween": true,
+    "ignoreCase": false,
+    "groups": [
+      "react",
+      ["builtin", "external"],
+      "core",
+      "features",
+      "components",
+      "pages",
+      "assets",
+      "locales",
+      "alias",
+      ["parent", "sibling", "index"],
+      "unknown",
+    ],
+    "customGroups": [
+      {
+        "groupName": "react",
+        "elementNamePattern": ["react", "react/**", "react-*", "react-*/**"],
+      },
+      { "groupName": "core", "elementNamePattern": ["@core/**"] },
+      { "groupName": "features", "elementNamePattern": ["@features/**"] },
+      { "groupName": "components", "elementNamePattern": ["@components/**"] },
+      { "groupName": "pages", "elementNamePattern": ["@pages/**"] },
+      { "groupName": "assets", "elementNamePattern": ["@assets/**"] },
+      { "groupName": "locales", "elementNamePattern": ["@locales/**"] },
+      { "groupName": "alias", "elementNamePattern": ["@/**"] },
+    ],
+  },
+  // .gitignore is honoured automatically; these are the extra paths that
+  // used to live in .prettierignore.
+  "ignorePatterns": [
+    "gemini-voyager-sync/",
+    "gemini-voyager-formal/",
+    "dist_*/",
+    "dist/",
+    "output/",
+    "coverage/",
+    "docs/.vitepress/dist/",
+    "docs/.vitepress/cache/",
+    "Voyager/",
+    "safari/",
+    "web-ext-artifacts/",
+    "sponsorkit/",
+    ".entire/",
+    ".claude/",
+    "CLAUDE.md",
+    "src/pages/content/changelog/notes/",
+    "*.zip",
+  ],
+}
