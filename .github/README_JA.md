@@ -4,7 +4,7 @@
   <p>
     <b>Gemini · Claude · ChatGPT、ついに完成。</b>
   </p>
-  
+
   <p>
     <img src="https://voyager.nagi.fun/badges/github-stars.svg" alt="GitHub Star">
     <img src="https://voyager.nagi.fun/badges/github-forks.svg" alt="GitHub Fork">
@@ -156,7 +156,7 @@ Voyager がお役に立ちましたら、コーヒー一杯分のご支援をい
   <a href="https://github.com/sponsors/Nagi-ovo" target="_blank">
     <img src="https://img.shields.io/badge/Sponsor%20me-GitHub-ea4aaa?style=for-the-badge&logo=github&logoColor=white" alt="Sponsor on GitHub" height="36">
   </a>
-  
+
   <p><b>WeChat / Alipay / Afdian でも支援可能です：</b></p>
   <table align="center" border="0" cellpadding="0" cellspacing="0">
     <tr>

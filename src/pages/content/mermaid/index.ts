@@ -188,15 +188,15 @@ export function resolveMermaidTheme(doc: Document, prefersDark: boolean): 'dark'
 
   const hasExplicitDarkTheme = Boolean(
     body.classList.contains('dark-theme') ||
-      root.classList.contains('dark') ||
-      body.getAttribute('data-theme') === 'dark',
+    root.classList.contains('dark') ||
+    body.getAttribute('data-theme') === 'dark',
   );
   if (hasExplicitDarkTheme) return 'dark';
 
   const hasExplicitLightTheme = Boolean(
     body.classList.contains('light-theme') ||
-      root.classList.contains('light') ||
-      body.getAttribute('data-theme') === 'light',
+    root.classList.contains('light') ||
+    body.getAttribute('data-theme') === 'light',
   );
   if (hasExplicitLightTheme) return 'default';
 

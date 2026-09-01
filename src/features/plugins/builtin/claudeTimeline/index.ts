@@ -859,7 +859,7 @@ class ClaudeTimeline {
   }
 
   private getScrollTarget(element: HTMLElement): HTMLElement | Window {
-    for (let parent = element.parentElement; parent && parent !== document.body; ) {
+    for (let parent = element.parentElement; parent && parent !== document.body;) {
       const style = getComputedStyle(parent);
       if (
         /(auto|scroll|overlay)/.test(style.overflowY) &&

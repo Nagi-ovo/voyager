@@ -4,7 +4,7 @@
   <p>
     <b>Gemini · Claude · ChatGPT — наконец, всё на месте.</b>
   </p>
-  
+
   <p>
     <img src="https://voyager.nagi.fun/badges/github-stars.svg" alt="GitHub stars">
     <img src="https://voyager.nagi.fun/badges/github-forks.svg" alt="GitHub forks">
@@ -156,7 +156,7 @@
   <a href="https://github.com/sponsors/Nagi-ovo" target="_blank">
     <img src="https://img.shields.io/badge/Sponsor%20me-GitHub-ea4aaa?style=for-the-badge&logo=github&logoColor=white" alt="Sponsor on GitHub" height="36">
   </a>
-  
+
   <p><b>Или через WeChat / Alipay / Afdian:</b></p>
   <table align="center" border="0" cellpadding="0" cellspacing="0">
     <tr>

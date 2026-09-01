@@ -76,8 +76,8 @@ function isSidebarConversationTrigger(trigger: HTMLElement): boolean {
 function hasDeepResearchReportMarkers(menuContent: HTMLElement): boolean {
   return Boolean(
     menuContent.querySelector('[data-test-id="share-button-tooltip-container"]') ||
-      menuContent.querySelector('[data-test-id="export-to-docs-button"]') ||
-      menuContent.querySelector('[data-test-id="copy-button"]'),
+    menuContent.querySelector('[data-test-id="export-to-docs-button"]') ||
+    menuContent.querySelector('[data-test-id="copy-button"]'),
   );
 }
 
@@ -156,8 +156,8 @@ export function isConversationMenuPanel(menuPanel: HTMLElement): boolean {
   if (!menuContent) return false;
   const hasConversationActions = Boolean(
     menuContent.querySelector('[data-test-id="pin-button"]') ||
-      menuContent.querySelector('[data-test-id="rename-button"]') ||
-      menuContent.querySelector('[data-test-id="delete-button"]'),
+    menuContent.querySelector('[data-test-id="rename-button"]') ||
+    menuContent.querySelector('[data-test-id="delete-button"]'),
   );
   if (hasConversationActions) return true;
 

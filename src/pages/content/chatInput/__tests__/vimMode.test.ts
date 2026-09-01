@@ -1200,43 +1200,43 @@ describe('input Vim mode', () => {
     Object.defineProperty(input, 'clientWidth', { configurable: true, value: 200 });
 
     const originalGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect;
-    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (
-      this: HTMLElement,
-    ) {
-      if (this.classList.contains('gv-input-vim-textarea-mirror')) {
-        return {
-          height: 24,
-          width: 200,
-          top: 0,
-          left: 0,
-          right: 200,
-          bottom: 24,
-          x: 0,
-          y: 0,
-          toJSON: () => {},
-        } as DOMRect;
-      }
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(
+      function (this: HTMLElement) {
+        if (this.classList.contains('gv-input-vim-textarea-mirror')) {
+          return {
+            height: 24,
+            width: 200,
+            top: 0,
+            left: 0,
+            right: 200,
+            bottom: 24,
+            x: 0,
+            y: 0,
+            toJSON: () => {},
+          } as DOMRect;
+        }
 
-      if (this.classList.contains('gv-input-vim-textarea-marker')) {
-        const offset = Number(this.dataset.gvVimOffset ?? 0);
-        const line = offset >= 3 ? 1 : 0;
-        const left = (line === 0 ? offset : offset - 3) * 12;
-        const top = line * 24;
-        return {
-          height: 24,
-          width: 12,
-          top,
-          left,
-          right: left + 12,
-          bottom: top + 24,
-          x: left,
-          y: top,
-          toJSON: () => {},
-        } as DOMRect;
-      }
+        if (this.classList.contains('gv-input-vim-textarea-marker')) {
+          const offset = Number(this.dataset.gvVimOffset ?? 0);
+          const line = offset >= 3 ? 1 : 0;
+          const left = (line === 0 ? offset : offset - 3) * 12;
+          const top = line * 24;
+          return {
+            height: 24,
+            width: 12,
+            top,
+            left,
+            right: left + 12,
+            bottom: top + 24,
+            x: left,
+            y: top,
+            toJSON: () => {},
+          } as DOMRect;
+        }
 
-      return originalGetBoundingClientRect.call(this);
-    });
+        return originalGetBoundingClientRect.call(this);
+      },
+    );
 
     const { startInputVimMode } = await import('../vimMode');
     const cleanup = await startInputVimMode();

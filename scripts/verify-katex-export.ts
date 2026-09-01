@@ -572,13 +572,13 @@ function analyze(metrics: Metrics): Analysis {
         metrics.svg.position === 'absolute' &&
         metrics.svg.height > 8 &&
         metrics.svg.width > 8) ||
-        (metrics.katexImg &&
-          metrics.katexImg.display === 'block' &&
-          metrics.katexImg.position === 'absolute' &&
-          metrics.katexImg.height > 8 &&
-          metrics.katexImg.width > 8 &&
-          metrics.katexImg.marginTop === '0px' &&
-          metrics.katexImg.maxWidth === 'none'),
+      (metrics.katexImg &&
+        metrics.katexImg.display === 'block' &&
+        metrics.katexImg.position === 'absolute' &&
+        metrics.katexImg.height > 8 &&
+        metrics.katexImg.width > 8 &&
+        metrics.katexImg.marginTop === '0px' &&
+        metrics.katexImg.maxWidth === 'none'),
     ),
     tailLayout:
       metrics.hideTail?.overflow === 'hidden' &&

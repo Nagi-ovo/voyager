@@ -181,7 +181,7 @@ function getGraphemeRanges(text: string): GraphemeRange[] {
     return ranges;
   }
 
-  for (let index = 0; index < text.length; ) {
+  for (let index = 0; index < text.length;) {
     const codePoint = text.codePointAt(index);
     const nextIndex = index + (codePoint && codePoint > 0xffff ? 2 : 1);
     ranges.push({ start: index, end: nextIndex });
@@ -1331,11 +1331,11 @@ function updateCursorMotion(cursor: HTMLElement, box: NonNullable<typeof lastCur
 function isUsableRect(rect: DOMRect | undefined): rect is DOMRect {
   return Boolean(
     rect &&
-      Number.isFinite(rect.left) &&
-      Number.isFinite(rect.top) &&
-      Number.isFinite(rect.width) &&
-      Number.isFinite(rect.height) &&
-      rect.width + rect.height > 0,
+    Number.isFinite(rect.left) &&
+    Number.isFinite(rect.top) &&
+    Number.isFinite(rect.width) &&
+    Number.isFinite(rect.height) &&
+    rect.width + rect.height > 0,
   );
 }
 

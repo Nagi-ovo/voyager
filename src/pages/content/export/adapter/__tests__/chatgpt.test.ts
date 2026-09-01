@@ -327,15 +327,15 @@ describe('chatgptCollectTurnContainers', () => {
       y: -150,
       toJSON: () => ({}),
     });
-    (HTMLElement.prototype.scrollIntoView as ReturnType<typeof vi.fn>).mockImplementation(function (
-      this: HTMLElement,
-    ) {
-      if (
-        (HTMLElement.prototype.scrollIntoView as ReturnType<typeof vi.fn>).mock.calls.length === 2
-      ) {
-        this.innerHTML = '<div data-message-author-role="user">Recovered prompt</div>';
-      }
-    });
+    (HTMLElement.prototype.scrollIntoView as ReturnType<typeof vi.fn>).mockImplementation(
+      function (this: HTMLElement) {
+        if (
+          (HTMLElement.prototype.scrollIntoView as ReturnType<typeof vi.fn>).mock.calls.length === 2
+        ) {
+          this.innerHTML = '<div data-message-author-role="user">Recovered prompt</div>';
+        }
+      },
+    );
 
     const exportPromise = buildChatGptTurnsForSelection(new Set(['user-1']));
     await vi.advanceTimersByTimeAsync(1000);

@@ -4,7 +4,7 @@
   <p>
     <b>Gemini · Claude · ChatGPT, 드디어 완성.</b>
   </p>
-  
+
   <p>
     <img src="https://voyager.nagi.fun/badges/github-stars.svg" alt="GitHub stars">
     <img src="https://voyager.nagi.fun/badges/github-forks.svg" alt="GitHub forks">
@@ -156,7 +156,7 @@ Voyager 가 도움이 되었다면 커피 한 잔을 후원해 주세요. 지속
   <a href="https://github.com/sponsors/Nagi-ovo" target="_blank">
     <img src="https://img.shields.io/badge/Sponsor%20me-GitHub-ea4aaa?style=for-the-badge&logo=github&logoColor=white" alt="Sponsor on GitHub" height="36">
   </a>
-  
+
   <p><b>또는 WeChat / Alipay / Afdian 을 통해 후원하기:</b></p>
   <table align="center" border="0" cellpadding="0" cellspacing="0">
     <tr>

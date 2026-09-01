@@ -11291,8 +11291,8 @@ body.gv-rtl .gv-pm-item-compact .gv-pm-bottom {
      original baseline. The editor surface in the final layer also masks the
      now-unused bottom pixel instead of leaving native blue selection visible. */
   background:
-    linear-gradient(var(--gv-pm-slash-selection-surface), var(--gv-pm-slash-selection-surface))
-      0 -1px / 100% 100% no-repeat,
+    linear-gradient(var(--gv-pm-slash-selection-surface), var(--gv-pm-slash-selection-surface)) 0
+      -1px / 100% 100% no-repeat,
     var(--gv-pm-slash-input-surface, transparent) !important;
   border-radius: 3px;
   box-shadow: 0 -1px 0 var(--gv-pm-slash-selection-surface);

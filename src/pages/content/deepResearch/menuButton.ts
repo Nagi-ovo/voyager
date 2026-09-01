@@ -504,12 +504,12 @@ export function isDeepResearchReportMenuPanel(menuPanel: HTMLElement): boolean {
 
   const hasReportShareActions = Boolean(
     menuContent.querySelector('[data-test-id="share-button-tooltip-container"]') ||
-      menuContent.querySelector('[data-test-id="share-drive-button"]') ||
-      menuContent.querySelector('[data-test-id="share-classroom-button"]'),
+    menuContent.querySelector('[data-test-id="share-drive-button"]') ||
+    menuContent.querySelector('[data-test-id="share-classroom-button"]'),
   );
   const hasReportExportActions = Boolean(
     menuContent.querySelector('[data-test-id="export-to-docs-button"]') ||
-      menuContent.querySelector('[data-test-id="copy-button"]'),
+    menuContent.querySelector('[data-test-id="copy-button"]'),
   );
 
   return hasReportShareActions && hasReportExportActions;

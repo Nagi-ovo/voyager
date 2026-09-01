@@ -114,16 +114,14 @@ function createManagerService(snapshot: StorageQuotaSnapshot): StorageManagerSer
       reason: 'granted',
       status: { ...snapshot.permission, granted: true, requestable: false },
     }),
-    clearCategory: vi.fn().mockImplementation(
-      async (category): Promise<StorageCleanupResult> => ({
-        category,
-        removedKeys: [`gv${category}`],
-        bytesBefore: 100 * KIBIBYTE,
-        bytesAfter: 0,
-        bytesFreed: 100 * KIBIBYTE,
-        estimated: false,
-      }),
-    ),
+    clearCategory: vi.fn().mockImplementation(async (category): Promise<StorageCleanupResult> => ({
+      category,
+      removedKeys: [`gv${category}`],
+      bytesBefore: 100 * KIBIBYTE,
+      bytesAfter: 0,
+      bytesFreed: 100 * KIBIBYTE,
+      estimated: false,
+    })),
   };
 }
 
