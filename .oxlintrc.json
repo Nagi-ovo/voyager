@@ -3,6 +3,9 @@
   "plugins": ["typescript", "unicorn", "oxc", "react", "jsx-a11y"],
   "env": { "browser": true, "builtin": true },
   "settings": { "react": { "version": "19.1.0" } },
+  // Everything oxlint classes as outright wrong blocks CI. The three opt-outs
+  // below are the rules whose every hit in this repository was a false positive.
+  "categories": { "correctness": "error" },
   "ignorePatterns": [
     "dist_*/**",
     "output/**",
@@ -24,6 +27,19 @@
     "react/exhaustive-deps": "warn",
     "no-unused-vars": ["warn", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
     "typescript/no-explicit-any": "warn",
-    "no-console": ["warn", { "allow": ["warn", "error"] }]
+    "no-console": ["warn", { "allow": ["warn", "error"] }],
+
+    // All 11 hits were correct ARIA where the suggested element is not a drop-in:
+    // role="dialog" on popovers that never call showModal(), role="progressbar"
+    // on a Tailwind-styled div, role="button" on a card that contains its own
+    // <button> (nesting a real button inside another is invalid HTML).
+    "jsx-a11y/prefer-tag-over-role": "off",
+    // Fires on every "load state on mount" effect. Extension storage reads are
+    // async, so neither alternative the rule suggests -- derive during render,
+    // initialise state directly -- can express them.
+    "react/set-state-in-effect": "off",
+    // `new Array(n).fill(x)` is the codebase's preallocation idiom in layout hot
+    // paths; Array.from({length: n}) allocates more for no readability gain.
+    "unicorn/no-new-array": "off"
   }
 }

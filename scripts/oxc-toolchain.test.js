@@ -90,7 +90,32 @@ export function Probe({ flag }: { flag: boolean }) {
 
   it('keeps the jsx-a11y plugin enabled', () => {
     // jsx-a11y is off by default, so this fires only while `plugins` lists it.
-    expect(severityOf('jsx-a11y(alt-text)')).toEqual(['warning']);
+    // It reports as an error because alt-text is a correctness rule.
+    expect(severityOf('jsx-a11y(alt-text)')).toEqual(['error']);
+  });
+});
+
+describe('oxlint fails the build on the correctness category', () => {
+  it('reports a rule the config never names as an error, not a warning', () => {
+    // no-unreachable is absent from `rules`, so its severity comes entirely from
+    // `categories`. Drop that key and every correctness rule silently falls back
+    // to a warning: the lint job keeps exiting 0 and stops guarding anything.
+    const filePath = writeFixture(
+      'correctness.ts',
+      'export function dead(): number {\n  return 1;\n  console.warn("unreachable");\n}\n',
+    );
+
+    const result = spawnSync(oxlintBin, ['-c', oxlintConfig, '-f', 'json', filePath], {
+      encoding: 'utf8',
+    });
+    const payload = JSON.parse(result.stdout);
+    const unreachable = (payload.diagnostics ?? payload).filter(
+      (entry) => entry.code === 'eslint(no-unreachable)',
+    );
+
+    expect(unreachable.map((entry) => entry.severity)).toEqual(['error']);
+    // An error has to be a non-zero exit, or CI would never notice it.
+    expect(result.status).not.toBe(0);
   });
 });
 
