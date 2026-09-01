@@ -41,5 +41,13 @@
     // `new Array(n).fill(x)` is the codebase's preallocation idiom in layout hot
     // paths; Array.from({length: n}) allocates more for no readability gain.
     "unicorn/no-new-array": "off"
-  }
+  },
+  "overrides": [
+    {
+      // Repository tooling, never bundled into the extension. Printing to the
+      // terminal is what these scripts are for.
+      "files": ["scripts/**"],
+      "rules": { "no-console": "off" }
+    }
+  ]
 }
