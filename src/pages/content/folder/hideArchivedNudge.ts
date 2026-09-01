@@ -52,7 +52,7 @@ export function mountHideArchivedNudge({
   if (container.querySelector(`.${NUDGE_CLASS}`)) return;
 
   const t = (key: string) => getTranslationSyncUnsafe(key);
-  const keys: NudgeI18nKeys = { ...DEFAULT_I18N_KEYS, ...(i18nKeys ?? {}) };
+  const keys: NudgeI18nKeys = { ...DEFAULT_I18N_KEYS, ...i18nKeys };
 
   const card = document.createElement('div');
   card.className = variantClass ? `${NUDGE_CLASS} ${variantClass}` : NUDGE_CLASS;

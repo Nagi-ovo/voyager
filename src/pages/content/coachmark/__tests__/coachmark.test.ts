@@ -15,7 +15,7 @@ vi.mock('webextension-polyfill', () => ({
     storage: {
       sync: {
         get: vi.fn(async (defaults?: Record<string, unknown>) => {
-          const out: Record<string, unknown> = { ...(defaults ?? {}) };
+          const out: Record<string, unknown> = { ...defaults };
           for (const k of Object.keys(out)) if (k in store) out[k] = store[k];
           return out;
         }),

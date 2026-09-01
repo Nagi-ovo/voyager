@@ -77,7 +77,7 @@ export async function waitForConversationFingerprintChangeOrTimeout(
   before: Fingerprint,
   options?: Partial<WaitForConversationChangeOptions>,
 ): Promise<WaitForConversationChangeResult> {
-  const opt: WaitForConversationChangeOptions = { ...DEFAULT_OPTIONS, ...(options ?? {}) };
+  const opt: WaitForConversationChangeOptions = { ...DEFAULT_OPTIONS, ...options };
   const selector = selectors.join(',');
 
   const start = Date.now();

@@ -3292,7 +3292,7 @@ export class FolderManager {
     const jslog = element.getAttribute('jslog');
     if (jslog) {
       // Match conversation ID - it appears in quotes like ["c_3456c77162722c1a",...]
-      const match = jslog.match(/[",\[]c_([a-f0-9]+)[",\]]/);
+      const match = jslog.match(/[",[]c_([a-f0-9]+)[",\]]/);
       if (match) {
         const conversationId = `c_${match[1]}`;
         this.debug('Extracted conversation ID:', conversationId, 'from jslog:', jslog);
@@ -3314,13 +3314,13 @@ export class FolderManager {
     if (link) {
       const href = link.href;
       // Try /app/<hexId>
-      let match = href.match(/\/app\/([^\/?#]+)/);
+      let match = href.match(/\/app\/([^/?#]+)/);
       if (match && match[1]) {
         // Enforce c_ prefix to match jslog format standard
         return `c_${match[1]}`;
       }
       // Try /gem/<gemId>/<hexId>
-      match = href.match(/\/gem\/[^/]+\/([^\/?#]+)/);
+      match = href.match(/\/gem\/[^/]+\/([^/?#]+)/);
       if (match && match[1]) {
         return `c_${match[1]}`;
       }
@@ -3348,7 +3348,7 @@ export class FolderManager {
     let hexId: string | null = null;
 
     if (jslog) {
-      const match = jslog.match(/[",\[]c_([a-f0-9]+)[",\]]/);
+      const match = jslog.match(/[",[]c_([a-f0-9]+)[",\]]/);
       if (match) {
         hexId = match[1];
         this.debug('Extracted hex ID from jslog:', hexId);
@@ -3363,12 +3363,12 @@ export class FolderManager {
       if (link) {
         const href = link.href;
         // Try /app/<hexId>
-        let match = href.match(/\/app\/([^\/?#]+)/);
+        let match = href.match(/\/app\/([^/?#]+)/);
         if (match && match[1]) {
           hexId = match[1];
         } else {
           // Try /gem/<gemId>/<hexId>
-          match = href.match(/\/gem\/[^/]+\/([^\/?#]+)/);
+          match = href.match(/\/gem\/[^/]+\/([^/?#]+)/);
           if (match && match[1]) {
             hexId = match[1];
           }
@@ -3442,8 +3442,8 @@ export class FolderManager {
     ) as HTMLAnchorElement | null;
     if (link) {
       const href = link.href;
-      const appMatch = href.match(/\/app\/([^\/?#]+)/);
-      const gemMatch = href.match(/\/gem\/[^/]+\/([^\/?#]+)/);
+      const appMatch = href.match(/\/app\/([^/?#]+)/);
+      const gemMatch = href.match(/\/gem\/[^/]+\/([^/?#]+)/);
       return appMatch?.[1] || gemMatch?.[1];
     }
 
@@ -7058,13 +7058,13 @@ export class FolderManager {
     this.debug('extractId: found link href', href);
 
     // Try /app/<hexId>
-    let match = href.match(/\/app\/([^\/?#]+)/);
+    let match = href.match(/\/app\/([^/?#]+)/);
     if (match && match[1]) {
       this.debug('extractId: extracted from /app/', match[1]);
       return match[1];
     }
     // Try /gem/<gemId>/<hexId>
-    match = href.match(/\/gem\/[^/]+\/([^\/?#]+)/);
+    match = href.match(/\/gem\/[^/]+\/([^/?#]+)/);
     if (match && match[1]) {
       this.debug('extractId: extracted from /gem/', match[1]);
       return match[1];
@@ -7350,8 +7350,8 @@ export class FolderManager {
    */
   private getCurrentConversationId(): string | null {
     const url = window.location.href;
-    const appMatch = url.match(/\/app\/([^\/?#]+)/);
-    const gemMatch = url.match(/\/gem\/[^/]+\/([^\/?#]+)/);
+    const appMatch = url.match(/\/app\/([^/?#]+)/);
+    const gemMatch = url.match(/\/gem\/[^/]+\/([^/?#]+)/);
     return appMatch?.[1] || gemMatch?.[1] || null;
   }
 
@@ -7485,7 +7485,7 @@ export class FolderManager {
 
     try {
       const path = window.location.pathname;
-      const gemMatch = path.match(/\/gem\/([^\/]+)/);
+      const gemMatch = path.match(/\/gem\/([^/]+)/);
       if (gemMatch && gemMatch[1]) {
         const gemId = gemMatch[1];
         return `https://gemini.google.com${accountPrefix}/gem/${gemId}/${hexId}`;
@@ -9618,7 +9618,7 @@ export class FolderManager {
 
       // If URL changed from /app/ to /gem/, update the stored gemId
       if (currentPath.includes('/gem/')) {
-        const gemMatch = currentPath.match(/\/gem\/([^\/]+)/);
+        const gemMatch = currentPath.match(/\/gem\/([^/]+)/);
         if (gemMatch) {
           const gemId = gemMatch[1];
           this.debug('Detected Gem after navigation:', gemId);

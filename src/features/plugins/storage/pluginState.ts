@@ -158,7 +158,7 @@ export async function setPluginSetting(
       [id]: {
         enabled: previous?.enabled ?? false,
         installedAt: previous?.installedAt ?? Date.now(),
-        settings: { ...(previous?.settings ?? {}), [key]: value },
+        settings: { ...previous?.settings, [key]: value },
       },
     };
     await local.set({ [KEY]: next });

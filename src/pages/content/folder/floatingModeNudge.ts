@@ -46,7 +46,7 @@ export function mountFloatingModeNudge({
   if (document.querySelector(`.${FLOATING_MODE_NUDGE_CLASS}`)) return null;
 
   const t = (key: string) => getTranslationSyncUnsafe(key);
-  const keys: FloatingModeNudgeI18nKeys = { ...DEFAULT_I18N_KEYS, ...(i18nKeys ?? {}) };
+  const keys: FloatingModeNudgeI18nKeys = { ...DEFAULT_I18N_KEYS, ...i18nKeys };
 
   const card = document.createElement('div');
   card.className = variantClass

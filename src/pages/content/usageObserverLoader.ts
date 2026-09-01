@@ -6,7 +6,6 @@
  * stable per-turn response ids used by bookmarks, hierarchy, forks, highlights
  * and exports, independently of whether timestamp labels are enabled.
  */
-export {};
 
 const HISTORY_OBSERVER_SOURCE = 'gv-history-observer';
 const HISTORY_OBSERVER_COMMAND_SOURCE = 'gv-history-observer-cmd';

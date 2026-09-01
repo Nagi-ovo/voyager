@@ -1149,7 +1149,7 @@ export class HighlightAnnotationService {
         ...index,
         conversations,
         clearMarkers: {
-          ...(index.clearMarkers ?? {}),
+          ...index.clearMarkers,
           [scope.platform]: clearMarker,
         },
         updatedAt: now,
@@ -1232,13 +1232,13 @@ export class HighlightAnnotationService {
         }
       }
 
-      const setItems: Record<string, unknown> = {
-        ...(device.needsWrite ? { [HIGHLIGHT_DEVICE_ID_KEY]: device.id } : {}),
-      };
+      const setItems: Record<string, unknown> = device.needsWrite
+        ? { [HIGHLIGHT_DEVICE_ID_KEY]: device.id }
+        : {};
       const accounts: HighlightClearAllAccountsResult['accounts'] = [];
       let removed = 0;
       for (const [accountHash, state] of accountStates) {
-        const clearMarkers = { ...(state.index.clearMarkers ?? {}) };
+        const clearMarkers = { ...state.index.clearMarkers };
         for (const platform of state.platforms) {
           const platformRecords = state.records.filter((record) => record.platform === platform);
           removed += platformRecords.filter((record) => record.deletedAt === undefined).length;
@@ -1415,7 +1415,7 @@ export class HighlightAnnotationService {
           ),
         ),
         clearMarkers: effectiveMarker
-          ? { ...(index.clearMarkers ?? {}), [scope.platform]: effectiveMarker }
+          ? { ...index.clearMarkers, [scope.platform]: effectiveMarker }
           : index.clearMarkers,
         updatedAt: now,
       };
