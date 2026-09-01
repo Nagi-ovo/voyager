@@ -139,6 +139,7 @@ export function enhanceCodeBlock(host: HTMLElement): void {
 }
 
 function cleanupDisconnectedBlocks(): void {
+  // oxlint-disable-next-line unicorn/no-useless-spread -- snapshot: the loop body mutates the collection
   for (const host of [...observedBlocks]) {
     if (host.isConnected) continue;
     resizeObserver?.unobserve(host);
@@ -209,6 +210,7 @@ export function stopCodeBlockCollapse(): void {
   }
   pendingBlocks.clear();
   observedBlocks.clear();
+  // oxlint-disable-next-line unicorn/no-useless-spread -- snapshot: the loop body mutates the collection
   for (const host of [...managedBlocks]) removeEnhancement(host);
   if (languageChangeListener) {
     try {

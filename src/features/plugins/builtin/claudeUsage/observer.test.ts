@@ -13,6 +13,7 @@ type ClaudeUsageWindow = Window &
   };
 
 function installObserver(): void {
+  // oxlint-disable-next-line no-eval -- evaluating the observer under test is what this suite exercises
   (0, eval)(observerScript);
 }
 

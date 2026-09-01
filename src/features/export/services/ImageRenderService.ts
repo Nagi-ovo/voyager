@@ -15,6 +15,7 @@ const WOFF2_SOURCE_RE = /url\((["']?)([^"')]+)\1\)\s*format\((["']?)woff2\3\)/i;
  * html-to-image serializes DOM into SVG (XML 1.0). Control characters outside the legal set
  * cause the serialization to fail silently (img error Event).
  */
+// oxlint-disable-next-line no-control-regex -- matching control characters is the point; see the XML 1.0 reference above
 const XML_ILLEGAL_CONTROL_CHAR_RE = /[\x00-\x08\x0B\x0C\x0E-\x1F]/g;
 
 function setStyle(element: HTMLElement | SVGElement, property: string, value: string): void {

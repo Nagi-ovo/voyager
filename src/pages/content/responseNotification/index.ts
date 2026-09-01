@@ -30,7 +30,10 @@ const MAX_NOTIFICATION_PROMPT_LENGTH = 140;
 const LATEST_RESPONSE_VISIBLE_MARGIN_PX = 96;
 const BOTTOM_SCROLL_THRESHOLD_PX = 160;
 const PROMPT_SELECTORS = 'rich-textarea, textarea, [contenteditable="true"], div[role="textbox"]';
+// Anchored to the start, so it only strips leading invisible characters and can
+// never split an emoji sequence in the label body.
 const TURN_LABEL_PREFIXES =
+  // oxlint-disable-next-line no-misleading-character-class
   /^[\u200B\u200C\u200D\u200E\u200F\uFEFF]*(?:you said|you wrote|user message|your prompt|you asked)[:\s]*/i;
 const VISUALLY_HIDDEN_CLASS_FRAGMENT = 'visually-hidden';
 const INJECTED_UI_SELECTOR = '.gv-fork-btn, .gv-fork-confirm, .gv-fork-indicator-group';

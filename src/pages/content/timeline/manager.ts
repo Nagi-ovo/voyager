@@ -38,7 +38,10 @@ import type { StarredMessage, StarredMessagesData } from './starredTypes';
 import type { DotElement, MarkerLevel } from './types';
 
 /** Accessibility prefixes injected by Gemini's DOM that should be stripped from previews effectively globally. */
+// Anchored to the start, so it only strips leading invisible characters and can
+// never split an emoji sequence in the label body.
 const TURN_LABEL_PREFIXES =
+  // oxlint-disable-next-line no-misleading-character-class
   /^[\u200B\u200C\u200D\u200E\u200F\uFEFF]*(?:you said|you wrote|user message|your prompt|you asked)[:\s]*/i;
 const VISUALLY_HIDDEN_CLASS_FRAGMENT = 'visually-hidden';
 const INJECTED_UI_SELECTOR = '.gv-fork-btn, .gv-fork-confirm, .gv-fork-indicator-group';

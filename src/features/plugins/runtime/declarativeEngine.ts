@@ -207,6 +207,7 @@ export class DeclarativeEngine {
   }
 
   unmountAll(): void {
+    // oxlint-disable-next-line unicorn/no-useless-spread -- snapshot: the loop body mutates the collection
     for (const id of [...this.active.keys()]) this.unmount(id);
     this.doc.getElementById(PLUGIN_BASE_STYLE_ID)?.remove();
   }

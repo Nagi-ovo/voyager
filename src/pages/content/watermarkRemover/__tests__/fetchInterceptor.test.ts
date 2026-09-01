@@ -10,6 +10,7 @@ const GEMINI_DOWNLOAD_URL_NO_DL = 'https://lh3.googleusercontent.com/rd-gg/examp
 const GEMINI_DOWNLOAD_URL_NO_RD = 'https://lh3.googleusercontent.com/gg-dl/example=d-I?alr=yes';
 
 function installInterceptor(): void {
+  // oxlint-disable-next-line no-eval -- evaluating the observer under test is what this suite exercises
   (0, eval)(interceptorScript);
 }
 

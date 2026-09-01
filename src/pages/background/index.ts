@@ -118,7 +118,10 @@ const RESPONSE_COMPLETE_NOTIFICATION_ICON = 'icon-128.png';
 const RESPONSE_COMPLETE_NOTIFICATION_ID_PREFIX = 'gv-response-complete-';
 const RESPONSE_COMPLETE_UNKNOWN_TAB_ID = 'unknown';
 const GENERATED_UI_CAPTURE_PERMISSION_ORIGINS = ['<all_urls>'];
+// Anchored to the start, so it only strips leading invisible characters and can
+// never split an emoji sequence in the label body.
 const RESPONSE_COMPLETE_TURN_LABEL_PREFIXES =
+  // oxlint-disable-next-line no-misleading-character-class
   /^[\u200B\u200C\u200D\u200E\u200F\uFEFF]*(?:you said|you wrote|user message|your prompt|you asked)[:\s]*/i;
 const RETIRED_TAB_TITLE_UPDATE_SETTING = { [StorageKeys.TAB_TITLE_UPDATE_ENABLED]: false };
 

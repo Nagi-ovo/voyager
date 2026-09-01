@@ -373,6 +373,7 @@ function getConversationTitle(): string {
 function sanitizeFilenamePart(value: string): string {
   const cleaned = value
     .trim()
+    // oxlint-disable-next-line no-control-regex -- control characters are illegal in filenames and must be matched to be stripped
     .replace(/[\\/:*?"<>|\u0000-\u001f]+/g, '-')
     .replace(/\s+/g, ' ')
     .slice(0, 80)

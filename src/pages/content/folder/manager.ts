@@ -10031,6 +10031,7 @@ export class FolderManager {
       this.tooltipElement.style.top = `${top}px`;
 
       // Trigger reflow for animation
+      // oxlint-disable-next-line no-unused-expressions -- reading offsetHeight flushes layout; the value is intentionally discarded
       this.tooltipElement.offsetHeight;
       this.tooltipElement.classList.add('show');
     }, 200);

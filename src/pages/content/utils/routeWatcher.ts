@@ -25,6 +25,7 @@ function checkRoute(event?: Event): void {
 
   const previousHref = lastHref;
   lastHref = currentHref;
+  // oxlint-disable-next-line unicorn/no-useless-spread -- snapshot: a listener may unsubscribe from inside its own callback
   for (const listener of [...listeners]) {
     try {
       listener({
