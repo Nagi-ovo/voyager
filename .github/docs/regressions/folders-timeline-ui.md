@@ -39,9 +39,11 @@ drop, or hover layout.
   current-conversation transition to `/app?pageId=none` is only settlement evidence after that
   confirmation; it can never arm deletion by itself. A hidden stale native row may be ignored only
   for a tracked current-conversation deletion that was explicitly confirmed and reached that
-  completion route; otherwise preserve it as deletion-rejection evidence. Clear candidate state on
-  explicit confirmation, cancellation (including Escape or overlay dismissal), full runtime teardown,
-  or timeout. Strong pin/rename/delete markers take precedence over overlapping report/export markers.
+  completion route; otherwise preserve it as deletion-rejection evidence. Bind the candidate and
+  every delayed check to the storage key and `/u/<index>` route active when deletion began; discard
+  the check if either account scope changes. Clear candidate state on explicit confirmation,
+  cancellation (including Escape or overlay dismissal), full runtime teardown, or timeout. Strong
+  pin/rename/delete markers take precedence over overlapping report/export markers.
 - **Guard:** `src/pages/content/export/__tests__/conversationMenuInjection.test.ts`
   (`keeps current top conversation menus distinct when they also export to Docs`) and
   `src/pages/content/folder/__tests__/observerBatching.test.ts`
@@ -57,6 +59,8 @@ drop, or hover layout.
   `does not infer deletion from pageId=none without an explicit confirmation`,
   `preserves folder entries when native deletion is cancelled with Escape`,
   `preserves folder entries when native deletion is cancelled by clicking the overlay backdrop`,
+  `discards a pending native deletion after the storage key changes`,
+  `discards a pending native deletion after the route account changes`,
   `clears native deletion state on destroy after sidebar reinitialization`,
   `retries a confirmed current-conversation deletion until the route and row settle`, and
   `stops retrying a rejected native deletion and preserves the folder entry`).

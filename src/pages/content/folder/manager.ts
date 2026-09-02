@@ -190,6 +190,11 @@ interface FolderDialogOption {
   path: string;
 }
 
+interface NativeDeleteScope {
+  storageKey: string;
+  routeUserId: string | null;
+}
+
 type ConversationReorderPlacement = 'above' | 'below';
 
 interface ConversationReorderTarget {
@@ -389,9 +394,11 @@ export class FolderManager {
   private moveMenuTriggerHandler: ((event: Event) => void) | null = null;
   private moveMenuKeydownHandler: ((event: Event) => void) | null = null;
   private nativeDeleteCandidateId: string | null = null;
+  private nativeDeleteCandidateScope: NativeDeleteScope | null = null;
   private nativeDeleteCandidateTimer: number | null = null;
   private nativeDeleteCandidateWasCurrent = false;
   private currentNativeDeletionChecks = new Set<string>();
+  private pendingNativeDeletionScopes = new Map<string, NativeDeleteScope>();
   // Tracks the last input modality so menu-close focus handling stays a11y-safe:
   // pointer dismissals drop trigger focus, keyboard dismissals preserve it.
   private lastInputModality: 'pointer' | 'keyboard' = 'pointer';
@@ -564,6 +571,7 @@ export class FolderManager {
     });
     this.pendingRemovals.clear();
     this.currentNativeDeletionChecks.clear();
+    this.pendingNativeDeletionScopes.clear();
 
     if (clearedCount > 0) {
       this.debug(`Cleared ${clearedCount} pending removal timer(s)`);
@@ -713,6 +721,7 @@ export class FolderManager {
     this.pendingRemovals.forEach((timerId) => clearTimeout(timerId));
     this.pendingRemovals.clear();
     this.currentNativeDeletionChecks.clear();
+    this.pendingNativeDeletionScopes.clear();
 
     if (this.longPressTimeout) {
       clearTimeout(this.longPressTimeout);
@@ -6861,11 +6870,15 @@ export class FolderManager {
 
       if (event.type === 'click' && this.isNativeDeleteConfirmationTarget(target)) {
         const conversationId = this.nativeDeleteCandidateId;
-        if (conversationId) {
+        const deletionScope = this.nativeDeleteCandidateScope;
+        if (conversationId && deletionScope && this.isNativeDeleteScopeCurrent(deletionScope)) {
           const wasCurrent = this.nativeDeleteCandidateWasCurrent;
           this.clearNativeDeleteCandidate();
           if (wasCurrent) this.currentNativeDeletionChecks.add(conversationId);
+          this.pendingNativeDeletionScopes.set(conversationId, deletionScope);
           this.scheduleConversationRemovalCheck(conversationId);
+        } else {
+          this.clearNativeDeleteCandidate();
         }
         return;
       }
@@ -6992,6 +7005,7 @@ export class FolderManager {
     if (!normalized) return;
     this.clearNativeDeleteCandidate();
     this.nativeDeleteCandidateId = normalized;
+    this.nativeDeleteCandidateScope = this.captureNativeDeleteScope();
     this.nativeDeleteCandidateWasCurrent =
       this.normalizeConversationId(this.getCurrentConversationId()) === normalized;
 
@@ -7012,12 +7026,27 @@ export class FolderManager {
     }
   }
 
+  private captureNativeDeleteScope(): NativeDeleteScope {
+    return {
+      storageKey: this.activeStorageKey,
+      routeUserId: extractRouteUserIdFromPath(window.location.pathname),
+    };
+  }
+
+  private isNativeDeleteScopeCurrent(scope: NativeDeleteScope): boolean {
+    return (
+      scope.storageKey === this.activeStorageKey &&
+      scope.routeUserId === extractRouteUserIdFromPath(window.location.pathname)
+    );
+  }
+
   private clearNativeDeleteCandidate(): void {
     if (this.nativeDeleteCandidateTimer !== null) {
       window.clearTimeout(this.nativeDeleteCandidateTimer);
       this.nativeDeleteCandidateTimer = null;
     }
     this.nativeDeleteCandidateId = null;
+    this.nativeDeleteCandidateScope = null;
     this.nativeDeleteCandidateWasCurrent = false;
   }
 
@@ -7345,6 +7374,9 @@ export class FolderManager {
   ): void {
     const normalizedId = this.normalizeConversationId(conversationId);
     if (!normalizedId || this.isDestroyed) return;
+    const deletionScope =
+      this.pendingNativeDeletionScopes.get(normalizedId) ?? this.captureNativeDeleteScope();
+    this.pendingNativeDeletionScopes.set(normalizedId, deletionScope);
 
     // Cancel any existing timer for this conversation
     const existingTimer = this.pendingRemovals.get(normalizedId);
@@ -7355,7 +7387,7 @@ export class FolderManager {
 
     // Schedule a new check after delay
     const timerId = window.setTimeout(() => {
-      this.confirmConversationRemoval(normalizedId, checksRemaining);
+      this.confirmConversationRemoval(normalizedId, checksRemaining, deletionScope);
     }, this.removalCheckDelay);
 
     this.pendingRemovals.set(normalizedId, timerId);
@@ -7471,10 +7503,20 @@ export class FolderManager {
    * URL / visible-row checks keep the folder entry if Gemini rejected or
    * cancelled the operation.
    */
-  private confirmConversationRemoval(conversationId: string, checksRemaining: number): void {
+  private confirmConversationRemoval(
+    conversationId: string,
+    checksRemaining: number,
+    deletionScope: NativeDeleteScope,
+  ): void {
     // Remove from pending list
     this.pendingRemovals.delete(conversationId);
     if (this.isDestroyed) return;
+    if (!this.isNativeDeleteScopeCurrent(deletionScope)) {
+      this.currentNativeDeletionChecks.delete(conversationId);
+      this.pendingNativeDeletionScopes.delete(conversationId);
+      this.debug(`Discarded deletion check after account scope changed: ${conversationId}`);
+      return;
+    }
 
     this.debug(`\n═══ Confirming removal for conversation ${conversationId} ═══`);
     this.debug(`  Delay elapsed: ${this.removalCheckDelay}ms`);
@@ -7514,12 +7556,14 @@ export class FolderManager {
 
     this.removeConversationFromAllFolders(conversationId);
     this.currentNativeDeletionChecks.delete(conversationId);
+    this.pendingNativeDeletionScopes.delete(conversationId);
   }
 
   private retryConversationRemovalCheck(conversationId: string, checksRemaining: number): void {
     if (checksRemaining <= 1) {
       this.debug(`Removal check timed out for ${conversationId}; preserving folder entry`);
       this.currentNativeDeletionChecks.delete(conversationId);
+      this.pendingNativeDeletionScopes.delete(conversationId);
       return;
     }
     this.scheduleConversationRemovalCheck(conversationId, checksRemaining - 1);

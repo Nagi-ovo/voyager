@@ -26,6 +26,7 @@ vi.mock('../floatingPanel', () => ({
 
 type TestableManager = {
   data: FolderData;
+  activeStorageKey: string;
   sidebarContainer: HTMLElement | null;
   hideArchivedConversations: boolean;
   isMultiSelectMode: boolean;
@@ -736,6 +737,51 @@ describe('FolderManager — observer batching (issue #678)', () => {
 
     expect(removalSpy).not.toHaveBeenCalled();
     expect(typed.data.folderContents.f1).toHaveLength(1);
+  });
+
+  it.each([
+    ['storage key', 'gvFolderData:account-b', '/u/0/app?pageId=none'],
+    ['route account', 'gvFolderData:account-a', '/u/1/app?pageId=none'],
+  ])('discards a pending native deletion after the %s changes', (_, nextStorageKey, nextRoute) => {
+    vi.useFakeTimers();
+    const conversationId = 'facefacefaceface';
+    window.history.replaceState({}, '', `/u/0/app/${conversationId}`);
+    typed.activeStorageKey = 'gvFolderData:account-a';
+    typed.data = {
+      folders: [],
+      folderContents: {
+        f1: [
+          {
+            conversationId: `c_${conversationId}`,
+            title: 'Account A conversation',
+            url: `https://gemini.google.com/u/0/app/${conversationId}`,
+            addedAt: 0,
+          },
+        ],
+      },
+    };
+    typed.setupConversationClickTracking();
+    clickCurrentConversationDeleteAction();
+    clickNativeDeleteDialogButton('confirm-delete-button', 'Delete');
+
+    typed.activeStorageKey = nextStorageKey;
+    typed.data = {
+      folders: [],
+      folderContents: {
+        f2: [
+          {
+            conversationId: `c_${conversationId}`,
+            title: 'Account B conversation',
+            url: `https://gemini.google.com/u/1/app/${conversationId}`,
+            addedAt: 0,
+          },
+        ],
+      },
+    };
+    window.history.replaceState({}, '', nextRoute);
+    vi.runAllTimers();
+
+    expect(typed.data.folderContents.f2).toHaveLength(1);
   });
 
   it('preserves a hidden native row when current deletion never reaches pageId=none', () => {
