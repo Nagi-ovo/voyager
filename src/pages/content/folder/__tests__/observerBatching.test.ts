@@ -563,6 +563,44 @@ describe('FolderManager — observer batching (issue #678)', () => {
     expect(typed.data.folderContents.f1).toHaveLength(1);
   });
 
+  it('preserves a live row when Gemini temporarily hides the sidebar ancestor', async () => {
+    vi.useFakeTimers();
+    const conversationId = '1234123412341234';
+    window.history.replaceState({}, '', `/u/0/app/${conversationId}`);
+    typed.data = {
+      folders: [],
+      folderContents: {
+        f1: [
+          {
+            conversationId: `c_${conversationId}`,
+            title: 'Live conversation in hidden sidebar',
+            url: `https://gemini.google.com/u/0/app/${conversationId}`,
+            addedAt: 0,
+          },
+        ],
+      },
+    };
+    typed.initializeFolderUI = vi.fn().mockResolvedValue(undefined);
+    typed.setupConversationClickTracking();
+    clickCurrentConversationDeleteAction();
+    clickNativeDeleteDialogButton('confirm-delete-button', 'Delete');
+
+    typed.reinitializeFolderUI();
+    await typed.reinitializePromise;
+
+    const replacementSidebar = document.createElement('div');
+    replacementSidebar.setAttribute('data-test-id', 'overflow-container');
+    replacementSidebar.style.display = 'none';
+    replacementSidebar.appendChild(createConversationEl(conversationId));
+    document.body.appendChild(replacementSidebar);
+    typed.sidebarContainer = replacementSidebar;
+
+    window.history.replaceState({}, '', '/u/0/app?pageId=none');
+    vi.runAllTimers();
+
+    expect(typed.data.folderContents.f1).toHaveLength(1);
+  });
+
   it('preserves a Voyager-hidden archived row marked on legacy actions', async () => {
     vi.useFakeTimers();
     const conversationId = 'dcbadcbadcbadcba';

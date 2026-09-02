@@ -51,6 +51,7 @@ drop, or hover layout.
   `ignores a hidden stale native row after current deletion completes at pageId=none`,
   `preserves a Voyager-hidden archived row during deletion checks`,
   `preserves a Voyager-hidden archived row marked on legacy actions`,
+  `preserves a live row when Gemini temporarily hides the sidebar ancestor`,
   `preserves a hidden native row when current deletion never reaches pageId=none`,
   `preserves folder entries when native deletion is cancelled after sidebar reinitialization`,
   `does not infer deletion from pageId=none without an explicit confirmation`,

@@ -7416,24 +7416,19 @@ export class FolderManager {
   }
 
   private isRenderedNativeConversationRow(row: HTMLElement): boolean {
-    let current: HTMLElement | null = row;
-    while (current) {
-      if (current.hidden || current.getAttribute('aria-hidden') === 'true') return false;
+    // A collapsed/temporarily hidden sidebar is not evidence that Gemini
+    // removed the conversation. Only the row's own state can identify a
+    // stale virtualized template; ancestor visibility belongs to sidebar UI
+    // lifecycle and must be treated conservatively.
+    if (row.hidden || row.getAttribute('aria-hidden') === 'true') return false;
 
-      const style = window.getComputedStyle(current);
-      if (
-        style.display === 'none' ||
-        style.visibility === 'hidden' ||
-        style.visibility === 'collapse' ||
-        style.contentVisibility === 'hidden'
-      ) {
-        return false;
-      }
-
-      if (current === this.sidebarContainer) break;
-      current = current.parentElement;
-    }
-    return true;
+    const style = window.getComputedStyle(row);
+    return !(
+      style.display === 'none' ||
+      style.visibility === 'hidden' ||
+      style.visibility === 'collapse' ||
+      style.contentVisibility === 'hidden'
+    );
   }
 
   /**
