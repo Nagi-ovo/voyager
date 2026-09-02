@@ -34,14 +34,17 @@ drop, or hover layout.
   sidebar-only reinitialization. If Gemini's confirmation control is not recognizable, require an
   explicit native confirmation before scheduling cleanup or ignoring any hidden row. The
   rows hidden by Voyager's `.gv-conversation-archived` or
-  `.gv-conversation-archived-actions` markers remain valid native conversations and must never be
-  treated as deletion evidence, even when their computed display is `none`. The
+  `.gv-conversation-archived-actions` markers remain valid native conversations during ordinary
+  checks. After an explicitly confirmed current-conversation deletion reaches its completion route,
+  however, those markers may remain on Gemini's stale hidden row and must not override the rendered
+  row check. The
   current-conversation transition to `/app?pageId=none` is only settlement evidence after that
   confirmation; it can never arm deletion by itself. A hidden stale native row may be ignored only
   for a tracked current-conversation deletion that was explicitly confirmed and reached that
   completion route; otherwise preserve it as deletion-rejection evidence. Bind the candidate and
-  every delayed check to the storage key and `/u/<index>` route active when deletion began; discard
-  the check if either account scope changes. Clear candidate state on explicit confirmation,
+  every delayed check to the storage key and `/u/<index>` route active when deletion began; treat
+  bare `/app` and `/u/0/app` as the same default account, and discard the check if either account
+  scope otherwise changes. Clear candidate state on explicit confirmation,
   cancellation (including Escape or overlay dismissal), full runtime teardown, or timeout. Strong
   pin/rename/delete markers take precedence over overlapping report/export markers.
 - **Guard:** `src/pages/content/export/__tests__/conversationMenuInjection.test.ts`

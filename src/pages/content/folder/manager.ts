@@ -7029,15 +7029,22 @@ export class FolderManager {
   private captureNativeDeleteScope(): NativeDeleteScope {
     return {
       storageKey: this.activeStorageKey,
-      routeUserId: extractRouteUserIdFromPath(window.location.pathname),
+      routeUserId: this.getNativeDeleteRouteUserId(),
     };
   }
 
   private isNativeDeleteScopeCurrent(scope: NativeDeleteScope): boolean {
     return (
       scope.storageKey === this.activeStorageKey &&
-      scope.routeUserId === extractRouteUserIdFromPath(window.location.pathname)
+      scope.routeUserId === this.getNativeDeleteRouteUserId()
     );
+  }
+
+  /** Bare `/app` routes and `/u/0/app` both address Gemini's default account. */
+  private getNativeDeleteRouteUserId(): string | null {
+    const routeUserId = extractRouteUserIdFromPath(window.location.pathname);
+    if (routeUserId !== null) return routeUserId;
+    return /^\/app(?:\/|$)/.test(window.location.pathname) ? '0' : null;
   }
 
   private clearNativeDeleteCandidate(): void {
@@ -7422,10 +7429,7 @@ export class FolderManager {
         });
 
       const existingRow = Array.from(matchingRows).find(
-        (row) =>
-          !ignoreHiddenRows ||
-          this.isVoyagerArchivedConversationRow(row) ||
-          this.isRenderedNativeConversationRow(row),
+        (row) => !ignoreHiddenRows || this.isRenderedNativeConversationRow(row),
       );
       if (existingRow) {
         this.debug(`Found conversation ${conversationId} in DOM`);
@@ -7461,31 +7465,6 @@ export class FolderManager {
       style.visibility === 'collapse' ||
       style.contentVisibility === 'hidden'
     );
-  }
-
-  /**
-   * Rows hidden by Voyager's hide-archived setting are still live native
-   * conversations. Keep them visible to deletion checks; only an unmarked
-   * hidden row can be Gemini's stale virtualized template after deletion.
-   */
-  private isVoyagerArchivedConversationRow(row: HTMLElement): boolean {
-    if (row.classList.contains('gv-conversation-archived')) return true;
-
-    // Legacy Gemini renders the actions container as a sibling of the row.
-    // Stop at the next conversation row so another row's archived marker
-    // cannot make this one appear to exist.
-    let sibling = row.nextElementSibling;
-    while (sibling && !sibling.matches('[data-test-id="conversation"]')) {
-      if (
-        sibling instanceof HTMLElement &&
-        sibling.classList.contains(ARCHIVED_CONVERSATION_ACTIONS_CLASS)
-      ) {
-        return true;
-      }
-      sibling = sibling.nextElementSibling;
-    }
-
-    return row.querySelector(`.${ARCHIVED_CONVERSATION_ACTIONS_CLASS}`) !== null;
   }
 
   /**

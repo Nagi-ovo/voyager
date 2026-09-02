@@ -524,7 +524,7 @@ describe('FolderManager — observer batching (issue #678)', () => {
     );
   });
 
-  it('preserves a Voyager-hidden archived row during deletion checks', async () => {
+  it('ignores a Voyager-hidden archived row after confirmed current deletion', async () => {
     vi.useFakeTimers();
     const conversationId = 'abcdabcdabcdabcd';
     window.history.replaceState({}, '', `/u/0/app/${conversationId}`);
@@ -561,7 +561,7 @@ describe('FolderManager — observer batching (issue #678)', () => {
     window.history.replaceState({}, '', '/u/0/app?pageId=none');
     vi.runAllTimers();
 
-    expect(typed.data.folderContents.f1).toHaveLength(1);
+    expect(typed.data.folderContents.f1).toHaveLength(0);
   });
 
   it('preserves a live row when Gemini temporarily hides the sidebar ancestor', async () => {
@@ -602,7 +602,7 @@ describe('FolderManager — observer batching (issue #678)', () => {
     expect(typed.data.folderContents.f1).toHaveLength(1);
   });
 
-  it('preserves a Voyager-hidden archived row marked on legacy actions', async () => {
+  it('ignores a Voyager-hidden archived row marked on legacy actions after deletion', async () => {
     vi.useFakeTimers();
     const conversationId = 'dcbadcbadcbadcba';
     window.history.replaceState({}, '', `/u/0/app/${conversationId}`);
@@ -641,7 +641,7 @@ describe('FolderManager — observer batching (issue #678)', () => {
     window.history.replaceState({}, '', '/u/0/app?pageId=none');
     vi.runAllTimers();
 
-    expect(typed.data.folderContents.f1).toHaveLength(1);
+    expect(typed.data.folderContents.f1).toHaveLength(0);
   });
 
   it('does not infer deletion from pageId=none without an explicit confirmation', () => {
@@ -783,6 +783,40 @@ describe('FolderManager — observer batching (issue #678)', () => {
 
     expect(typed.data.folderContents.f2).toHaveLength(1);
   });
+
+  it.each([
+    ['/app/facefacefaceface', '/u/0/app?pageId=none'],
+    ['/u/0/app/facefacefaceface', '/app?pageId=none'],
+  ])(
+    'keeps a pending deletion across equivalent default-account routes (%s → %s)',
+    (startRoute, completionRoute) => {
+      vi.useFakeTimers();
+      const conversationId = 'facefacefaceface';
+      window.history.replaceState({}, '', startRoute);
+      typed.activeStorageKey = 'gvFolderData:account-a';
+      typed.data = {
+        folders: [],
+        folderContents: {
+          f1: [
+            {
+              conversationId: `c_${conversationId}`,
+              title: 'Default account conversation',
+              url: `https://gemini.google.com${startRoute}`,
+              addedAt: 0,
+            },
+          ],
+        },
+      };
+      typed.setupConversationClickTracking();
+      clickCurrentConversationDeleteAction();
+      clickNativeDeleteDialogButton('confirm-delete-button', 'Delete');
+
+      window.history.replaceState({}, '', completionRoute);
+      vi.runAllTimers();
+
+      expect(typed.data.folderContents.f1).toHaveLength(0);
+    },
+  );
 
   it('preserves a hidden native row when current deletion never reaches pageId=none', () => {
     vi.useFakeTimers();
