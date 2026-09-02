@@ -87,6 +87,8 @@ const MOVE_MENU_INJECTION_RETRY_LIMIT = 8;
 const MOVE_MENU_INJECTION_RETRY_DELAY_MS = 80;
 const CONVERSATION_MENU_TRIGGER_SELECTOR =
   '[data-test-id="actions-menu-button"], [data-test-id="conversation-actions-menu-icon-button"]';
+const VOYAGER_CONVERSATION_MENU_ACTION_SELECTOR =
+  '.gv-export-conversation-menu-btn, .gv-export-response-menu-btn, .gv-move-to-folder-btn';
 // AI Organize: the lr26 sidebar populates conversation rows lazily, so wait
 // briefly for at least one row to gain its link before collecting (see #725).
 const AI_ORG_COLLECT_TIMEOUT_MS = 3000;
@@ -388,6 +390,8 @@ export class FolderManager {
   private moveMenuKeydownHandler: ((event: Event) => void) | null = null;
   private nativeDeleteCandidateId: string | null = null;
   private nativeDeleteCandidateTimer: number | null = null;
+  private nativeDeleteCandidateWasCurrent = false;
+  private currentNativeDeletionChecks = new Set<string>();
   // Tracks the last input modality so menu-close focus handling stays a11y-safe:
   // pointer dismissals drop trigger focus, keyboard dismissals preserve it.
   private lastInputModality: 'pointer' | 'keyboard' = 'pointer';
@@ -559,6 +563,7 @@ export class FolderManager {
       this.debug(`Cleared pending removal timer for ${conversationId}`);
     });
     this.pendingRemovals.clear();
+    this.currentNativeDeletionChecks.clear();
 
     if (clearedCount > 0) {
       this.debug(`Cleared ${clearedCount} pending removal timer(s)`);
@@ -707,6 +712,7 @@ export class FolderManager {
 
     this.pendingRemovals.forEach((timerId) => clearTimeout(timerId));
     this.pendingRemovals.clear();
+    this.currentNativeDeletionChecks.clear();
 
     if (this.longPressTimeout) {
       clearTimeout(this.longPressTimeout);
@@ -3788,7 +3794,11 @@ export class FolderManager {
         this.nativeMenuObserver.disconnect();
         this.nativeMenuObserver = null;
       }
-      this.teardownMoveMenuTriggerListener();
+
+      // The document-level menu tracker is lifetime-scoped and idempotent.
+      // Gemini can rebuild the sidebar between Delete and confirmation, so a
+      // transient UI reinit must preserve the candidate and its timeout.
+      // Full teardown paths still remove the listener and clear delete state.
 
       this.teardownPositionEnforcer();
       this.cleanupNotebooksAnchorButton();
@@ -6839,10 +6849,22 @@ export class FolderManager {
       const target = event.target;
       if (!(target instanceof HTMLElement)) return;
 
+      if (event.type === 'click' && this.isNativeDeleteCancellationTarget(target)) {
+        this.clearNativeDeleteCandidate();
+        return;
+      }
+
+      if (event.type === 'click' && this.isNativeDeleteOverlayDismissalTarget(target)) {
+        this.clearNativeDeleteCandidate();
+        return;
+      }
+
       if (event.type === 'click' && this.isNativeDeleteConfirmationTarget(target)) {
         const conversationId = this.nativeDeleteCandidateId;
         if (conversationId) {
+          const wasCurrent = this.nativeDeleteCandidateWasCurrent;
           this.clearNativeDeleteCandidate();
+          if (wasCurrent) this.currentNativeDeletionChecks.add(conversationId);
           this.scheduleConversationRemovalCheck(conversationId);
         }
         return;
@@ -6885,8 +6907,12 @@ export class FolderManager {
     document.addEventListener('pointerdown', handler, true);
     this.moveMenuTriggerHandler = handler;
 
-    const keyHandler = () => {
-      if (!this.isDestroyed) this.lastInputModality = 'keyboard';
+    const keyHandler = (event: Event) => {
+      if (this.isDestroyed) return;
+      if (event instanceof KeyboardEvent && event.key === 'Escape') {
+        this.clearNativeDeleteCandidate();
+      }
+      this.lastInputModality = 'keyboard';
     };
     document.addEventListener('keydown', keyHandler, true);
     this.moveMenuKeydownHandler = keyHandler;
@@ -6896,7 +6922,7 @@ export class FolderManager {
     const action = target.closest(
       '[data-test-id="delete-button"], button[role="menuitem"], [role="menuitem"], gem-menu-item',
     ) as HTMLElement | null;
-    if (!action || action.closest('[class*="gv-"]')) return null;
+    if (!action || action.matches(VOYAGER_CONVERSATION_MENU_ACTION_SELECTOR)) return null;
 
     const panel = action.closest(CONVERSATION_MENU_PANEL_SELECTOR) as HTMLElement | null;
     const context = panel ? getConversationMenuContext(panel) : null;
@@ -6944,15 +6970,46 @@ export class FolderManager {
     );
   }
 
+  private isNativeDeleteCancellationTarget(target: HTMLElement): boolean {
+    if (!this.nativeDeleteCandidateId) return false;
+    const button = target.closest('button, [role="button"]') as HTMLElement | null;
+    if (!button?.closest('[role="dialog"], .mat-mdc-dialog-container')) return false;
+
+    const testId = button.getAttribute('data-test-id')?.toLowerCase() || '';
+    if (testId.includes('cancel')) return true;
+
+    const text = button.textContent?.trim().toLowerCase() || '';
+    const cancelLabel = this.t('pm_cancel').trim().toLowerCase();
+    return text === 'cancel' || (!!cancelLabel && text === cancelLabel);
+  }
+
+  private isNativeDeleteOverlayDismissalTarget(target: HTMLElement): boolean {
+    return !!this.nativeDeleteCandidateId && !!target.closest('.cdk-overlay-backdrop');
+  }
+
   private rememberNativeDeleteCandidate(conversationId: string): void {
     const normalized = this.normalizeConversationId(conversationId);
     if (!normalized) return;
     this.clearNativeDeleteCandidate();
     this.nativeDeleteCandidateId = normalized;
+    this.nativeDeleteCandidateWasCurrent =
+      this.normalizeConversationId(this.getCurrentConversationId()) === normalized;
+
     this.nativeDeleteCandidateTimer = window.setTimeout(
       () => this.clearNativeDeleteCandidate(),
       NATIVE_DELETE_CANDIDATE_TIMEOUT_MS,
     );
+  }
+
+  private isNativeDeleteCompletionRoute(): boolean {
+    try {
+      const url = new URL(window.location.href);
+      return (
+        /^\/(?:u\/\d+\/)?app\/?$/.test(url.pathname) && url.searchParams.get('pageId') === 'none'
+      );
+    } catch {
+      return false;
+    }
   }
 
   private clearNativeDeleteCandidate(): void {
@@ -6961,6 +7018,7 @@ export class FolderManager {
       this.nativeDeleteCandidateTimer = null;
     }
     this.nativeDeleteCandidateId = null;
+    this.nativeDeleteCandidateWasCurrent = false;
   }
 
   // After a conversation ⋮ menu we injected into closes, mat-menu restores DOM
@@ -7309,29 +7367,38 @@ export class FolderManager {
    * Returns true if conversation found, false if definitely deleted
    * In case of errors, conservatively returns true to avoid false deletions
    */
-  private isConversationInDOM(conversationId: string): boolean {
+  private isConversationInDOM(conversationId: string, ignoreHiddenRows = false): boolean {
     if (!this.sidebarContainer) {
       this.debugWarn('Sidebar container not available for DOM check');
       return true; // Conservative: assume conversation exists if we can't check
     }
 
     try {
-      // Check by jslog attribute
-      const byJslog = this.sidebarContainer.querySelector(
-        `[data-test-id="conversation"][jslog*="c_${conversationId}"]`,
+      const matchingRows = new Set<HTMLElement>();
+      this.sidebarContainer
+        .querySelectorAll<HTMLElement>(
+          `[data-test-id="conversation"][jslog*="c_${conversationId}"]`,
+        )
+        .forEach((row) => matchingRows.add(row));
+      this.sidebarContainer
+        .querySelectorAll<HTMLAnchorElement>(
+          `[data-test-id="conversation"] a[href*="${conversationId}"]`,
+        )
+        .forEach((link) => {
+          const row = link.closest('[data-test-id="conversation"]');
+          if (row instanceof HTMLElement) matchingRows.add(row);
+        });
+
+      const existingRow = Array.from(matchingRows).find(
+        (row) => !ignoreHiddenRows || this.isRenderedNativeConversationRow(row),
       );
-      if (byJslog) {
-        this.debug(`Found conversation ${conversationId} in DOM by jslog`);
+      if (existingRow) {
+        this.debug(`Found conversation ${conversationId} in DOM`);
         return true;
       }
 
-      // Check by href
-      const byHref = this.sidebarContainer.querySelector(
-        `[data-test-id="conversation"] a[href*="${conversationId}"]`,
-      );
-      if (byHref) {
-        this.debug(`Found conversation ${conversationId} in DOM by href`);
-        return true;
+      if (matchingRows.size > 0) {
+        this.debug(`Ignored hidden stale native row for conversation ${conversationId}`);
       }
 
       // Not found in DOM
@@ -7343,6 +7410,27 @@ export class FolderManager {
       // This prevents accidental deletion during DOM reconstruction
       return true;
     }
+  }
+
+  private isRenderedNativeConversationRow(row: HTMLElement): boolean {
+    let current: HTMLElement | null = row;
+    while (current) {
+      if (current.hidden || current.getAttribute('aria-hidden') === 'true') return false;
+
+      const style = window.getComputedStyle(current);
+      if (
+        style.display === 'none' ||
+        style.visibility === 'hidden' ||
+        style.visibility === 'collapse' ||
+        style.contentVisibility === 'hidden'
+      ) {
+        return false;
+      }
+
+      if (current === this.sidebarContainer) break;
+      current = current.parentElement;
+    }
+    return true;
   }
 
   /**
@@ -7381,8 +7469,13 @@ export class FolderManager {
       return;
     }
 
-    // Check 2: Is conversation still in DOM?
-    if (this.isConversationInDOM(conversationId)) {
+    // Check 2: Is conversation still visibly present in Gemini's native list?
+    // The lr26 sidebar can retain hidden virtualized rows after a successful
+    // current-chat deletion. Ignore those only when the explicit delete flow
+    // was armed for the current route and Gemini reached its completion page.
+    const ignoreHiddenRows =
+      this.currentNativeDeletionChecks.has(conversationId) && this.isNativeDeleteCompletionRoute();
+    if (this.isConversationInDOM(conversationId, ignoreHiddenRows)) {
       this.debug(`  ✓ SKIPPED: Conversation still exists in DOM`);
       this.debug(`    Likely a UI refresh, not a deletion`);
       this.debug(`════════════════════════════════════════════════\n`);
@@ -7397,11 +7490,13 @@ export class FolderManager {
     this.debug(`════════════════════════════════════════════════\n`);
 
     this.removeConversationFromAllFolders(conversationId);
+    this.currentNativeDeletionChecks.delete(conversationId);
   }
 
   private retryConversationRemovalCheck(conversationId: string, checksRemaining: number): void {
     if (checksRemaining <= 1) {
       this.debug(`Removal check timed out for ${conversationId}; preserving folder entry`);
+      this.currentNativeDeletionChecks.delete(conversationId);
       return;
     }
     this.scheduleConversationRemovalCheck(conversationId, checksRemaining - 1);

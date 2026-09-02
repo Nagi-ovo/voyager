@@ -22,15 +22,36 @@ drop, or hover layout.
 - **Trap:** Deleting the currently open conversation from Gemini's top menu left a dead folder
   entry. The lr26 trigger no longer exposes Voyager's expected test ID, and the menu can contain both
   strong conversation actions and Export to Docs. Even when deletion was captured, a single 300ms
-  check permanently gave up while the old route or sidebar row was still mounted.
+  check permanently gave up while the old route or sidebar row was still mounted. Gemini can also
+  rebuild the sidebar between Delete and confirmation; treating that transient reinitialization as a
+  full teardown clears the pending conversation identity before confirmation arrives. The lr26
+  virtual list can also retain a hidden native conversation row after the visible entry and route are
+  gone, so raw DOM presence can block cleanup even after Gemini completes the deletion.
 - **Rule:** Identify a Delete action from its live conversation menu, resolve its conversation from
   that menu context at click time, and only arm cleanup after native confirmation. Poll for a bounded
   window until both the route has left and the native row is absent; on timeout, preserve folder data.
-  Strong pin/rename/delete markers take precedence over overlapping report/export markers.
+  Preserve the document-level delete tracker, candidate identity, and candidate timeout across
+  sidebar-only reinitialization. If Gemini's confirmation control is not recognizable, treat the
+  require an explicit native confirmation before scheduling cleanup or ignoring any hidden row. The
+  current-conversation transition to `/app?pageId=none` is only settlement evidence after that
+  confirmation; it can never arm deletion by itself. A hidden stale native row may be ignored only
+  for a tracked current-conversation deletion that was explicitly confirmed and reached that
+  completion route; otherwise preserve it as deletion-rejection evidence. Clear candidate state on
+  explicit confirmation, cancellation (including Escape or overlay dismissal), full runtime teardown,
+  or timeout. Strong pin/rename/delete markers take precedence over overlapping report/export markers.
 - **Guard:** `src/pages/content/export/__tests__/conversationMenuInjection.test.ts`
   (`keeps current top conversation menus distinct when they also export to Docs`) and
   `src/pages/content/folder/__tests__/observerBatching.test.ts`
   (`resolves the current conversation when the top Delete menu trigger has no test id`,
+  `removes only the confirmed current conversation when the sidebar reinitializes before confirmation`,
+  `removes the deleted current conversation when Gemini lands on pageId=none`,
+  `ignores a hidden stale native row after current deletion completes at pageId=none`,
+  `preserves a hidden native row when current deletion never reaches pageId=none`,
+  `preserves folder entries when native deletion is cancelled after sidebar reinitialization`,
+  `does not infer deletion from pageId=none without an explicit confirmation`,
+  `preserves folder entries when native deletion is cancelled with Escape`,
+  `preserves folder entries when native deletion is cancelled by clicking the overlay backdrop`,
+  `clears native deletion state on destroy after sidebar reinitialization`,
   `retries a confirmed current-conversation deletion until the route and row settle`, and
   `stops retrying a rejected native deletion and preserves the folder entry`).
 

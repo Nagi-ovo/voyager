@@ -32,6 +32,7 @@ type TestableManager = {
   selectedConversations: Set<string>;
   mutationBatchQueue: MutationRecord[];
   pendingRemovals: Map<string, number>;
+  nativeDeleteCandidateId: string | null;
   removalCheckDelay: number;
   enhancementQueue: Set<HTMLElement>;
   legacyActionsProbe: { present: boolean; at: number } | null;
@@ -46,6 +47,9 @@ type TestableManager = {
   isConversationInFolders: (conversationId: string) => boolean;
   scheduleNativeConversationTitleSync: () => void;
   setupConversationClickTracking: () => void;
+  initializeFolderUI: () => Promise<void>;
+  reinitializeFolderUI: () => void;
+  reinitializePromise: Promise<void> | null;
 };
 
 function createConversationEl(
@@ -150,10 +154,39 @@ function nextAnimationFrame(): Promise<void> {
   return new Promise((resolve) => requestAnimationFrame(() => resolve()));
 }
 
+function clickCurrentConversationDeleteAction(): void {
+  const triggerHost = document.createElement('conversation-actions-icon');
+  const trigger = document.createElement('gem-icon-button');
+  trigger.setAttribute('aria-haspopup', 'true');
+  trigger.setAttribute('aria-expanded', 'true');
+  triggerHost.appendChild(trigger);
+  document.body.appendChild(triggerHost);
+
+  const menu = document.createElement('gem-menu');
+  const deleteItem = document.createElement('gem-menu-item');
+  deleteItem.setAttribute('data-test-id', 'delete-button');
+  deleteItem.textContent = 'Delete';
+  menu.appendChild(deleteItem);
+  document.body.appendChild(menu);
+  deleteItem.click();
+}
+
+function clickNativeDeleteDialogButton(testId: string, text: string): void {
+  const dialog = document.createElement('div');
+  dialog.setAttribute('role', 'dialog');
+  const button = document.createElement('button');
+  button.setAttribute('data-test-id', testId);
+  button.textContent = text;
+  dialog.appendChild(button);
+  document.body.appendChild(dialog);
+  button.click();
+}
+
 describe('FolderManager — observer batching (issue #678)', () => {
   let manager: FolderManager | null = null;
   let typed: TestableManager;
   let onlineDescriptor: PropertyDescriptor | undefined;
+  let documentElementClassName = '';
 
   beforeEach(() => {
     manager = new FolderManager();
@@ -166,12 +199,14 @@ describe('FolderManager — observer batching (issue #678)', () => {
 
     onlineDescriptor = Object.getOwnPropertyDescriptor(navigator, 'onLine');
     Object.defineProperty(navigator, 'onLine', { value: true, configurable: true });
+    documentElementClassName = document.documentElement.className;
   });
 
   afterEach(() => {
     manager?.destroy();
     manager = null;
     document.body.innerHTML = '';
+    document.documentElement.className = documentElementClassName;
     if (onlineDescriptor) {
       Object.defineProperty(navigator, 'onLine', onlineDescriptor);
     }
@@ -304,6 +339,7 @@ describe('FolderManager — observer batching (issue #678)', () => {
   it('resolves the current conversation when the top Delete menu trigger has no test id', () => {
     const conversationId = '13579bdf2468ace0';
     window.history.replaceState({}, '', `/app/${conversationId}`);
+    document.documentElement.classList.add('gv-formula-copy-enabled');
     const removalSpy = vi.spyOn(typed, 'scheduleConversationRemovalCheck');
     typed.setupConversationClickTracking();
 
@@ -339,6 +375,360 @@ describe('FolderManager — observer batching (issue #678)', () => {
 
     expect(removalSpy).toHaveBeenCalledTimes(1);
     expect(removalSpy).toHaveBeenCalledWith(conversationId);
+  });
+
+  it('removes only the confirmed current conversation when the sidebar reinitializes before confirmation', async () => {
+    vi.useFakeTimers();
+    const conversationId = '2468ace02468ace0';
+    const otherConversationId = '13579bdf13579bdf';
+    window.history.replaceState({}, '', `/app/${conversationId}`);
+    typed.data = {
+      folders: [],
+      folderContents: {
+        f1: [
+          {
+            conversationId: `c_${conversationId}`,
+            title: 'Deleted conversation',
+            url: `https://gemini.google.com/app/${conversationId}`,
+            addedAt: 0,
+          },
+          {
+            conversationId: `c_${otherConversationId}`,
+            title: 'Preserved conversation',
+            url: `https://gemini.google.com/app/${otherConversationId}`,
+            addedAt: 0,
+          },
+        ],
+        f2: [
+          {
+            conversationId,
+            title: 'Deleted conversation in another folder',
+            url: `https://gemini.google.com/app/${conversationId}`,
+            addedAt: 0,
+          },
+        ],
+      },
+    };
+    typed.initializeFolderUI = vi.fn().mockResolvedValue(undefined);
+    typed.setupConversationClickTracking();
+    clickCurrentConversationDeleteAction();
+
+    typed.reinitializeFolderUI();
+    await typed.reinitializePromise;
+
+    const replacementSidebar = document.createElement('div');
+    replacementSidebar.setAttribute('data-test-id', 'overflow-container');
+    document.body.appendChild(replacementSidebar);
+    typed.sidebarContainer = replacementSidebar;
+    clickNativeDeleteDialogButton('confirm-delete-button', 'Delete');
+
+    window.history.replaceState({}, '', '/app');
+    vi.advanceTimersByTime(typed.removalCheckDelay);
+
+    expect(typed.data.folderContents.f1.map((conversation) => conversation.conversationId)).toEqual(
+      [`c_${otherConversationId}`],
+    );
+    expect(typed.data.folderContents.f2).toHaveLength(0);
+  });
+
+  it('removes the deleted current conversation when Gemini lands on pageId=none', async () => {
+    vi.useFakeTimers();
+    const conversationId = 'abcdef0123456789';
+    const otherConversationId = '9876543210fedcba';
+    window.history.replaceState({}, '', `/u/0/app/${conversationId}`);
+    typed.data = {
+      folders: [],
+      folderContents: {
+        f1: [
+          {
+            conversationId: `c_${conversationId}`,
+            title: 'Deleted conversation',
+            url: `https://gemini.google.com/u/0/app/${conversationId}`,
+            addedAt: 0,
+          },
+          {
+            conversationId: `c_${otherConversationId}`,
+            title: 'Preserved conversation',
+            url: `https://gemini.google.com/u/0/app/${otherConversationId}`,
+            addedAt: 0,
+          },
+        ],
+      },
+    };
+    typed.initializeFolderUI = vi.fn().mockResolvedValue(undefined);
+    typed.setupConversationClickTracking();
+    clickCurrentConversationDeleteAction();
+
+    typed.reinitializeFolderUI();
+    await typed.reinitializePromise;
+
+    const replacementSidebar = document.createElement('div');
+    replacementSidebar.setAttribute('data-test-id', 'overflow-container');
+    document.body.appendChild(replacementSidebar);
+    typed.sidebarContainer = replacementSidebar;
+    clickNativeDeleteDialogButton('confirm-delete-button', 'Delete');
+    window.history.replaceState({}, '', '/u/0/app?pageId=none');
+    vi.runAllTimers();
+
+    expect(typed.data.folderContents.f1.map((conversation) => conversation.conversationId)).toEqual(
+      [`c_${otherConversationId}`],
+    );
+  });
+
+  it('ignores a hidden stale native row after current deletion completes at pageId=none', async () => {
+    vi.useFakeTimers();
+    const conversationId = '66cec21c315555a1';
+    const otherConversationId = '38a3361d1cd1cf2f';
+    window.history.replaceState({}, '', `/u/0/app/${conversationId}?pageId=none`);
+    typed.data = {
+      folders: [],
+      folderContents: {
+        f1: [
+          {
+            conversationId: `c_${conversationId}`,
+            title: 'Deleted conversation',
+            url: `https://gemini.google.com/u/0/app/${conversationId}?pageId=none`,
+            addedAt: 0,
+          },
+          {
+            conversationId: `c_${otherConversationId}`,
+            title: 'Preserved conversation',
+            url: `https://gemini.google.com/u/0/app/${otherConversationId}?pageId=none`,
+            addedAt: 0,
+          },
+        ],
+      },
+    };
+    typed.initializeFolderUI = vi.fn().mockResolvedValue(undefined);
+    typed.setupConversationClickTracking();
+    clickCurrentConversationDeleteAction();
+    clickNativeDeleteDialogButton('confirm-delete-button', 'Delete');
+
+    typed.reinitializeFolderUI();
+    await typed.reinitializePromise;
+
+    const replacementSidebar = document.createElement('div');
+    replacementSidebar.setAttribute('data-test-id', 'overflow-container');
+    const staleNativeRow = createConversationEl(conversationId);
+    staleNativeRow.hidden = true;
+    replacementSidebar.appendChild(staleNativeRow);
+    document.body.appendChild(replacementSidebar);
+    typed.sidebarContainer = replacementSidebar;
+
+    window.history.replaceState({}, '', '/u/0/app?pageId=none');
+    vi.runAllTimers();
+
+    expect(typed.data.folderContents.f1.map((conversation) => conversation.conversationId)).toEqual(
+      [`c_${otherConversationId}`],
+    );
+  });
+
+  it('does not infer deletion from pageId=none without an explicit confirmation', () => {
+    vi.useFakeTimers();
+    const conversationId = '1122334455667788';
+    window.history.replaceState({}, '', `/app/${conversationId}`);
+    typed.data = {
+      folders: [],
+      folderContents: {
+        f1: [
+          {
+            conversationId: `c_${conversationId}`,
+            title: 'Unconfirmed deletion',
+            url: `https://gemini.google.com/app/${conversationId}`,
+            addedAt: 0,
+          },
+        ],
+      },
+    };
+    const removalSpy = vi.spyOn(typed, 'removeConversationFromAllFolders');
+    typed.setupConversationClickTracking();
+    clickCurrentConversationDeleteAction();
+
+    window.history.replaceState({}, '', '/app?pageId=none');
+    vi.advanceTimersByTime(5000);
+
+    expect(removalSpy).not.toHaveBeenCalled();
+    expect(typed.data.folderContents.f1).toHaveLength(1);
+  });
+
+  it('preserves folder entries when native deletion is cancelled with Escape', () => {
+    vi.useFakeTimers();
+    const conversationId = 'abcabcabcabcabcd';
+    window.history.replaceState({}, '', `/app/${conversationId}`);
+    typed.data = {
+      folders: [],
+      folderContents: {
+        f1: [
+          {
+            conversationId: `c_${conversationId}`,
+            title: 'Cancelled with Escape',
+            url: `https://gemini.google.com/app/${conversationId}`,
+            addedAt: 0,
+          },
+        ],
+      },
+    };
+    const removalSpy = vi.spyOn(typed, 'removeConversationFromAllFolders');
+    typed.setupConversationClickTracking();
+    clickCurrentConversationDeleteAction();
+    expect(typed.nativeDeleteCandidateId).toBe(conversationId);
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(typed.nativeDeleteCandidateId).toBeNull();
+
+    window.history.replaceState({}, '', '/app?pageId=none');
+    vi.runAllTimers();
+
+    expect(removalSpy).not.toHaveBeenCalled();
+    expect(typed.data.folderContents.f1).toHaveLength(1);
+  });
+
+  it('preserves folder entries when native deletion is cancelled by clicking the overlay backdrop', () => {
+    vi.useFakeTimers();
+    const conversationId = 'defdefdefdefdef0';
+    window.history.replaceState({}, '', `/app/${conversationId}`);
+    typed.data = {
+      folders: [],
+      folderContents: {
+        f1: [
+          {
+            conversationId: `c_${conversationId}`,
+            title: 'Cancelled by backdrop',
+            url: `https://gemini.google.com/app/${conversationId}`,
+            addedAt: 0,
+          },
+        ],
+      },
+    };
+    const removalSpy = vi.spyOn(typed, 'removeConversationFromAllFolders');
+    typed.setupConversationClickTracking();
+    clickCurrentConversationDeleteAction();
+    expect(typed.nativeDeleteCandidateId).toBe(conversationId);
+
+    const backdrop = document.createElement('div');
+    backdrop.className = 'cdk-overlay-backdrop';
+    document.body.appendChild(backdrop);
+    backdrop.click();
+    expect(typed.nativeDeleteCandidateId).toBeNull();
+
+    window.history.replaceState({}, '', '/app?pageId=none');
+    vi.runAllTimers();
+
+    expect(removalSpy).not.toHaveBeenCalled();
+    expect(typed.data.folderContents.f1).toHaveLength(1);
+  });
+
+  it('preserves a hidden native row when current deletion never reaches pageId=none', () => {
+    vi.useFakeTimers();
+    const conversationId = '77def32d426666b2';
+    window.history.replaceState({}, '', `/u/0/app/${conversationId}?pageId=none`);
+    typed.data = {
+      folders: [],
+      folderContents: {
+        f1: [
+          {
+            conversationId: `c_${conversationId}`,
+            title: 'Rejected deletion',
+            url: `https://gemini.google.com/u/0/app/${conversationId}?pageId=none`,
+            addedAt: 0,
+          },
+        ],
+      },
+    };
+    typed.setupConversationClickTracking();
+    clickCurrentConversationDeleteAction();
+    clickNativeDeleteDialogButton('confirm-delete-button', 'Delete');
+
+    const staleNativeRow = createConversationEl(conversationId);
+    staleNativeRow.hidden = true;
+    typed.sidebarContainer!.appendChild(staleNativeRow);
+    window.history.replaceState({}, '', '/u/0/app');
+    vi.runAllTimers();
+
+    expect(typed.data.folderContents.f1).toHaveLength(1);
+  });
+
+  it('preserves folder entries when native deletion is cancelled after sidebar reinitialization', async () => {
+    vi.useFakeTimers();
+    const conversationId = 'aaaabbbbccccdddd';
+    const otherConversationId = '1111222233334444';
+    window.history.replaceState({}, '', `/app/${conversationId}`);
+    typed.data = {
+      folders: [],
+      folderContents: {
+        f1: [
+          {
+            conversationId: `c_${conversationId}`,
+            title: 'Cancelled deletion',
+            url: `https://gemini.google.com/app/${conversationId}`,
+            addedAt: 0,
+          },
+          {
+            conversationId: `c_${otherConversationId}`,
+            title: 'Unrelated conversation',
+            url: `https://gemini.google.com/app/${otherConversationId}`,
+            addedAt: 0,
+          },
+        ],
+      },
+    };
+    typed.initializeFolderUI = vi.fn().mockResolvedValue(undefined);
+    const removalSpy = vi.spyOn(typed, 'removeConversationFromAllFolders');
+    typed.setupConversationClickTracking();
+    clickCurrentConversationDeleteAction();
+
+    typed.reinitializeFolderUI();
+    await typed.reinitializePromise;
+    clickNativeDeleteDialogButton('cancel-delete-button', 'Cancel');
+
+    const replacementSidebar = document.createElement('div');
+    replacementSidebar.setAttribute('data-test-id', 'overflow-container');
+    document.body.appendChild(replacementSidebar);
+    typed.sidebarContainer = replacementSidebar;
+    window.history.replaceState({}, '', '/u/0/app?pageId=none');
+    vi.runAllTimers();
+
+    expect(removalSpy).not.toHaveBeenCalled();
+    expect(typed.data.folderContents.f1.map((conversation) => conversation.conversationId)).toEqual(
+      [`c_${conversationId}`, `c_${otherConversationId}`],
+    );
+  });
+
+  it('clears native deletion state on destroy after sidebar reinitialization', async () => {
+    vi.useFakeTimers();
+    const conversationId = 'eeeeffffaaaabbbb';
+    window.history.replaceState({}, '', `/app/${conversationId}`);
+    typed.data = {
+      folders: [],
+      folderContents: {
+        f1: [
+          {
+            conversationId: `c_${conversationId}`,
+            title: 'Preserved after destroy',
+            url: `https://gemini.google.com/app/${conversationId}`,
+            addedAt: 0,
+          },
+        ],
+      },
+    };
+    typed.initializeFolderUI = vi.fn().mockResolvedValue(undefined);
+    const removalSpy = vi.spyOn(typed, 'removeConversationFromAllFolders');
+    typed.setupConversationClickTracking();
+    clickCurrentConversationDeleteAction();
+
+    typed.reinitializeFolderUI();
+    await typed.reinitializePromise;
+    typed.scheduleConversationRemovalCheck(conversationId);
+
+    manager!.destroy();
+    manager = null;
+    window.history.replaceState({}, '', '/app');
+    clickNativeDeleteDialogButton('confirm-delete-button', 'Delete');
+    vi.runAllTimers();
+
+    expect(typed.pendingRemovals.size).toBe(0);
+    expect(removalSpy).not.toHaveBeenCalled();
+    expect(typed.data.folderContents.f1).toHaveLength(1);
   });
 
   it('resolves a sidebar Delete action from its menu without a prior trigger click', () => {
