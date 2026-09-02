@@ -523,6 +523,88 @@ describe('FolderManager — observer batching (issue #678)', () => {
     );
   });
 
+  it('preserves a Voyager-hidden archived row during deletion checks', async () => {
+    vi.useFakeTimers();
+    const conversationId = 'abcdabcdabcdabcd';
+    window.history.replaceState({}, '', `/u/0/app/${conversationId}`);
+    typed.data = {
+      folders: [],
+      folderContents: {
+        f1: [
+          {
+            conversationId: `c_${conversationId}`,
+            title: 'Archived conversation still present in Gemini',
+            url: `https://gemini.google.com/u/0/app/${conversationId}`,
+            addedAt: 0,
+          },
+        ],
+      },
+    };
+    typed.initializeFolderUI = vi.fn().mockResolvedValue(undefined);
+    typed.setupConversationClickTracking();
+    clickCurrentConversationDeleteAction();
+    clickNativeDeleteDialogButton('confirm-delete-button', 'Delete');
+
+    typed.reinitializeFolderUI();
+    await typed.reinitializePromise;
+
+    const replacementSidebar = document.createElement('div');
+    replacementSidebar.setAttribute('data-test-id', 'overflow-container');
+    const archivedNativeRow = createConversationEl(conversationId);
+    archivedNativeRow.classList.add('gv-conversation-archived');
+    archivedNativeRow.hidden = true;
+    replacementSidebar.appendChild(archivedNativeRow);
+    document.body.appendChild(replacementSidebar);
+    typed.sidebarContainer = replacementSidebar;
+
+    window.history.replaceState({}, '', '/u/0/app?pageId=none');
+    vi.runAllTimers();
+
+    expect(typed.data.folderContents.f1).toHaveLength(1);
+  });
+
+  it('preserves a Voyager-hidden archived row marked on legacy actions', async () => {
+    vi.useFakeTimers();
+    const conversationId = 'dcbadcbadcbadcba';
+    window.history.replaceState({}, '', `/u/0/app/${conversationId}`);
+    typed.data = {
+      folders: [],
+      folderContents: {
+        f1: [
+          {
+            conversationId: `c_${conversationId}`,
+            title: 'Archived legacy conversation',
+            url: `https://gemini.google.com/u/0/app/${conversationId}`,
+            addedAt: 0,
+          },
+        ],
+      },
+    };
+    typed.initializeFolderUI = vi.fn().mockResolvedValue(undefined);
+    typed.setupConversationClickTracking();
+    clickCurrentConversationDeleteAction();
+    clickNativeDeleteDialogButton('confirm-delete-button', 'Delete');
+
+    typed.reinitializeFolderUI();
+    await typed.reinitializePromise;
+
+    const replacementSidebar = document.createElement('div');
+    replacementSidebar.setAttribute('data-test-id', 'overflow-container');
+    const archivedNativeRow = createConversationEl(conversationId);
+    archivedNativeRow.hidden = true;
+    replacementSidebar.appendChild(archivedNativeRow);
+    const actions = document.createElement('div');
+    actions.className = 'conversation-actions-container gv-conversation-archived-actions';
+    replacementSidebar.appendChild(actions);
+    document.body.appendChild(replacementSidebar);
+    typed.sidebarContainer = replacementSidebar;
+
+    window.history.replaceState({}, '', '/u/0/app?pageId=none');
+    vi.runAllTimers();
+
+    expect(typed.data.folderContents.f1).toHaveLength(1);
+  });
+
   it('does not infer deletion from pageId=none without an explicit confirmation', () => {
     vi.useFakeTimers();
     const conversationId = '1122334455667788';

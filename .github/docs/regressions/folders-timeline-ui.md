@@ -31,8 +31,11 @@ drop, or hover layout.
   that menu context at click time, and only arm cleanup after native confirmation. Poll for a bounded
   window until both the route has left and the native row is absent; on timeout, preserve folder data.
   Preserve the document-level delete tracker, candidate identity, and candidate timeout across
-  sidebar-only reinitialization. If Gemini's confirmation control is not recognizable, treat the
-  require an explicit native confirmation before scheduling cleanup or ignoring any hidden row. The
+  sidebar-only reinitialization. If Gemini's confirmation control is not recognizable, require an
+  explicit native confirmation before scheduling cleanup or ignoring any hidden row. The
+  rows hidden by Voyager's `.gv-conversation-archived` or
+  `.gv-conversation-archived-actions` markers remain valid native conversations and must never be
+  treated as deletion evidence, even when their computed display is `none`. The
   current-conversation transition to `/app?pageId=none` is only settlement evidence after that
   confirmation; it can never arm deletion by itself. A hidden stale native row may be ignored only
   for a tracked current-conversation deletion that was explicitly confirmed and reached that
@@ -46,6 +49,8 @@ drop, or hover layout.
   `removes only the confirmed current conversation when the sidebar reinitializes before confirmation`,
   `removes the deleted current conversation when Gemini lands on pageId=none`,
   `ignores a hidden stale native row after current deletion completes at pageId=none`,
+  `preserves a Voyager-hidden archived row during deletion checks`,
+  `preserves a Voyager-hidden archived row marked on legacy actions`,
   `preserves a hidden native row when current deletion never reaches pageId=none`,
   `preserves folder entries when native deletion is cancelled after sidebar reinitialization`,
   `does not infer deletion from pageId=none without an explicit confirmation`,
