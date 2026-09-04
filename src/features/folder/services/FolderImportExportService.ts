@@ -1,6 +1,5 @@
 /**
  * Service for importing and exporting folder configurations
- * Follows enterprise best practices with proper validation and error handling
  */
 import { AppError, ErrorCode } from '@/core/errors/AppError';
 import type { Result } from '@/core/types/common';
@@ -13,8 +12,8 @@ import {
   getCompatibilityInfo,
   isSupportedFormat,
 } from '@/core/utils/version';
-import { SESSION_BACKUP_KEY, SESSION_BACKUP_TIMESTAMP_KEY } from '@/pages/content/folder/manager';
 
+import { SESSION_BACKUP_KEY, SESSION_BACKUP_TIMESTAMP_KEY } from '../constants';
 import {
   type FolderExportPayload,
   type ImportOptions,

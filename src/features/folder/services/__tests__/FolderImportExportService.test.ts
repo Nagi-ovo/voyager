@@ -11,17 +11,16 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { ConversationId, FolderId } from '@/core/types/common';
 import type { ConversationReference, Folder, FolderData } from '@/core/types/folder';
 import { AsyncLockTimeoutError, importExportLock } from '@/core/utils/concurrency';
-import { SESSION_BACKUP_KEY } from '@/pages/content/folder/manager';
 
+import { SESSION_BACKUP_KEY } from '../../constants';
 import type { FolderExportPayload } from '../../types/import-export';
 import { FolderImportExportService } from '../FolderImportExportService';
 
 function createFolder(id: string, name: string, overrides: Partial<Folder> = {}): Folder {
   return {
-    id: id as FolderId,
+    id,
     name,
     parentId: null,
     isExpanded: true,
@@ -37,7 +36,7 @@ function createConversation(
   overrides: Partial<ConversationReference> = {},
 ): ConversationReference {
   return {
-    conversationId: conversationId as ConversationId,
+    conversationId,
     title,
     url: `https://gemini.google.com/app/${conversationId}`,
     addedAt: 1,
