@@ -40,12 +40,34 @@ mirrors, clear markers, or Drive sync.
   `chrome.storage.onChanged` fires in the SAME context that performed the write (unlike the window
   `storage` event). The manager's onChanged handler treated its own mirror write as an external
   change and reloaded.
-- **Rule:** `armStorageEchoSuppression()` (counter + 2s window) is called before every
-  `storage.saveData`; the onChanged handler consumes one suppression per echo and still reloads on
-  genuine external writes (popup sync, other tabs). Any new `storage.saveData` call site must arm
-  the suppression first.
+- **Rule:** Call `armStorageEchoSuppression()` (counter + 2s window) before every
+  `storage.saveData` for the active account session. The onChanged handler consumes one suppression
+  per echo and still reloads on genuine external writes (popup sync, other tabs). Reset the counter
+  when switching accounts; delayed writes for a previous session must not arm the new session's
+  counter because the listener ignores events for their old storage key.
 - **Guard:** `src/pages/content/folder/__tests__/auditFixes.test.ts` ("skips the reload for our own
   mirror-write echo", "still reloads for external writes")
+
+## Folder recovery and pending writes belong to an account session
+
+- **Trap:** Live folder storage used stable account keys, but both managers shared platform-wide
+  recovery backups. AI Studio could recover account A into a new account B; Gemini could do so
+  when B's live value was corrupt. Keeping the previous in-memory data on load failure also crossed
+  accounts. A delayed load, save, import or sync completion could use the manager's newly selected
+  account instead of the account where the operation began.
+- **Rule:** Bind data, backup namespace and pending saves to one `FolderDataSession`. Capture its
+  key and data snapshot before asynchronous writes, reject stale reads/import/sync completions,
+  and detach its unload handler on account changes. Returning to an account with pending writes
+  must reuse its writer and retain unsaved memory; leaving the account still invalidates earlier
+  import/sync operations. Clear the old account's visible rows and transient editors while resolving
+  the next account. Resolution failure must not fall back to global storage. Keep ownerless legacy
+  backups intact and readable only with isolation off; never adopt them into an isolated account.
+  Arm storage-echo suppression only for the session currently observed by the manager.
+- **Guard:** `src/pages/content/folder/__tests__/accountScopedBackup.test.ts` covers same-account
+  recovery, legacy compatibility, new/empty accounts, same-instance switching, unload ownership,
+  deferred loads/writes, account revisits and failed resolution. `src/pages/content/folder/__tests__/auditFixes.test.ts`
+  preserves the per-write echo and trailing-save behavior; `src/pages/content/folder/floatingPanel.test.ts`
+  guards reset during inline editing.
 
 ## Highlight cleanup must preserve account clear markers
 

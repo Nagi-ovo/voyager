@@ -18,7 +18,6 @@ import {
   detectAccountContextFromDocument,
   extractRouteUserIdFromPath,
 } from '@/core/services/AccountIsolationService';
-import { DataBackupService } from '@/core/services/DataBackupService';
 import { StorageKeys } from '@/core/types/common';
 import type { PromptItem, SyncAccountScope } from '@/core/types/sync';
 import { isSafari } from '@/core/utils/browser';
@@ -49,6 +48,7 @@ import type { TimelineHierarchyData } from '../timeline/hierarchyTypes';
 import { TimestampService } from '../timestamp/TimestampService';
 import { historyTimestampStore } from '../timestamp/historyTimestamps';
 import { watchRouteChanges } from '../utils/routeWatcher';
+import { FolderDataSession } from './FolderDataSession';
 import {
   ACTIVITY_PRIORITY_WINDOW_MS,
   type ConversationActivityGroup,
@@ -260,8 +260,23 @@ export class FolderManager {
     }
   }
   private storage: IFolderStorageAdapter; // Storage adapter (Strategy Pattern)
-  private backupService: DataBackupService<FolderData>; // Multi-layer backup system
-  private data: FolderData = { folders: [], folderContents: {} };
+  private readonly storageInitializations = new Map<string, Promise<void>>();
+  private dataSession: FolderDataSession | null = new FolderDataSession(
+    STORAGE_KEY,
+    'gemini-folders',
+    null,
+    validateFolderData,
+  );
+  private readonly dataSessions = new Map<string, FolderDataSession>();
+  private unresolvedData: FolderData = { folders: [], folderContents: {} };
+  private accountScopeRequest = 0;
+  private get data(): FolderData {
+    return this.dataSession?.data ?? this.unresolvedData;
+  }
+  private set data(data: FolderData) {
+    if (this.dataSession) this.dataSession.data = data;
+    else this.unresolvedData = data;
+  }
   private containerElement: HTMLElement | null = null;
   private multiSelectHostElement: HTMLElement | null = null;
   private sidebarContainer: HTMLElement | null = null;
@@ -324,8 +339,6 @@ export class FolderManager {
   private accountScope: AccountScope | null = null; // Resolved account scope for current page
   private activeStorageKey: string = STORAGE_KEY; // Storage key currently used for folder data
   private lastPathname: string | null = null;
-  private saveInProgress: boolean = false; // Lock to prevent concurrent saves
-  private savePending: boolean = false; // Run one trailing save when data changes mid-write
   private nativeTitleSyncTimer: number | null = null;
   private nativeTitleSyncInProgress: boolean = false;
   private pendingTitleUpdates: Map<string, string> = new Map(); // Buffer title updates during render
@@ -459,9 +472,6 @@ export class FolderManager {
     this.storage = createFolderStorageAdapter();
     this.debug(`Using storage backend: ${this.storage.getBackendName()}`);
 
-    // Initialize backup service with localStorage
-    this.backupService = new DataBackupService<FolderData>('gemini-folders', validateFolderData);
-
     // Note: Data loading moved to init() for async support
     // This allows Safari to use async browser.storage API
     this.createTooltip();
@@ -472,13 +482,23 @@ export class FolderManager {
     });
   }
 
+  private initializeStorage(key: string): Promise<void> {
+    const existing = this.storageInitializations.get(key);
+    if (existing) return existing;
+    // init() performs a best-effort migration that can write to storage. Run it
+    // once per key so revisiting an account cannot race that account's save queue.
+    const initialization = this.storage.init(key).catch((error) => {
+      this.storageInitializations.delete(key);
+      throw error;
+    });
+    this.storageInitializations.set(key, initialization);
+    return initialization;
+  }
+
   async init(): Promise<void> {
     try {
       // Initialize storage adapter (handles migration for Safari automatically)
-      await this.storage.init(STORAGE_KEY);
-
-      // Setup automatic backup before page unload
-      this.backupService.setupBeforeUnloadBackup(() => this.data);
+      await this.initializeStorage(STORAGE_KEY);
 
       // Flush any pending debounced save on unload. The localStorage half of
       // the save is synchronous, so the data itself is safe; the
@@ -605,6 +625,8 @@ export class FolderManager {
     // Flush a pending debounced save so a recent expand/collapse isn't lost,
     // then drop the unload flush hook.
     this.flushPendingSaveData();
+    this.dataSession?.deactivate();
+    this.accountScopeRequest += 1;
     if (this.beforeUnloadFlushHandler) {
       window.removeEventListener('beforeunload', this.beforeUnloadFlushHandler);
       this.beforeUnloadFlushHandler = null;
@@ -7754,12 +7776,14 @@ export class FolderManager {
 
     // Flush any pending title updates collected during rendering
     if (this.pendingTitleUpdates.size > 0) {
+      const session = this.dataSession;
+      const scopeRequest = this.accountScopeRequest;
       this.debug(`Flushing ${this.pendingTitleUpdates.size} pending title updates`);
       // Save once after all title updates are applied (async, fire-and-forget)
       this.saveData()
         .then((saved) => {
           // Only clear after confirmed successful save to avoid losing updates
-          if (saved) {
+          if (saved && this.dataSession === session && this.accountScopeRequest === scopeRequest) {
             this.pendingTitleUpdates.clear();
           } else {
             this.debugWarn('Save failed, retaining pending title updates for next attempt');
@@ -7912,15 +7936,25 @@ export class FolderManager {
    * Uses storage adapter for automatic Safari/non-Safari handling
    */
   private async loadData(): Promise<void> {
+    const session = this.dataSession;
+    if (!session) return;
+    // A returning account may still own a queued edit that is newer than disk.
+    if (session.saveInProgress && session.ready) return;
+    const version = ++session.loadVersion;
+    const isCurrent = () =>
+      this.dataSession === session && session.loadVersion === version && !this.isDestroyed;
     try {
       // On Safari, restore recovery backups from the durable mirror before any
       // recoverFromBackup() can run (localStorage may have been ITP-evicted).
-      await this.backupService.ensureHydrated();
+      await session.backup.ensureHydrated();
+      if (!isCurrent()) return;
 
-      let loadedData = await this.storage.loadData(this.activeStorageKey);
+      let loadedData = await this.storage.loadData(session.storageKey);
+      if (!isCurrent()) return;
 
-      if (!loadedData && this.accountIsolationEnabled && this.activeStorageKey !== STORAGE_KEY) {
-        loadedData = await this.migrateLegacyFolderDataToScopedStorage();
+      if (!loadedData && session.accountScope) {
+        loadedData = await this.migrateLegacyFolderDataToScopedStorage(session, version);
+        if (!isCurrent()) return;
       }
 
       if (loadedData && validateFolderData(loadedData)) {
@@ -7940,7 +7974,8 @@ export class FolderManager {
         });
 
         // Create primary backup on successful load
-        this.backupService.createPrimaryBackup(this.data);
+        session.backup.createPrimaryBackup(this.data);
+        session.markReady();
 
         this.debug('Data loaded and validated successfully');
       } else if (loadedData) {
@@ -7948,21 +7983,27 @@ export class FolderManager {
         console.warn(
           '[FolderManager] Storage returned invalid data structure, attempting recovery from backup',
         );
-        this.attemptDataRecovery({ reason: 'corrupted', originalData: loadedData });
+        await this.attemptDataRecovery({ reason: 'corrupted', originalData: loadedData }, session);
       } else {
         // No data found - likely a first-time user
         console.log(
           '[FolderManager] No folder data found, initializing empty state (likely first-time user)',
         );
         this.data = { folders: [], folderContents: {} };
+        session.markReady();
         // No notification needed - this is expected for new users
       }
     } catch (error) {
+      if (!isCurrent()) return;
       console.error('[FolderManager] Load data error:', error);
 
       // CRITICAL: Do NOT clear data on error - this causes data loss!
       // Instead, try to recover from backup or keep existing data
-      this.attemptDataRecovery(error);
+      await this.attemptDataRecovery(error, session);
+    } finally {
+      if (isCurrent() && session.ready) {
+        this.floatingPanelHandle?.update(session.data, this.conversationSortMode);
+      }
     }
   }
 
@@ -7977,8 +8018,11 @@ export class FolderManager {
     return { folders, folderContents };
   }
 
-  private filterLegacyFolderDataByCurrentAccount(data: FolderData): FolderData {
-    const routeUserId = this.accountScope?.routeUserId;
+  private filterLegacyFolderDataByCurrentAccount(
+    data: FolderData,
+    scope: AccountScope | null,
+  ): FolderData {
+    const routeUserId = scope?.routeUserId;
     if (!routeUserId) {
       return this.cloneFolderData(data);
     }
@@ -8032,22 +8076,35 @@ export class FolderManager {
     };
   }
 
-  private async migrateLegacyFolderDataToScopedStorage(): Promise<FolderData | null> {
+  private async migrateLegacyFolderDataToScopedStorage(
+    session: FolderDataSession,
+    version: number,
+  ): Promise<FolderData | null> {
     try {
       const legacyData = await this.storage.loadData(STORAGE_KEY);
-      if (!legacyData || !validateFolderData(legacyData)) {
+      if (
+        this.dataSession !== session ||
+        session.loadVersion !== version ||
+        !legacyData ||
+        !validateFolderData(legacyData)
+      ) {
         return null;
       }
 
-      const migratedData = this.filterLegacyFolderDataByCurrentAccount(legacyData);
-      this.armStorageEchoSuppression();
-      const saved = await this.storage.saveData(this.activeStorageKey, migratedData);
+      const migratedData = this.filterLegacyFolderDataByCurrentAccount(
+        legacyData,
+        session.accountScope,
+      );
+      session.data = migratedData;
+      this.ensureDataIntegrity();
+      session.markReady();
+      const saved = await this.persistDataSession(session, this.cloneFolderData(session.data));
       if (!saved) {
         console.warn('[FolderManager] Failed to persist scoped migration data');
       }
       this.debug(
         'Migrated legacy folder data to scoped storage:',
-        this.activeStorageKey,
+        session.storageKey,
         migratedData.folders.length,
       );
       return migratedData;
@@ -8062,18 +8119,20 @@ export class FolderManager {
    * This method is only called when there's an actual problem (not for first-time users).
    * Priority: localStorage backup (primary/emergency/beforeUnload) > keep existing data > initialize empty
    */
-  private attemptDataRecovery(error: unknown): void {
+  private async attemptDataRecovery(error: unknown, session: FolderDataSession): Promise<void> {
+    if (this.dataSession !== session) return;
     console.warn('[FolderManager] Attempting data recovery after load failure');
 
     // Step 1: Try to restore from localStorage backups (primary, emergency, beforeUnload)
-    const recovered = this.backupService.recoverFromBackup();
+    const recovered = session.backup.recoverFromBackup();
     if (recovered && validateFolderData(recovered)) {
       this.data = recovered;
       this.ensureDataIntegrity();
+      session.markReady();
       console.warn('[FolderManager] Data recovered from localStorage backup');
       this.showNotificationByLevel('Folder data has been recovered from a backup.', 'warning');
       // Save recovered data to persistent storage
-      this.saveData();
+      await this.saveData();
       return; // Successfully recovered, no need to continue
     }
 
@@ -8081,6 +8140,7 @@ export class FolderManager {
     if (validateFolderData(this.data) && this.data.folders.length > 0) {
       console.warn('[FolderManager] Keeping existing in-memory data after load error');
       this.ensureDataIntegrity();
+      session.markReady();
       return;
     }
 
@@ -8088,6 +8148,7 @@ export class FolderManager {
     console.error('[FolderManager] CRITICAL: Unable to recover data, initializing empty state');
     console.error('[FolderManager] Original error:', error);
     this.data = { folders: [], folderContents: {} };
+    session.markReady();
 
     // Show user notification about data loss
     this.showDataLossNotification();
@@ -8214,27 +8275,41 @@ export class FolderManager {
    * Uses storage adapter for automatic Safari/non-Safari handling
    */
   private async saveData(): Promise<boolean> {
-    // Prevent concurrent saves to avoid race conditions
-    if (this.saveInProgress) {
-      this.savePending = true;
-      this.debug('Save already in progress, queueing one trailing save');
+    const session = this.dataSession;
+    if (!session || (!session.ready && session.accountScope)) return false;
+    try {
+      this.ensureDataIntegrity();
+      const snapshot = this.cloneFolderData(session.data);
+      // A mutation supersedes any storage read already in flight for this session.
+      session.loadVersion += 1;
+      session.markReady();
+      session.backup.createEmergencyBackup(snapshot);
+      if (session.saveInProgress) {
+        session.pendingSave = snapshot;
+        this.debug('Save already in progress, queueing one trailing save');
+        return false;
+      }
+
+      return this.persistDataSession(session, snapshot);
+    } catch (error) {
+      console.error('[FolderManager] Save data error:', error);
       return false;
     }
+  }
 
-    this.saveInProgress = true;
+  private async persistDataSession(
+    session: FolderDataSession,
+    snapshot: FolderData,
+  ): Promise<boolean> {
+    this.dataSessions.set(session.storageKey, session);
+    session.saveInProgress = true;
     let success = false;
 
     try {
-      // Validate data integrity before saving
-      this.ensureDataIntegrity();
-
-      // CRITICAL: Create emergency backup BEFORE saving (snapshot of previous state)
-      this.backupService.createEmergencyBackup(this.data);
-
       // Additional safety check: warn if saving empty data
-      if (this.data.folders.length === 0 && Object.keys(this.data.folderContents).length === 0) {
+      if (snapshot.folders.length === 0 && Object.keys(snapshot.folderContents).length === 0) {
         // Check if we're about to overwrite non-empty data
-        const existingData = await this.storage.loadData(this.activeStorageKey);
+        const existingData = await this.storage.loadData(session.storageKey);
         if (
           existingData &&
           (existingData.folders.length > 0 || Object.keys(existingData.folderContents).length > 0)
@@ -8251,25 +8326,27 @@ export class FolderManager {
       // Each write mirrors into chrome.storage.local and echoes back through
       // storage.onChanged in this same context — arm suppression so the echo
       // doesn't trigger a redundant full reload (see setupStorageListener).
-      this.armStorageEchoSuppression();
-      success = await this.storage.saveData(this.activeStorageKey, this.data);
+      if (this.dataSession === session) this.armStorageEchoSuppression();
+      success = await this.storage.saveData(session.storageKey, snapshot);
 
       // Retry once if the first attempt fails (for transient errors)
       if (!success) {
         console.warn('[FolderManager] Save failed, retrying once...');
-        this.armStorageEchoSuppression();
-        success = await this.storage.saveData(this.activeStorageKey, this.data);
+        if (this.dataSession === session) this.armStorageEchoSuppression();
+        success = await this.storage.saveData(session.storageKey, snapshot);
       }
 
       if (success) {
         // Create primary backup AFTER successful save
-        this.backupService.createPrimaryBackup(this.data);
+        session.backup.createPrimaryBackup(snapshot);
         this.debug('Data saved successfully');
         // Centralised floating-panel sync. Any code path that persists folder
         // data (sidebar actions, cloud download, native menu → "Move to
         // folder", etc.) ends up here, so one hook keeps the floating view
         // live without every call site having to remember.
-        this.floatingPanelHandle?.update(this.data, this.conversationSortMode);
+        if (this.dataSession === session && !this.isDestroyed) {
+          this.floatingPanelHandle?.update(session.data, this.conversationSortMode);
+        }
       } else {
         console.error('[FolderManager] Save failed after retry');
       }
@@ -8277,11 +8354,13 @@ export class FolderManager {
       console.error('[FolderManager] Save data error:', error);
       success = false;
     } finally {
-      this.saveInProgress = false;
-      const shouldRunTrailingSave = this.savePending;
-      this.savePending = false;
-      if (shouldRunTrailingSave && !this.isDestroyed) {
-        void this.saveData();
+      session.saveInProgress = false;
+      const pending = session.pendingSave;
+      session.pendingSave = null;
+      if (pending) {
+        void this.persistDataSession(session, pending);
+      } else if (this.dataSession !== session) {
+        this.dataSessions.delete(session.storageKey);
       }
     }
 
@@ -8339,26 +8418,63 @@ export class FolderManager {
   }
 
   private async refreshAccountScope(): Promise<void> {
-    if (!this.accountIsolationEnabled) {
-      this.accountScope = null;
-      this.activeStorageKey = STORAGE_KEY;
-      return;
-    }
-
+    const request = ++this.accountScopeRequest;
+    const previous = this.dataSession;
+    // Flush the old account's pending debounce before releasing its data owner.
+    this.flushPendingSaveData();
+    previous?.deactivate();
+    if (previous && !previous.saveInProgress) this.dataSessions.delete(previous.storageKey);
+    this.dataSession = null;
+    this.unresolvedData = { folders: [], folderContents: {} };
+    this.accountScope = null;
+    this.activeStorageKey = '';
+    this.pendingStorageEchoes = 0;
+    this.pendingTitleUpdates.clear();
+    this.nativeTitleLookup = null;
+    this.clearNativeTitleSyncTimer();
+    this.clearFolderNavigationConfirmation();
+    this.clearActiveFolderInput();
+    this.closeActiveImportExportMenu();
+    this.closeActiveImportDialog();
+    this.closeFolderConversationMenus();
+    if (this.isMultiSelectMode) this.exitMultiSelectMode();
+    this.renderAllFolders();
+    this.floatingPanelHandle?.reset(this.data, this.conversationSortMode);
+    this.applyHideArchivedSetting();
     try {
-      const context = detectAccountContextFromDocument(window.location.href, document);
-      const resolvedScope = await accountIsolationService.resolveAccountScope({
-        pageUrl: window.location.href,
-        routeUserId: context.routeUserId,
-        email: context.email,
-      });
+      let resolvedScope: AccountScope | null = null;
+      if (this.accountIsolationEnabled) {
+        const context = detectAccountContextFromDocument(window.location.href, document);
+        resolvedScope = await accountIsolationService.resolveAccountScope({
+          pageUrl: window.location.href,
+          routeUserId: context.routeUserId,
+          email: context.email,
+        });
+      }
+      if (request !== this.accountScopeRequest || this.isDestroyed) return;
+      const storageKey = resolvedScope
+        ? buildScopedFolderStorageKey(resolvedScope.accountKey)
+        : STORAGE_KEY;
+      await this.initializeStorage(storageKey);
+      if (request !== this.accountScopeRequest || this.isDestroyed) return;
+      const session =
+        this.dataSessions.get(storageKey) ??
+        (previous?.storageKey === storageKey
+          ? previous
+          : new FolderDataSession(storageKey, 'gemini-folders', resolvedScope, validateFolderData));
+      this.dataSessions.set(storageKey, session);
+      session.accountScope = resolvedScope;
+      this.dataSession = session;
       this.accountScope = resolvedScope;
-      this.activeStorageKey = buildScopedFolderStorageKey(resolvedScope.accountKey);
-      await this.storage.init(this.activeStorageKey);
+      this.activeStorageKey = storageKey;
+      session.activate();
+      if (session.ready) {
+        this.renderAllFolders();
+        this.floatingPanelHandle?.update(session.data, this.conversationSortMode);
+      }
     } catch (error) {
       console.error('[FolderManager] Failed to resolve account scope:', error);
-      this.accountScope = null;
-      this.activeStorageKey = STORAGE_KEY;
+      // Keep persistence unbound on failure. A global fallback has no known owner.
     }
   }
 
@@ -10389,6 +10505,9 @@ export class FolderManager {
   }
 
   private async handleImport(fileInput: HTMLInputElement, strategy: ImportStrategy): Promise<void> {
+    const session = this.dataSession;
+    const scopeRequest = this.accountScopeRequest;
+    if (!session || (!session.ready && session.accountScope)) return;
     // Prevent concurrent imports to avoid data corruption
     if (this.importInProgress) {
       this.showNotification(
@@ -10418,6 +10537,7 @@ export class FolderManager {
 
       // Read and parse file
       const readResult = await FolderImportExportService.readJSONFile(file);
+      if (this.dataSession !== session || this.accountScopeRequest !== scopeRequest) return;
       if (!readResult.success) {
         this.showNotification(this.t('folder_import_invalid_format'), 'error');
         return;
@@ -10436,9 +10556,10 @@ export class FolderManager {
       // Import data (now async with concurrency protection)
       const importResult = await FolderImportExportService.importFromPayload(
         validationResult.data,
-        this.data as unknown as Parameters<typeof FolderImportExportService.importFromPayload>[1],
+        this.cloneFolderData(session.data),
         { strategy, createBackup: true },
       );
+      if (this.dataSession !== session || this.accountScopeRequest !== scopeRequest) return;
 
       if (!importResult.success) {
         this.showNotification(
@@ -10489,6 +10610,9 @@ export class FolderManager {
    * Import folder data from pasted JSON text
    */
   private async handleImportFromText(jsonText: string, strategy: ImportStrategy): Promise<void> {
+    const session = this.dataSession;
+    const scopeRequest = this.accountScopeRequest;
+    if (!session || (!session.ready && session.accountScope)) return;
     if (this.importInProgress) {
       this.showNotification(
         this.t('folder_import_in_progress') || 'Import already in progress',
@@ -10522,9 +10646,10 @@ export class FolderManager {
 
       const importResult = await FolderImportExportService.importFromPayload(
         validationResult.data,
-        this.data as unknown as Parameters<typeof FolderImportExportService.importFromPayload>[1],
+        this.cloneFolderData(session.data),
         { strategy, createBackup: true },
       );
+      if (this.dataSession !== session || this.accountScopeRequest !== scopeRequest) return;
 
       if (!importResult.success) {
         this.showNotification(
@@ -11186,12 +11311,15 @@ export class FolderManager {
    * This mirrors the logic in CloudSyncSettings.tsx handleSyncNow()
    */
   private async handleCloudUpload(): Promise<void> {
+    const session = this.dataSession;
+    const scopeRequest = this.accountScopeRequest;
+    if (!session || (!session.ready && session.accountScope)) return;
+    const accountScope = this.toSyncAccountScope(session.accountScope);
+    const folders = this.cloneFolderData(session.data);
     try {
       this.showNotification(this.t('uploadInProgress'), 'info');
       const timelineHierarchyAccountScope = await this.resolveTimelineHierarchySyncScope();
-
-      // Get current folder data
-      const folders = this.data;
+      if (this.dataSession !== session || this.accountScopeRequest !== scopeRequest) return;
 
       // Get prompts from storage
       let prompts: PromptItem[] = [];
@@ -11203,6 +11331,7 @@ export class FolderManager {
       } catch (err) {
         console.warn('[FolderManager] Could not get prompts for upload:', err);
       }
+      if (this.dataSession !== session || this.accountScopeRequest !== scopeRequest) return;
 
       this.debug(
         `Uploading - folders: ${folders.folders?.length || 0}, prompts: ${prompts.length}`,
@@ -11216,7 +11345,7 @@ export class FolderManager {
           folders,
           prompts,
           platform: 'gemini',
-          accountScope: this.toSyncAccountScope(this.accountScope),
+          accountScope,
           timelineHierarchyAccountScope,
         },
       })) as { ok?: boolean; error?: string } | undefined;
@@ -11239,9 +11368,14 @@ export class FolderManager {
    * This mirrors the logic in CloudSyncSettings.tsx handleDownloadFromDrive()
    */
   private async handleCloudSync(): Promise<void> {
+    const session = this.dataSession;
+    const scopeRequest = this.accountScopeRequest;
+    if (!session || (!session.ready && session.accountScope)) return;
+    const accountScope = this.toSyncAccountScope(session.accountScope);
     try {
       this.showNotification(this.t('downloadInProgress'), 'info');
       const timelineHierarchyAccountScope = await this.resolveTimelineHierarchySyncScope();
+      if (this.dataSession !== session || this.accountScopeRequest !== scopeRequest) return;
       const timelineHierarchyStorageKey = getTimelineHierarchyStorageKey(
         timelineHierarchyAccountScope?.accountKey,
       );
@@ -11251,7 +11385,7 @@ export class FolderManager {
         type: 'gv.sync.download',
         payload: {
           platform: 'gemini',
-          accountScope: this.toSyncAccountScope(this.accountScope),
+          accountScope,
           timelineHierarchyAccountScope,
         },
       })) as
@@ -11268,6 +11402,7 @@ export class FolderManager {
           }
         | undefined;
 
+      if (this.dataSession !== session || this.accountScopeRequest !== scopeRequest) return;
       if (!response?.ok) {
         const errorMsg = response?.error || 'Download failed';
         this.showNotification(this.t('syncError').replace('{error}', errorMsg), 'error');
@@ -11341,6 +11476,7 @@ export class FolderManager {
       } catch (err) {
         console.warn('[FolderManager] Could not get local timeline hierarchy for merge:', err);
       }
+      if (this.dataSession !== session || this.accountScopeRequest !== scopeRequest) return;
 
       // Merge folder data
       const localFolders = this.data;
@@ -11363,6 +11499,7 @@ export class FolderManager {
       // Apply merged folder data
       this.data = mergedFolders;
       await this.saveData();
+      if (this.dataSession !== session || this.accountScopeRequest !== scopeRequest) return;
 
       // Save merged prompts and starred to storage
       try {

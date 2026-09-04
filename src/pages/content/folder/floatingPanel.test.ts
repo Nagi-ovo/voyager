@@ -649,6 +649,85 @@ describe('mountFloatingPanel', () => {
     expect(handle.element.textContent).not.toContain('Alpha');
   });
 
+  it.each(['create-root', 'create-child', 'rename'] as const)(
+    'discards a focused %s draft and old rows on account reset while preserving panel geometry',
+    (mode) => {
+      const onCreateFolder = vi.fn();
+      const onRenameFolder = vi.fn();
+      const handle = mountPanel({
+        onCreateFolder,
+        onRenameFolder,
+        storedPos: { x: 24, y: 32 },
+        storedSize: { w: 400, h: 500 },
+      });
+      const geometry = handle.element.style.cssText;
+      if (mode === 'rename') {
+        requireElement<HTMLElement>(
+          folderHeader(handle.element, 'folder-a'),
+          `.${FLOATING_PANEL_CLASS}__folder-name`,
+        ).dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+      } else {
+        click(
+          requireElement<HTMLButtonElement>(
+            mode === 'create-root' ? handle.element : folderHeader(handle.element, 'folder-a'),
+            `.${FLOATING_PANEL_CLASS}__icon-button--${mode === 'create-root' ? 'create' : 'add-child'}`,
+          ),
+        );
+      }
+      const input = requireElement<HTMLInputElement>(
+        handle.element,
+        `.${FLOATING_PANEL_CLASS}__inline-input`,
+      );
+      input.value = 'Account A private draft';
+      input.focus();
+
+      handle.reset({ folders: [], folderContents: {} });
+
+      expect(handle.element.querySelector(`.${FLOATING_PANEL_CLASS}__inline-input`)).toBeNull();
+      expect(handle.element.querySelector(`.${FLOATING_PANEL_CLASS}__folder`)).toBeNull();
+      expect(handle.element.textContent).not.toContain('Conversation A');
+      expect(handle.element.style.cssText).toBe(geometry);
+      expect(onCreateFolder).not.toHaveBeenCalled();
+      expect(onRenameFolder).not.toHaveBeenCalled();
+      const outsideClick = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+      document.body.dispatchEvent(outsideClick);
+      expect(outsideClick.defaultPrevented).toBe(false);
+
+      click(
+        requireElement<HTMLButtonElement>(
+          handle.element,
+          `.${FLOATING_PANEL_CLASS}__icon-button--create`,
+        ),
+      );
+      expect(
+        requireElement<HTMLInputElement>(handle.element, `.${FLOATING_PANEL_CLASS}__inline-input`)
+          .value,
+      ).toBe('');
+    },
+  );
+
+  it('clears the previous account menu and expansion when the next account reuses folder ids', () => {
+    const handle = mountPanel();
+    click(folderHeader(handle.element, 'folder-a'));
+    contextMenu(folderHeader(handle.element, 'folder-a'));
+    expect(handle.element.querySelector(`.${FLOATING_PANEL_CLASS}__context-menu`)).not.toBeNull();
+
+    const next = createData();
+    next.folders[0].name = 'Other account';
+    next.folderContents['folder-a'] = [];
+    handle.reset(next);
+
+    expect(handle.element.querySelector(`.${FLOATING_PANEL_CLASS}__context-menu`)).toBeNull();
+    expect(handle.element.textContent).toContain('Other account');
+    expect(handle.element.textContent).not.toContain('Conversation A');
+    expect(
+      requireElement<HTMLElement>(
+        folderHeader(handle.element, 'folder-a').parentElement!,
+        `.${FLOATING_PANEL_CLASS}__folder-body`,
+      ).style.display,
+    ).not.toBe('none');
+  });
+
   it('debounces onSizeChange and commits only the final observed size', () => {
     vi.useFakeTimers();
     const resizeObserver = installResizeObserverMock();

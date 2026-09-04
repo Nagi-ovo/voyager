@@ -39,6 +39,8 @@ export type FloatingPanelMountArgs = MountArgs;
 export type FloatingPanelHandle = {
   element: HTMLElement;
   update: (data: FolderData, conversationSortMode?: ConversationSortMode) => void;
+  /** Replaces account data and discards transient edits without changing panel geometry. */
+  reset: (data: FolderData, conversationSortMode?: ConversationSortMode) => void;
   destroy: () => void;
 };
 
@@ -1127,6 +1129,14 @@ export function mountFloatingPanel({
 
   return {
     element: panel,
+    reset: (next, nextConversationSortMode) => {
+      currentData = next;
+      if (nextConversationSortMode) currentConversationSortMode = nextConversationSortMode;
+      inlineEditor = null;
+      contextMenu = null;
+      expandedFolders.clear();
+      render();
+    },
     update: (next, nextConversationSortMode) => {
       currentData = next;
       if (nextConversationSortMode) currentConversationSortMode = nextConversationSortMode;

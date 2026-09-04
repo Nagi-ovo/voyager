@@ -338,7 +338,7 @@ describe('M11 — destroy() lifecycle teardown', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it('destroys on disable and re-initializes through initializeFolderUI on enable', () => {
+  it('destroys on disable and re-initializes through initializeFolderUI on enable', async () => {
     vi.useFakeTimers();
     const { internals } = createManager();
 
@@ -358,7 +358,8 @@ describe('M11 — destroy() lifecycle teardown', () => {
     internals.folderEnabled = true;
     internals.applyFolderEnabledSetting();
 
-    expect(initSpy).toHaveBeenCalledTimes(1);
+    // Re-enable resolves account ownership before initializing the folder UI.
+    await vi.waitFor(() => expect(initSpy).toHaveBeenCalledTimes(1));
     // The account-scope poller stopped by destroy() is restarted on re-enable.
     expect(internals.accountContextPoller).not.toBeNull();
   });
