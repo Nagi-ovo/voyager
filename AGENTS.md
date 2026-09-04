@@ -1,100 +1,88 @@
-# AGENTS.md - Gemini Voyager
+# AGENTS.md — Voyager
 
-## Commands
+## Execution
 
-```bash
-bun install                # Setup
-bun run dev:chrome         # Dev (also: dev, dev:firefox, dev:safari, dev:chrome-open)
-bun run build:chrome       # Build Chrome (also: build, build:firefox, build:safari)
-bun run build:edge         # Edge package (runs Chrome build, adjusts manifest, creates zip)
-bun run build:all          # Build Chrome + Firefox + Safari (does not include Edge)
-bun run build:browsers     # Build Chrome + Edge + Firefox + Safari
-bun run test               # Test (also: test:watch, test:ui, test:coverage)
-bun run typecheck          # Type check
-bun run lint               # Lint and auto-fix
-bun run format             # Format
-bun run verify:pr          # Standard local PR automation (excludes native/live browser tests)
-bun run regressions:check  # Validate the regression-note index, fields, and guard paths
-bun run bump               # Bump package/manifest versions and run format
-bun run docs:dev           # Docs dev server
-bun run docs:build         # Build docs
-bun run docs:preview       # Preview built docs
-```
+- Complete the requested outcome: audits deliver evidence and recommendations; implementations include changes and verification. Make routine, reversible choices within the authorized scope; ask when missing information changes scope, data safety, or authorization.
+- Follow current user requirements over repository or skill guidance, within the host's instruction hierarchy. Reuse existing approval. If a document requires a pause, cite the exact instruction and explain why it applies; finish independent authorized work first.
+- Check `git status --short --branch -uall` before editing. Preserve unrelated work; recheck status and HEAD before committing or pushing.
+- Use subagents for bounded, independent reviews or disjoint implementation when useful. Keep small edits local, give each file one editor, and verify delegated findings.
+- Report the outcome, verification and remaining work concisely in the user's language. Distinguish recommendations from applied changes.
 
-## Chrome Development Builds
+## Read the relevant context
 
-- Use `bun run dev:chrome` for routine Chrome development. It watches the source and writes complete builds to `dist_chrome_dev`.
-- Load and reload `dist_chrome_dev` in Chrome when testing local changes.
-- `bun run build:chrome` and `bun run build:all` write production artifacts to `dist_chrome`; use them for production verification and releases, not as the normal local development target.
+Read matching rules before editing; do not assume the client auto-loaded `.claude/rules/`.
 
-## Core Rules
+| Change                                                                   | Required context                                                                                                            |
+| ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| `src/**/*.ts`, `src/**/*.tsx`                                            | [.claude/rules/typescript.md](.claude/rules/typescript.md)                                                                  |
+| `src/pages/content/**`, `public/contentStyle.css`                        | [.claude/rules/content-scripts.md](.claude/rules/content-scripts.md)                                                        |
+| `src/locales/**`                                                         | [.claude/rules/i18n.md](.claude/rules/i18n.md)                                                                              |
+| Storage, backup, account isolation, Drive sync, folder or export modules | [.claude/rules/high-complexity.md](.claude/rules/high-complexity.md), including full-file reads and full-suite verification |
+| Non-trivial feature, fix or refactor                                     | Search [.github/docs/REGRESSION_NOTES.md](.github/docs/REGRESSION_NOTES.md), then read matching topics                      |
+| Contribution or release                                                  | [.github/CONTRIBUTING.md](.github/CONTRIBUTING.md); matching workflows in [.agents/skills/](.agents/skills/)                |
 
-Path-scoped rules live in `.claude/rules/` and load automatically by glob: `typescript.md` (src/**/\*.ts(x)), `content-scripts.md` (src/pages/content/** and public/contentStyle.css), `i18n.md` (src/locales/**), `high-complexity.md` (core storage/sync services plus folder/export services and content modules).
+Use `package.json`, build configs, manifests and CI to verify command names and current wiring. Keep `CLAUDE.md` as a pointer here.
 
-Project-wide rules (always in effect):
+## Protected behavior
 
-1. **Never modify `dist_*` folders directly.**
-2. **Never commit `.env` or secrets.**
-3. **Never grant a page or feature direct `<all_urls>` permission.** If it is truly unavoidable, discuss it with the user first and get explicit approval before implementation.
-4. **When adding Material Symbol icons**, the popup uses the bundled font in `public/fonts/`; verify the glyph exists locally or update the bundled font assets. Do not add a remote Google Fonts URL.
-5. **For GitHub issue/PR/comment work, prefer `gh` as the source of truth** instead of browser scraping or unstable connectors.
-6. **After fixing an issue with a pushed `Fixes #xxx` / `Closes #xxx` commit or PR**, leave a short GitHub comment in the reporter's language: the fix has landed, it will be available in the next version, and they are welcome to reopen the issue if the problem remains.
-7. **Default push target**: when asked to push without explicit branch/PR instructions, push a fast-forward update to `origin/main`. Never force-push unless explicitly requested.
-8. **Regression notes are required context.** Use `.github/docs/REGRESSION_NOTES.md` as the routing index before a non-trivial feature or bug fix: search the affected terms, then read the matching topic file. Record repeatable, non-obvious bugs as a short Trap/Rule/Guard entry and run `bun run regressions:check`.
-9. **Do not force-refresh Gemini's SPA for feature navigation.** For Gemini content-script navigation, prefer native in-app links first and History API / router events as the fallback. Do not introduce `location.assign`, `location.href`, or `location.reload` for normal conversation/session navigation unless the user explicitly accepts a full page reload. Preserve `/u/<index>/...` account scope when constructing routes.
-10. **Never invent a new Xcode `-derivedDataPath`.** Every local or ad-hoc `xcodebuild` run reuses `.build/safari-native-test-derived` plus `-clonedSourcePackagesDirPath .build/sparkle-source-packages`; only CI may use `.build/ci-xcode-derived`. Task-flavored names (`safari-ui-fix-derived`, `safari-voyager-name-release-derived`, …) each strand 500MB–1GB and once piled up to 6.8GB. Run `bun run clean:build` to reclaim them — it keeps the SPM package cache so the next build does not re-download Sparkle.
+- Preserve user data and serialized formats, especially localStorage. Legacy keys and cleanup paths may serve migrations. Scope page-derived state, caches, backups and delayed work to the applicable platform/account; preserve `/u/<index>/` routes.
+- Generate `dist_*` through build scripts; never edit them directly. Never commit `.env` or secrets.
+- Never grant a page or feature direct `<all_urls>` permission without explicit user approval.
+- Gemini conversation navigation uses native in-app links first, then History API/router events. Full reloads (`location.assign`, `location.href`, `location.reload`) require explicit user acceptance for normal session navigation.
+- Popup Material Symbols use bundled `public/fonts/` assets. Check new glyphs locally or update the bundle; do not introduce a remote Google Fonts URL.
+- Every local `xcodebuild` uses `-derivedDataPath .build/safari-native-test-derived -clonedSourcePackagesDirPath .build/sparkle-source-packages`. Only CI uses `.build/ci-xcode-derived`. `bun run clean:build` reclaims derived data while retaining the SPM cache.
 
-## Verification (run before declaring done)
+## Where changes belong
 
-1. `bun run typecheck` — after any `.ts`/`.tsx` change
-2. `bun run lint` — before finishing; note this runs `oxlint --fix`, so inspect resulting changes
-3. `bun run test` — all tests pass
-4. `bun run build:chrome` — builds without error
-   - **If you added, renamed, or removed anything under `public/`, run `bun run build:all` instead.** `public/` is copied into `dist_safari`, and every top-level entry there must be registered in `Voyager/Voyager.xcodeproj/project.pbxproj`. Nothing wires that up automatically, so a new asset fails `build:safari` while Chrome and Firefox stay green.
-5. `bun run docs:build` — after any `docs/**/*.md` or `docs/.vitepress/**` change
-6. `bun run docs:dev` — after docs changes when preview is needed, start in background so user can preview in browser before committing
-7. New features/fixes must include tests
+| Responsibility               | Entry points                                                                                                                                                                         |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Shared services and storage  | `src/core/services/`; `StorageKeys` in `src/core/types/common.ts`; sync-backed settings also need `SettingsBackupService.ts` defaults/migrations                                     |
+| Feature logic and UI         | `src/features/*/services/` or hooks; functional React UI. Content modules in `src/pages/content/` remain self-contained                                                              |
+| Folders                      | `src/pages/content/folder/`, `src/features/folder/`; persisted types currently exist in both `src/core/types/folder.ts` and `src/pages/content/folder/types.ts`                      |
+| Popup settings and shortcuts | `src/pages/popup/Popup.tsx` and its `components/`; shortcuts use `src/core/services/KeyboardShortcutService.ts`, related types and `components/KeyboardShortcutSettings.tsx`         |
+| Cloud sync                   | `src/core/services/GoogleDriveSyncService.ts`                                                                                                                                        |
+| Translations                 | `src/locales/*/messages.json`: all 10 locales for new/removed user-facing keys                                                                                                       |
+| Content styles               | Shared/static CSS in `public/contentStyle.css`; computed feature CSS stays local, uses `gv-` prefixes and has teardown                                                               |
+| Coachmarks                   | Reuse `src/pages/content/coachmark/`; keep consumers beside the feature and register Gemini guides in `showOnboardingCoachmarksWhenChangelogIsIdle` in `src/pages/content/index.tsx` |
+| Plugins                      | `src/features/plugins/`; official CSS/JSON in `catalog/` with `BundledCatalogPluginSource.ts` mapping/tests; native JS in `builtin/index.ts`                                         |
 
-## Commit Format
+Use `StorageService` where suitable; established direct `chrome.storage`/`browser.storage` paths remain valid for content scripts, popup settings, bulk operations and listeners.
 
-Conventional Commits: `<type>(<scope>): <imperative summary>`
+`src/features/plugins/sources/defaultSources.ts` defines active sources: builtin and bundled catalog. The remote `MarketplacePluginSource` is currently disabled. A sibling `../voyager-plugins` clone mirrors that marketplace; bundled official plugins are maintained here.
 
-- Types: `feat`, `fix`, `refactor`, `chore`, `docs`, `test`, `build`, `ci`, `perf`, `style`, `revert`, `deps`, `ux`
-- Scope: short, feature-focused, lowercase when possible; commitlint currently enforces lowercase scopes and a 100-character header limit
-- Summary: imperative, preferably lowercase, no trailing period
-- If the commit relates to a GitHub issue or discussion, include `Closes #xxx` or `Fixes #xxx` in the commit body or PR description
-- Codex-authored commits should include `Co-authored-by: Codex <codex@users.noreply.github.com>` in the commit body.
+Coachmarks require a stable ID, side-effect-free eligibility, cleanup after partial mount failure, all 10 locales, a debug trigger and tests. Skip seen/ineligible guides, then show the remaining guides continuously in registration order with `1/N` progress: confirmation advances; close, Escape or outside click exits the tour.
 
-## Design Principles
+## Keep changes incremental
 
-1. **KISS.** Implement the minimum interpretation of requirements. Never combine orthogonal features (e.g., "fade" and "thin") without explicit confirmation.
-2. **Backward compatibility is iron law.** Zero destructiveness to user data (especially `localStorage`).
-3. **Data structures first.** Eliminate special cases by redesigning data, not adding branches.
-4. **For visual/CSS changes:** describe expected rendering, verify alignment/centering/spacing in both light and dark themes, and check external resources (icon fonts, CDN links).
-5. **For ambiguous requirements:** implement the minimal version first. Ask before adding scope.
-6. **Grep for a sibling precedent before adding a new primitive.** Body-level popover, global listener, CSS overlay — there is almost always an existing `gv-pm-*` analogue (e.g., `.gv-pm-confirm` for body-appended popovers) already wired into close-outside handlers, teardown, and theme overrides. Copy its integration points; don't reinvent and miss one.
-7. **Account scope matters.** Any Gemini feature that persists or reuses page-derived data must consider multi-account routes (`/u/<index>/...`). Cache keys, storage payloads, background refreshes, DOM-derived state, and links back to Gemini pages should preserve the current account scope where applicable. Avoid global caches unless the data is truly account-independent.
+- Implement the minimum requested behavior. Keep independent options separate; inspect existing data structures and sibling implementations before adding abstractions.
+- Before deletion, trace production entry points, callers and regression guards. Distinguish retired implementations from compatibility cleanup. Remove tests that exist solely for deleted, unreachable code.
+- Extract cohesive data operations or complete lifecycle responsibilities from large managers. Give helpers explicit inputs and one state owner; avoid passing the whole manager into extracted modules. Each step must work independently and preserve existing callers and data.
+- Keep listener, observer and timer cleanup beside setup. Sidebar remount, account change and full teardown have different lifetimes; preserve the appropriate state across each.
+- Reuse existing popover integration, such as `gv-pm-confirm`, including outside-click handling, teardown and theme overrides.
+- For visual changes, state the expected result and verify alignment, spacing and behavior in light/dark themes, including external resource dependencies.
+- Record repeatable, non-obvious bugs as Trap/Rule/Guard entries in the matching regression topic; run `bun run regressions:check` after editing notes.
 
-## Architecture
+## Verification
 
-- **Services**: service classes, singleton exports, factories, and service helpers live in `src/core/services/`. `StorageService` is the typed wrapper for storage when suitable; existing persistence also uses direct `chrome.storage`/`browser.storage` and local fallback paths in popup, background, services, and content scripts.
-- **Content scripts**: `src/pages/content/`. Each sub-module is self-contained.
-- **UI**: functional React components + hooks. Business logic in `features/*/services/` or custom hooks, not in UI files.
-- **Types**: `src/core/types/common.ts` for StorageKeys and shared types.
-- **Translations**: `src/locales/*/messages.json` (10 languages).
-- **Injected CSS**: shared/static content CSS lives in `public/contentStyle.css`; feature-specific dynamic CSS may be injected by content modules or the plugin runtime when values are computed at runtime, with `gv-` prefixes and teardown.
-- **Feature coachmarks**: reuse the primitive in `src/pages/content/coachmark/`; keep feature-specific consumers beside their feature, and register Gemini onboarding in `showOnboardingCoachmarksWhenChangelogIsIdle` in `src/pages/content/index.tsx`. Each coachmark needs a stable ID, a side-effect-free eligibility check, complete reveal cleanup (including partial mount failure), all 10 locales, a debug trigger, and tests. The scheduler filters seen/ineligible guides first, then shows the remaining guides continuously in registration order with `1/N` progress; confirmation advances, while close/Escape/outside click exits the current tour.
-- **Plugins**: declarative CSS+JSON plugin system in `src/features/plugins/` (engine + `PluginHost` + popup `PluginManager`). Default sources are builtin native plugins, bundled official catalog plugins, and the remote marketplace. Official CSS/JSON plugins that ship with Voyager live in `src/features/plugins/catalog/` and load through `BundledCatalogPluginSource`; update them in this repo together with engine/popup changes. Third-party or experimental marketplace plugins can still live in `github.com/nagi-studio/voyager-plugins` and are fetched at runtime by `MarketplacePluginSource`. A local sibling clone may exist at `../voyager-plugins`, but treat it as the remote marketplace mirror, not the source of truth for bundled official plugins. Builtin/native-function plugins that need JS (e.g. **Formula Copy**, which targets Claude + ChatGPT) live in `src/features/plugins/builtin/index.ts`.
+Choose checks by changed surface. Repeat passing checks only after relevant changes or new evidence. `bun run verify:pr` runs complete local PR automation; native/live-browser checks remain separate.
 
-## Task Map
+| Changed surface                             | Checks before completion                                                                                                            |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Repository prose or agent instructions only | Review the diff for lost requirements, validate referenced paths/commands, format-check changed files                               |
+| Extension code, build logic or dependencies | `bun run lint:check`, `bun run test`, `bun run build:chrome`; add `bun run typecheck` for any `.ts`/`.tsx` change                   |
+| Added, renamed or removed `public/` entries | `bun run build:all` instead of Chrome only; register every top-level Safari resource in `Voyager/Voyager.xcodeproj/project.pbxproj` |
+| `docs/**/*.md` or `docs/.vitepress/**`      | `bun run docs:build`; background `bun run docs:dev` when preview is needed before committing                                        |
 
-| Task                               | Where                                                                                                                                                                                 |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Add storage key                    | `src/core/types/common.ts` → storage defaults/migrations (`SettingsBackupService.ts` for sync-backed settings) → popup/content consumers → locale keys only when new UI text is added |
-| Update translations                | `src/locales/*/messages.json` (all 10)                                                                                                                                                |
-| Change DOM injection               | `src/pages/content/`                                                                                                                                                                  |
-| Add a one-time feature guide       | Reuse `src/pages/content/coachmark/` → add a feature-local consumer → register it in `src/pages/content/index.tsx` → add all 10 locale strings and tests                              |
-| Modify popup settings              | Existing top-level settings often live in `src/pages/popup/Popup.tsx`; extracted sections live in `src/pages/popup/components/`                                                       |
-| Fix cloud sync                     | `src/core/services/GoogleDriveSyncService.ts`                                                                                                                                         |
-| Add keyboard shortcut              | `src/core/services/KeyboardShortcutService.ts` + related types + `src/pages/popup/components/KeyboardShortcutSettings.tsx`                                                            |
-| Add/update bundled official plugin | `src/features/plugins/catalog/` + `BundledCatalogPluginSource.ts` mapping/tests                                                                                                       |
+`bun run lint` (`oxlint --fix`) and `bun run format` apply corrections: inspect their diffs. Read-only reviews use `:check` variants.
+
+Features and behavior fixes need meaningful tests. Assert observable behavior or data invariants; avoid repeating mocks, private wiring or source spelling. Static checks belong to static contracts such as resource registration or forbidden primitives. Migrate valuable regression assertions with extracted responsibilities. Prose, formatting and other reversible changes without a behavior change need no new tests.
+
+For Chrome development, run `bun run dev:chrome` and load/reload `dist_chrome_dev`. Production checks use `build:chrome`/`dist_chrome`. `build:all` builds Chrome, Firefox and Safari; `build:browsers` includes Edge too.
+
+## Git and publishing
+
+- Use `gh` as the source of truth for GitHub issues, PRs and comments.
+- When asked to push without branch/PR instructions, fast-forward `origin/main`. Never force-push unless explicitly requested.
+- Commit as `<type>(<scope>): <imperative summary>`: lowercase feature scope, preferably lowercase summary, no trailing period, at most 100 header characters. Types: `feat`, `fix`, `refactor`, `chore`, `docs`, `test`, `build`, `ci`, `perf`, `style`, `revert`, `deps`, `ux`.
+- Link related issues/discussions with `Fixes #xxx` or `Closes #xxx` in the commit body or PR description. Codex commits include `Co-authored-by: Codex <codex@users.noreply.github.com>`.
+- After publishing an issue fix with a pushed `Fixes`/`Closes` commit or PR, comment briefly in the reporter's language: the fix has landed, it will be in the next version, and they can reopen if it persists.
