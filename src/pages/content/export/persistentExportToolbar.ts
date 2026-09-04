@@ -7,6 +7,9 @@ export type PersistentExportToolbarOptions = {
   label: string;
   tooltip: string;
   onClick: () => void;
+  batchLabel?: string;
+  batchTooltip?: string;
+  onBatchClick?: () => void;
 };
 
 const TOOLBAR_CLASS = 'gv-persistent-export-toolbar';
@@ -48,10 +51,6 @@ function isVisibleTopRightElement(
   const rect = element.getBoundingClientRect();
   if (rect.width <= 0 || rect.height <= 0) return false;
   if (rect.bottom <= 0 || rect.top >= TOP_RIGHT_MAX_Y_PX) return false;
-  // Some Gemini top-bar hosts span the full viewport. Treating those as
-  // right-side controls makes the computed offset enormous and pushes the
-  // toolbar into the left rail, so only avoid elements whose own left edge is
-  // already in the right-side control cluster.
   return rect.left >= window.innerWidth * TOP_RIGHT_MIN_LEFT_RATIO;
 }
 
@@ -125,6 +124,8 @@ function buildToolbarDom(options: PersistentExportToolbarOptions): {
   root: HTMLDivElement;
   button: HTMLButtonElement;
   labelEl: HTMLSpanElement;
+  batchButton?: HTMLButtonElement;
+  batchLabelEl?: HTMLSpanElement;
 } {
   const root = document.createElement('div');
   root.className = TOOLBAR_CLASS;
@@ -148,13 +149,42 @@ function buildToolbarDom(options: PersistentExportToolbarOptions): {
   button.appendChild(labelEl);
   root.appendChild(button);
 
-  return { root, button, labelEl };
+  let batchButton: HTMLButtonElement | undefined;
+  let batchLabelEl: HTMLSpanElement | undefined;
+
+  if (options.onBatchClick) {
+    batchButton = document.createElement('button');
+    batchButton.type = 'button';
+    batchButton.className = `${BUTTON_CLASS} gv-batch-btn`;
+    batchButton.style.marginLeft = '6px';
+    const bTip = options.batchTooltip || 'Batch export conversations to Markdown';
+    batchButton.title = bTip;
+    batchButton.setAttribute('aria-label', bTip);
+
+    const bIcon = document.createElement('span');
+    bIcon.className = ICON_CLASS;
+    bIcon.setAttribute('aria-hidden', 'true');
+    bIcon.textContent = '📦';
+    bIcon.style.fontSize = '13px';
+
+    batchLabelEl = document.createElement('span');
+    batchLabelEl.className = LABEL_CLASS;
+    batchLabelEl.textContent = options.batchLabel || '一键导出';
+
+    batchButton.appendChild(bIcon);
+    batchButton.appendChild(batchLabelEl);
+    root.appendChild(batchButton);
+  }
+
+  return { root, button, labelEl, batchButton, batchLabelEl };
 }
 
 export type PersistentExportToolbarHandle = {
   root: HTMLDivElement;
   button: HTMLButtonElement;
+  batchButton?: HTMLButtonElement;
   setText(label: string, tooltip: string): void;
+  setBatchText?(label: string, tooltip: string): void;
   remove(): void;
 };
 
@@ -186,7 +216,7 @@ export function mountPersistentExportToolbar(
     };
   }
 
-  const { root: plainRoot, button: plainButton, labelEl } = buildToolbarDom(options);
+  const { root: plainRoot, button: plainButton, labelEl, batchButton, batchLabelEl } = buildToolbarDom(options);
   const root = plainRoot as OwnedToolbarRoot;
   const button = plainButton as ToolbarButton;
   root._gvOwner = owner;
@@ -199,17 +229,27 @@ export function mountPersistentExportToolbar(
   };
   ['pointerdown', 'mousedown', 'pointerup', 'mouseup'].forEach((type) => {
     button.addEventListener(type, swallow, true);
+    if (batchButton) batchButton.addEventListener(type, swallow, true);
   });
   button.addEventListener('click', (ev) => {
     swallow(ev);
     try {
       button._gvOnClick?.();
     } catch (err) {
-      try {
-        console.error('[Gemini Voyager] Persistent export toolbar click failed:', err);
-      } catch {}
+      console.error('[Gemini Voyager] Persistent export toolbar click failed:', err);
     }
   });
+
+  if (batchButton && options.onBatchClick) {
+    batchButton.addEventListener('click', (ev) => {
+      swallow(ev);
+      try {
+        options.onBatchClick?.();
+      } catch (err) {
+        console.error('[Gemini Voyager] Batch export click failed:', err);
+      }
+    });
+  }
 
   document.body.appendChild(root);
   installToolbarAvoidance(root);
@@ -217,10 +257,18 @@ export function mountPersistentExportToolbar(
   return {
     root,
     button,
+    batchButton,
     setText(label, tooltip) {
       button.title = tooltip;
       button.setAttribute('aria-label', tooltip);
       labelEl.textContent = label;
+    },
+    setBatchText(label, tooltip) {
+      if (batchButton && batchLabelEl) {
+        batchButton.title = tooltip;
+        batchButton.setAttribute('aria-label', tooltip);
+        batchLabelEl.textContent = label;
+      }
     },
     remove() {
       if (root._gvOwner === owner) removeToolbarRoot(root);
