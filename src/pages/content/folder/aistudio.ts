@@ -263,7 +263,7 @@ export class AIStudioFolderManager {
     else this.unresolvedData = data;
   }
   private get canEdit(): boolean {
-    return this.dataSession?.ready === true;
+    return this.dataSession?.ready === true && !this.dataSession.replacingData;
   }
   private container: HTMLElement | null = null;
   private historyRoot: HTMLElement | null = null;
@@ -587,7 +587,8 @@ export class AIStudioFolderManager {
       const migratedData = this.cloneFolderData(legacyData as FolderData);
       session.data = migratedData;
       session.markReady();
-      await this.persistDataSession(session, this.cloneFolderData(migratedData));
+      session.activeSave = this.persistDataSession(session, this.cloneFolderData(migratedData));
+      await session.activeSave;
       console.log(
         '[AIStudioFolderManager] Migrated legacy AI Studio folder data to scoped storage:',
         session.storageKey,
@@ -647,7 +648,9 @@ export class AIStudioFolderManager {
     this.resolvingAccountContextFingerprint = fingerprint;
     const previous = this.dataSession;
     previous?.deactivate();
-    if (previous && !previous.saveInProgress) this.dataSessions.delete(previous.storageKey);
+    if (previous && !previous.saveInProgress && !previous.replacingData) {
+      this.dataSessions.delete(previous.storageKey);
+    }
     this.dataSession = null;
     this.unresolvedData = { folders: [], folderContents: {} };
     this.accountScope = null;
@@ -901,7 +904,7 @@ export class AIStudioFolderManager {
     const session = this.dataSession;
     if (!session) return;
     // A returning account may still own a queued edit that is newer than disk.
-    if (session.saveInProgress && session.ready) return;
+    if ((session.saveInProgress || session.replacingData) && session.ready) return;
     const version = ++session.loadVersion;
     const isCurrent = () => this.dataSession === session && session.loadVersion === version;
     try {
@@ -959,7 +962,8 @@ export class AIStudioFolderManager {
         }
         return session.pendingSaveCompletion.promise;
       }
-      return this.persistDataSession(session, snapshot);
+      session.activeSave = this.persistDataSession(session, snapshot);
+      return session.activeSave;
     } catch (error) {
       console.error('[AIStudioFolderManager] Save error:', error);
       this.showErrorNotification('Failed to save folder data. Changes may not be persisted.');
@@ -967,24 +971,59 @@ export class AIStudioFolderManager {
     }
   }
 
+  /** Keep imported/synced drafts out of live data and recovery until storage accepts them. */
+  private async replaceData(data: FolderData, prompts?: PromptItem[]): Promise<boolean> {
+    const session = this.dataSession;
+    const activation = this.accountScopeRequest;
+    if (!session || !this.canEdit) return false;
+    const snapshot = this.cloneFolderData(data);
+    session.replacingData = true;
+    session.loadVersion += 1;
+    this.render();
+    try {
+      // Preserve accepted ordinary edits rather than coalescing a draft into their tail.
+      const pending = session.pendingSaveCompletion?.promise ?? session.activeSave;
+      if (pending) await pending;
+      if (this.dataSession !== session || this.accountScopeRequest !== activation) return false;
+
+      session.activeSave = this.persistDataSession(session, snapshot, prompts);
+      const saved = await session.activeSave;
+      // An issued write belongs to its session even after leaving and returning to that account.
+      if (saved) session.data = snapshot;
+      return saved;
+    } finally {
+      session.replacingData = false;
+      if (this.dataSession === session) {
+        this.render();
+        if (this.container) this.applyHideArchivedToLibraryTable();
+      } else if (!session.saveInProgress) {
+        this.dataSessions.delete(session.storageKey);
+      }
+    }
+  }
+
   private async persistDataSession(
     session: FolderDataSession,
     snapshot: FolderData,
+    prompts?: PromptItem[],
   ): Promise<boolean> {
     this.dataSessions.set(session.storageKey, session);
     session.saveInProgress = true;
     let saved = false;
     try {
       // Save to chrome.storage.local using active scoped key.
-      await chrome.storage.local.set({ [session.storageKey]: snapshot });
+      await chrome.storage.local.set({
+        [session.storageKey]: snapshot,
+        ...(prompts ? { gvPromptItems: prompts } : {}),
+      });
 
       // Create primary backup AFTER successful save
       session.backup.createPrimaryBackup(snapshot);
       saved = true;
     } catch (error) {
       console.error('[AIStudioFolderManager] Save error:', error);
-      // Show error notification to user
-      if (this.dataSession === session) {
+      // A newer queued snapshot can still persist this edit; report only a final failure.
+      if (this.dataSession === session && !session.pendingSave) {
         this.showErrorNotification('Failed to save folder data. Changes may not be persisted.');
       }
     } finally {
@@ -994,12 +1033,18 @@ export class AIStudioFolderManager {
       session.pendingSave = null;
       session.pendingSaveCompletion = null;
       if (pending) {
-        void this.persistDataSession(session, pending).then((saved) => completion?.resolve(saved));
-      } else if (this.dataSession !== session) this.dataSessions.delete(session.storageKey);
+        session.activeSave = this.persistDataSession(session, pending);
+        void session.activeSave.then((saved) => completion?.resolve(saved));
+      } else {
+        session.activeSave = null;
+        if (this.dataSession !== session && !session.replacingData) {
+          this.dataSessions.delete(session.storageKey);
+        }
+      }
     }
     // Folder membership drives which /library rows count as "archived"; re-sync the
     // table and nudge visibility after every mutation, not just on explicit user toggles.
-    if (this.dataSession === session) {
+    if (this.dataSession === session && !session.replacingData) {
       this.applyHideArchivedToLibraryTable();
       this.updateHideArchivedNudgeVisibility();
     }
@@ -3180,26 +3225,26 @@ export class AIStudioFolderManager {
             return;
           }
           // Merge mode by default: simple union without duplicates
-          const existingIds = new Set(this.data.folders.map((x) => x.id));
+          const draft = this.cloneFolderData(this.data);
+          const existingIds = new Set(draft.folders.map((x) => x.id));
           for (const f of next.folders) {
             if (!existingIds.has(f.id)) {
-              this.data.folders.push(f);
-              this.data.folderContents[f.id] = next.folderContents[f.id] || [];
+              draft.folders.push(f);
+              draft.folderContents[f.id] = next.folderContents[f.id] || [];
             } else {
               // Merge conversations
-              const base = this.data.folderContents[f.id] || [];
+              const base = draft.folderContents[f.id] || [];
               const add = next.folderContents[f.id] || [];
               const seen = new Set(base.map((c) => c.conversationId));
               for (const c of add) {
                 if (!seen.has(c.conversationId)) base.push(c);
               }
-              this.data.folderContents[f.id] = base;
+              draft.folderContents[f.id] = base;
             }
           }
-          const saved = await this.save();
+          const saved = await this.replaceData(draft);
           if (this.dataSession !== session || this.accountScopeRequest !== scopeRequest) return;
           if (!saved) return;
-          this.render();
           alert(this.t('folder_import_success') || 'Imported');
         } catch {
           if (this.dataSession !== session || this.accountScopeRequest !== scopeRequest) return;
@@ -3987,19 +4032,11 @@ export class AIStudioFolderManager {
         `[AIStudioFolderManager] Merged - folders: ${mergedFolders.folders?.length || 0}, prompts: ${mergedPrompts.length}`,
       );
 
-      // Apply merged folder data
-      this.data = mergedFolders;
-      const saved = await this.save();
+      // Persist folders and shared prompts together before publishing the merged folders.
+      const saved = await this.replaceData(mergedFolders, mergedPrompts);
       if (this.dataSession !== session || this.accountScopeRequest !== scopeRequest) return;
       if (!saved) return;
 
-      // Save merged prompts to storage (shared with Gemini)
-      await chrome.storage.local.set({
-        gvPromptItems: mergedPrompts,
-      });
-      if (this.dataSession !== session || this.accountScopeRequest !== scopeRequest) return;
-
-      this.render();
       this.showNotification(this.t('downloadMergeSuccess'), 'info');
     } catch (error) {
       if (this.dataSession !== session || this.accountScopeRequest !== scopeRequest) return;

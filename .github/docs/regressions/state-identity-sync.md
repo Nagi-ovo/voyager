@@ -84,11 +84,12 @@ mirrors, clear markers, or Drive sync.
 
 ## Failed folder drafts must not become later ordinary saves
 
-- **Trap:** Import and instructions editors changed live folder data before saving. A failed save
+- **Trap:** Import, cloud sync and instructions editors changed live folder data before saving. A failed save
   kept the dialog open, but cancelling it left the draft in memory and recovery backups; the next
   ordinary edit could persist the cancelled import, including an overwrite of existing folders.
-- **Rule:** Persist drafts through `FolderStore.replaceData`, then publish them only on success.
-  Flush and finish accepted ordinary writes first; keep the current account's editing controls
+- **Rule:** Persist drafts through `FolderStore.replaceData` or AI Studio's `replaceData`, then
+  publish them only on success. AI Studio writes merged folders and prompts in the same storage call.
+  Track migration writes as well as ordinary saves, and finish accepted writes first; keep the current account's editing controls
   disabled during replacement so old live snapshots cannot overwrite the draft. Keep drafts out of
   emergency/unload backups, retain the account owner while replacing, and submit an issued write's
   successful result only to that owner. A draft still waiting for ordinary writes is abandoned when
@@ -97,6 +98,8 @@ mirrors, clear markers, or Drive sync.
   manager UI through failed merge/overwrite, cancellation, a later ordinary save and successful retry.
   `src/pages/content/folder/FolderStorePersistence.test.ts` covers failed instructions, queued writes,
   debounce/unload backups and account changes while a draft is pending.
+  `src/pages/content/folder/__tests__/aistudioPersistence.test.ts` covers failed import/sync drafts,
+  recovery slots, later ordinary edits and account changes before/after issuing the draft write.
 
 ## Highlight cleanup must preserve account clear markers
 
