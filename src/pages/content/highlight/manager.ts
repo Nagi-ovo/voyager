@@ -5,62 +5,35 @@ import {
 import {
   DEFAULT_HIGHLIGHT_COLOR_PALETTE,
   HIGHLIGHT_COLORS,
-  HIGHLIGHT_LIMITS,
   type HighlightAccountScope,
   type HighlightColor,
   type HighlightCreateInput,
   type HighlightRecordV1,
   type HighlightUpdatePatch,
-  areHighlightColorsEqual,
   getHighlightColorHex,
   isHighlightPresetColor,
   normalizeHighlightColorPalette,
 } from '@/core/types/highlight';
 import { buildConversationIdFromUrl } from '@/core/utils/conversationIdentity';
-import { getTranslationSync } from '@/utils/i18n';
-import type { TranslationKey } from '@/utils/translations';
 
+import { HighlightEditor } from './HighlightEditor';
+import { HighlightTimelineMarkers } from './HighlightTimelineMarkers';
 import { HIGHLIGHT_EXACT_MAX_BYTES, buildHighlightAnchor, resolveHighlightAnchor } from './anchor';
 import { HighlightClient, highlightClient } from './client';
 import {
   collectHighlightTurns,
   findHighlightTurn,
-  findScrollableAncestor,
   getHighlightSelectionContext,
+  isVisibleHighlightMark,
   resolveMountedHighlightTurnId,
   resolveStoredHighlightTurnId,
 } from './dom';
+import { getSaveFailureMessage, translate, translateWith } from './messages';
 
 const STYLE_ID = 'gv-highlight-style';
 const HIGHLIGHT_HASH_PREFIX = '#gv-highlight-';
-const NOTE_MAX_CHARS = 8 * 1024;
 const RENDER_DEBOUNCE_MS = 120;
 type NavigationResult = 'highlight' | 'turn' | 'missing';
-
-function translate(key: TranslationKey, fallback: string): string {
-  const translated = getTranslationSync(key);
-  return translated === key ? fallback : translated;
-}
-
-function translateWith(
-  key: TranslationKey,
-  fallback: string,
-  replacements: Record<string, string>,
-): string {
-  let output = translate(key, fallback);
-  Object.entries(replacements).forEach(([name, value]) => {
-    output = output.replaceAll(`{${name}}`, value);
-  });
-  return output;
-}
-
-function getSaveFailureMessage(error: unknown): string {
-  const fallback = translate('highlightSaveFailed', 'Could not save the highlight.');
-  if (!(error instanceof Error)) return fallback;
-  const detail = error.message.trim();
-  if (!detail || detail === 'Highlight operation failed') return fallback;
-  return `${fallback} ${detail}`;
-}
 
 function injectStyles(): void {
   if (document.getElementById(STYLE_ID)) return;
@@ -314,31 +287,6 @@ function applyMarkColor(element: HTMLElement, color: HighlightColor): void {
   }
 }
 
-function isVisibleHighlightMark(element: HTMLElement): boolean {
-  if (!element.isConnected) return false;
-  let current: HTMLElement | null = element;
-  while (current) {
-    if (
-      current.hidden ||
-      current.hasAttribute('inert') ||
-      current.getAttribute('aria-hidden') === 'true'
-    ) {
-      return false;
-    }
-    const style = window.getComputedStyle(current);
-    if (
-      style.display === 'none' ||
-      style.visibility === 'hidden' ||
-      style.visibility === 'collapse' ||
-      style.contentVisibility === 'hidden'
-    ) {
-      return false;
-    }
-    current = current.parentElement;
-  }
-  return true;
-}
-
 function getRangeTextNodes(range: Range): Text[] {
   const root = range.commonAncestorContainer;
   if (root instanceof Text) return [root];
@@ -397,30 +345,22 @@ function setRecordColor(elements: HTMLElement[], color: HighlightColor): void {
 export class HighlightManager {
   private readonly records = new Map<string, HighlightRecordV1>();
   private readonly marks = new Map<string, HTMLElement[]>();
-  private readonly ticks = new Map<string, HTMLButtonElement>();
   private destroyed = false;
   private observer: MutationObserver | null = null;
-  private timelineStyleObserver: MutationObserver | null = null;
-  private observedTimelineBar: HTMLElement | null = null;
   private renderTimer: number | null = null;
   private reloadTimer: number | null = null;
-  private timelineRaf: number | null = null;
   private currentRoute = '';
   private currentConversationId = '';
   private accountScope: HighlightAccountScope | null = null;
   private scopeGeneration = 0;
   private loadGeneration = 0;
-  private popover: HTMLElement | null = null;
-  private popoverReturnFocus: HTMLElement | null = null;
   private liveRegion: HTMLElement | null = null;
   private activeTimer: number | null = null;
   private announceTimer: number | null = null;
-  private popoverFocusTimer: number | null = null;
   private hashRetryTimer: number | null = null;
   private pendingHashId: string | null = null;
   private pendingHashDeadline = 0;
   private pendingTurnFallbackDone = false;
-  private timelineMarkersEnabled = true;
   private colorPalette = [...DEFAULT_HIGHLIGHT_COLOR_PALETTE];
   private readonly onDocumentClick = (event: MouseEvent): void => {
     const target = event.target instanceof Element ? event.target : null;
@@ -429,35 +369,25 @@ export class HighlightManager {
       event.preventDefault();
       event.stopPropagation();
       const id = mark.dataset.gvHighlightId;
-      if (id) this.openPopover(id, mark);
-      return;
+      const record = id ? this.records.get(id) : undefined;
+      if (record) this.editor.open(record, mark, this.colorPalette);
     }
-    if (this.popover && target && !this.popover.contains(target)) this.closePopover();
   };
   private readonly onDocumentKeydown = (event: KeyboardEvent): void => {
-    if (event.key === 'Escape' && this.popover) {
-      event.preventDefault();
-      this.closePopover(true);
-      return;
-    }
     if (event.key !== 'Enter' && event.key !== ' ') return;
     const target = event.target instanceof Element ? event.target : null;
     const mark = target?.closest<HTMLElement>('.gv-highlight-mark[data-gv-highlight-id]');
     if (!mark) return;
     event.preventDefault();
     const id = mark.dataset.gvHighlightId;
-    if (id) this.openPopover(id, mark);
+    const record = id ? this.records.get(id) : undefined;
+    if (record) this.editor.open(record, mark, this.colorPalette);
   };
   private readonly onHashChange = (): void => {
     this.handleHashNavigation();
   };
   private readonly onRouteEvent = (): void => {
     this.checkRoute();
-  };
-  private readonly onViewportChange = (event: Event): void => {
-    this.scheduleTimelineSync();
-    const target = event.target instanceof Node ? event.target : null;
-    if (this.popover && (!target || !this.popover.contains(target))) this.closePopover();
   };
   private readonly onRuntimeMessage = (message: unknown): void => {
     if (!message || typeof message !== 'object') return;
@@ -473,6 +403,15 @@ export class HighlightManager {
     this.scheduleReload();
   };
 
+  private readonly editor = new HighlightEditor({
+    save: (record, patch) => this.saveHighlight(record, patch),
+    delete: (record) => this.deleteHighlight(record),
+    announce: (message) => this.announce(message),
+  });
+  private readonly timelineMarkers = new HighlightTimelineMarkers(this.records, this.marks, (id) =>
+    this.navigateToHighlight(id),
+  );
+
   constructor(private readonly client: HighlightClient = highlightClient) {}
 
   setColorPalette(colors: readonly HighlightColor[]): void {
@@ -480,13 +419,7 @@ export class HighlightManager {
   }
 
   setTimelineMarkersEnabled(enabled: boolean): void {
-    this.timelineMarkersEnabled = enabled;
-    if (enabled) {
-      this.syncTimelineTicks();
-      return;
-    }
-    this.ticks.forEach((tick) => tick.remove());
-    this.ticks.clear();
+    this.timelineMarkers.setEnabled(enabled);
   }
 
   async init(): Promise<void> {
@@ -499,8 +432,7 @@ export class HighlightManager {
     document.addEventListener('keydown', this.onDocumentKeydown, true);
     window.addEventListener('hashchange', this.onHashChange);
     window.addEventListener('popstate', this.onRouteEvent);
-    window.addEventListener('resize', this.onViewportChange, { passive: true });
-    document.addEventListener('scroll', this.onViewportChange, { capture: true, passive: true });
+    this.timelineMarkers.start();
     chrome.runtime.onMessage.addListener(this.onRuntimeMessage);
 
     this.observer = new MutationObserver(() => this.scheduleRender());
@@ -602,7 +534,7 @@ export class HighlightManager {
     this.currentRoute = nextRoute;
     this.currentConversationId = buildConversationIdFromUrl(location.href);
     this.accountScope = null;
-    this.closePopover();
+    this.editor.close();
     this.clearRenderedMarks();
     this.records.clear();
     void this.refreshScopeAndReload();
@@ -747,7 +679,7 @@ export class HighlightManager {
         elements.forEach(unwrapMark);
         this.marks.delete(id);
       }
-      this.syncTimelineTicks();
+      this.timelineMarkers.render();
       if (this.pendingHashId) this.attemptPendingHashNavigation();
     } finally {
       this.observeDocument();
@@ -763,298 +695,40 @@ export class HighlightManager {
         .reverse()
         .forEach(unwrapMark);
       this.marks.clear();
-      this.ticks.forEach((tick) => tick.remove());
-      this.ticks.clear();
+      this.timelineMarkers.clear();
     } finally {
       this.observeDocument();
     }
   }
 
-  private syncTimelineTicks(): void {
-    if (!this.timelineMarkersEnabled) {
-      this.ticks.forEach((tick) => tick.remove());
-      this.ticks.clear();
-      return;
+  private async saveHighlight(
+    record: HighlightRecordV1,
+    patch: HighlightUpdatePatch,
+  ): Promise<void> {
+    if (!(await this.refreshAccountScopeForMutation())) {
+      throw new Error('Highlight account scope is unavailable');
     }
-    const bar = document.querySelector<HTMLElement>('.gemini-timeline-bar');
-    const trackContent = bar?.querySelector<HTMLElement>('.timeline-track-content');
-    if (!bar || !trackContent) {
-      this.timelineStyleObserver?.disconnect();
-      this.observedTimelineBar = null;
-      this.ticks.forEach((tick) => tick.remove());
-      this.ticks.clear();
-      return;
+    const scope = this.accountScope;
+    if (!scope) throw new Error('Highlight account scope is unavailable');
+    const updated = await this.client.update(scope, record.conversationId, record.id, patch);
+    if (this.destroyed) return;
+    this.records.set(updated.id, updated);
+    setRecordColor(this.marks.get(updated.id) ?? [], updated.color);
+    this.timelineMarkers.render();
+  }
+
+  private async deleteHighlight(record: HighlightRecordV1): Promise<void> {
+    if (!(await this.refreshAccountScopeForMutation())) {
+      throw new Error('Highlight account scope is unavailable');
     }
-    this.observeTimelineStyle(bar);
-    const compact = bar.classList.contains('timeline-style-compact');
-    const parent = compact ? bar : trackContent;
-
-    for (const [id, record] of this.records) {
-      const mark = this.marks.get(id)?.find(isVisibleHighlightMark);
-      if (!mark) {
-        this.ticks.get(id)?.remove();
-        this.ticks.delete(id);
-        continue;
-      }
-
-      let tick = this.ticks.get(id);
-      if (!tick || !tick.isConnected || tick.parentElement !== parent) {
-        tick?.remove();
-        tick = document.createElement('button');
-        tick.type = 'button';
-        tick.className = 'gv-highlight-timeline-tick';
-        tick.dataset.gvHighlightId = id;
-        tick.addEventListener('click', (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          this.navigateToHighlight(id);
-        });
-        parent.appendChild(tick);
-        this.ticks.set(id, tick);
-      }
-      HIGHLIGHT_COLORS.forEach((color) =>
-        tick!.classList.remove(`gv-highlight-timeline-tick-${color}`),
-      );
-      tick.style.removeProperty('background-color');
-      if (isHighlightPresetColor(record.color)) {
-        tick.classList.add(`gv-highlight-timeline-tick-${record.color}`);
-      } else {
-        tick.style.backgroundColor = getHighlightColorHex(record.color);
-      }
-      tick.setAttribute(
-        'aria-label',
-        translateWith('highlightTimelineAriaLabel', 'Go to highlight: {text}', {
-          text: record.anchor.quote.exact.slice(0, 120),
-        }),
-      );
-      tick.title = record.anchor.quote.exact.replace(/\s+/g, ' ').trim().slice(0, 160);
-      this.positionTimelineTick(tick, mark, parent, compact);
-    }
-
-    for (const [id, tick] of this.ticks) {
-      if (this.records.has(id) && this.marks.has(id)) continue;
-      tick.remove();
-      this.ticks.delete(id);
-    }
-  }
-
-  private observeTimelineStyle(bar: HTMLElement): void {
-    if (this.observedTimelineBar === bar) return;
-    this.timelineStyleObserver?.disconnect();
-    this.observedTimelineBar = bar;
-    this.timelineStyleObserver = new MutationObserver(() => this.syncTimelineTicks());
-    this.timelineStyleObserver.observe(bar, { attributes: true, attributeFilter: ['class'] });
-  }
-
-  private positionTimelineTick(
-    tick: HTMLButtonElement,
-    mark: HTMLElement,
-    parent: HTMLElement,
-    compact: boolean,
-  ): void {
-    const scrollContainer = findScrollableAncestor(mark);
-    const containerRect = scrollContainer.getBoundingClientRect();
-    const markRect = mark.getBoundingClientRect();
-    const absoluteTop = scrollContainer.scrollTop + markRect.top - containerRect.top;
-    const scrollHeight = Math.max(1, scrollContainer.scrollHeight);
-    const ratio = Math.max(0, Math.min(1, absoluteTop / scrollHeight));
-    const targetHeight = compact
-      ? Math.max(1, parent.clientHeight)
-      : Math.max(1, parent.scrollHeight || parent.clientHeight);
-    tick.style.top = `${Math.round(ratio * targetHeight)}px`;
-  }
-
-  private scheduleTimelineSync(): void {
-    if (this.timelineRaf !== null || this.destroyed) return;
-    this.timelineRaf = requestAnimationFrame(() => {
-      this.timelineRaf = null;
-      this.syncTimelineTicks();
-    });
-  }
-
-  private openPopover(id: string, anchorElement: HTMLElement): void {
-    const record = this.records.get(id);
-    if (!record) return;
-    this.closePopover();
-
-    const popover = document.createElement('section');
-    popover.className = 'gv-highlight-popover';
-    popover.setAttribute('role', 'dialog');
-    popover.setAttribute('aria-modal', 'false');
-    popover.setAttribute(
-      'aria-label',
-      translate('highlightAriaLabel', 'Saved highlight annotation'),
-    );
-    popover.setAttribute('dir', 'auto');
-
-    const quote = document.createElement('div');
-    quote.className = 'gv-highlight-popover-quote';
-    quote.textContent = record.anchor.quote.exact;
-
-    const note = document.createElement('textarea');
-    note.className = 'gv-highlight-note';
-    note.maxLength = NOTE_MAX_CHARS;
-    note.placeholder = translate('highlightNotePlaceholder', 'Add a note');
-    note.value = record.note ?? '';
-    note.setAttribute('aria-label', note.placeholder);
-
-    const colorRow = document.createElement('div');
-    colorRow.className = 'gv-highlight-color-row';
-    colorRow.setAttribute('role', 'group');
-    const colorLabel = document.createElement('span');
-    colorLabel.className = 'gv-highlight-color-label';
-    colorLabel.textContent = translate('highlightColor', 'Color');
-    colorRow.setAttribute('aria-label', colorLabel.textContent);
-    colorRow.appendChild(colorLabel);
-
-    let selectedColor: HighlightColor = record.color;
-    const updateColorSelection = (): void => {
-      swatches.forEach((item, itemIndex) => {
-        item.setAttribute(
-          'aria-pressed',
-          String(areHighlightColorsEqual(this.colorPalette[itemIndex], selectedColor)),
-        );
-      });
-    };
-    const swatches = this.colorPalette.map((color, index) => {
-      const swatch = document.createElement('button');
-      swatch.type = 'button';
-      swatch.className = 'gv-highlight-swatch';
-      swatch.style.backgroundColor = getHighlightColorHex(color);
-      swatch.setAttribute('aria-label', `${colorLabel.textContent} ${index + 1}`);
-      swatch.setAttribute('aria-pressed', String(areHighlightColorsEqual(color, selectedColor)));
-      swatch.addEventListener('click', () => {
-        selectedColor = color;
-        updateColorSelection();
-      });
-      colorRow.appendChild(swatch);
-      return swatch;
-    });
-
-    const actions = document.createElement('div');
-    actions.className = 'gv-highlight-popover-actions';
-    const deleteButton = this.createPopoverButton(
-      translate('pm_delete', 'Delete'),
-      'gv-highlight-popover-button-danger',
-    );
-    const cancelButton = this.createPopoverButton(translate('pm_cancel', 'Cancel'));
-    const saveButton = this.createPopoverButton(
-      translate('pm_save', 'Save'),
-      'gv-highlight-popover-button-primary',
-    );
-    actions.append(deleteButton, cancelButton, saveButton);
-    popover.append(quote, note, colorRow, actions);
-    document.body.appendChild(popover);
-    this.popover = popover;
-    this.popoverReturnFocus = anchorElement;
-
-    const setBusy = (busy: boolean): void => {
-      deleteButton.disabled = busy;
-      cancelButton.disabled = busy;
-      saveButton.disabled = busy;
-      note.disabled = busy;
-      swatches.forEach((swatch) => {
-        swatch.disabled = busy;
-      });
-    };
-    cancelButton.addEventListener('click', () => this.closePopover(true));
-    saveButton.addEventListener('click', async () => {
-      const noteBytes = new TextEncoder().encode(note.value).byteLength;
-      if (noteBytes > HIGHLIGHT_LIMITS.noteBytes) {
-        const message = `${translate('highlightSaveFailed', 'Could not save the highlight.')} (${noteBytes} / ${HIGHLIGHT_LIMITS.noteBytes})`;
-        note.setCustomValidity(message);
-        note.reportValidity();
-        this.announce(message);
-        return;
-      }
-      note.setCustomValidity('');
-      setBusy(true);
-      const patch: HighlightUpdatePatch = { note: note.value, color: selectedColor };
-      try {
-        if (!(await this.refreshAccountScopeForMutation())) {
-          throw new Error('Highlight account scope is unavailable');
-        }
-        const scope = this.accountScope;
-        if (!scope) throw new Error('Highlight account scope is unavailable');
-        const updated = await this.client.update(scope, record.conversationId, record.id, patch);
-        if (this.destroyed) return;
-        this.records.set(updated.id, updated);
-        setRecordColor(this.marks.get(updated.id) ?? [], updated.color);
-        this.syncTimelineTicks();
-        this.closePopover(true);
-        this.announce(translate('highlightSaved', 'Highlight saved.'));
-      } catch (error) {
-        setBusy(false);
-        this.announce(getSaveFailureMessage(error));
-      }
-    });
-    note.addEventListener('input', () => note.setCustomValidity(''));
-    deleteButton.addEventListener('click', async () => {
-      setBusy(true);
-      try {
-        if (!(await this.refreshAccountScopeForMutation())) {
-          throw new Error('Highlight account scope is unavailable');
-        }
-        const scope = this.accountScope;
-        if (!scope) throw new Error('Highlight account scope is unavailable');
-        await this.client.delete(scope, record.conversationId, record.id);
-        if (this.destroyed) return;
-        this.records.delete(record.id);
-        (this.marks.get(record.id) ?? []).reverse().forEach(unwrapMark);
-        this.marks.delete(record.id);
-        this.ticks.get(record.id)?.remove();
-        this.ticks.delete(record.id);
-        this.closePopover();
-      } catch (error) {
-        setBusy(false);
-        this.announce(getSaveFailureMessage(error));
-      }
-    });
-
-    this.positionPopover(popover, anchorElement);
-    this.popoverFocusTimer = window.setTimeout(() => {
-      this.popoverFocusTimer = null;
-      if (note.isConnected) note.focus({ preventScroll: true });
-    }, 0);
-  }
-
-  private createPopoverButton(label: string, extraClass = ''): HTMLButtonElement {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = `gv-highlight-popover-button ${extraClass}`.trim();
-    button.textContent = label;
-    return button;
-  }
-
-  private positionPopover(popover: HTMLElement, anchorElement: HTMLElement): void {
-    const anchorRect = anchorElement.getBoundingClientRect();
-    const popoverRect = popover.getBoundingClientRect();
-    const edge = 12;
-    const gap = 8;
-    const desiredTop = anchorRect.bottom + gap;
-    const fallbackTop = anchorRect.top - popoverRect.height - gap;
-    const top =
-      desiredTop + popoverRect.height <= window.innerHeight - edge ? desiredTop : fallbackTop;
-    const left = anchorRect.left + anchorRect.width / 2 - popoverRect.width / 2;
-    popover.style.top = `${Math.max(edge, Math.min(top, window.innerHeight - popoverRect.height - edge))}px`;
-    popover.style.left = `${Math.max(edge, Math.min(left, window.innerWidth - popoverRect.width - edge))}px`;
-  }
-
-  private closePopover(restoreFocus = false): void {
-    const returnFocus = this.popoverReturnFocus;
-    if (this.popoverFocusTimer !== null) {
-      window.clearTimeout(this.popoverFocusTimer);
-      this.popoverFocusTimer = null;
-    }
-    this.popover?.remove();
-    this.popover = null;
-    this.popoverReturnFocus = null;
-    if (!restoreFocus || !returnFocus?.isConnected) return;
-    try {
-      returnFocus.focus({ preventScroll: true });
-    } catch {
-      returnFocus.focus();
-    }
+    const scope = this.accountScope;
+    if (!scope) throw new Error('Highlight account scope is unavailable');
+    await this.client.delete(scope, record.conversationId, record.id);
+    if (this.destroyed) return;
+    this.records.delete(record.id);
+    (this.marks.get(record.id) ?? []).reverse().forEach(unwrapMark);
+    this.marks.delete(record.id);
+    this.timelineMarkers.render();
   }
 
   private ensureLiveRegion(): void {
@@ -1138,24 +812,19 @@ export class HighlightManager {
     this.scopeGeneration++;
     this.observer?.disconnect();
     this.observer = null;
-    this.timelineStyleObserver?.disconnect();
-    this.timelineStyleObserver = null;
-    this.observedTimelineBar = null;
+    this.timelineMarkers.destroy();
     document.removeEventListener('click', this.onDocumentClick, true);
     document.removeEventListener('keydown', this.onDocumentKeydown, true);
     window.removeEventListener('hashchange', this.onHashChange);
     window.removeEventListener('popstate', this.onRouteEvent);
-    window.removeEventListener('resize', this.onViewportChange);
-    document.removeEventListener('scroll', this.onViewportChange, true);
     chrome.runtime.onMessage.removeListener(this.onRuntimeMessage);
     if (this.renderTimer !== null) window.clearTimeout(this.renderTimer);
     if (this.reloadTimer !== null) window.clearTimeout(this.reloadTimer);
-    if (this.timelineRaf !== null) cancelAnimationFrame(this.timelineRaf);
     if (this.activeTimer !== null) window.clearTimeout(this.activeTimer);
     if (this.announceTimer !== null) window.clearTimeout(this.announceTimer);
     if (this.hashRetryTimer !== null) window.clearTimeout(this.hashRetryTimer);
     this.pendingHashId = null;
-    this.closePopover();
+    this.editor.close();
     this.clearRenderedMarks();
     this.liveRegion?.remove();
     this.liveRegion = null;

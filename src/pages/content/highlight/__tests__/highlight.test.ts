@@ -14,6 +14,7 @@ import { buildHighlightAnchor, resolveHighlightAnchor } from '../anchor';
 import { HighlightClient } from '../client';
 import { collectHighlightTurns, findHighlightTurn, getHighlightSelectionContext } from '../dom';
 import { HighlightManager } from '../manager';
+import { installConversation, makeRecord, selectText } from './fixtures';
 
 vi.mock('@/core/services/AccountIsolationService', () => ({
   detectAccountContextFromDocument: vi.fn(() => ({ routeUserId: '0', email: null })),
@@ -26,40 +27,6 @@ vi.mock('@/core/services/AccountIsolationService', () => ({
     })),
   },
 }));
-
-function selectText(root: HTMLElement, exact: string): Range {
-  const textNode = root.firstChild;
-  if (!(textNode instanceof Text)) throw new Error('Expected a text node');
-  const start = textNode.data.indexOf(exact);
-  if (start < 0) throw new Error(`Could not find ${exact}`);
-  const range = document.createRange();
-  range.setStart(textNode, start);
-  range.setEnd(textNode, start + exact.length);
-  return range;
-}
-
-function makeRecord(
-  anchor: HighlightRecordV1['anchor'],
-  overrides: Partial<HighlightRecordV1> = {},
-): HighlightRecordV1 {
-  return {
-    id: 'highlight-1',
-    schemaVersion: 1,
-    platform: 'gemini',
-    accountHash: 'account-hash',
-    conversationId: 'gemini:conv:test',
-    conversationUrl: 'https://gemini.google.com/app/test',
-    conversationTitle: 'Test',
-    turnId: 's-1111111111111111',
-    role: 'assistant',
-    anchor,
-    color: 'yellow',
-    createdAt: 1,
-    updatedAt: 1,
-    revision: { counter: 1, deviceId: 'device-1' },
-    ...overrides,
-  };
-}
 
 class FakeHighlightClient extends HighlightClient {
   readonly listScopes: HighlightAccountScope[] = [];
@@ -122,24 +89,6 @@ class FakeHighlightClient extends HighlightClient {
   ): Promise<void> {
     this.listed = this.listed.filter((record) => record.id !== id);
   }
-}
-
-function installConversation(responseText = 'Alpha target Omega'): HTMLElement {
-  document.body.innerHTML = `
-    <main>
-      <div class="conversation-container" id="1111111111111111">
-        <div class="user-query-bubble-with-background">Question</div>
-        <model-response><message-content id="response"></message-content></model-response>
-      </div>
-    </main>
-    <div class="gemini-timeline-bar">
-      <div class="timeline-track"><div class="timeline-track-content"></div></div>
-    </div>
-  `;
-  const response = document.getElementById('response');
-  if (!(response instanceof HTMLElement)) throw new Error('Expected response root');
-  response.textContent = responseText;
-  return response;
 }
 
 describe('highlight anchors', () => {
@@ -351,10 +300,62 @@ describe('HighlightManager rendering and navigation', () => {
     expect(swatches).toHaveLength(5);
     expect(swatches[2].getAttribute('aria-pressed')).toBe('true');
     expect(swatches[4].style.backgroundColor).toBe('rgb(85, 85, 85)');
-    expect(document.getElementById('gv-highlight-style')?.textContent).toContain(
-      'outline: 2px solid #8ab4f8',
+    manager.destroy();
+  });
+
+  it('saves editor changes through the scoped client and removes the annotation on delete', async () => {
+    const response = installConversation();
+    const anchor = buildHighlightAnchor(response, selectText(response, 'target'));
+    if (!anchor) throw new Error('Expected anchor');
+    const scope = {
+      accountKey: 'email:editor-account',
+      accountId: 2,
+      routeUserId: '1',
+      emailHash: 'editor-account',
+    };
+    vi.mocked(accountIsolationService.resolveAccountScope).mockResolvedValue(scope);
+    const client = new FakeHighlightClient([makeRecord(anchor)]);
+    const update = vi.spyOn(client, 'update');
+    const remove = vi.spyOn(client, 'delete');
+    const manager = new HighlightManager(client);
+    await manager.init();
+
+    const mark = document.querySelector<HTMLElement>('.gv-highlight-mark')!;
+    mark.click();
+    const note = document.querySelector<HTMLTextAreaElement>('.gv-highlight-note')!;
+    note.value = 'Saved from the editor';
+    document.querySelectorAll<HTMLButtonElement>('.gv-highlight-swatch')[1].click();
+    document.querySelector<HTMLButtonElement>('.gv-highlight-popover-button-primary')!.click();
+    await vi.waitFor(() => expect(document.querySelector('.gv-highlight-popover')).toBeNull());
+
+    expect(update).toHaveBeenCalledExactlyOnceWith(
+      { platform: 'gemini', accountKey: scope.accountKey, accountId: 2, routeUserId: '1' },
+      'gemini:conv:test',
+      'highlight-1',
+      { note: 'Saved from the editor', color: 'green' },
+    );
+    expect(accountIsolationService.resolveAccountScope).toHaveBeenCalledTimes(2);
+    expect(mark.classList).toContain('gv-highlight-mark-green');
+    expect(document.querySelector('.gv-highlight-timeline-tick')?.classList).toContain(
+      'gv-highlight-timeline-tick-green',
     );
 
+    mark.click();
+    expect(document.querySelector<HTMLTextAreaElement>('.gv-highlight-note')?.value).toBe(
+      'Saved from the editor',
+    );
+    document.querySelector<HTMLButtonElement>('.gv-highlight-popover-button-danger')!.click();
+    await vi.waitFor(() => expect(document.querySelector('.gv-highlight-mark')).toBeNull());
+
+    expect(remove).toHaveBeenCalledExactlyOnceWith(
+      { platform: 'gemini', accountKey: scope.accountKey, accountId: 2, routeUserId: '1' },
+      'gemini:conv:test',
+      'highlight-1',
+    );
+    expect(accountIsolationService.resolveAccountScope).toHaveBeenCalledTimes(3);
+    expect(document.querySelector('.gv-highlight-popover')).toBeNull();
+    expect(document.querySelector('.gv-highlight-timeline-tick')).toBeNull();
+    expect(response.textContent).toBe('Alpha target Omega');
     manager.destroy();
   });
 
@@ -456,6 +457,37 @@ describe('HighlightManager rendering and navigation', () => {
     await new Promise((resolve) => window.setTimeout(resolve, 0));
     expect(document.querySelector('.gv-highlight-timeline-tick')?.parentElement).toBe(track);
 
+    manager.destroy();
+  });
+
+  it('reattaches markers when Timeline replaces its DOM and follows the replacement style', async () => {
+    const response = installConversation();
+    const anchor = buildHighlightAnchor(response, selectText(response, 'target'));
+    if (!anchor) throw new Error('Expected anchor');
+    const manager = new HighlightManager(new FakeHighlightClient([makeRecord(anchor)]));
+    await manager.init();
+    const oldBar = document.querySelector<HTMLElement>('.gemini-timeline-bar')!;
+    const oldTick = oldBar.querySelector('.gv-highlight-timeline-tick')!;
+    const replacement = document.createElement('div');
+    replacement.className = 'gemini-timeline-bar';
+    replacement.innerHTML = '<div class="timeline-track-content"></div>';
+    oldBar.replaceWith(replacement);
+
+    await vi.waitFor(() => {
+      expect(replacement.querySelector('.gv-highlight-timeline-tick')?.parentElement).toBe(
+        replacement.firstElementChild,
+      );
+    });
+    expect(oldTick.isConnected).toBe(false);
+    expect(replacement.querySelectorAll('.gv-highlight-timeline-tick')).toHaveLength(1);
+
+    replacement.classList.add('timeline-style-compact');
+    await vi.waitFor(() => {
+      expect(replacement.querySelector('.gv-highlight-timeline-tick')?.parentElement).toBe(
+        replacement,
+      );
+    });
+    expect(replacement.querySelectorAll('.gv-highlight-timeline-tick')).toHaveLength(1);
     manager.destroy();
   });
 

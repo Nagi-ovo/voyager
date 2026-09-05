@@ -244,3 +244,28 @@ export function findScrollableAncestor(element: HTMLElement): HTMLElement {
     (document.scrollingElement as HTMLElement | null) ?? document.documentElement ?? document.body
   );
 }
+
+export function isVisibleHighlightMark(element: HTMLElement): boolean {
+  if (!element.isConnected) return false;
+  let current: HTMLElement | null = element;
+  while (current) {
+    if (
+      current.hidden ||
+      current.hasAttribute('inert') ||
+      current.getAttribute('aria-hidden') === 'true'
+    ) {
+      return false;
+    }
+    const style = window.getComputedStyle(current);
+    if (
+      style.display === 'none' ||
+      style.visibility === 'hidden' ||
+      style.visibility === 'collapse' ||
+      style.contentVisibility === 'hidden'
+    ) {
+      return false;
+    }
+    current = current.parentElement;
+  }
+  return true;
+}
