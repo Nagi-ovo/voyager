@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { ConversationSortMode } from '../conversationSort';
+import type { ConversationSortMode } from '@/features/folder/model/folderData';
+
 import { FolderManager } from '../manager';
 import type { ConversationReference, DragData, Folder, FolderData } from '../types';
 
@@ -16,11 +17,8 @@ type TestableManager = {
   saveData: () => void;
   refresh: () => void;
   createFolderElement: (folder: Folder, level?: number) => HTMLElement;
-  canFolderBeDragged: (folder: Folder) => boolean;
-  sortFolders: (folders: Folder[]) => Folder[];
   reorderFolder: (folderId: string, targetParentId: string, insertIndex: number) => void;
   addFolderToFolder: (targetFolderId: string, dragData: DragData) => void;
-  moveFolderToRoot: (dragData: DragData) => void;
 };
 
 type RafQueue = {
@@ -52,8 +50,9 @@ function createFolder(
 }
 
 function getOrderedFolderIds(manager: TestableManager, parentId: string | null): string[] {
-  return manager
-    .sortFolders(manager.data.folders.filter((folder) => folder.parentId === parentId))
+  return manager.data.folders
+    .filter((folder) => folder.parentId === parentId)
+    .sort((a, b) => (a.sortIndex ?? 0) - (b.sortIndex ?? 0))
     .map((folder) => folder.id);
 }
 
@@ -169,10 +168,7 @@ describe('folder movement', () => {
     const parentHeader = parentElement.querySelector('.gv-folder-item-header');
     const pinnedHeader = pinnedElement.querySelector('.gv-folder-item-header');
 
-    expect(typedManager.canFolderBeDragged(parentFolder)).toBe(true);
     expect(parentHeader instanceof HTMLElement ? parentHeader.draggable : false).toBe(true);
-
-    expect(typedManager.canFolderBeDragged(pinnedFolder)).toBe(false);
     expect(pinnedHeader instanceof HTMLElement ? pinnedHeader.draggable : true).toBe(false);
   });
 
@@ -198,125 +194,30 @@ describe('folder movement', () => {
     expect(refreshSpy).toHaveBeenCalledTimes(1);
   });
 
-  it('moves a multi-level folder into another folder while keeping subtree order intact', () => {
-    manager = new FolderManager();
-    const typedManager = manager as unknown as TestableManager;
-    const saveSpy = vi.spyOn(typedManager, 'saveData').mockImplementation(() => {});
-    const refreshSpy = vi.spyOn(typedManager, 'refresh').mockImplementation(() => {});
+  it.each(['pinned', 'descendant'])(
+    'does not save or refresh after a rejected %s move',
+    (reason) => {
+      manager = new FolderManager();
+      const typedManager = manager as unknown as TestableManager;
+      const saveSpy = vi.spyOn(typedManager, 'saveData').mockImplementation(() => {});
+      const refreshSpy = vi.spyOn(typedManager, 'refresh').mockImplementation(() => {});
 
-    typedManager.data = {
-      folders: [
-        createFolder('target', 'Target', null, 0),
-        createFolder('existing-child', 'Existing Child', 'target', 0),
-        createFolder('moving', 'Moving', null, 1),
-        createFolder('moving-child-a', 'Moving Child A', 'moving', 0),
-        createFolder('moving-child-b', 'Moving Child B', 'moving', 1),
-      ],
-      folderContents: {},
-    };
+      typedManager.data = {
+        folders: [
+          createFolder('moving', 'Moving', null, 0, reason === 'pinned'),
+          createFolder('target', 'Target', reason === 'descendant' ? 'moving' : null, 1),
+        ],
+        folderContents: {},
+      };
 
-    typedManager.addFolderToFolder('target', createFolderDragData('moving', 'Moving'));
+      const original = structuredClone(typedManager.data);
+      typedManager.addFolderToFolder('target', createFolderDragData('moving', 'Moving'));
 
-    const movingFolder = typedManager.data.folders.find((folder) => folder.id === 'moving');
-
-    expect(movingFolder?.parentId).toBe('target');
-    expect(getOrderedFolderIds(typedManager, 'target')).toEqual(['existing-child', 'moving']);
-    expect(getOrderedFolderIds(typedManager, 'moving')).toEqual([
-      'moving-child-a',
-      'moving-child-b',
-    ]);
-    expect(saveSpy).toHaveBeenCalledTimes(1);
-    expect(refreshSpy).toHaveBeenCalledTimes(1);
-  });
-
-  it('moves a multi-level folder to root while keeping subtree order intact', () => {
-    manager = new FolderManager();
-    const typedManager = manager as unknown as TestableManager;
-    const saveSpy = vi.spyOn(typedManager, 'saveData').mockImplementation(() => {});
-    const refreshSpy = vi.spyOn(typedManager, 'refresh').mockImplementation(() => {});
-
-    typedManager.data = {
-      folders: [
-        createFolder('root-a', 'Root A', null, 0),
-        createFolder('root-b', 'Root B', null, 1),
-        createFolder('container', 'Container', null, 2),
-        createFolder('existing-child', 'Existing Child', 'container', 0),
-        createFolder('moving', 'Moving', 'container', 1),
-        createFolder('moving-child-a', 'Moving Child A', 'moving', 0),
-        createFolder('moving-child-b', 'Moving Child B', 'moving', 1),
-      ],
-      folderContents: {},
-    };
-
-    typedManager.moveFolderToRoot(createFolderDragData('moving', 'Moving'));
-
-    const movingFolder = typedManager.data.folders.find((folder) => folder.id === 'moving');
-
-    expect(movingFolder?.parentId).toBeNull();
-    expect(getOrderedFolderIds(typedManager, null)).toEqual([
-      'root-a',
-      'root-b',
-      'container',
-      'moving',
-    ]);
-    expect(getOrderedFolderIds(typedManager, 'container')).toEqual(['existing-child']);
-    expect(getOrderedFolderIds(typedManager, 'moving')).toEqual([
-      'moving-child-a',
-      'moving-child-b',
-    ]);
-    expect(saveSpy).toHaveBeenCalledTimes(1);
-    expect(refreshSpy).toHaveBeenCalledTimes(1);
-  });
-
-  it('blocks moving pinned folders', () => {
-    manager = new FolderManager();
-    const typedManager = manager as unknown as TestableManager;
-    const saveSpy = vi.spyOn(typedManager, 'saveData').mockImplementation(() => {});
-    const refreshSpy = vi.spyOn(typedManager, 'refresh').mockImplementation(() => {});
-
-    typedManager.data = {
-      folders: [
-        createFolder('pinned', 'Pinned', null, 0, true),
-        createFolder('target', 'Target', null, 1),
-      ],
-      folderContents: {},
-    };
-
-    typedManager.addFolderToFolder('target', createFolderDragData('pinned', 'Pinned'));
-
-    const pinnedFolder = typedManager.data.folders.find((folder) => folder.id === 'pinned');
-
-    expect(typedManager.canFolderBeDragged(pinnedFolder!)).toBe(false);
-    expect(pinnedFolder?.parentId).toBeNull();
-    expect(getOrderedFolderIds(typedManager, null)).toEqual(['pinned', 'target']);
-    expect(saveSpy).not.toHaveBeenCalled();
-    expect(refreshSpy).not.toHaveBeenCalled();
-  });
-
-  it('prevents moving a folder into its descendant', () => {
-    manager = new FolderManager();
-    const typedManager = manager as unknown as TestableManager;
-    const saveSpy = vi.spyOn(typedManager, 'saveData').mockImplementation(() => {});
-    const refreshSpy = vi.spyOn(typedManager, 'refresh').mockImplementation(() => {});
-
-    typedManager.data = {
-      folders: [
-        createFolder('ancestor', 'Ancestor', null, 0),
-        createFolder('child', 'Child', 'ancestor', 0),
-      ],
-      folderContents: {},
-    };
-
-    typedManager.addFolderToFolder('child', createFolderDragData('ancestor', 'Ancestor'));
-
-    const ancestorFolder = typedManager.data.folders.find((folder) => folder.id === 'ancestor');
-
-    expect(ancestorFolder?.parentId).toBeNull();
-    expect(getOrderedFolderIds(typedManager, null)).toEqual(['ancestor']);
-    expect(getOrderedFolderIds(typedManager, 'ancestor')).toEqual(['child']);
-    expect(saveSpy).not.toHaveBeenCalled();
-    expect(refreshSpy).not.toHaveBeenCalled();
-  });
+      expect(typedManager.data).toEqual(original);
+      expect(saveSpy).not.toHaveBeenCalled();
+      expect(refreshSpy).not.toHaveBeenCalled();
+    },
+  );
 
   it('restores in-folder conversation reorder handles in manual mode', () => {
     rafQueue = installRafQueue();

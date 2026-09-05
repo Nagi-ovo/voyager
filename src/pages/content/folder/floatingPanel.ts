@@ -1,8 +1,13 @@
 import { CLOUD_SYNC_PATH, CLOUD_UPLOAD_PATH } from '@/core/icons/cloudSyncPaths';
 import { isSafari } from '@/core/utils/browser';
+import {
+  type ConversationSortMode,
+  getFolderDepth,
+  sortConversationsByPriority,
+  sortFolders,
+} from '@/features/folder/model/folderData';
 import { getTranslationSyncUnsafe } from '@/utils/i18n';
 
-import { type ConversationSortMode, sortConversationsByPriority } from './conversationSort';
 import { FOLDER_COLORS, getFolderColor, isDarkMode } from './folderColors';
 import type { ConversationReference, Folder, FolderData } from './types';
 
@@ -143,36 +148,8 @@ function defaultPos(size: FloatingPanelSize): FloatingPanelPos {
   };
 }
 
-function sortFolders(folders: Folder[]): Folder[] {
-  return [...folders].sort((a, b) => {
-    if (a.pinned && !b.pinned) return -1;
-    if (!a.pinned && b.pinned) return 1;
-
-    const aIdx = a.sortIndex ?? -1;
-    const bIdx = b.sortIndex ?? -1;
-    if (aIdx >= 0 && bIdx >= 0) return aIdx - bIdx;
-
-    return a.name.localeCompare(b.name, undefined, {
-      numeric: true,
-      sensitivity: 'base',
-    });
-  });
-}
-
 function getFolderChildren(data: FolderData, parentId: string | null): Folder[] {
   return sortFolders(data.folders.filter((folder) => folder.parentId === parentId));
-}
-
-function getFolderDepth(data: FolderData, folderId: string): number {
-  let depth = 0;
-  let current = data.folders.find((folder) => folder.id === folderId);
-
-  while (current?.parentId) {
-    depth += 1;
-    current = data.folders.find((folder) => folder.id === current?.parentId);
-  }
-
-  return depth;
 }
 
 function canCreateChildAtDepth(depth: number): boolean {

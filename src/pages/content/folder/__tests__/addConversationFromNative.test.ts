@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { sortConversationsByPriority } from '../conversationSort';
+import {
+  normalizeFolderData,
+  sortConversationsByPriority,
+} from '@/features/folder/model/folderData';
+
 import { FolderManager } from '../manager';
 import type { ConversationReference, Folder, FolderData } from '../types';
 
@@ -14,7 +18,6 @@ type TestableManager = {
   data: FolderData;
   saveData: () => void;
   refresh: () => void;
-  ensureDataIntegrity: () => void;
 };
 
 function createFolder(id: string, name: string, sortIndex: number): Folder {
@@ -79,7 +82,7 @@ describe('addConversationToFolderFromNative — sort-order preservation', () => 
       'https://gemini.google.com/app/auto-assigned',
     );
 
-    typedManager.ensureDataIntegrity();
+    typedManager.data = normalizeFolderData(typedManager.data);
 
     const sorted = sortConversationsByPriority(typedManager.data.folderContents['folder-1']);
 

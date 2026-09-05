@@ -23,6 +23,16 @@ import type { PromptItem, SyncAccountScope } from '@/core/types/sync';
 import { isSafari } from '@/core/utils/browser';
 import { buildConversationIdFromUrl } from '@/core/utils/conversationIdentity';
 import { isExtensionContextInvalidatedError } from '@/core/utils/extensionContext';
+import {
+  type ConversationSortMode,
+  getFolderDepth,
+  moveFolder,
+  normalizeFolderData,
+  removeFolder,
+  reorderConversations,
+  sortConversationsByPriority,
+  sortFolders,
+} from '@/features/folder/model/folderData';
 import { FolderImportExportService } from '@/features/folder/services/FolderImportExportService';
 import type { ImportStrategy } from '@/features/folder/types/import-export';
 import { getTranslationSync, getTranslationSyncUnsafe, initI18n } from '@/utils/i18n';
@@ -57,7 +67,6 @@ import {
   buildConversationActivityGroups,
   formatActivityFolderSummary,
 } from './activityView';
-import { type ConversationSortMode, sortConversationsByPriority } from './conversationSort';
 import { type FloatingFabPos, mountFloatingFab, unmountFloatingFab } from './floatingModeFab';
 import { unmountFloatingModeNudge } from './floatingModeNudge';
 import {
@@ -156,10 +165,6 @@ const ACTIVITY_COMPOSER_INPUT_SELECTOR = [
   'textarea[placeholder*="Ask"]',
 ].join(', ');
 export const FOLDER_ONLY_SEARCH_HINT_ID = 'folder-only-search-prefix-hint';
-
-// Export session backup keys for use by FolderImportExportService (deprecated, kept for compatibility)
-export const SESSION_BACKUP_KEY = 'gvFolderBackup';
-export const SESSION_BACKUP_TIMESTAMP_KEY = 'gvFolderBackupTimestamp';
 
 export function clampFolderTreeIndent(value: unknown): number {
   const numeric = typeof value === 'number' ? value : Number(value);
@@ -1410,11 +1415,7 @@ export class FolderManager {
         afterMutation();
       },
       onDeleteFolder: (folderId) => {
-        const foldersToDelete = this.getFolderAndDescendants(folderId);
-        this.data.folders = this.data.folders.filter((f) => !foldersToDelete.includes(f.id));
-        foldersToDelete.forEach((id) => {
-          delete this.data.folderContents[id];
-        });
+        this.data = removeFolder(this.data, folderId);
         afterMutation();
       },
       // These delegate to the shared data paths, which persist via saveData —
@@ -1514,11 +1515,6 @@ export class FolderManager {
    * `this.recentSection`. This is the single place the lookup logic lives so
    * `findRecentSection` and `enforceFolderAboveRecents` can't drift apart.
    */
-  private findRecentSectionCandidate(): HTMLElement | null {
-    if (!this.sidebarContainer) return null;
-    return this.findRecentSectionCandidateIn(this.sidebarContainer);
-  }
-
   private findRecentSectionCandidateIn(sidebar: HTMLElement): HTMLElement | null {
     const promoteToSection = (el: Element | null): Element | null =>
       el ? (el.closest('expandable-section') ?? el) : null;
@@ -2300,7 +2296,10 @@ export class FolderManager {
     const rootConversations = this.data.folderContents[ROOT_CONVERSATIONS_ID] || [];
     const filteredRootConversations = this.filterVisibleConversations(rootConversations);
     if (filteredRootConversations.length > 0) {
-      const sortedRootConversations = this.sortConversations(filteredRootConversations);
+      const sortedRootConversations = sortConversationsByPriority(
+        filteredRootConversations,
+        this.conversationSortMode,
+      );
       const groupIndices = { starred: 0, normal: 0 };
       sortedRootConversations.forEach((conv) => {
         const convEl = this.createConversationElement(conv, ROOT_CONVERSATIONS_ID, 0);
@@ -2315,7 +2314,7 @@ export class FolderManager {
 
     // Render root level folders (sorted)
     const rootFolders = this.data.folders.filter((f) => f.parentId === null);
-    const sortedRootFolders = this.sortFolders(rootFolders);
+    const sortedRootFolders = sortFolders(rootFolders);
     let rootFolderIndex = 0;
     if (!isSearchActive) {
       list.appendChild(this.createReorderGap('__root__', 'folder', 0));
@@ -2459,7 +2458,10 @@ export class FolderManager {
         conversations,
         includeFolderSubtree,
       );
-      const sortedConversations = this.sortConversations(filteredConversations);
+      const sortedConversations = sortConversationsByPriority(
+        filteredConversations,
+        this.conversationSortMode,
+      );
       const groupIndices = { starred: 0, normal: 0 };
       sortedConversations.forEach((conv) => {
         const convEl = this.createConversationElement(conv, folder.id, level + 1);
@@ -2472,7 +2474,7 @@ export class FolderManager {
 
       // Render subfolders (sorted)
       const subfolders = this.data.folders.filter((f) => f.parentId === folder.id);
-      const sortedSubfolders = this.sortFolders(subfolders);
+      const sortedSubfolders = sortFolders(subfolders);
       let subfolderIndex = 0;
       const visibleSubfolders = sortedSubfolders.filter((subfolder) =>
         isSearchActive
@@ -3886,7 +3888,7 @@ export class FolderManager {
     // at this depth, but guard here too so any other caller (imports, cross-
     // module wiring, drag shortcuts) can't silently exceed the cap. Root
     // creation (parentId === null) is always allowed.
-    if (parentId !== null && this.getFolderDepth(parentId) >= MAX_FOLDER_DEPTH) {
+    if (parentId !== null && getFolderDepth(this.data, parentId) >= MAX_FOLDER_DEPTH) {
       this.debugWarn('createFolder refused: parent is already at MAX_FOLDER_DEPTH', parentId);
       return;
     }
@@ -4129,15 +4131,7 @@ export class FolderManager {
     };
 
     yesBtn?.addEventListener('click', () => {
-      // Remove folder and all subfolders recursively
-      const foldersToDelete = this.getFolderAndDescendants(folderId);
-      this.data.folders = this.data.folders.filter((f) => !foldersToDelete.includes(f.id));
-
-      // Remove folder contents
-      foldersToDelete.forEach((id) => {
-        delete this.data.folderContents[id];
-      });
-
+      this.data = removeFolder(this.data, folderId);
       this.saveData();
       this.refresh();
       cleanup();
@@ -4155,15 +4149,6 @@ export class FolderManager {
       };
       document.addEventListener('click', closeOnOutside);
     }, 0);
-  }
-
-  private getFolderAndDescendants(folderId: string): string[] {
-    const result = [folderId];
-    const children = this.data.folders.filter((f) => f.parentId === folderId);
-    children.forEach((child) => {
-      result.push(...this.getFolderAndDescendants(child.id));
-    });
-    return result;
   }
 
   private toggleFolder(folderId: string): void {
@@ -4186,101 +4171,6 @@ export class FolderManager {
     folder.updatedAt = Date.now();
     this.saveData();
     this.refresh();
-  }
-
-  /**
-   * Sort folders with pinned folders first, then by name using localized collation
-   */
-  private sortFolders(folders: Folder[]): Folder[] {
-    return [...folders].sort((a, b) => {
-      // Pinned folders always come first
-      if (a.pinned && !b.pinned) return -1;
-      if (!a.pinned && b.pinned) return 1;
-
-      // Within the same pinned state, use sortIndex if both have one
-      const aIdx = a.sortIndex ?? -1;
-      const bIdx = b.sortIndex ?? -1;
-      if (aIdx >= 0 && bIdx >= 0) return aIdx - bIdx;
-
-      // Fall back to name-based sort
-      return a.name.localeCompare(b.name, undefined, {
-        numeric: true,
-        sensitivity: 'base',
-      });
-    });
-  }
-
-  private sortConversations(conversations: ConversationReference[]): ConversationReference[] {
-    return sortConversationsByPriority(conversations, this.conversationSortMode);
-  }
-
-  /**
-   * Move a folder to a parent/position while preserving descendant structure.
-   * Only the moved folder's parent/sibling order changes; the subtree beneath it stays intact.
-   */
-  private moveFolder(
-    folderId: string,
-    targetParentId: string | null,
-    insertIndex?: number,
-  ): boolean {
-    const folder = this.data.folders.find((candidate) => candidate.id === folderId);
-    if (!folder || folder.pinned) return false;
-
-    if (folderId === targetParentId) return false;
-    if (targetParentId && this.isFolderDescendant(targetParentId, folderId)) return false;
-
-    const sourceParentId = folder.parentId;
-    if (insertIndex == null && sourceParentId === targetParentId) return false;
-
-    const pinned = !!folder.pinned;
-    const originalSiblings = this.sortFolders(
-      this.data.folders.filter(
-        (candidate) =>
-          candidate.parentId === sourceParentId &&
-          candidate.id !== folderId &&
-          !!candidate.pinned === pinned,
-      ),
-    );
-    const targetSiblings = this.sortFolders(
-      this.data.folders.filter(
-        (candidate) =>
-          candidate.parentId === targetParentId &&
-          candidate.id !== folderId &&
-          !!candidate.pinned === pinned,
-      ),
-    );
-
-    let normalizedInsertIndex = insertIndex ?? targetSiblings.length;
-    if (sourceParentId === targetParentId) {
-      const originalIndex = this.sortFolders(
-        this.data.folders.filter(
-          (candidate) => candidate.parentId === sourceParentId && !!candidate.pinned === pinned,
-        ),
-      ).findIndex((candidate) => candidate.id === folderId);
-
-      if (originalIndex >= 0 && originalIndex < normalizedInsertIndex) {
-        normalizedInsertIndex -= 1;
-      }
-    }
-
-    const clampedInsertIndex = Math.max(0, Math.min(normalizedInsertIndex, targetSiblings.length));
-    const nextOrder = [...targetSiblings];
-    nextOrder.splice(clampedInsertIndex, 0, folder);
-
-    folder.parentId = targetParentId;
-    folder.updatedAt = Date.now();
-
-    nextOrder.forEach((sibling, index) => {
-      sibling.sortIndex = index;
-    });
-
-    if (sourceParentId !== targetParentId) {
-      originalSiblings.forEach((sibling, index) => {
-        sibling.sortIndex = index;
-      });
-    }
-
-    return true;
   }
 
   /** Add manual reorder capability to a conversation row. */
@@ -4547,9 +4437,10 @@ export class FolderManager {
    */
   private reorderFolder(folderId: string, targetParentId: string, insertIndex: number): void {
     const targetParent = targetParentId === '__root__' ? null : targetParentId;
-    const moved = this.moveFolder(folderId, targetParent, insertIndex);
-    if (!moved) return;
-    this.saveData();
+    const nextData = moveFolder(this.data, folderId, targetParent, Date.now(), insertIndex);
+    if (nextData === this.data) return;
+    this.data = nextData;
+    void this.saveData();
     this.refresh();
   }
 
@@ -4622,91 +4513,17 @@ export class FolderManager {
     targetParentId: string,
     insertIndex: number,
   ): void {
-    if (!this.data.folderContents[targetParentId]) {
-      this.data.folderContents[targetParentId] = [];
-    }
-
-    const movingConvs: ConversationReference[] = [];
-
-    // Deduplicate conversation IDs to prevent duplicates from cross-folder selection
-    const uniqueIds = [...new Set(conversationIds)];
-
-    // Collect conversation references
-    for (const convId of uniqueIds) {
-      const sourceList = this.data.folderContents[sourceParentId];
-      if (!sourceList) continue;
-      const conv = sourceList.find((c) => c.conversationId === convId);
-      if (conv) movingConvs.push(conv);
-    }
-
-    if (movingConvs.length === 0) return;
-
-    // When reordering within the same folder, insertIndex is based on the original
-    // sorted list (which includes the dragged items). After removal, indices shift.
-    // Adjust by subtracting the count of dragged items that were before insertIndex.
-    if (sourceParentId === targetParentId) {
-      const isStarredGroup = movingConvs[0].starred ?? false;
-      const originalSorted = this.sortConversations(
-        (this.data.folderContents[targetParentId] ?? []).filter(
-          (c) => !!c.starred === isStarredGroup,
-        ),
-      );
-      let adjustment = 0;
-      for (const convId of conversationIds) {
-        const origIdx = originalSorted.findIndex((c) => c.conversationId === convId);
-        if (origIdx >= 0 && origIdx < insertIndex) {
-          adjustment++;
-        }
-      }
-      insertIndex -= adjustment;
-    }
-
-    // Remove from source
-    if (this.data.folderContents[sourceParentId]) {
-      const removeSet = new Set(conversationIds);
-      this.data.folderContents[sourceParentId] = this.data.folderContents[sourceParentId].filter(
-        (c) => !removeSet.has(c.conversationId),
-      );
-      // Reassign sortIndex in source if it changed
-      if (sourceParentId !== targetParentId) {
-        const sourceConvs = this.sortConversations(this.data.folderContents[sourceParentId]);
-        sourceConvs.forEach((c, i) => {
-          c.sortIndex = i;
-        });
-      }
-    }
-
-    // Get target starred group info for proper insertion
-    const isStarred = movingConvs[0].starred ?? false;
-    const targetList = this.data.folderContents[targetParentId].filter(
-      (c) => !conversationIds.includes(c.conversationId),
+    const nextData = reorderConversations(
+      this.data,
+      conversationIds,
+      sourceParentId,
+      targetParentId,
+      insertIndex,
+      this.conversationSortMode,
     );
-    this.data.folderContents[targetParentId] = targetList;
-
-    // Get sorted siblings in the same starred group (dragged items already excluded)
-    const sameGroupSiblings = this.sortConversations(
-      targetList.filter((c) => !!c.starred === isStarred),
-    );
-    const otherGroup = targetList.filter((c) => !!c.starred !== isStarred);
-
-    // Clamp insertIndex to valid range after removal
-    const clampedIndex = Math.min(insertIndex, sameGroupSiblings.length);
-
-    // Insert at position
-    sameGroupSiblings.splice(clampedIndex, 0, ...movingConvs);
-
-    // Reassign sortIndex
-    sameGroupSiblings.forEach((c, i) => {
-      c.sortIndex = i;
-    });
-    otherGroup.forEach((c, i) => {
-      if (c.sortIndex == null) c.sortIndex = i;
-    });
-
-    // Recombine
-    this.data.folderContents[targetParentId] = [...sameGroupSiblings, ...otherGroup];
-
-    this.saveData();
+    if (nextData === this.data) return;
+    this.data = nextData;
+    void this.saveData();
     this.refresh();
   }
 
@@ -4856,12 +4673,13 @@ export class FolderManager {
       targetFolderId,
     });
 
-    const moved = this.moveFolder(draggedFolderId, targetFolderId);
-    if (!moved) {
+    const nextData = moveFolder(this.data, draggedFolderId, targetFolderId, Date.now());
+    if (nextData === this.data) {
       this.debug('Folder move rejected');
       return;
     }
-    this.saveData();
+    this.data = nextData;
+    void this.saveData();
     this.refresh();
   }
 
@@ -4871,42 +4689,14 @@ export class FolderManager {
 
     this.debug('Moving folder to root level:', draggedFolderId);
 
-    const moved = this.moveFolder(draggedFolderId, null);
-    if (!moved) {
+    const nextData = moveFolder(this.data, draggedFolderId, null, Date.now());
+    if (nextData === this.data) {
       this.debug('Folder move to root rejected');
       return;
     }
-    this.saveData();
+    this.data = nextData;
+    void this.saveData();
     this.refresh();
-  }
-
-  private isFolderDescendant(folderId: string, potentialAncestorId: string): boolean {
-    // Check if potentialAncestorId is an ancestor of folderId
-    let currentId: string | null = folderId;
-    while (currentId) {
-      if (currentId === potentialAncestorId) {
-        return true;
-      }
-      const folder = this.data.folders.find((f) => f.id === currentId);
-      currentId = folder?.parentId || null;
-    }
-    return false;
-  }
-
-  /**
-   * Distance from a folder to the root — 0 for a top-level folder, 1 for a
-   * subfolder, etc. Returns 0 for unknown ids so callers can treat "not found"
-   * the same as "at root" for gating purposes (they'll also fail their own
-   * existence check before mutating).
-   */
-  private getFolderDepth(folderId: string): number {
-    let depth = 0;
-    let current = this.data.folders.find((f) => f.id === folderId);
-    while (current?.parentId) {
-      depth += 1;
-      current = this.data.folders.find((f) => f.id === current?.parentId);
-    }
-    return depth;
   }
 
   private toggleConversationStar(folderId: string, conversationId: string): void {
@@ -6062,7 +5852,7 @@ export class FolderManager {
     // "Create subfolder" only appears when the parent isn't already at the
     // floor of the depth cap. Pre-existing deeper data still renders; we just
     // don't offer a UI path to grow it further.
-    if (this.getFolderDepth(folderId) < MAX_FOLDER_DEPTH) {
+    if (getFolderDepth(this.data, folderId) < MAX_FOLDER_DEPTH) {
       menuItems.push({
         label: this.t('folder_create_subfolder'),
         action: () => this.createFolder(folderId),
@@ -6394,7 +6184,7 @@ export class FolderManager {
       parentPath: string = '',
     ) => {
       const folders = this.data.folders.filter((f) => f.parentId === parentId);
-      const sortedFolders = this.sortFolders(folders); // Apply same sorting as sidebar
+      const sortedFolders = sortFolders(folders); // Apply same sorting as sidebar
       sortedFolders.forEach((folder) => {
         const path = parentPath ? `${parentPath} / ${folder.name}` : folder.name;
         folderOptions.push({ folder, level, path });
@@ -6551,15 +6341,15 @@ export class FolderManager {
     let addedNewConversation = false;
     if (existingIndex === -1) {
       // Insert at the top by claiming sortIndex 0 and shifting existing entries
-      // up by one. Time-based fallback alone is not enough — ensureDataIntegrity
+      // up by one. Time-based fallback alone is not enough — normalization
       // (called from saveData) will assign sortIndex 0 to the newest entry by
       // time and collide with any pre-existing sortIndex 0, after which JS's
       // stable sort drops the new entry below the old one.
       //
-      // Run ensureDataIntegrity first so any nullish sortIndex on existing
+      // Normalize first so any nullish sortIndex on existing
       // entries gets a numeric value before the shift. Otherwise (sortIndex ?? 0)
       // would map both null entries and the existing 0 entry to 1.
-      this.ensureDataIntegrity();
+      this.data = normalizeFolderData(this.data);
       const now = Date.now();
       for (const c of this.data.folderContents[folderId]) {
         c.sortIndex = (c.sortIndex ?? 0) + 1;
@@ -7841,97 +7631,6 @@ export class FolderManager {
   }
 
   /**
-   * Ensures data integrity by validating and repairing the folder data structure.
-   * This method is called by both loadData() and saveData() to maintain consistency.
-   */
-  private ensureDataIntegrity(): void {
-    // Ensure folderContents object exists
-    if (!this.data.folderContents) {
-      this.data.folderContents = {};
-      this.debugWarn('folderContents was missing, initialized');
-    }
-
-    // Ensure folders array exists
-    if (!this.data.folders) {
-      this.data.folders = [];
-      this.debugWarn('folders was missing, initialized');
-    }
-
-    // Ensure all folders have a folderContents entry (even if empty)
-    // This is critical for empty folders to persist correctly
-    this.data.folders.forEach((folder) => {
-      if (!this.data.folderContents[folder.id]) {
-        this.data.folderContents[folder.id] = [];
-        this.debugWarn(`Initialized missing folderContents for folder: ${folder.name}`);
-      }
-    });
-
-    // Deduplicate conversations within each folder
-    for (const folderId of Object.keys(this.data.folderContents)) {
-      const convs = this.data.folderContents[folderId];
-      const seen = new Set<string>();
-      const deduped = convs.filter((c) => {
-        if (seen.has(c.conversationId)) return false;
-        seen.add(c.conversationId);
-        return true;
-      });
-      if (deduped.length < convs.length) {
-        this.debugWarn(
-          `Removed ${convs.length - deduped.length} duplicate conversations in folder: ${folderId}`,
-        );
-        this.data.folderContents[folderId] = deduped;
-      }
-    }
-
-    // Ensure all items have sortIndex for manual ordering
-    this.ensureSortIndices();
-  }
-
-  /**
-   * Assign sortIndex to folders and conversations that don't have one yet.
-   * Uses current sort order so existing users see no change on upgrade.
-   */
-  private ensureSortIndices(): void {
-    // Group folders by parent
-    const foldersByParent = new Map<string, Folder[]>();
-    for (const folder of this.data.folders) {
-      const parentKey = folder.parentId ?? '__root__';
-      if (!foldersByParent.has(parentKey)) foldersByParent.set(parentKey, []);
-      foldersByParent.get(parentKey)!.push(folder);
-    }
-
-    // Assign sortIndex to folders missing it, preserving current name-based order
-    for (const siblings of foldersByParent.values()) {
-      const needsIndex = siblings.some((f) => f.sortIndex == null);
-      if (!needsIndex) continue;
-
-      // Sort by current logic (pinned state ignored here — sortIndex is within same pinned group)
-      const sorted = [...siblings].sort((a, b) =>
-        a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }),
-      );
-      sorted.forEach((folder, i) => {
-        if (folder.sortIndex == null) folder.sortIndex = i;
-      });
-    }
-
-    // Assign sortIndex to conversations missing it, preserving current time-based order
-    for (const [, conversations] of Object.entries(this.data.folderContents)) {
-      const needsIndex = conversations.some((c) => c.sortIndex == null);
-      if (!needsIndex) continue;
-
-      const sorted = [...conversations].sort((a, b) => {
-        const aTime = a.lastOpenedAt ?? a.addedAt ?? 0;
-        const bTime = b.lastOpenedAt ?? b.addedAt ?? 0;
-        return bTime - aTime;
-      });
-      sorted.forEach((conv, i) => {
-        const original = conversations.find((c) => c.conversationId === conv.conversationId);
-        if (original && original.sortIndex == null) original.sortIndex = i;
-      });
-    }
-  }
-
-  /**
    * Load folder data from storage (async, browser-agnostic)
    * Uses storage adapter for automatic Safari/non-Safari handling
    */
@@ -7958,10 +7657,8 @@ export class FolderManager {
       }
 
       if (loadedData && validateFolderData(loadedData)) {
-        this.data = loadedData;
-
         // Validate and repair data integrity
-        this.ensureDataIntegrity();
+        this.data = normalizeFolderData(loadedData);
 
         // Clean up orphaned folderContents (folders that no longer exist)
         const validFolderIds = new Set(this.data.folders.map((f) => f.id));
@@ -8091,12 +7788,10 @@ export class FolderManager {
         return null;
       }
 
-      const migratedData = this.filterLegacyFolderDataByCurrentAccount(
-        legacyData,
-        session.accountScope,
+      const migratedData = normalizeFolderData(
+        this.filterLegacyFolderDataByCurrentAccount(legacyData, session.accountScope),
       );
       session.data = migratedData;
-      this.ensureDataIntegrity();
       session.markReady();
       const saved = await this.persistDataSession(session, this.cloneFolderData(session.data));
       if (!saved) {
@@ -8126,8 +7821,7 @@ export class FolderManager {
     // Step 1: Try to restore from localStorage backups (primary, emergency, beforeUnload)
     const recovered = session.backup.recoverFromBackup();
     if (recovered && validateFolderData(recovered)) {
-      this.data = recovered;
-      this.ensureDataIntegrity();
+      this.data = normalizeFolderData(recovered);
       session.markReady();
       console.warn('[FolderManager] Data recovered from localStorage backup');
       this.showNotificationByLevel('Folder data has been recovered from a backup.', 'warning');
@@ -8139,7 +7833,7 @@ export class FolderManager {
     // Step 2: If current this.data already has valid structure, keep it
     if (validateFolderData(this.data) && this.data.folders.length > 0) {
       console.warn('[FolderManager] Keeping existing in-memory data after load error');
-      this.ensureDataIntegrity();
+      this.data = normalizeFolderData(this.data);
       session.markReady();
       return;
     }
@@ -8278,7 +7972,7 @@ export class FolderManager {
     const session = this.dataSession;
     if (!session || (!session.ready && session.accountScope)) return false;
     try {
-      this.ensureDataIntegrity();
+      this.data = normalizeFolderData(this.data);
       const snapshot = this.cloneFolderData(session.data);
       // A mutation supersedes any storage read already in flight for this session.
       session.loadVersion += 1;
@@ -9316,69 +9010,6 @@ export class FolderManager {
     }
   }
 
-  /**
-   * Merge folder data for auto-sync (same logic as popup's mergeFolderData)
-   */
-  private mergeFolderDataForAutoSync(local: FolderData, cloud: FolderData): FolderData {
-    // Merge folders list
-    const folderMap = new Map<string, Folder>();
-
-    // Add all local folders first
-    local.folders.forEach((folder) => {
-      folderMap.set(folder.id, folder);
-    });
-
-    // Merge cloud folders
-    cloud.folders.forEach((cloudFolder) => {
-      const localFolder = folderMap.get(cloudFolder.id);
-      if (!localFolder) {
-        // New folder from cloud
-        folderMap.set(cloudFolder.id, cloudFolder);
-      } else {
-        // Conflict: compare timestamps
-        const cloudTime = cloudFolder.updatedAt || cloudFolder.createdAt || 0;
-        const localTime = localFolder.updatedAt || localFolder.createdAt || 0;
-        if (cloudTime > localTime) {
-          folderMap.set(cloudFolder.id, cloudFolder);
-        }
-        // If local is newer or equal, keep local
-      }
-    });
-
-    // Merge folder contents
-    const mergedContents: Record<string, ConversationReference[]> = { ...local.folderContents };
-
-    const allFolderIds = new Set([
-      ...Object.keys(local.folderContents),
-      ...Object.keys(cloud.folderContents),
-    ]);
-
-    allFolderIds.forEach((folderId) => {
-      const localConvos = local.folderContents[folderId] || [];
-      const cloudConvos = cloud.folderContents[folderId] || [];
-
-      const convoMap = new Map<string, ConversationReference>();
-      // Add cloud first, then local metadata overwrites. Activity time remains
-      // monotonic across devices even when the local reference wins.
-      cloudConvos.forEach((c) => convoMap.set(c.conversationId, c));
-      localConvos.forEach((conversation) => {
-        const cloudConversation = convoMap.get(conversation.conversationId);
-        convoMap.set(conversation.conversationId, {
-          ...conversation,
-          lastTurnAt:
-            Math.max(cloudConversation?.lastTurnAt ?? 0, conversation.lastTurnAt ?? 0) || undefined,
-        });
-      });
-
-      mergedContents[folderId] = Array.from(convoMap.values());
-    });
-
-    return {
-      folders: Array.from(folderMap.values()),
-      folderContents: mergedContents,
-    };
-  }
-
   private applyFolderEnabledSetting(): void {
     if (this.folderEnabled) {
       this.debug('Folder feature enabled');
@@ -10318,10 +9949,7 @@ export class FolderManager {
     this.exportInProgress = true;
 
     try {
-      // Type assertion to match the service's expected type
-      const payload = FolderImportExportService.exportToPayload(
-        this.data as unknown as Parameters<typeof FolderImportExportService.exportToPayload>[0],
-      );
+      const payload = FolderImportExportService.exportToPayload(this.data);
       FolderImportExportService.downloadJSON(payload);
       this.showNotification(this.t('folder_export_success'), 'success');
       this.debug('Folders exported successfully');

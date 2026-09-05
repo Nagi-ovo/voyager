@@ -72,7 +72,6 @@ type TestableManager = {
   ensureNotebooksAnchorButton: () => void;
   cleanupNotebooksAnchorButton: () => void;
   findRecentSection: () => boolean;
-  findRecentSectionCandidate: () => HTMLElement | null;
   findFolderAnchorCandidate: () => HTMLElement | null;
 };
 

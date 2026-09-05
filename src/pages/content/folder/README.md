@@ -11,20 +11,34 @@ The folder manager allows users to:
 - Move conversations between folders
 - Display Gem-specific icons for different conversation types
 - Navigate to conversations without page reload (SPA-style)
+- Import/export folder JSON and sync folders across devices
 
-## File Structure
+## Change the owner of the behavior
 
-- **`types.ts`** - TypeScript type definitions for folders, conversations, and drag data
-- **`manager.ts`** - Core folder management logic and UI rendering
-- **`gemConfig.ts`** - Configuration for Gem icons and metadata
-- **`index.ts`** - Entry point that initializes the folder manager
-- **`README.md`** - This file
+| Responsibility                                                | Entry point                                                                                                                                                                                                                                  |
+| ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Persisted folder and conversation schema                      | [`core/types/folder.ts`](../../../core/types/folder.ts). Local [`types.ts`](types.ts) re-exports it and keeps the content drag payload.                                                                                                      |
+| Tree traversal, moves, removal, ordering and integrity repair | [`features/folder/model/folderData.ts`](../../../features/folder/model/folderData.ts). Functions take data explicitly and return the next data without mutating the input.                                                                   |
+| Account data, backup ownership and unload lifetime            | [`FolderDataSession.ts`](FolderDataSession.ts). Each asynchronous load/save belongs to the session in which it started.                                                                                                                      |
+| Gemini DOM, user commands and runtime coordination            | [`manager.ts`](manager.ts). The existing public entry points remain available while responsibilities move out incrementally.                                                                                                                 |
+| AI Studio host integration                                    | [`aistudio.ts`](aistudio.ts). Shares the persisted schema and account session, with its own navigation and storage path.                                                                                                                     |
+| Floating view                                                 | [`floatingPanel.ts`](floatingPanel.ts). Mount with data/callbacks; update or destroy through the returned handle.                                                                                                                            |
+| Browser storage implementations                               | [`storage/FolderStorageAdapter.ts`](storage/FolderStorageAdapter.ts). Preserve Safari's durable storage and Chromium's mirror behavior.                                                                                                      |
+| JSON import/export                                            | [`FolderImportExportService.ts`](../../../features/folder/services/FolderImportExportService.ts). Shared keys live in the feature's [`constants.ts`](../../../features/folder/constants.ts); this service must not import a content manager. |
+| Gem metadata and startup                                      | [`gemConfig.ts`](gemConfig.ts), [`index.ts`](index.ts).                                                                                                                                                                                      |
 
-[<img src="https://devin.ai/assets/askdeepwiki.png" alt="Ask DeepWiki" height="20"/>](https://deepwiki.com/Nagi-ovo/voyager)
+Test tree and ordering changes directly in the [model tests](../../../features/folder/model/__tests__/folderData.test.ts).
+Keep DOM, storage-event and navigation assertions in the content integration tests. Do not pass a
+manager into a model helper or add a manager wrapper solely to keep a private test interface alive.
+
+Account changes, sidebar remounts and full destruction have different lifetimes. In-flight writes
+retain their original session and snapshot; a sidebar remount keeps the native deletion tracker.
+Read the [state/identity](../../../../.github/docs/regressions/state-identity-sync.md) and
+[folder UI](../../../../.github/docs/regressions/folders-timeline-ui.md) regression notes before
+changing those boundaries. For future extraction, move a complete responsibility together with its
+setup, cleanup and behavioral tests.
 
 ## Adding Support for New Gems
-
-[<img src="https://devin.ai/assets/askdeepwiki.png" alt="Ask DeepWiki" height="20"/>](https://deepwiki.com/Nagi-ovo/voyager)
 
 To add support for a new Gem (either official Google Gems or custom Gems):
 
@@ -83,8 +97,6 @@ If you're adding support for a new official Google Gem, please submit a pull req
 
 ## Technical Details
 
-[<img src="https://devin.ai/assets/askdeepwiki.png" alt="Ask DeepWiki" height="20"/>](https://deepwiki.com/Nagi-ovo/voyager)
-
 ### Gem Detection
 
 The folder manager detects Gem conversations by analyzing the `jslog` attribute:
@@ -124,5 +136,3 @@ Potential improvements that could be contributed:
 - Custom user-defined Gems
 - Gem icon customization
 - Support for more than 2 levels of folder nesting
-- Import/export folder structure
-- Folder sharing across devices

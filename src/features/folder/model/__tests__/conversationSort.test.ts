@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { sortConversationsByPriority } from '../conversationSort';
-import type { ConversationReference } from '../types';
+import type { ConversationReference } from '@/core/types/folder';
+
+import { sortConversationsByPriority } from '../folderData';
 
 function createConversation(
   conversationId: string,
@@ -17,19 +18,25 @@ function createConversation(
 }
 
 describe('sortConversationsByPriority', () => {
-  it('keeps starred conversations ahead of non-starred conversations', () => {
-    const sorted = sortConversationsByPriority([
-      createConversation('normal-newer', { addedAt: 30 }),
-      createConversation('starred-older', { starred: true, addedAt: 10 }),
-      createConversation('starred-newer', { starred: true, addedAt: 20 }),
-    ]);
+  it.each(['manual', 'recent'] as const)(
+    'keeps starred conversations ahead of non-starred conversations in %s mode',
+    (mode) => {
+      const sorted = sortConversationsByPriority(
+        [
+          createConversation('normal-newer', { addedAt: 30 }),
+          createConversation('starred-older', { starred: true, addedAt: 10 }),
+          createConversation('starred-newer', { starred: true, addedAt: 20 }),
+        ],
+        mode,
+      );
 
-    expect(sorted.map((item) => item.conversationId)).toEqual([
-      'starred-newer',
-      'starred-older',
-      'normal-newer',
-    ]);
-  });
+      expect(sorted.map((item) => item.conversationId)).toEqual([
+        'starred-newer',
+        'starred-older',
+        'normal-newer',
+      ]);
+    },
+  );
 
   it('sorts by lastOpenedAt in recently-opened mode', () => {
     const sorted = sortConversationsByPriority(
@@ -101,5 +108,19 @@ describe('sortConversationsByPriority', () => {
       'manual-last-new',
       'manual-first-old',
     ]);
+  });
+
+  it('uses conversation ids to break equal time and index ties without changing the input', () => {
+    const conversations = Object.freeze([
+      Object.freeze(createConversation('b', { sortIndex: 0, lastOpenedAt: 100 })),
+      Object.freeze(createConversation('a', { sortIndex: 0, lastOpenedAt: 100 })),
+    ]);
+
+    for (const mode of ['manual', 'recent'] as const) {
+      expect(
+        sortConversationsByPriority(conversations, mode).map((item) => item.conversationId),
+      ).toEqual(['a', 'b']);
+    }
+    expect(conversations.map((item) => item.conversationId)).toEqual(['b', 'a']);
   });
 });
