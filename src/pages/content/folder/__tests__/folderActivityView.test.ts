@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import browser from 'webextension-polyfill';
 
+import { accountIsolationService } from '@/core/services/AccountIsolationService';
 import { StorageKeys } from '@/core/types/common';
 
 import { ACTIVITY_PRIORITY_WINDOW_MS } from '../activityView';
-import { FolderManager } from '../manager';
 import type { FolderData } from '../types';
+import { createFolderViewHarness, resetFolderViewBrowserMocks } from './folderViewHarness';
 
 vi.mock('webextension-polyfill', () => ({
   default: {
@@ -24,34 +25,7 @@ vi.mock('@/utils/i18n', () => ({
   initI18n: () => Promise.resolve(),
 }));
 
-vi.mock('../floatingPanel', () => ({
-  mountFloatingPanel: vi.fn(() => ({ destroy: vi.fn(), update: vi.fn() })),
-}));
-
-type TestableManager = {
-  accountIsolationEnabled: boolean;
-  containerElement: HTMLElement | null;
-  data: FolderData;
-  folderSearchEnabled: boolean;
-  folderViewMode: 'folders' | 'activity';
-  foldersCollapsed: boolean;
-  recentSection: HTMLElement | null;
-  createFolderUI: () => void;
-  markConversationLastTurnAt: (conversationId: string, timestamp: number) => void;
-  destroy: () => void;
-};
-
 const NOW = new Date(2026, 7, 1, 12, 0, 0).getTime();
-
-function mountSidebar(): HTMLElement {
-  const sidebar = document.createElement('div');
-  sidebar.setAttribute('data-test-id', 'overflow-container');
-  const recents = document.createElement('expandable-section');
-  recents.setAttribute('data-test-id', 'chats-expandable-section');
-  sidebar.appendChild(recents);
-  document.body.appendChild(sidebar);
-  return recents;
-}
 
 function activityData(): FolderData {
   const recent = NOW - 60_000;
@@ -150,37 +124,32 @@ function nestedMultiFolderActivityData(): FolderData {
 }
 
 describe('folder Activity view', () => {
-  let manager: FolderManager | null = null;
+  let harness: Awaited<ReturnType<typeof createFolderViewHarness>>;
 
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(NOW);
     vi.clearAllMocks();
-    vi.mocked(browser.storage.sync.get).mockResolvedValue({});
-    vi.mocked(browser.storage.sync.set).mockResolvedValue(undefined);
-    vi.mocked(browser.storage.local.get).mockResolvedValue({});
-    vi.mocked(browser.storage.local.set).mockResolvedValue(undefined);
+    resetFolderViewBrowserMocks();
+    vi.mocked(browser.storage.sync.get).mockResolvedValue({
+      [StorageKeys.FOLDER_SEARCH_ENABLED]: false,
+    });
+    vi.mocked(browser.storage.local.get).mockResolvedValue({
+      [StorageKeys.FOLDERS_VIEW_MODE]: 'activity',
+    });
   });
 
   afterEach(() => {
-    manager?.destroy();
-    manager = null;
+    harness?.destroy();
     document.body.innerHTML = '';
+    localStorage.clear();
     vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
   it('renders the bell projection with exclusive Priority and deduplicated folder context', async () => {
-    manager = new FolderManager();
-    const typed = manager as unknown as TestableManager;
-    typed.recentSection = mountSidebar();
-    typed.data = activityData();
-    typed.folderSearchEnabled = false;
-    typed.folderViewMode = 'activity';
-    typed.foldersCollapsed = false;
-    typed.createFolderUI();
-
-    const container = typed.containerElement;
+    harness = await createFolderViewHarness(activityData());
+    const container = harness.runtime.panel;
     const bell = container?.querySelector<HTMLButtonElement>('.gv-folder-activity-toggle');
     expect(bell?.getAttribute('aria-pressed')).toBe('true');
     expect(bell?.classList.contains('is-active')).toBe(true);
@@ -224,52 +193,39 @@ describe('folder Activity view', () => {
     bell?.click();
     await Promise.resolve();
 
-    expect(typed.folderViewMode).toBe('folders');
+    expect(harness.treeView.viewMode).toBe('folders');
     expect(bell?.title).toBe('folder_activity_turn_on');
     expect(browser.storage.local.set).toHaveBeenCalledWith({
       [StorageKeys.FOLDERS_VIEW_MODE]: 'folders',
     });
   });
 
-  it('automatically returns an expired Priority conversation to Today', () => {
-    manager = new FolderManager();
-    const typed = manager as unknown as TestableManager;
-    typed.recentSection = mountSidebar();
-    typed.data = activityData();
-    Object.values(typed.data.folderContents)
+  it('automatically returns an expired Priority conversation to Today', async () => {
+    const data = activityData();
+    Object.values(data.folderContents)
       .flat()
       .filter((conversation) => conversation.conversationId.replace(/^c_/, '') === 'active')
       .forEach((conversation) => {
         conversation.lastTurnAt = NOW - ACTIVITY_PRIORITY_WINDOW_MS + 1_000;
       });
-    typed.folderSearchEnabled = false;
-    typed.folderViewMode = 'activity';
-    typed.foldersCollapsed = false;
-    typed.createFolderUI();
+    harness = await createFolderViewHarness(data);
 
     expect(
-      typed.containerElement?.querySelector('.gv-folder-activity-group-priority')?.textContent,
+      harness.runtime.panel?.querySelector('.gv-folder-activity-group-priority')?.textContent,
     ).toContain('Active chat');
 
     vi.advanceTimersByTime(1_002);
 
-    expect(typed.containerElement?.querySelector('.gv-folder-activity-group-priority')).toBeNull();
+    expect(harness.runtime.panel?.querySelector('.gv-folder-activity-group-priority')).toBeNull();
     expect(
-      typed.containerElement?.querySelector('.gv-folder-activity-group-today')?.textContent,
+      harness.runtime.panel?.querySelector('.gv-folder-activity-group-today')?.textContent,
     ).toContain('Active chat');
   });
 
-  it('shows leaf folder names while preserving full multi-folder paths for context', () => {
-    manager = new FolderManager();
-    const typed = manager as unknown as TestableManager;
-    typed.recentSection = mountSidebar();
-    typed.data = nestedMultiFolderActivityData();
-    typed.folderSearchEnabled = false;
-    typed.folderViewMode = 'activity';
-    typed.foldersCollapsed = false;
-    typed.createFolderUI();
+  it('shows leaf folder names while preserving full multi-folder paths for context', async () => {
+    harness = await createFolderViewHarness(nestedMultiFolderActivityData());
 
-    const context = typed.containerElement?.querySelector<HTMLElement>(
+    const context = harness.runtime.panel?.querySelector<HTMLElement>(
       '.gv-folder-activity-context',
     );
 
@@ -277,32 +233,31 @@ describe('folder Activity view', () => {
     expect(context?.getAttribute('aria-label')).toBe('Folder tests\nFolder tests / Food diary');
   });
 
-  it('updates every folder reference when a real new turn is observed', () => {
-    manager = new FolderManager();
-    const typed = manager as unknown as TestableManager;
-    typed.data = activityData();
+  it('updates every folder reference when a real new turn is observed', async () => {
+    harness = await createFolderViewHarness(activityData());
 
     const nextTurnAt = Date.now() + 10_000;
-    typed.markConversationLastTurnAt('active', nextTurnAt);
+    harness.store.markConversationLastTurnAt('active', nextTurnAt);
 
-    const copies = Object.values(typed.data.folderContents)
+    const copies = Object.values(harness.store.data.folderContents)
       .flat()
       .filter((conversation) => conversation.conversationId.replace(/^c_/, '') === 'active');
     expect(copies).toHaveLength(2);
     expect(copies.every((conversation) => conversation.lastTurnAt === nextTurnAt)).toBe(true);
+    await vi.advanceTimersByTimeAsync(350);
+    const savedCopies = Object.values(harness.saved.folderContents)
+      .flat()
+      .filter((conversation) => conversation.conversationId.replace(/^c_/, '') === 'active');
+    expect(savedCopies.every((conversation) => conversation.lastTurnAt === nextTurnAt)).toBe(true);
   });
 
   it('marks the user filter button active after the Activity bell is inserted first', async () => {
-    manager = new FolderManager();
-    const typed = manager as unknown as TestableManager;
-    typed.recentSection = mountSidebar();
-    typed.data = activityData();
-    typed.folderSearchEnabled = false;
-    typed.folderViewMode = 'folders';
-    typed.foldersCollapsed = false;
-    typed.createFolderUI();
+    vi.mocked(browser.storage.local.get).mockResolvedValue({
+      [StorageKeys.FOLDERS_VIEW_MODE]: 'folders',
+    });
+    harness = await createFolderViewHarness(activityData());
 
-    const container = typed.containerElement;
+    const container = harness.runtime.panel;
     const bell = container?.querySelector<HTMLButtonElement>('.gv-folder-activity-toggle');
     const userFilterButton = container?.querySelector<HTMLButtonElement>(
       '.gv-folder-user-filter-toggle',
@@ -318,18 +273,17 @@ describe('folder Activity view', () => {
     });
   });
 
-  it('hides the redundant user filter when hard account isolation is enabled', () => {
-    manager = new FolderManager();
-    const typed = manager as unknown as TestableManager;
-    typed.recentSection = mountSidebar();
-    typed.data = activityData();
-    typed.folderSearchEnabled = false;
-    typed.folderViewMode = 'folders';
-    typed.foldersCollapsed = false;
-    typed.accountIsolationEnabled = true;
-    typed.createFolderUI();
+  it('hides the redundant user filter when hard account isolation is enabled', async () => {
+    harness = await createFolderViewHarness(activityData());
+    vi.spyOn(accountIsolationService, 'resolveAccountScope').mockResolvedValue({
+      accountKey: 'gemini-test',
+      accountId: 1,
+      routeUserId: null,
+      emailHash: null,
+    });
+    await harness.store.setAccountIsolationEnabled(true);
 
-    const userFilterButton = typed.containerElement?.querySelector<HTMLButtonElement>(
+    const userFilterButton = harness.runtime.panel?.querySelector<HTMLButtonElement>(
       '.gv-folder-user-filter-toggle',
     );
     expect(userFilterButton?.hidden).toBe(true);

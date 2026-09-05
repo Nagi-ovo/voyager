@@ -101,7 +101,7 @@ or prompt commands.
   non-blocking Prompt Manager badge until resolved. Route every Drive merge through the shared
   helper, which retains a local name when the newer cloud record predates prompt names.
 - **Guard:** `src/features/backup/services/__tests__/PromptImportExportService.test.ts`
-  `src/utils/merge.test.ts` `src/pages/content/folder/__tests__/auditFixes.test.ts`
+  `src/utils/merge.test.ts` `src/pages/content/folder/__tests__/FolderTransferController.test.ts`
   `src/pages/content/folder/__tests__/aistudioAuditFixes.test.ts`
   `src/pages/content/prompt/__tests__/promptName.test.ts`
   `src/pages/content/prompt/__tests__/slashPrompt.test.ts`

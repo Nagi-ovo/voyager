@@ -28,7 +28,7 @@ mirrors, clear markers, or Drive sync.
 - **Rule:** Return `true` only from branches that respond; fall through to `return undefined` for
   unknown messages so the sender's promise settles immediately. Any new content-script onMessage
   listener must follow this.
-- **Guard:** `src/pages/content/folder/__tests__/auditFixes.test.ts` ("returns undefined for unknown
+- **Guard:** `src/pages/content/folder/__tests__/folderRuntimeMessages.test.ts` ("returns undefined for unknown
   messages so the sender promise settles")
   `src/pages/content/folder/__tests__/aistudioAuditFixes.test.ts`
 
@@ -45,8 +45,7 @@ mirrors, clear markers, or Drive sync.
   per echo and still reloads on genuine external writes (popup sync, other tabs). Reset the counter
   when switching accounts; delayed writes for a previous session must not arm the new session's
   counter because the listener ignores events for their old storage key.
-- **Guard:** `src/pages/content/folder/__tests__/auditFixes.test.ts` ("skips the reload for our own
-  mirror-write echo", "still reloads for external writes")
+- **Guard:** `src/pages/content/folder/FolderStore.test.ts` ("consumes one mirror echo per write and then applies an external update" and "applies an external update when no local write has armed echo suppression")
 
 ## Folder recovery and pending writes belong to an account session
 
@@ -65,7 +64,7 @@ mirrors, clear markers, or Drive sync.
   Arm storage-echo suppression only for the session currently observed by the manager.
 - **Guard:** `src/pages/content/folder/__tests__/accountScopedBackup.test.ts` covers same-account
   recovery, legacy compatibility, new/empty accounts, same-instance switching, unload ownership,
-  deferred loads/writes, account revisits and failed resolution. `src/pages/content/folder/__tests__/auditFixes.test.ts`
+  deferred loads/writes, account revisits and failed resolution. `src/pages/content/folder/FolderStore.test.ts`
   preserves the per-write echo and trailing-save behavior; `src/pages/content/folder/floatingPanel.test.ts`
   guards reset during inline editing.
 

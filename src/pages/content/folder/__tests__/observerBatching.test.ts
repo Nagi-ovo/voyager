@@ -1,8 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { accountIsolationService } from '@/core/services/AccountIsolationService';
 import type { FolderData } from '@/core/types/folder';
 
+import type { FolderSidebarRuntime } from '../FolderSidebarRuntime';
+import type { FolderStore } from '../FolderStore';
 import { FolderManager } from '../manager';
+import * as storageAdapters from '../storage/FolderStorageAdapter';
+import { mountSidebar, setLayout } from './sidebarRuntimeHarness';
 
 vi.mock('@/utils/i18n', () => ({
   getTranslationSync: (key: string) => key,
@@ -10,19 +15,10 @@ vi.mock('@/utils/i18n', () => ({
   initI18n: () => Promise.resolve(),
 }));
 
-type TestableManager = {
-  data: FolderData;
-  activeStorageKey: string;
-  sidebarContainer: HTMLElement | null;
+type ManagerOwners = {
+  store: FolderStore;
+  sidebarRuntime: FolderSidebarRuntime;
   hideArchivedConversations: boolean;
-  selectedConversations: Set<string>;
-  ensureDomRecoveryWatchers: () => void;
-  createFolderUI: () => void;
-  initializeFolderUI: () => Promise<void>;
-  reinitializeFolderUI: () => void;
-  reinitializePromise: Promise<void> | null;
-  isConversationInFolders: (id: string) => boolean;
-  saveData: () => Promise<boolean>;
 };
 
 const CONVERSATION_ID = '2468ace02468ace0';
@@ -34,14 +30,6 @@ function createConversationEl(id: string, title = 'Native title'): HTMLElement {
   row.setAttribute('jslog', `["c_${id}"]`);
   row.innerHTML = `<a href="/app/${id}"><span class="title-text gds-body-s">${title}</span></a>`;
   return row;
-}
-
-function createSidebar(): HTMLElement {
-  const sidebar = document.createElement('div');
-  sidebar.setAttribute('data-test-id', 'overflow-container');
-  sidebar.innerHTML = '<div data-test-id="all-conversations"></div>';
-  document.body.appendChild(sidebar);
-  return sidebar;
 }
 
 function dispatchDragStart(element: HTMLElement) {
@@ -81,7 +69,8 @@ function clickDeleteDialogButton(testId = 'confirm-delete-button'): void {
 /** Owner timing/confirmation cases live beside NativeSidebarObserver and NativeConversationMenus. */
 describe('FolderManager native sidebar integration', () => {
   let manager: FolderManager;
-  let typed: TestableManager;
+  let owners: ManagerOwners;
+  let writes: FolderData[];
   let sidebar: HTMLElement;
   let originalUrl: string;
 
@@ -89,11 +78,21 @@ describe('FolderManager native sidebar integration', () => {
     vi.useFakeTimers();
     originalUrl = window.location.pathname + window.location.search;
     window.history.replaceState({}, '', `/u/0/app/${CONVERSATION_ID}`);
-    sidebar = createSidebar();
+    sidebar = mountSidebar().sidebar;
+    writes = [];
+    vi.spyOn(storageAdapters, 'createFolderStorageAdapter').mockReturnValue({
+      init: async () => {},
+      loadData: async () => ({ folders: [], folderContents: {} }),
+      saveData: async (_key, data) => {
+        writes.push(structuredClone(data));
+        return true;
+      },
+      removeData: async () => {},
+      getBackendName: () => 'test-memory',
+    });
     manager = new FolderManager();
-    typed = manager as unknown as TestableManager;
-    typed.activeStorageKey = 'gvFolderData:account-a';
-    typed.data = {
+    owners = manager as unknown as ManagerOwners;
+    owners.store.data = {
       folders: ['f1', 'f2'].map((id) => ({
         id,
         name: id,
@@ -127,17 +126,15 @@ describe('FolderManager native sidebar integration', () => {
         ],
       },
     };
-    // Exercise actual native setup and teardown; folder rendering and persistence have their own suites.
-    vi.spyOn(typed, 'ensureDomRecoveryWatchers').mockImplementation(() => {});
-    vi.spyOn(typed, 'createFolderUI').mockImplementation(() => {});
-    vi.spyOn(typed, 'saveData').mockResolvedValue(true);
-    await typed.initializeFolderUI();
-    expect(typed.sidebarContainer).toBe(sidebar);
+    await owners.sidebarRuntime.start('sidebar');
+    setLayout(owners.sidebarRuntime.panel!, 280, 200);
+    expect(owners.sidebarRuntime.sidebar).toBe(sidebar);
   });
 
   afterEach(() => {
     manager.destroy();
     document.body.innerHTML = '';
+    localStorage.clear();
     window.history.replaceState({}, '', originalUrl);
     vi.restoreAllMocks();
     vi.useRealTimers();
@@ -145,10 +142,10 @@ describe('FolderManager native sidebar integration', () => {
 
   async function remountSidebar(): Promise<void> {
     sidebar.remove();
-    sidebar = createSidebar();
-    typed.reinitializeFolderUI();
-    await typed.reinitializePromise;
-    expect(typed.sidebarContainer).toBe(sidebar);
+    sidebar = mountSidebar().sidebar;
+    await owners.sidebarRuntime.remount();
+    setLayout(owners.sidebarRuntime.panel!, 280, 200);
+    expect(owners.sidebarRuntime.sidebar).toBe(sidebar);
   }
 
   it.each(['replace', 'remove'])(
@@ -162,11 +159,10 @@ describe('FolderManager native sidebar integration', () => {
       window.history.replaceState({}, '', '/app?pageId=none');
       await vi.advanceTimersByTimeAsync(1000);
 
-      expect(typed.data.folderContents.f1.map(({ conversationId }) => conversationId)).toEqual([
-        `c_${CONVERSATION_ID}`,
-        `c_${OTHER_ID}`,
-      ]);
-      expect(typed.data.folderContents.f2[0].conversationId).toBe(CONVERSATION_ID);
+      expect(
+        owners.store.data.folderContents.f1.map(({ conversationId }) => conversationId),
+      ).toEqual([`c_${CONVERSATION_ID}`, `c_${OTHER_ID}`]);
+      expect(owners.store.data.folderContents.f2[0].conversationId).toBe(CONVERSATION_ID);
     },
   );
 
@@ -180,21 +176,31 @@ describe('FolderManager native sidebar integration', () => {
       await vi.advanceTimersByTimeAsync(350);
 
       expect(
-        typed.data.folderContents.f1.map((conversation) => conversation.conversationId),
+        owners.store.data.folderContents.f1.map((conversation) => conversation.conversationId),
       ).toEqual([`c_${OTHER_ID}`]);
-      expect(typed.data.folderContents.f2).toEqual([]);
-      expect(typed.saveData).toHaveBeenCalledTimes(1);
+      expect(owners.store.data.folderContents.f2).toEqual([]);
+      expect(writes.at(-1)?.folderContents).toEqual(owners.store.data.folderContents);
     },
   );
 
   it.each([
-    ['storage key', 'gvFolderData:account-b', '/u/0/app?pageId=none'],
-    ['route account', 'gvFolderData:account-a', '/u/1/app?pageId=none'],
-  ])('discards a pending native deletion after the %s changes', async (_, key, route) => {
+    ['storage key', '/u/0/app?pageId=none'],
+    ['route account', '/u/1/app?pageId=none'],
+  ])('discards a pending native deletion after the %s changes', async (change, route) => {
     clickDelete();
     clickDeleteDialogButton();
-    typed.activeStorageKey = key;
-    typed.data.folderContents = {
+    if (change === 'storage key') {
+      const previousKey = owners.store.storageKey;
+      vi.spyOn(accountIsolationService, 'resolveAccountScope').mockResolvedValue({
+        accountKey: 'account-b',
+        accountId: 1,
+        routeUserId: '0',
+        emailHash: null,
+      });
+      await owners.store.setAccountIsolationEnabled(true);
+      expect(owners.store.storageKey).not.toBe(previousKey);
+    }
+    owners.store.data.folderContents = {
       f2: [
         {
           conversationId: `c_${CONVERSATION_ID}`,
@@ -205,11 +211,11 @@ describe('FolderManager native sidebar integration', () => {
       ],
     };
     window.history.replaceState({}, '', route);
-    await vi.runAllTimersAsync();
+    await vi.advanceTimersByTimeAsync(1000);
 
-    expect(typed.data.folderContents.f2).toHaveLength(1);
-    expect(typed.data.folderContents.f2[0].title).toBe('Account B conversation');
-    expect(typed.saveData).not.toHaveBeenCalled();
+    expect(owners.store.data.folderContents.f2).toHaveLength(1);
+    expect(owners.store.data.folderContents.f2[0].title).toBe('Account B conversation');
+    expect(writes).toHaveLength(0);
   });
 
   it('preserves folder entries when native deletion is cancelled after sidebar reinitialization', async () => {
@@ -217,11 +223,11 @@ describe('FolderManager native sidebar integration', () => {
     await remountSidebar();
     clickDeleteDialogButton('cancel-delete-button');
     window.history.replaceState({}, '', '/u/0/app?pageId=none');
-    await vi.runAllTimersAsync();
+    await vi.advanceTimersByTimeAsync(1000);
 
-    expect(typed.data.folderContents.f1).toHaveLength(2);
-    expect(typed.data.folderContents.f2).toHaveLength(1);
-    expect(typed.saveData).not.toHaveBeenCalled();
+    expect(owners.store.data.folderContents.f1).toHaveLength(2);
+    expect(owners.store.data.folderContents.f2).toHaveLength(1);
+    expect(writes).toHaveLength(0);
   });
 
   it.each([false, true])(
@@ -236,11 +242,11 @@ describe('FolderManager native sidebar integration', () => {
       manager.destroy();
       window.history.replaceState({}, '', '/app');
       if (!confirmed) clickDeleteDialogButton();
-      await vi.runAllTimersAsync();
+      await vi.advanceTimersByTimeAsync(1000);
 
-      expect(typed.data.folderContents.f1).toHaveLength(2);
-      expect(typed.data.folderContents.f2).toHaveLength(1);
-      expect(typed.saveData).not.toHaveBeenCalled();
+      expect(owners.store.data.folderContents.f1).toHaveLength(2);
+      expect(owners.store.data.folderContents.f2).toHaveLength(1);
+      expect(writes).toHaveLength(0);
     },
   );
 
@@ -261,7 +267,13 @@ describe('FolderManager native sidebar integration', () => {
     const second = createConversationEl('ccccdddd', 'Second selected chat');
     sidebar.append(first, second);
     await vi.advanceTimersByTimeAsync(50);
-    typed.selectedConversations = new Set(['c_aaaabbbb', 'c_ccccdddd']);
+    first.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
+    await vi.advanceTimersByTimeAsync(500);
+    first.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 0 }));
+    first.click();
+    second.click();
+    expect(first.classList.contains('gv-conversation-selected')).toBe(true);
+    expect(second.classList.contains('gv-conversation-selected')).toBe(true);
 
     const payload = dispatchDragStart(first);
 
@@ -281,12 +293,12 @@ describe('FolderManager native sidebar integration', () => {
 
     expect(row.draggable).toBe(false);
     expect(row.classList.contains('gv-conversation-archived')).toBe(false);
-    expect(typed.saveData).not.toHaveBeenCalled();
+    expect(writes).toHaveLength(0);
   });
 
   it('skips folder membership scans and caches the legacy-layout miss while archive hiding is off', async () => {
-    typed.hideArchivedConversations = false;
-    const membershipSpy = vi.spyOn(typed, 'isConversationInFolders');
+    owners.hideArchivedConversations = false;
+    const membershipSpy = vi.spyOn(owners.store, 'isConversationInFolders');
     const querySpy = vi.spyOn(sidebar, 'querySelector');
     const rows = [createConversationEl('ee55ee55'), createConversationEl('ee66ee66')];
     sidebar.append(...rows);
@@ -300,7 +312,7 @@ describe('FolderManager native sidebar integration', () => {
   });
 
   it('clears leftover archived state in the legacy sibling layout when archive hiding is off', async () => {
-    typed.hideArchivedConversations = false;
+    owners.hideArchivedConversations = false;
     const row = createConversationEl(CONVERSATION_ID);
     row.classList.add('gv-conversation-archived');
     const actions = document.createElement('div');

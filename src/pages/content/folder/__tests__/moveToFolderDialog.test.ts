@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { FolderManager } from '../manager';
-import type { FolderData } from '../types';
+import type { Folder } from '@/core/types/folder';
+
+import { type FolderDialogs, createFolderDialogs } from '../folderDialogs';
 
 vi.mock('@/utils/i18n', () => ({
   getTranslationSync: (key: string) => key,
@@ -9,66 +10,46 @@ vi.mock('@/utils/i18n', () => ({
   initI18n: () => Promise.resolve(),
 }));
 
-type TestableManager = {
-  data: FolderData;
-  showMoveToFolderDialog: (conversationId: string, title: string, url: string) => void;
-  addConversationToFolderFromNative: (
-    folderId: string,
-    conversationId: string,
-    title: string,
-    url: string,
-  ) => void;
-  destroy: () => void;
-};
-
 describe('move to folder dialog', () => {
-  let manager: FolderManager | null = null;
+  let dialogs: FolderDialogs | null = null;
 
   afterEach(() => {
-    manager?.destroy();
-    manager = null;
+    dialogs?.closeAll();
+    dialogs = null;
     document.body.innerHTML = '';
     vi.restoreAllMocks();
   });
 
   it('renders folder paths in a searchable tree list', () => {
-    manager = new FolderManager();
-    const typedManager = manager as unknown as TestableManager;
-    typedManager.data = {
-      folders: [
-        {
-          id: 'root-misc',
-          name: 'misc',
-          parentId: null,
-          isExpanded: true,
-          createdAt: 1,
-          updatedAt: 1,
-        },
-        {
-          id: 'software',
-          name: 'software',
-          parentId: null,
-          isExpanded: true,
-          createdAt: 2,
-          updatedAt: 2,
-        },
-        {
-          id: 'software-misc',
-          name: 'misc',
-          parentId: 'software',
-          isExpanded: true,
-          createdAt: 3,
-          updatedAt: 3,
-        },
-      ],
-      folderContents: {},
-    };
-
-    const addSpy = vi
-      .spyOn(typedManager, 'addConversationToFolderFromNative')
-      .mockImplementation(() => {});
-
-    typedManager.showMoveToFolderDialog('conv-a', 'Conversation A', '/app/conv-a');
+    dialogs = createFolderDialogs();
+    const folders: Folder[] = [
+      {
+        id: 'root-misc',
+        name: 'misc',
+        parentId: null,
+        isExpanded: true,
+        createdAt: 1,
+        updatedAt: 1,
+      },
+      {
+        id: 'software',
+        name: 'software',
+        parentId: null,
+        isExpanded: true,
+        createdAt: 2,
+        updatedAt: 2,
+      },
+      {
+        id: 'software-misc',
+        name: 'misc',
+        parentId: 'software',
+        isExpanded: true,
+        createdAt: 3,
+        updatedAt: 3,
+      },
+    ];
+    const onSelect = vi.fn();
+    dialogs.openMove(folders, onSelect);
 
     const items = [...document.querySelectorAll<HTMLButtonElement>('.gv-folder-dialog-item')];
     expect(items.map((item) => item.dataset.folderPath)).toEqual([
@@ -76,6 +57,7 @@ describe('move to folder dialog', () => {
       'software',
       'software / misc',
     ]);
+    expect(items.map((item) => item.style.paddingLeft)).toEqual(['12px', '12px', '28px']);
     expect(
       items.map((item) => item.querySelector('.gv-folder-dialog-item-path')?.textContent),
     ).toEqual(['/misc', '/software', '/software/misc']);
@@ -94,7 +76,7 @@ describe('move to folder dialog', () => {
       'timelinePreviewNoResults',
     );
 
-    search!.value = 'software/misc';
+    search!.value = ' SOFTWARE / misc ';
     search!.dispatchEvent(new InputEvent('input', { bubbles: true }));
 
     const matchingItems = [
@@ -105,14 +87,7 @@ describe('move to folder dialog', () => {
 
     matchingItems[0].click();
 
-    expect(addSpy).toHaveBeenCalledWith(
-      'software-misc',
-      'conv-a',
-      'Conversation A',
-      '/app/conv-a',
-      undefined,
-      undefined,
-    );
+    expect(onSelect).toHaveBeenCalledExactlyOnceWith('software-misc');
     expect(document.querySelector('.gv-folder-dialog-overlay')).toBeNull();
   });
 });

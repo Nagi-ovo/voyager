@@ -1,12 +1,10 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  FolderManager,
-  calculateFolderConversationPaddingLeft,
-  calculateFolderDialogPaddingLeft,
-  calculateFolderHeaderPaddingLeft,
-  clampFolderTreeIndent,
-} from '../manager';
+import { StorageKeys } from '@/core/types/common';
+
+import { createFolderViewHarness, resetFolderViewBrowserMocks } from './folderViewHarness';
+
+vi.mock('webextension-polyfill', () => ({ default: chrome }));
 
 vi.mock('@/utils/i18n', () => ({
   getTranslationSync: (key: string) => key,
@@ -15,55 +13,62 @@ vi.mock('@/utils/i18n', () => ({
 }));
 
 describe('folder tree indentation', () => {
-  let manager: FolderManager | null = null;
+  let harness: Awaited<ReturnType<typeof createFolderViewHarness>>;
+
+  beforeEach(async () => {
+    vi.useFakeTimers();
+    resetFolderViewBrowserMocks();
+    harness = await createFolderViewHarness({
+      folders: ['root', 'child', 'legacy-deep'].map((id, index, ids) => ({
+        id,
+        name: id,
+        parentId: index ? ids[index - 1] : null,
+        isExpanded: true,
+        createdAt: 1,
+        updatedAt: 1,
+      })),
+      folderContents: {
+        child: [{ conversationId: 'a', title: 'A', url: '/app/a', addedAt: 1 }],
+        'legacy-deep': [{ conversationId: 'b', title: 'B', url: '/app/b', addedAt: 1 }],
+      },
+    });
+  });
 
   afterEach(() => {
-    manager?.destroy();
-    manager = null;
+    harness?.destroy();
     document.body.innerHTML = '';
+    localStorage.clear();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
-  it('clamps configured indent into [-8, 32] and defaults to -8 for invalid values', () => {
-    expect(clampFolderTreeIndent(-40)).toBe(-8);
-    expect(clampFolderTreeIndent(64)).toBe(32);
-    expect(clampFolderTreeIndent(0)).toBe(0);
-    expect(clampFolderTreeIndent(16)).toBe(16);
-    expect(clampFolderTreeIndent('invalid')).toBe(-8);
-  });
+  it.each([
+    [-40, '0px', '8px', '0px'],
+    [64, '72px', '88px', '120px'],
+    [0, '8px', '24px', '24px'],
+    [16, '40px', '56px', '72px'],
+    ['invalid', '0px', '8px', '0px'],
+  ])('renders safe nested padding when indent is %s', (setting, header, child, deep) => {
+    const originalData = structuredClone(harness.store.data);
+    const originalList = harness.runtime.panel!.querySelector('.gv-folder-list');
 
-  it('calculates folder and conversation paddings from indent and level', () => {
-    expect(calculateFolderHeaderPaddingLeft(2, 16)).toBe(40); // 2 * 16 + 8
-    expect(calculateFolderConversationPaddingLeft(2, 16)).toBe(56); // 2 * 16 + 24
-    expect(calculateFolderHeaderPaddingLeft(2, -16)).toBe(0);
-    expect(calculateFolderConversationPaddingLeft(3, -16)).toBe(0);
-  });
+    harness.treeView.applySettings(
+      { [StorageKeys.GV_FOLDER_TREE_INDENT]: { newValue: setting } },
+      'sync',
+    );
 
-  it('dialog padding always indents subfolders further than parents', () => {
-    // Dialog is a flat list — uses a fixed positive per-level indent (16px),
-    // independent of the sidebar's folderTreeIndent setting (which can be
-    // negative to compact the nested tree view).
-    expect(calculateFolderDialogPaddingLeft(0)).toBe(12); // 0 * 16 + 12
-    expect(calculateFolderDialogPaddingLeft(1)).toBe(28); // 1 * 16 + 12
-    expect(calculateFolderDialogPaddingLeft(2)).toBe(44); // 2 * 16 + 12
-  });
-
-  it('updates indent and refreshes render when setting changes', () => {
-    manager = new FolderManager();
-    const typedManager = manager as unknown as {
-      folderEnabled: boolean;
-      containerElement: HTMLElement | null;
-      folderTreeIndent: number;
-      renderAllFolders: () => void;
-      applyFolderTreeIndentSetting: (value: unknown) => void;
-    };
-
-    typedManager.folderEnabled = true;
-    typedManager.containerElement = document.createElement('div');
-    typedManager.folderTreeIndent = 16;
-    const renderSpy = vi.spyOn(typedManager, 'renderAllFolders').mockImplementation(() => {});
-
-    typedManager.applyFolderTreeIndentSetting(28);
-    expect(typedManager.folderTreeIndent).toBe(28);
-    expect(renderSpy).toHaveBeenCalledTimes(1);
+    const panel = harness.runtime.panel!;
+    expect(
+      panel.querySelector<HTMLElement>('[data-folder-id="legacy-deep"] > .gv-folder-item-header')!
+        .style.paddingLeft,
+    ).toBe(header);
+    expect(panel.querySelector<HTMLElement>('[data-conversation-id="a"]')!.style.paddingLeft).toBe(
+      child,
+    );
+    expect(panel.querySelector<HTMLElement>('[data-conversation-id="b"]')!.style.paddingLeft).toBe(
+      deep,
+    );
+    expect(harness.store.data).toEqual(originalData);
+    if (typeof setting === 'number' && setting >= 0) expect(originalList!.isConnected).toBe(false);
   });
 });

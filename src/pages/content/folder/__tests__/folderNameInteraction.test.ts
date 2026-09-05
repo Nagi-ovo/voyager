@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { FolderManager } from '../manager';
-import type { Folder } from '../types';
+import { createFolderViewHarness, resetFolderViewBrowserMocks } from './folderViewHarness';
+
+vi.mock('webextension-polyfill', () => ({ default: chrome }));
 
 vi.mock('@/utils/i18n', () => ({
   getTranslationSync: (key: string) => key,
@@ -9,79 +10,71 @@ vi.mock('@/utils/i18n', () => ({
   initI18n: () => Promise.resolve(),
 }));
 
-type TestableManager = {
-  createFolderElement: (folder: Folder, level?: number) => HTMLElement;
-  toggleFolder: (folderId: string) => void;
-  renameFolder: (folderId: string) => void;
-};
-
-function createFolder(): Folder {
-  const now = Date.now();
-  return {
-    id: 'folder-1',
-    name: 'Folder 1',
-    parentId: null,
-    isExpanded: false,
-    createdAt: now,
-    updatedAt: now,
-  };
-}
-
 describe('folder name click/double-click interaction', () => {
-  let manager: FolderManager | null = null;
+  let harness: Awaited<ReturnType<typeof createFolderViewHarness>>;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.useFakeTimers();
+    vi.clearAllMocks();
+    resetFolderViewBrowserMocks();
+    harness = await createFolderViewHarness({
+      folders: [
+        {
+          id: 'folder-1',
+          name: 'Folder 1',
+          parentId: null,
+          isExpanded: false,
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+      folderContents: {},
+    });
   });
 
   afterEach(() => {
-    manager?.destroy();
-    manager = null;
+    harness?.destroy();
     document.body.innerHTML = '';
-    vi.runOnlyPendingTimers();
+    localStorage.clear();
     vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   it('toggles folder on single click after delay', () => {
-    manager = new FolderManager();
-    const typedManager = manager as unknown as TestableManager;
-    const toggleSpy = vi.spyOn(typedManager, 'toggleFolder').mockImplementation(() => {});
-    const renameSpy = vi.spyOn(typedManager, 'renameFolder').mockImplementation(() => {});
-
-    const folderEl = typedManager.createFolderElement(createFolder());
-    document.body.appendChild(folderEl);
-
-    const folderName = folderEl.querySelector('.gv-folder-name') as HTMLElement | null;
-    expect(folderName).not.toBeNull();
-    folderName?.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
+    const folderName = harness.runtime.panel!.querySelector<HTMLElement>('.gv-folder-name')!;
+    folderName.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
 
     vi.advanceTimersByTime(219);
-    expect(toggleSpy).not.toHaveBeenCalled();
+    expect(harness.store.data.folders[0].isExpanded).toBe(false);
+    expect(harness.onRefresh).not.toHaveBeenCalled();
 
     vi.advanceTimersByTime(1);
-    expect(toggleSpy).toHaveBeenCalledTimes(1);
-    expect(toggleSpy).toHaveBeenCalledWith('folder-1');
-    expect(renameSpy).not.toHaveBeenCalled();
+    expect(harness.store.data.folders[0].isExpanded).toBe(true);
+    expect(harness.onRefresh).toHaveBeenCalledTimes(1);
+    expect(harness.runtime.panel!.querySelector('.gv-folder-content')).not.toBeNull();
+    expect(document.querySelector('.gv-folder-rename-inline')).toBeNull();
   });
 
-  it('renames folder on double click without toggle flicker', () => {
-    manager = new FolderManager();
-    const typedManager = manager as unknown as TestableManager;
-    const toggleSpy = vi.spyOn(typedManager, 'toggleFolder').mockImplementation(() => {});
-    const renameSpy = vi.spyOn(typedManager, 'renameFolder').mockImplementation(() => {});
+  it('renames folder on double click without toggle flicker', async () => {
+    const folderName = harness.runtime.panel!.querySelector<HTMLElement>('.gv-folder-name')!;
+    folderName.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
+    folderName.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 2 }));
+    folderName.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, detail: 2 }));
 
-    const folderEl = typedManager.createFolderElement(createFolder());
-    document.body.appendChild(folderEl);
+    vi.advanceTimersByTime(220);
+    expect(harness.store.data.folders[0].isExpanded).toBe(false);
+    expect(harness.onRefresh).not.toHaveBeenCalled();
+    const input = document.querySelector<HTMLInputElement>('.gv-folder-rename-input')!;
+    expect(input.value).toBe('Folder 1');
+    expect(document.activeElement).toBe(input);
+    input.value = '  Renamed  ';
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await vi.advanceTimersByTimeAsync(0);
 
-    const folderName = folderEl.querySelector('.gv-folder-name') as HTMLElement | null;
-    expect(folderName).not.toBeNull();
-    folderName?.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
-    folderName?.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 2 }));
-    folderName?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, detail: 2 }));
-
-    vi.runAllTimers();
-    expect(toggleSpy).not.toHaveBeenCalled();
-    expect(renameSpy).toHaveBeenCalledTimes(1);
-    expect(renameSpy).toHaveBeenCalledWith('folder-1');
+    expect(harness.store.data.folders[0]).toMatchObject({ name: 'Renamed', isExpanded: false });
+    expect(harness.saved.folders[0].name).toBe('Renamed');
+    expect(harness.adapter.saveData).toHaveBeenCalledTimes(1);
+    expect(document.querySelector('.gv-folder-rename-inline')).toBeNull();
+    expect(harness.runtime.panel!.querySelector('.gv-folder-name')?.textContent).toBe('Renamed');
   });
 });

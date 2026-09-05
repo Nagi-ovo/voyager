@@ -117,6 +117,18 @@ drop, or hover layout.
   `does not leave a FAB or immediately reopen after closing an automatic fallback`, and
   `clears every floating fallback entry point when the sidebar recovers`).
 
+## A pending floating mount must preserve the latest requested mode
+
+- **Trap:** Stopping and restarting the folder runtime during an asynchronous floating mount could
+  reuse the old mount promise and silently discard the new request. A request for the panel could
+  finish as a FAB, or a stopped instance could remove its replacement.
+- **Rule:** Track the requested panel/FAB intent along with the in-flight mount. Coalesce identical
+  requests within one lifetime; after stop or an intent change, wait for the old mount to settle and
+  clean it up before mounting the current request. The mount promise must include asynchronous FAB
+  setup, so cleanup cannot race a detached continuation.
+- **Guard:** `src/pages/content/folder/FolderSidebarRuntime.test.ts` covers stop/restart while a
+  floating mount is pending with panel-to-panel, panel-to-FAB and FAB-to-panel requests.
+
 ## Folder conversation navigation must not hard-refresh Gemini
 
 - **Trap:** Clicking a folder conversation sometimes forced a full Gemini page refresh instead of

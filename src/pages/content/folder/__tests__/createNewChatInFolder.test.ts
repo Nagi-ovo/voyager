@@ -2,7 +2,7 @@ import { type MockInstance, afterEach, beforeEach, describe, expect, it, vi } fr
 
 import { StorageKeys } from '@/core/types/common';
 
-import { FolderManager } from '../manager';
+import { FolderNavigation } from '../FolderNavigation';
 
 const { mockBrowserStorage } = vi.hoisted(() => ({
   mockBrowserStorage: {
@@ -27,10 +27,6 @@ vi.mock('@/utils/i18n', () => ({
   initI18n: () => Promise.resolve(),
 }));
 
-type TestableManager = {
-  createNewChatInFolder: (folderId: string) => void;
-};
-
 interface LocationMock {
   pathname: string;
   origin: string;
@@ -39,12 +35,24 @@ interface LocationMock {
 }
 
 describe('createNewChatInFolder', () => {
-  let manager: FolderManager | null = null;
+  let navigation: FolderNavigation;
   let locationMock: LocationMock;
   let originalLocation: Location;
   let pushStateSpy: MockInstance<typeof window.history.pushState>;
 
   beforeEach(() => {
+    navigation = new FolderNavigation({
+      getContext: () => ({
+        container: null,
+        sidebar: null,
+        isDestroyed: false,
+        accountIsolationEnabled: false,
+      }),
+      onRouteChange: vi.fn(),
+      onOpened: vi.fn(),
+      onTitleChange: vi.fn(),
+      onGemDetected: vi.fn(),
+    });
     originalLocation = window.location;
     locationMock = {
       pathname: '/app',
@@ -70,16 +78,12 @@ describe('createNewChatInFolder', () => {
       writable: true,
       configurable: true,
     });
-    manager?.destroy();
-    manager = null;
+    navigation.destroy();
     vi.restoreAllMocks();
   });
 
   it('writes the pending folder ID to storage.local', async () => {
-    manager = new FolderManager();
-    const typedManager = manager as unknown as TestableManager;
-
-    typedManager.createNewChatInFolder('folder-1');
+    navigation.createNewChatInFolder('folder-1');
     await Promise.resolve();
     await Promise.resolve();
 
@@ -90,10 +94,8 @@ describe('createNewChatInFolder', () => {
 
   it('reloads when already on /app', async () => {
     locationMock.pathname = '/app';
-    manager = new FolderManager();
-    const typedManager = manager as unknown as TestableManager;
 
-    typedManager.createNewChatInFolder('folder-1');
+    navigation.createNewChatInFolder('folder-1');
     await Promise.resolve();
     await Promise.resolve();
 
@@ -103,10 +105,8 @@ describe('createNewChatInFolder', () => {
 
   it('navigates to /app via SPA route (no full page load) from a conversation page', async () => {
     locationMock.pathname = '/app/abc123def456';
-    manager = new FolderManager();
-    const typedManager = manager as unknown as TestableManager;
 
-    typedManager.createNewChatInFolder('folder-1');
+    navigation.createNewChatInFolder('folder-1');
     await Promise.resolve();
     await Promise.resolve();
 
@@ -117,10 +117,8 @@ describe('createNewChatInFolder', () => {
 
   it('preserves the multi-account user prefix (/u/N/app)', async () => {
     locationMock.pathname = '/u/2/c/abc';
-    manager = new FolderManager();
-    const typedManager = manager as unknown as TestableManager;
 
-    typedManager.createNewChatInFolder('folder-1');
+    navigation.createNewChatInFolder('folder-1');
     await Promise.resolve();
     await Promise.resolve();
 
@@ -133,10 +131,8 @@ describe('createNewChatInFolder', () => {
     pushStateSpy.mockImplementation(() => {
       throw new Error('pushState blocked');
     });
-    manager = new FolderManager();
-    const typedManager = manager as unknown as TestableManager;
 
-    typedManager.createNewChatInFolder('folder-1');
+    navigation.createNewChatInFolder('folder-1');
     await Promise.resolve();
     await Promise.resolve();
 
@@ -149,10 +145,7 @@ describe('createNewChatInFolder', () => {
     locationMock.pathname = '/app/abc';
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-    manager = new FolderManager();
-    const typedManager = manager as unknown as TestableManager;
-
-    typedManager.createNewChatInFolder('folder-1');
+    navigation.createNewChatInFolder('folder-1');
     await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
@@ -166,10 +159,7 @@ describe('createNewChatInFolder', () => {
     mockBrowserStorage.local.set.mockRejectedValue(new Error('Extension context invalidated.'));
     locationMock.pathname = '/app/abc';
 
-    manager = new FolderManager();
-    const typedManager = manager as unknown as TestableManager;
-
-    typedManager.createNewChatInFolder('folder-1');
+    navigation.createNewChatInFolder('folder-1');
     await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();

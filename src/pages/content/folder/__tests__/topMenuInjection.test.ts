@@ -1,9 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { accountIsolationService } from '@/core/services/AccountIsolationService';
 import type { FolderData } from '@/core/types/folder';
 
+import type { FolderSidebarRuntime } from '../FolderSidebarRuntime';
+import type { FolderStore } from '../FolderStore';
 import { FolderManager } from '../manager';
 import { extractConversationInfoFromPage } from '../nativeSidebarDom';
+import * as storageAdapters from '../storage/FolderStorageAdapter';
+import { mountSidebar, setLayout } from './sidebarRuntimeHarness';
 
 vi.mock('@/utils/i18n', () => ({
   getTranslationSync: (key: string) => key,
@@ -100,48 +105,56 @@ describe('extractConversationInfoFromPage', () => {
   });
 });
 
-type TestableManager = {
-  data: FolderData;
-  sidebarContainer: HTMLElement | null;
-  accountIsolationEnabled: boolean;
-  ensureDomRecoveryWatchers: () => void;
-  waitForSidebar: () => Promise<boolean>;
-  initializeFolderUI: () => Promise<void>;
-  saveData: () => Promise<boolean>;
-  refresh: () => void;
+type ManagerOwners = {
+  store: FolderStore;
+  sidebarRuntime: FolderSidebarRuntime;
 };
 
 describe('native move menu → folder command', () => {
   let manager: FolderManager;
-  let typed: TestableManager;
+  let owners: ManagerOwners;
+  let writes: FolderData[];
   let sidebar: HTMLElement;
 
   beforeEach(async () => {
     vi.useFakeTimers();
+    window.history.replaceState({}, '', '/u/1/app/aaaaaaaaaaaaaaaa');
+    vi.spyOn(accountIsolationService, 'resolveAccountScope').mockResolvedValue({
+      accountKey: 'account-1',
+      accountId: 1,
+      routeUserId: '1',
+      emailHash: null,
+    });
+    writes = [];
+    vi.spyOn(storageAdapters, 'createFolderStorageAdapter').mockReturnValue({
+      init: async () => {},
+      loadData: async () => ({ folders: [], folderContents: {} }),
+      saveData: async (_key, data) => {
+        writes.push(structuredClone(data));
+        return true;
+      },
+      removeData: async () => {},
+      getBackendName: () => 'test-memory',
+    });
     manager = new FolderManager();
-    typed = manager as unknown as TestableManager;
-    typed.accountIsolationEnabled = true;
-    typed.data = {
+    owners = manager as unknown as ManagerOwners;
+    await owners.store.setAccountIsolationEnabled(true);
+    owners.store.data = {
       folders: [
         { id: 'f1', name: 'Target', parentId: null, isExpanded: true, createdAt: 1, updatedAt: 1 },
       ],
       folderContents: { f1: [] },
     };
-    sidebar = document.createElement('div');
-    sidebar.setAttribute('data-test-id', 'overflow-container');
-    document.body.appendChild(sidebar);
-    typed.sidebarContainer = sidebar;
-    vi.spyOn(typed, 'ensureDomRecoveryWatchers').mockImplementation(() => {});
-    vi.spyOn(typed, 'waitForSidebar').mockResolvedValue(false);
-    vi.spyOn(typed, 'saveData').mockResolvedValue(true);
-    vi.spyOn(typed, 'refresh').mockImplementation(() => {});
-    await typed.initializeFolderUI();
+    sidebar = mountSidebar().sidebar;
+    await owners.sidebarRuntime.start('sidebar');
+    setLayout(owners.sidebarRuntime.panel!, 280, 200);
     window.history.replaceState({}, '', '/u/1/app/aaaaaaaaaaaaaaaa');
     pageTitle('Current page title');
   });
 
   afterEach(() => {
     manager.destroy();
+    localStorage.clear();
     vi.useRealTimers();
   });
 
@@ -207,14 +220,15 @@ describe('native move menu → folder command', () => {
     menu.querySelector<HTMLElement>('.gv-move-to-folder-btn')!.click();
     selectFolder();
 
-    expect(typed.data.folderContents.f1).toEqual([
+    expect(owners.store.data.folderContents.f1).toEqual([
       expect.objectContaining({
         conversationId: 'bbbbbbbbbbbbbbbb',
         title: 'Sidebar conversation',
         url: 'https://gemini.google.com/u/1/app/bbbbbbbbbbbbbbbb',
       }),
     ]);
-    expect(typed.saveData).toHaveBeenCalledTimes(1);
+    expect(writes).toHaveLength(1);
+    expect(writes[0].folderContents.f1).toEqual(owners.store.data.folderContents.f1);
   });
 
   it('moves the sidebar conversation with its current native title and scoped URL', async () => {
@@ -230,15 +244,18 @@ describe('native move menu → folder command', () => {
     move.click();
     selectFolder();
 
-    expect(typed.data.folderContents.f1).toEqual([
+    expect(owners.store.data.folderContents.f1).toEqual([
       expect.objectContaining({
         conversationId: 'bbbbbbbbbbbbbbbb',
         title: 'Renamed sidebar title',
         url: 'https://gemini.google.com/u/1/app/bbbbbbbbbbbbbbbb',
       }),
     ]);
-    expect(typed.saveData).toHaveBeenCalledTimes(1);
-    expect(typed.refresh).toHaveBeenCalledTimes(1);
+    expect(writes).toHaveLength(1);
+    expect(writes[0].folderContents.f1).toEqual(owners.store.data.folderContents.f1);
+    expect(owners.sidebarRuntime.panel?.querySelector('.gv-conversation-title')?.textContent).toBe(
+      'Renamed sidebar title',
+    );
     expect(document.querySelector('.gv-folder-dialog-overlay')).toBeNull();
   });
 
@@ -248,7 +265,7 @@ describe('native move menu → folder command', () => {
     move.click();
     selectFolder();
 
-    expect(typed.data.folderContents.f1).toEqual([
+    expect(owners.store.data.folderContents.f1).toEqual([
       expect.objectContaining({
         conversationId: 'aaaaaaaaaaaaaaaa',
         title: 'Current page title',
@@ -267,7 +284,7 @@ describe('native move menu → folder command', () => {
     move.click();
 
     expect(document.querySelector('.gv-folder-dialog-overlay')).toBeNull();
-    expect(typed.data.folderContents.f1).toEqual([]);
-    expect(typed.saveData).not.toHaveBeenCalled();
+    expect(owners.store.data.folderContents.f1).toEqual([]);
+    expect(writes).toHaveLength(0);
   });
 });
