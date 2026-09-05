@@ -63,7 +63,8 @@ mirrors, clear markers, or Drive sync.
   backups intact and readable only with isolation off; never adopt them into an isolated account.
   Arm storage-echo suppression only for the session currently observed by the manager.
   Accept user mutations only after the current session is ready; disable the sidebar/floating
-  editing controls during both account resolution and initial loading. Floating mode, including
+  editing controls during both account resolution and initial loading, including global data after
+  disabling isolation and AI Studio's library drop targets. Floating mode, including
   its closed FAB state, must observe account route changes without waiting for a sidebar mount.
   A queued save must await its coalesced snapshot's actual storage result. Import, sync and
   instructions editors report
@@ -78,6 +79,8 @@ mirrors, clear markers, or Drive sync.
   controls and real manager route wiring in sidebar, floating and FAB modes and its teardown.
   `src/pages/content/folder/__tests__/FolderTransferController.test.ts`
   and `src/pages/content/folder/folderDialogs.test.ts` cover save failures and stale completions.
+  `src/pages/content/folder/__tests__/aistudioPersistence.test.ts` covers AI Studio's pending
+  global/scoped loads, coalesced save results, library drops and import/sync completion feedback.
 
 ## Failed folder drafts must not become later ordinary saves
 

@@ -262,6 +262,9 @@ export class AIStudioFolderManager {
     if (this.dataSession) this.dataSession.data = data;
     else this.unresolvedData = data;
   }
+  private get canEdit(): boolean {
+    return this.dataSession?.ready === true;
+  }
   private container: HTMLElement | null = null;
   private historyRoot: HTMLElement | null = null;
   private cleanupFns: Array<() => void> = [];
@@ -937,9 +940,9 @@ export class AIStudioFolderManager {
     }
   }
 
-  private async save(): Promise<void> {
+  private async save(): Promise<boolean> {
     const session = this.dataSession;
-    if (!session || (!session.ready && session.accountScope)) return;
+    if (!session || !this.canEdit) return false;
     try {
       const snapshot = this.cloneFolderData(session.data);
       session.loadVersion += 1;
@@ -947,27 +950,37 @@ export class AIStudioFolderManager {
       session.backup.createEmergencyBackup(snapshot);
       if (session.saveInProgress) {
         session.pendingSave = snapshot;
-        return;
+        if (!session.pendingSaveCompletion) {
+          let resolve!: (saved: boolean) => void;
+          const promise = new Promise<boolean>((complete) => {
+            resolve = complete;
+          });
+          session.pendingSaveCompletion = { promise, resolve };
+        }
+        return session.pendingSaveCompletion.promise;
       }
-      await this.persistDataSession(session, snapshot);
+      return this.persistDataSession(session, snapshot);
     } catch (error) {
       console.error('[AIStudioFolderManager] Save error:', error);
       this.showErrorNotification('Failed to save folder data. Changes may not be persisted.');
+      return false;
     }
   }
 
   private async persistDataSession(
     session: FolderDataSession,
     snapshot: FolderData,
-  ): Promise<void> {
+  ): Promise<boolean> {
     this.dataSessions.set(session.storageKey, session);
     session.saveInProgress = true;
+    let saved = false;
     try {
       // Save to chrome.storage.local using active scoped key.
       await chrome.storage.local.set({ [session.storageKey]: snapshot });
 
       // Create primary backup AFTER successful save
       session.backup.createPrimaryBackup(snapshot);
+      saved = true;
     } catch (error) {
       console.error('[AIStudioFolderManager] Save error:', error);
       // Show error notification to user
@@ -977,9 +990,12 @@ export class AIStudioFolderManager {
     } finally {
       session.saveInProgress = false;
       const pending = session.pendingSave;
+      const completion = session.pendingSaveCompletion;
       session.pendingSave = null;
-      if (pending) void this.persistDataSession(session, pending);
-      else if (this.dataSession !== session) this.dataSessions.delete(session.storageKey);
+      session.pendingSaveCompletion = null;
+      if (pending) {
+        void this.persistDataSession(session, pending).then((saved) => completion?.resolve(saved));
+      } else if (this.dataSession !== session) this.dataSessions.delete(session.storageKey);
     }
     // Folder membership drives which /library rows count as "archived"; re-sync the
     // table and nudge visibility after every mutation, not just on explicit user toggles.
@@ -987,6 +1003,7 @@ export class AIStudioFolderManager {
       this.applyHideArchivedToLibraryTable();
       this.updateHideArchivedNudgeVisibility();
     }
+    return saved;
   }
 
   private injectUI(): void {
@@ -1200,6 +1217,13 @@ export class AIStudioFolderManager {
 
   private render(): void {
     if (!this.container) return;
+    this.container.inert = !this.canEdit;
+    this.container.setAttribute('aria-busy', String(!this.canEdit));
+    this.container
+      .querySelectorAll<HTMLButtonElement>('.gv-folder-header-actions button')
+      .forEach((button) => {
+        button.disabled = !this.canEdit;
+      });
     const list = this.container.querySelector('.gv-folder-list') as HTMLElement | null;
     if (!list) return;
     list.innerHTML = '';
@@ -1357,6 +1381,7 @@ export class AIStudioFolderManager {
     expandBtn.className = 'gv-folder-expand-btn';
     expandBtn.appendChild(this.createIcon(folder.isExpanded ? 'expand_more' : 'chevron_right'));
     expandBtn.addEventListener('click', () => {
+      if (!this.canEdit) return;
       folder.isExpanded = !folder.isExpanded;
       this.save().then(() => this.render());
     });
@@ -1382,6 +1407,7 @@ export class AIStudioFolderManager {
     } catch {}
     pinBtn.appendChild(this.createIcon('push_pin'));
     pinBtn.addEventListener('click', () => {
+      if (!this.canEdit) return;
       folder.pinned = !folder.pinned;
       this.save().then(() => this.render());
     });
@@ -1454,6 +1480,7 @@ export class AIStudioFolderManager {
     starBtn.title = conv.starred ? this.t('conversation_unstar') : this.t('conversation_star');
     starBtn.addEventListener('click', (e) => {
       e.stopPropagation();
+      if (!this.canEdit) return;
       conv.starred = !conv.starred;
       this.save().then(() => this.render());
     });
@@ -1547,6 +1574,7 @@ export class AIStudioFolderManager {
   }
 
   private createFolder(parentId: string | null = null): void {
+    if (!this.canEdit) return;
     const existingInput = this.container?.querySelector<HTMLInputElement>(
       '.gv-folder-inline-input input',
     );
@@ -1569,6 +1597,7 @@ export class AIStudioFolderManager {
     };
 
     const save = async () => {
+      if (!this.canEdit) return;
       const name = input.value.trim();
       if (!name) {
         cancel();
@@ -1621,6 +1650,7 @@ export class AIStudioFolderManager {
   }
 
   private renameFolder(folderId: string): void {
+    if (!this.canEdit) return;
     const activeRenameInput = this.container?.querySelector<HTMLInputElement>(
       '.gv-folder-rename-inline input',
     );
@@ -1658,6 +1688,7 @@ export class AIStudioFolderManager {
     };
 
     const save = async () => {
+      if (!this.canEdit) return;
       const name = input.value.trim();
       if (!name) {
         restore();
@@ -1695,6 +1726,7 @@ export class AIStudioFolderManager {
       this.t('folder_delete_confirm'),
       this.t('folder_remove_conversation_action'),
       () => {
+        if (!this.canEdit) return;
         // Collect all folder IDs to delete (including subfolders)
         const folderIdsToDelete: string[] = [folderId];
         const subfolders = this.data.folders.filter((f) => f.parentId === folderId);
@@ -1714,6 +1746,7 @@ export class AIStudioFolderManager {
   }
 
   private removeConversationFromFolder(folderId: string, conversationId: string): void {
+    if (!this.canEdit) return;
     const arr = this.data.folderContents[folderId] || [];
     this.data.folderContents[folderId] = arr.filter((c) => c.conversationId !== conversationId);
     this.save().then(() => this.render());
@@ -1778,6 +1811,7 @@ export class AIStudioFolderManager {
       e.stopPropagation(); // Prevent bubbling to parent drop zones
       dragEnterCounter = 0; // Reset counter on drop
       el.classList.remove('gv-folder-dragover');
+      if (!this.canEdit) return;
       const data = this.parseDragDataFromEvent(e);
       if (!data || data.type !== 'conversation' || !data.conversationId) return;
       const conv: ConversationReference = {
@@ -1989,7 +2023,7 @@ export class AIStudioFolderManager {
   }
 
   private async syncConversationTitlesFromPromptList(): Promise<void> {
-    if (!this.hasStoredConversations()) return;
+    if (!this.canEdit || !this.hasStoredConversations()) return;
 
     // One full-document scan up front; per-conversation lookups are then O(1) instead
     // of three full-document selector scans for every stored conversation.
@@ -2790,9 +2824,11 @@ export class AIStudioFolderManager {
       `;
       rootItem.innerHTML = `<span class="google-symbols" data-icon="inbox">inbox</span>${this.t('folder_uncategorized') || 'Uncategorized'}`;
 
-      const onDropToRoot = (e: DragEvent) => {
+      const onDropToRoot = async (e: DragEvent) => {
         e.preventDefault();
         e.stopPropagation();
+        if (!this.canEdit) return;
+        const scopeRequest = this.accountScopeRequest;
         rootItem.style.background = 'rgba(138, 180, 248, 0.2)';
         rootItem.style.borderColor = '#8ab4f8';
 
@@ -2821,7 +2857,8 @@ export class AIStudioFolderManager {
           this.data.folderContents[this.UNCATEGORIZED_KEY] = uncatArr;
         }
 
-        this.save();
+        const saved = await this.save();
+        if (!saved || this.accountScopeRequest !== scopeRequest) return;
         this.showNotification(
           this.t('conversation_saved_to_root') || 'Saved to Uncategorized',
           'info',
@@ -2920,9 +2957,11 @@ export class AIStudioFolderManager {
           folderItem.style.background = 'rgba(255, 255, 255, 0.05)';
           folderItem.style.borderColor = 'transparent';
         });
-        folderItem.addEventListener('drop', (e) => {
+        folderItem.addEventListener('drop', async (e) => {
           e.preventDefault();
           e.stopPropagation();
+          if (!this.canEdit) return;
+          const scopeRequest = this.accountScopeRequest;
           folderItem.style.background = 'rgba(255, 255, 255, 0.05)';
           folderItem.style.borderColor = 'transparent';
 
@@ -2952,7 +2991,8 @@ export class AIStudioFolderManager {
             );
           });
 
-          this.save();
+          const saved = await this.save();
+          if (!saved || this.accountScopeRequest !== scopeRequest) return;
           this.showNotification(
             `${this.t('conversation_added_to_folder') || 'Added to'} "${folder.name}"`,
             'info',
@@ -2991,6 +3031,7 @@ export class AIStudioFolderManager {
     };
 
     const showZone = () => {
+      if (!this.canEdit) return;
       zoneVisible = true;
       updateFolderList();
       floatingZone.style.opacity = '1';
@@ -3120,7 +3161,7 @@ export class AIStudioFolderManager {
   private handleImport(): void {
     const session = this.dataSession;
     const scopeRequest = this.accountScopeRequest;
-    if (!session || (!session.ready && session.accountScope)) return;
+    if (!session || !this.canEdit) return;
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'application/json';
@@ -3155,10 +3196,13 @@ export class AIStudioFolderManager {
               this.data.folderContents[f.id] = base;
             }
           }
-          await this.save();
+          const saved = await this.save();
+          if (this.dataSession !== session || this.accountScopeRequest !== scopeRequest) return;
+          if (!saved) return;
           this.render();
           alert(this.t('folder_import_success') || 'Imported');
         } catch {
+          if (this.dataSession !== session || this.accountScopeRequest !== scopeRequest) return;
           alert(this.t('folder_import_error') || 'Import failed');
         }
       },
@@ -3817,7 +3861,7 @@ export class AIStudioFolderManager {
   private async handleCloudUpload(): Promise<void> {
     const session = this.dataSession;
     const scopeRequest = this.accountScopeRequest;
-    if (!session || (!session.ready && session.accountScope)) return;
+    if (!session || !this.canEdit) return;
     const accountScope = this.toSyncAccountScope(session.accountScope);
     try {
       this.showNotification(this.t('uploadInProgress'), 'info');
@@ -3852,6 +3896,7 @@ export class AIStudioFolderManager {
         },
       })) as { ok?: boolean; error?: string } | undefined;
 
+      if (this.dataSession !== session || this.accountScopeRequest !== scopeRequest) return;
       if (response?.ok) {
         this.showNotification(this.t('uploadSuccess'), 'info');
       } else {
@@ -3859,6 +3904,7 @@ export class AIStudioFolderManager {
         this.showNotification(this.t('syncError').replace('{error}', errorMsg), 'error');
       }
     } catch (error) {
+      if (this.dataSession !== session || this.accountScopeRequest !== scopeRequest) return;
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
       console.error('[AIStudioFolderManager] Cloud upload failed:', error);
       this.showNotification(this.t('syncError').replace('{error}', errorMsg), 'error');
@@ -3873,7 +3919,7 @@ export class AIStudioFolderManager {
   private async handleCloudSync(): Promise<void> {
     const session = this.dataSession;
     const scopeRequest = this.accountScopeRequest;
-    if (!session || (!session.ready && session.accountScope)) return;
+    if (!session || !this.canEdit) return;
     const accountScope = this.toSyncAccountScope(session.accountScope);
     try {
       this.showNotification(this.t('downloadInProgress'), 'info');
@@ -3943,21 +3989,20 @@ export class AIStudioFolderManager {
 
       // Apply merged folder data
       this.data = mergedFolders;
-      await this.save();
+      const saved = await this.save();
       if (this.dataSession !== session || this.accountScopeRequest !== scopeRequest) return;
+      if (!saved) return;
 
       // Save merged prompts to storage (shared with Gemini)
-      try {
-        await chrome.storage.local.set({
-          gvPromptItems: mergedPrompts,
-        });
-      } catch (err) {
-        console.error('[AIStudioFolderManager] Failed to save merged prompts:', err);
-      }
+      await chrome.storage.local.set({
+        gvPromptItems: mergedPrompts,
+      });
+      if (this.dataSession !== session || this.accountScopeRequest !== scopeRequest) return;
 
       this.render();
       this.showNotification(this.t('downloadMergeSuccess'), 'info');
     } catch (error) {
+      if (this.dataSession !== session || this.accountScopeRequest !== scopeRequest) return;
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
       console.error('[AIStudioFolderManager] Cloud sync failed:', error);
       this.showNotification(this.t('syncError').replace('{error}', errorMsg), 'error');

@@ -31,6 +31,7 @@ type StoredConversation = {
 };
 
 type ManagerInternals = {
+  dataSession: { ready: boolean };
   data: {
     folders: Array<{
       id: string;
@@ -67,7 +68,7 @@ type ManagerInternals = {
   syncConversationTitlesFromPromptList: () => Promise<void>;
   applyHideArchivedToLibraryTable: () => void;
   mergePromptsData: (local: PromptItem[], cloud: PromptItem[]) => PromptItem[];
-  save: () => Promise<void>;
+  save: () => Promise<boolean>;
   render: () => void;
 };
 
@@ -82,6 +83,8 @@ const managersToDestroy: ManagerInternals[] = [];
 function createManager(): { manager: AIStudioFolderManager; internals: ManagerInternals } {
   const manager = new AIStudioFolderManager();
   const internals = manager as unknown as ManagerInternals;
+  // These unit cases start after the initial folder load.
+  internals.dataSession.ready = true;
   managersToDestroy.push(internals);
   return { manager, internals };
 }
@@ -234,7 +237,7 @@ describe('H7 — single-scan native title sync', () => {
         folderB: [storedConversation('conv3', 'Old Three')],
       },
     };
-    internals.save = vi.fn().mockResolvedValue(undefined);
+    internals.save = vi.fn().mockResolvedValue(true);
     internals.render = vi.fn();
 
     const qsaSpy = vi.spyOn(document, 'querySelectorAll');
@@ -258,7 +261,7 @@ describe('H7 — single-scan native title sync', () => {
       folders: [],
       folderContents: { folderA: [storedConversation('dup1', 'Old')] },
     };
-    internals.save = vi.fn().mockResolvedValue(undefined);
+    internals.save = vi.fn().mockResolvedValue(true);
     internals.render = vi.fn();
 
     await internals.syncConversationTitlesFromPromptList();
@@ -272,7 +275,7 @@ describe('H7 — single-scan native title sync', () => {
       folders: [],
       folderContents: { folderA: [storedConversation('ghost1', 'Kept Title')] },
     };
-    internals.save = vi.fn().mockResolvedValue(undefined);
+    internals.save = vi.fn().mockResolvedValue(true);
     internals.render = vi.fn();
 
     await internals.syncConversationTitlesFromPromptList();
@@ -305,7 +308,7 @@ describe('M11 — destroy() lifecycle teardown', () => {
       ],
       folderContents: { f1: [] },
     };
-    internals.save = vi.fn().mockResolvedValue(undefined);
+    internals.save = vi.fn().mockResolvedValue(true);
 
     internals.setupAccountContextPoller();
     internals.installRouteChangeListener();
@@ -403,7 +406,7 @@ describe('L12 — floating drop zone heartbeat and archived-row set', () => {
       ],
       folderContents: { f1: [] },
     };
-    internals.save = vi.fn().mockResolvedValue(undefined);
+    internals.save = vi.fn().mockResolvedValue(true);
 
     const row = createLibraryRow('drag1');
     internals.injectLibraryDropZone();
@@ -441,7 +444,7 @@ describe('L12 — floating drop zone heartbeat and archived-row set', () => {
       ],
       folderContents: { f1: [] },
     };
-    internals.save = vi.fn().mockResolvedValue(undefined);
+    internals.save = vi.fn().mockResolvedValue(true);
 
     const row = createLibraryRow('drag2');
     internals.injectLibraryDropZone();

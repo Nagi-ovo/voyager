@@ -116,11 +116,12 @@ type AIStudioManagerInternals = {
     >;
   };
   historyRoot: HTMLElement | null;
+  dataSession: { ready: boolean };
   observePromptList: () => void;
   observeLibraryTable: () => void;
   bindDraggablesInLibraryTable: () => void;
   syncConversationTitlesFromPromptList: () => Promise<void>;
-  save: () => Promise<void>;
+  save: () => Promise<boolean>;
   render: () => void;
 };
 
@@ -434,6 +435,7 @@ describe('AIStudio conversation title sync', () => {
     createPromptRow('abc123', 'Renamed in AI Studio');
     const manager = new AIStudioFolderManager();
     const internals = manager as unknown as AIStudioManagerInternals;
+    internals.dataSession.ready = true;
 
     internals.data = {
       folders: [],
@@ -449,7 +451,7 @@ describe('AIStudio conversation title sync', () => {
       },
     };
 
-    const saveSpy = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
+    const saveSpy = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
     const renderSpy = vi.fn<() => void>();
     internals.save = saveSpy;
     internals.render = renderSpy;
@@ -465,6 +467,7 @@ describe('AIStudio conversation title sync', () => {
     createPromptRow('abc999', 'Native New Name');
     const manager = new AIStudioFolderManager();
     const internals = manager as unknown as AIStudioManagerInternals;
+    internals.dataSession.ready = true;
 
     internals.data = {
       folders: [],
@@ -481,7 +484,7 @@ describe('AIStudio conversation title sync', () => {
       },
     };
 
-    const saveSpy = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
+    const saveSpy = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
     const renderSpy = vi.fn<() => void>();
     internals.save = saveSpy;
     internals.render = renderSpy;
@@ -498,6 +501,7 @@ describe('AIStudio conversation title sync', () => {
     const { root, anchor } = createPromptRow('debounce1', 'Before Rename');
     const manager = new AIStudioFolderManager();
     const internals = manager as unknown as AIStudioManagerInternals;
+    internals.dataSession.ready = true;
 
     internals.data = {
       folders: [],
@@ -514,7 +518,7 @@ describe('AIStudio conversation title sync', () => {
     };
     internals.historyRoot = root;
 
-    const saveSpy = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
+    const saveSpy = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
     const renderSpy = vi.fn<() => void>();
     internals.save = saveSpy;
     internals.render = renderSpy;
