@@ -721,6 +721,10 @@
     "message": "✗ Ошибка импорта: {error}",
     "description": "Import error message"
   },
+  "folder_save_error": {
+    "message": "Не удалось сохранить изменения в папках. Повторите попытку.",
+    "description": "Shown when folder changes could not be saved"
+  },
   "folder_export_success": {
     "message": "✓ Папки успешно экспортированы",
     "description": "Export success message"

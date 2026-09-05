@@ -718,6 +718,10 @@
     "message": "✗ インポート失敗：{error}",
     "description": "Import error message"
   },
+  "folder_save_error": {
+    "message": "フォルダの変更を保存できませんでした。もう一度お試しください。",
+    "description": "Shown when folder changes could not be saved"
+  },
   "folder_export_success": {
     "message": "✓ フォルダをエクスポートしました",
     "description": "Export success message"

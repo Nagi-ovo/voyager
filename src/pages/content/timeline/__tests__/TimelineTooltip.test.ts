@@ -192,6 +192,21 @@ describe('TimelineTooltip', () => {
     expect(measure.getAttribute('aria-hidden')).toBe('true');
   });
 
+  it('uses the rendered height to keep the tooltip above the bottom edge when measurement is empty', () => {
+    const marker = createDot('bottom', 960, 740);
+    Object.defineProperty(element, 'offsetHeight', { value: 80 });
+    const measure = document.querySelector<HTMLElement>('[style*="-9999px"]')!;
+    expect(measure.offsetHeight).toBe(0);
+
+    tooltip.show(marker);
+    vi.advanceTimersToNextFrame();
+
+    expect(element.textContent).toBe('2026-09-05\n★ A long conversation preview');
+    expect(element.classList.contains('visible')).toBe(true);
+    expect(element.style.top).toBe('680px');
+    expect(element.isConnected).toBe(true);
+  });
+
   it('refreshes current content only for a visible tooltip and a hovered or focused marker', () => {
     dot.focus();
     tooltip.refreshCurrent();

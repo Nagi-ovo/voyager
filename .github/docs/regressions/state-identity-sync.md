@@ -62,11 +62,22 @@ mirrors, clear markers, or Drive sync.
   the next account. Resolution failure must not fall back to global storage. Keep ownerless legacy
   backups intact and readable only with isolation off; never adopt them into an isolated account.
   Arm storage-echo suppression only for the session currently observed by the manager.
+  Accept user mutations only after the current session is ready; disable the sidebar/floating
+  editing controls during both account resolution and initial loading. Floating mode, including
+  its closed FAB state, must observe account route changes without waiting for a sidebar mount.
+  A queued save must await its coalesced snapshot's actual storage result. Import, sync and
+  instructions editors report
+  success only after persistence succeeds; failed saves retain editable input for retry.
 - **Guard:** `src/pages/content/folder/__tests__/accountScopedBackup.test.ts` covers same-account
   recovery, legacy compatibility, new/empty accounts, same-instance switching, unload ownership,
   deferred loads/writes, account revisits and failed resolution. `src/pages/content/folder/FolderStore.test.ts`
   preserves the per-write echo and trailing-save behavior; `src/pages/content/folder/floatingPanel.test.ts`
   guards reset during inline editing.
+  `src/pages/content/folder/FolderStorePersistence.test.ts` covers pending resolution/load and queued
+  save results. `src/pages/content/folder/__tests__/folderAccountRouting.test.ts` covers disabled
+  controls and real manager route wiring in sidebar, floating and FAB modes and its teardown.
+  `src/pages/content/folder/__tests__/FolderTransferController.test.ts`
+  and `src/pages/content/folder/folderDialogs.test.ts` cover save failures and stale completions.
 
 ## Highlight cleanup must preserve account clear markers
 

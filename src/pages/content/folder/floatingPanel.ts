@@ -18,6 +18,7 @@ export type FloatingPanelSize = { w: number; h: number };
 
 export type MountArgs = {
   data: FolderData;
+  dataReady?: boolean;
   conversationSortMode?: ConversationSortMode;
   storedPos?: FloatingPanelPos | null;
   storedSize?: FloatingPanelSize | null;
@@ -43,6 +44,7 @@ export type FloatingPanelMountArgs = MountArgs;
 
 export type FloatingPanelHandle = {
   element: HTMLElement;
+  setDataReady: (ready: boolean) => void;
   update: (data: FolderData, conversationSortMode?: ConversationSortMode) => void;
   /** Replaces account data and discards transient edits without changing panel geometry. */
   reset: (data: FolderData, conversationSortMode?: ConversationSortMode) => void;
@@ -819,6 +821,7 @@ function renderContextMenu(container: HTMLElement, context: RenderContext): void
 
 export function mountFloatingPanel({
   data,
+  dataReady = true,
   conversationSortMode = 'manual',
   storedPos,
   storedSize,
@@ -907,6 +910,17 @@ export function mountFloatingPanel({
 
   const body = document.createElement('div');
   body.className = `${FLOATING_PANEL_CLASS}__body`;
+
+  const setDataReady = (ready: boolean): void => {
+    body.inert = !ready;
+    body.setAttribute('aria-busy', String(!ready));
+    headerActions
+      .querySelectorAll<HTMLButtonElement>(`.${FLOATING_PANEL_CLASS}__icon-button`)
+      .forEach((button) => {
+        button.disabled = !ready;
+      });
+  };
+  setDataReady(dataReady);
 
   panel.appendChild(header);
   panel.appendChild(createHintStack());
@@ -1106,6 +1120,7 @@ export function mountFloatingPanel({
 
   return {
     element: panel,
+    setDataReady,
     reset: (next, nextConversationSortMode) => {
       currentData = next;
       if (nextConversationSortMode) currentConversationSortMode = nextConversationSortMode;

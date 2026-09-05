@@ -62,6 +62,8 @@ const FOLDER_NAME_SINGLE_CLICK_DELAY_MS = 220;
 
 const FOLDER_SEARCH_DEBOUNCE_MS = 200;
 
+const MAX_TIMEOUT_MS = 2_147_483_647;
+
 const FOLDER_ONLY_SEARCH_HINT_ID = 'folder-only-search-prefix-hint';
 
 function clampFolderTreeIndent(value: unknown): number {
@@ -161,6 +163,18 @@ export class FolderTreeView {
     this.applyFolderViewModeState();
   }
 
+  updateAvailability(panel = this.options.runtime.panel): void {
+    if (!panel) return;
+    const ready = this.options.store.canEdit;
+    panel.inert = !ready;
+    panel.setAttribute('aria-busy', String(!ready));
+    panel
+      .querySelectorAll<HTMLButtonElement>('.gv-folder-header-actions button')
+      .forEach((button) => {
+        button.disabled = !ready;
+      });
+  }
+
   unmount(): void {
     this.clearPendingFolderNameClick();
     this.clearFolderSearchDebounceTimer();
@@ -225,6 +239,7 @@ export class FolderTreeView {
     // Create folders list
     const foldersList = this.createFoldersList();
     panel.appendChild(foldersList);
+    this.updateAvailability(panel);
     return panel;
   }
 
@@ -535,7 +550,7 @@ export class FolderTreeView {
     }, null);
     if (nextExpiry === null || nextExpiry === undefined) return;
 
-    const delay = Math.max(1, nextExpiry - Date.now() + 1);
+    const delay = Math.min(MAX_TIMEOUT_MS, Math.max(1, nextExpiry - Date.now() + 1));
     this.activityPriorityRefreshTimer = window.setTimeout(() => {
       this.activityPriorityRefreshTimer = null;
       if (this.options.getContext().isDestroyed || this.folderViewMode !== 'activity') return;
@@ -1152,7 +1167,12 @@ export class FolderTreeView {
           : t('folderAsProject_setInstructions'),
         action: () =>
           this.options.dialogs.openInstructions(folder.instructions, async (instructions) => {
-            await this.options.store.setFolderInstructions(folderId, instructions);
+            const activation = this.options.store.activation;
+            const saved = await this.options.store.setFolderInstructions(folderId, instructions);
+            if (!saved && activation === this.options.store.activation) {
+              this.options.feedback.showNotification(t('folder_save_error'), 'error');
+            }
+            return saved;
           }),
       });
     }

@@ -27,7 +27,7 @@ export type FolderDialogs = {
   openMove: (folders: readonly Folder[], onSelect: (folderId: string) => void) => void;
   openInstructions: (
     instructions: string | undefined,
-    onSave: (instructions: string | undefined) => Promise<void>,
+    onSave: (instructions: string | undefined) => Promise<boolean>,
   ) => void;
   confirmFolderRemoval: (folderElement: Element | null, onConfirm: () => void) => void;
   confirmConversationRemoval: (title: string, anchor: HTMLElement, onConfirm: () => void) => void;
@@ -432,8 +432,10 @@ export function createFolderDialogs(): FolderDialogs {
       save.addEventListener(
         'click',
         async () => {
-          await onSave(input.value.trim() || undefined);
-          view.close();
+          save.disabled = true;
+          const saved = await onSave(input.value.trim() || undefined);
+          if (saved) view.close();
+          else save.disabled = false;
         },
         { signal: view.signal },
       );

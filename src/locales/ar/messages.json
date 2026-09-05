@@ -715,6 +715,10 @@
     "message": "✗ فشل الاستيراد: {error}",
     "description": "Import error message"
   },
+  "folder_save_error": {
+    "message": "تعذّر حفظ تغييرات المجلدات. يُرجى المحاولة مرة أخرى.",
+    "description": "Shown when folder changes could not be saved"
+  },
   "folder_export_success": {
     "message": "✓ تم تصدير المجلدات بنجاح",
     "description": "Export success message"

@@ -92,6 +92,40 @@ describe('FolderSidebarRuntime lifecycle', () => {
     expect(harness.floating.close).not.toHaveBeenCalled();
   });
 
+  it('closes a settled fallback panel before starting floating mode with only the FAB', async () => {
+    const { recentsSection } = mountSidebar();
+    recentsSection.remove();
+    const panel = document.createElement('div');
+    const fab = document.createElement('button');
+    harness.floating.isOpen = () => panel.isConnected;
+    harness.floating.open.mockImplementation(async (openPanel) => {
+      if (openPanel) {
+        fab.remove();
+        document.body.appendChild(panel);
+      } else {
+        // The production FAB entry point does not close an already open panel.
+        document.body.appendChild(fab);
+      }
+    });
+    harness.floating.close.mockImplementation(() => {
+      panel.remove();
+      fab.remove();
+    });
+
+    await harness.runtime.start('sidebar');
+    await vi.advanceTimersByTimeAsync(8000);
+    expect(harness.runtime.isFallbackActive).toBe(true);
+    expect(panel.isConnected).toBe(true);
+    expect(fab.isConnected).toBe(false);
+
+    await harness.runtime.start('floating', false);
+
+    expect(panel.isConnected).toBe(false);
+    expect(fab.isConnected).toBe(true);
+    expect(harness.runtime.isFloatingMode).toBe(true);
+    expect(harness.runtime.isFallbackActive).toBe(false);
+  });
+
   it.each([
     [false, true],
     [true, false],

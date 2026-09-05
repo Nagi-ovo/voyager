@@ -157,6 +157,72 @@ describe('folder transfer commands', () => {
     expect(h.session.data.folderContents.coding).toHaveLength(1);
   });
 
+  it('keeps the import draft until persistence succeeds and allows retry after failure', async () => {
+    const h = harness();
+    const pending = deferred<boolean>();
+    h.applyData.mockReturnValueOnce(pending.promise);
+    h.transfer.showImportDialog();
+    const input = document.querySelector<HTMLTextAreaElement>('.gv-folder-import-paste-area')!;
+    const text = JSON.stringify(FolderImportExportService.exportToPayload(importedData()));
+    input.value = text;
+    const save = document.querySelector<HTMLButtonElement>('.gv-folder-dialog-btn-primary')!;
+    save.click();
+    save.click();
+    await vi.waitFor(() => expect(h.applyData).toHaveBeenCalledOnce());
+    expect(save.disabled).toBe(true);
+    expect(h.notify).not.toHaveBeenCalled();
+    expect(h.refresh).not.toHaveBeenCalled();
+    pending.resolve(false);
+    await vi.waitFor(() => expect(save.disabled).toBe(false));
+    expect(input.isConnected).toBe(true);
+    expect(input.value).toBe(text);
+    expect(h.notify).toHaveBeenLastCalledWith('folder_save_error', 'error');
+    save.click();
+    await vi.waitFor(() => expect(input.isConnected).toBe(false));
+    expect(h.applyData).toHaveBeenCalledTimes(2);
+    expect(h.notify).toHaveBeenLastCalledWith('folder_import_success', 'success');
+  });
+
+  it('does not report an old import save or close the next account dialog', async () => {
+    const h = harness();
+    const pending = deferred<boolean>();
+    h.applyData.mockReturnValueOnce(pending.promise);
+    h.transfer.showImportDialog();
+    document.querySelector<HTMLTextAreaElement>('.gv-folder-import-paste-area')!.value =
+      JSON.stringify(FolderImportExportService.exportToPayload(importedData()));
+    document.querySelector<HTMLButtonElement>('.gv-folder-dialog-btn-primary')!.click();
+    await vi.waitFor(() => expect(h.applyData).toHaveBeenCalledOnce());
+    h.leaveAndReturn();
+    h.transfer.closeImportDialog();
+    h.transfer.showImportDialog();
+    const next = document.querySelector('.gv-folder-dialog-overlay')!;
+    pending.resolve(true);
+    await pending.promise;
+    await Promise.resolve();
+    expect(next.isConnected).toBe(true);
+    expect(h.refresh).not.toHaveBeenCalled();
+    expect(h.notify).not.toHaveBeenCalled();
+  });
+
+  it.each(['folders', 'other data'] as const)(
+    'does not report a cloud merge when saving %s fails',
+    async (part) => {
+      const h = harness();
+      sendMessage.mockResolvedValue({ ok: true, data: { folders: { data: importedData() } } });
+      if (part === 'folders') h.applyData.mockResolvedValue(false);
+      else vi.mocked(chrome.storage.local.set).mockRejectedValueOnce(new Error('Quota exceeded'));
+
+      await h.transfer.sync();
+
+      expect(h.notify).toHaveBeenLastCalledWith(
+        part === 'folders' ? 'folder_save_error' : 'syncError',
+        'error',
+      );
+      expect(h.notify).not.toHaveBeenCalledWith('downloadMergeSuccess', 'success');
+      expect(h.refresh).not.toHaveBeenCalled();
+    },
+  );
+
   it('uploads the captured folder snapshot even when live data changes before prompt loading finishes', async () => {
     const h = harness(importedData());
     const pending = deferred<Record<string, unknown>>();

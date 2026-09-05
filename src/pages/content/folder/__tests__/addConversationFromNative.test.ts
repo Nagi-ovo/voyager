@@ -50,7 +50,7 @@ describe('addConversationToFolderFromNative — sort-order preservation', () => 
   let manager: FolderManager | null = null;
   let saved: FolderData | null = null;
 
-  function makeManager(): FolderStore {
+  async function makeManager(): Promise<FolderStore> {
     saved = null;
     vi.spyOn(storageAdapters, 'createFolderStorageAdapter').mockReturnValue({
       init: async () => {},
@@ -63,7 +63,9 @@ describe('addConversationToFolderFromNative — sort-order preservation', () => 
       getBackendName: () => 'test-memory',
     });
     manager = new FolderManager();
-    return (manager as unknown as ManagerOwners).store;
+    const store = (manager as unknown as ManagerOwners).store;
+    await store.init();
+    return store;
   }
 
   afterEach(() => {
@@ -74,8 +76,8 @@ describe('addConversationToFolderFromNative — sort-order preservation', () => 
     vi.restoreAllMocks();
   });
 
-  it('places newly auto-assigned conversation at the top after data normalization', () => {
-    const store = makeManager();
+  it('places newly auto-assigned conversation at the top after data normalization', async () => {
+    const store = await makeManager();
 
     const folder = createFolder('folder-1', 'Project A', 0);
     store.data = {
@@ -105,8 +107,8 @@ describe('addConversationToFolderFromNative — sort-order preservation', () => 
     ).toBe('auto-assigned');
   });
 
-  it('does not create duplicate sortIndex values when an existing entry lacks sortIndex', () => {
-    const store = makeManager();
+  it('does not create duplicate sortIndex values when an existing entry lacks sortIndex', async () => {
+    const store = await makeManager();
 
     const folder = createFolder('folder-1', 'Project A', 0);
     store.data = {

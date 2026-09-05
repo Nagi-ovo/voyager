@@ -721,6 +721,10 @@
     "message": "✗ Error en la importación: {error}",
     "description": "Import error message"
   },
+  "folder_save_error": {
+    "message": "No se pudieron guardar los cambios en las carpetas. Inténtalo de nuevo.",
+    "description": "Shown when folder changes could not be saved"
+  },
   "folder_export_success": {
     "message": "✓ Carpetas exportadas correctamente",
     "description": "Export success message"

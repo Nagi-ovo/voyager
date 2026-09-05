@@ -34,6 +34,10 @@ interface NativeDeleteScope {
   routeUserId: string | null;
 }
 
+interface NativeDeleteAction extends NativeDeleteScope {
+  signal: AbortSignal;
+}
+
 // Native menu contents render asynchronously after their panel appears.
 const MOVE_MENU_INJECTION_RETRY_LIMIT = 8;
 const MOVE_MENU_INJECTION_RETRY_DELAY_MS = 80;
@@ -96,6 +100,7 @@ export class NativeConversationMenus {
   private removalCheckDelay: number = 300;
 
   private menuTimers = new Set<number>();
+  private activeDeletes = new Set<AbortController>();
 
   constructor(private readonly callbacks: NativeConversationMenuCallbacks) {}
 
@@ -105,8 +110,10 @@ export class NativeConversationMenus {
     this.nativeMenuObserver = null;
   }
 
-  /** Full mounted-runtime teardown; promise-based native action waits still settle normally. */
+  /** Full mounted-runtime teardown also cancels active programmatic deletions. */
   stop(): void {
+    for (const controller of this.activeDeletes) controller.abort();
+    this.activeDeletes.clear();
     this.disconnectPanels();
     this.teardownMoveMenuTriggerListener();
     this.pendingRemovals.forEach((timerId) => clearTimeout(timerId));
@@ -647,8 +654,18 @@ export class NativeConversationMenus {
   /**
    * Trigger native delete for a single conversation by simulating UI interactions
    */
-  async deleteConversation(conversationId: string): Promise<boolean> {
+  async deleteConversation(conversationId: string, signal?: AbortSignal): Promise<boolean> {
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    if (signal?.aborted) controller.abort();
+    else signal?.addEventListener('abort', abort, { once: true });
+    this.activeDeletes.add(controller);
+    const action: NativeDeleteAction = {
+      ...this.captureNativeDeleteScope(),
+      signal: controller.signal,
+    };
     try {
+      if (!this.isNativeDeleteActionCurrent(action)) return false;
       // Step 1: Find the conversation element in the sidebar.
       // The lr26 sidebar virtualizes rows — if the user has scrolled the list
       // since selecting, the target row may be unmounted entirely.
@@ -664,7 +681,8 @@ export class NativeConversationMenus {
         return false;
       }
 
-      const moreButton = await this.findAndClickMoreButton(conversationEl);
+      const moreButton = await this.findAndClickMoreButton(conversationEl, action);
+      if (!this.isNativeDeleteActionCurrent(action)) return false;
       if (!moreButton) {
         console.warn(
           `[FolderManager] Batch delete: actions menu button not found for ${conversationId}`,
@@ -672,9 +690,11 @@ export class NativeConversationMenus {
         return false;
       }
 
-      await this.delay(NATIVE_ACTION_TIMING.MENU_APPEAR_DELAY);
+      await this.delay(NATIVE_ACTION_TIMING.MENU_APPEAR_DELAY, action.signal);
+      if (!this.isNativeDeleteActionCurrent(action)) return false;
 
-      const deleteSuccess = await this.waitForDeleteButtonAndClick();
+      const deleteSuccess = await this.waitForDeleteButtonAndClick(action);
+      if (!this.isNativeDeleteActionCurrent(action)) return false;
       if (!deleteSuccess) {
         console.warn(
           `[FolderManager] Batch delete: Delete menu item not found after ${NATIVE_ACTION_TIMING.MAX_BUTTON_WAIT_TIME}ms for ${conversationId}`,
@@ -683,15 +703,28 @@ export class NativeConversationMenus {
         return false;
       }
 
-      await this.delay(NATIVE_ACTION_TIMING.DIALOG_APPEAR_DELAY);
-      await this.confirmDeleteIfNeeded();
-      await this.delay(NATIVE_ACTION_TIMING.DELETION_COMPLETE_DELAY);
+      await this.delay(NATIVE_ACTION_TIMING.DIALOG_APPEAR_DELAY, action.signal);
+      if (!this.isNativeDeleteActionCurrent(action)) return false;
+      await this.confirmDeleteIfNeeded(action);
+      if (!this.isNativeDeleteActionCurrent(action)) return false;
+      await this.delay(NATIVE_ACTION_TIMING.DELETION_COMPLETE_DELAY, action.signal);
 
-      return true;
+      return this.isNativeDeleteActionCurrent(action);
     } catch (error) {
       console.error(`[FolderManager] Error in triggerNativeDeleteForConversation:`, error);
       return false;
+    } finally {
+      signal?.removeEventListener('abort', abort);
+      this.activeDeletes.delete(controller);
     }
+  }
+
+  private isNativeDeleteActionCurrent(action: NativeDeleteAction): boolean {
+    return (
+      !action.signal.aborted &&
+      !this.callbacks.getContext().isDestroyed &&
+      this.isNativeDeleteScopeCurrent(action)
+    );
   }
 
   /**
@@ -707,7 +740,11 @@ export class NativeConversationMenus {
    * only as an empty stub or be missing entirely. Scroll the host into view
    * before clicking so the trailing actions actually mount.
    */
-  async findAndClickMoreButton(conversationEl: HTMLElement): Promise<HTMLElement | null> {
+  async findAndClickMoreButton(
+    conversationEl: HTMLElement,
+    action?: NativeDeleteAction,
+  ): Promise<HTMLElement | null> {
+    if (action && !this.isNativeDeleteActionCurrent(action)) return null;
     const locate = (): HTMLElement | null => {
       // Primary: button is inside the conversation host (current lr26 layout).
       const inside = conversationEl.querySelector<HTMLElement>(
@@ -746,12 +783,14 @@ export class NativeConversationMenus {
       const step = NATIVE_ACTION_TIMING.BUTTON_CHECK_INTERVAL;
       let waited = 0;
       while (waited < maxWait && !moreButton) {
-        await this.delay(step);
+        await this.delay(step, action?.signal);
+        if (action && !this.isNativeDeleteActionCurrent(action)) return null;
         waited += step;
         moreButton = locate();
       }
     }
 
+    if (action && !this.isNativeDeleteActionCurrent(action)) return null;
     if (moreButton) {
       moreButton.click();
       debug('log', 'Clicked more button');
@@ -816,7 +855,7 @@ export class NativeConversationMenus {
    * Wait for delete button to appear in the menu and click it
    * Uses multiple strategies to find the delete button for resilience to UI changes
    */
-  private async waitForDeleteButtonAndClick(): Promise<boolean> {
+  private async waitForDeleteButtonAndClick(action: NativeDeleteAction): Promise<boolean> {
     const maxWaitTime = NATIVE_ACTION_TIMING.MAX_BUTTON_WAIT_TIME;
     const checkInterval = NATIVE_ACTION_TIMING.BUTTON_CHECK_INTERVAL;
     let elapsed = 0;
@@ -831,6 +870,7 @@ export class NativeConversationMenus {
     let lastMenuItemTexts: string[] = [];
 
     while (elapsed < maxWaitTime) {
+      if (!this.isNativeDeleteActionCurrent(action)) return false;
       // Strategy 1: data-test-id (primary). Use querySelectorAll because some
       // layouts render hidden template copies that querySelector would lock
       // onto, never advancing past an invisible match.
@@ -903,7 +943,7 @@ export class NativeConversationMenus {
       lastOverlayPanes = document.querySelectorAll('.cdk-overlay-pane').length;
       lastMenuPanels = document.querySelectorAll('.mat-mdc-menu-panel').length;
 
-      await this.delay(checkInterval);
+      await this.delay(checkInterval, action.signal);
       elapsed += checkInterval;
     }
 
@@ -926,7 +966,7 @@ export class NativeConversationMenus {
   /**
    * Check for and confirm the delete confirmation dialog if it appears
    */
-  private async confirmDeleteIfNeeded(): Promise<void> {
+  private async confirmDeleteIfNeeded(action: NativeDeleteAction): Promise<void> {
     // Look for confirmation dialog buttons
     // Gemini typically uses a dialog with confirm/cancel buttons
     const maxWaitTime = NATIVE_ACTION_TIMING.MAX_BUTTON_WAIT_TIME;
@@ -936,6 +976,7 @@ export class NativeConversationMenus {
     const keywords = this.getDeleteKeywords();
 
     while (elapsed < maxWaitTime) {
+      if (!this.isNativeDeleteActionCurrent(action)) return;
       // Strategy 1: Look for button with data-test-id containing "confirm" or "delete"
       const confirmByTestId = document.querySelector(
         '[data-test-id*="confirm"], [data-test-id*="delete"]:not([data-test-id="delete-button"])',
@@ -1005,7 +1046,7 @@ export class NativeConversationMenus {
         }
       }
 
-      await this.delay(checkInterval);
+      await this.delay(checkInterval, action.signal);
       elapsed += checkInterval;
     }
 
@@ -1055,7 +1096,16 @@ export class NativeConversationMenus {
   /**
    * Helper function to create a delay
    */
-  private delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+  private delay(ms: number, signal?: AbortSignal): Promise<void> {
+    return new Promise((resolve) => {
+      if (signal?.aborted) return resolve();
+      const finish = () => {
+        window.clearTimeout(timer);
+        signal?.removeEventListener('abort', finish);
+        resolve();
+      };
+      const timer = window.setTimeout(finish, ms);
+      signal?.addEventListener('abort', finish, { once: true });
+    });
   }
 }

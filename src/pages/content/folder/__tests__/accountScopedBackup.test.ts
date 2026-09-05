@@ -559,7 +559,7 @@ describe.each<Platform>(['gemini', 'aistudio'])('%s backup account ownership', (
     const originalSave = harness.save();
     await started.promise;
     harness.data.folders[0].name = 'Older queued a';
-    await harness.save();
+    const olderSave = harness.save();
     await harness.switchTo('b');
     await harness.load();
     harness.data.folders[0].name = 'B can still save';
@@ -572,6 +572,7 @@ describe.each<Platform>(['gemini', 'aistudio'])('%s backup account ownership', (
     const newestSave = harness.save();
     pending.resolve();
     await originalSave;
+    await olderSave;
     await newestSave;
     await Promise.resolve();
     expect((extensionLocal[aKeys.live] as FolderData).folders[0]?.name).toBe(
@@ -604,9 +605,10 @@ describe.each<Platform>(['gemini', 'aistudio'])('%s backup account ownership', (
     await harness.switchTo('a');
     await harness.load();
     harness.data.folders[0].name = 'New edit in a';
-    await harness.save();
+    const queuedSave = harness.save();
     writes.release();
     await originalSave;
+    await queuedSave;
     await Promise.resolve();
     const cloudData: FolderData = {
       folders: [{ ...privateData('a').folders[0], id: 'cloud-only', name: 'Old cloud response' }],
@@ -825,9 +827,10 @@ it('Gemini does not revive an import after returning to its still-saving account
   await harness.switchTo('a');
   await harness.load();
   harness.data.folders[0].name = 'New edit in a';
-  await harness.save();
+  const queuedSave = harness.save();
   writes.release();
   await originalSave;
+  await queuedSave;
   await Promise.resolve();
   pending.resolve(result);
   await imported;
@@ -930,7 +933,7 @@ it('Gemini does not restart adapter migration while the first account mirror is 
   const originalSave = harness.save();
   await started.promise;
   harness.data.folders[0].name = 'Queued latest a';
-  await harness.save();
+  const queuedSave = harness.save();
   await harness.switchTo('b');
   await harness.load();
   const returning = harness.switchTo('a');
@@ -939,6 +942,7 @@ it('Gemini does not restart adapter migration while the first account mirror is 
   });
   firstMirror.resolve();
   await originalSave;
+  await queuedSave;
   await vi.waitFor(() => {
     expect((extensionLocal[aKeys.live] as FolderData).folders[0]?.name).toBe('Queued latest a');
   });

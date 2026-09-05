@@ -712,6 +712,10 @@
     "message": "✗ 导入失败：{error}",
     "description": "导入错误消息"
   },
+  "folder_save_error": {
+    "message": "无法保存文件夹更改，请重试。",
+    "description": "文件夹更改保存失败时显示的提示"
+  },
   "folder_export_success": {
     "message": "✓ 文件夹导出成功",
     "description": "导出成功消息"

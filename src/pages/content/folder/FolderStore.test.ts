@@ -216,11 +216,11 @@ describe('FolderStore ownership', () => {
     );
     const first = store.saveData();
     store.data.folders[0].name = 'Newest queued edit';
-    expect(await store.saveData()).toBe(false);
+    const queued = store.saveData();
     expect(adapter.saveData).toHaveBeenCalledTimes(1);
     finish(true);
     await first;
-    await vi.advanceTimersByTimeAsync(0);
+    expect(await queued).toBe(true);
     expect(adapter.saveData).toHaveBeenCalledTimes(2);
     expect(saved.folders[0].name).toBe('Newest queued edit');
   });

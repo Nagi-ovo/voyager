@@ -92,6 +92,7 @@ describe('FolderManager native sidebar integration', () => {
     });
     manager = new FolderManager();
     owners = manager as unknown as ManagerOwners;
+    await owners.store.init();
     owners.store.data = {
       folders: ['f1', 'f2'].map((id) => ({
         id,

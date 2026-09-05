@@ -62,6 +62,25 @@ drop, or hover layout.
   `preserves folder entries when native deletion is cancelled after sidebar reinitialization`,
   and `clears native deletion on destroy after remount (confirmed: %s)`).
 
+## Batch deletion cancellation must reach native menu waits
+
+- **Trap:** Clearing the batch flag or its outer timers left a pending native-menu promise alive.
+  It could click the next account's Delete control or continue the remaining batch after disable.
+- **Rule:** Bind the batch to its account activation and route; pass cancellation through row,
+  menu, confirmation and inter-item waits. Reset, disable and destroy abort that work immediately.
+  Sidebar-only remounts retain the batch. Cancelled work must not report success or schedule reload.
+- **Guard:** `src/pages/content/folder/FolderNativeBatchDelete.test.ts` covers each wait, remount,
+  account changes and a replacement batch while the old one is unwinding.
+
+## Retained selection must be restored into replacement sidebar UI
+
+- **Trap:** Sidebar recovery kept selected conversation IDs but replaced the toolbar and rows,
+  hiding the active selection mode, count and actions while later clicks still selected items.
+- **Rule:** After mounting the replacement tree, restore selected rows and toolbar state from the
+  selection owner; remove a temporary floating selection host when the sidebar takes over.
+- **Guard:** `src/pages/content/folder/FolderSelection.test.ts` covers native/folder selections
+  through remount and floating-to-sidebar toolbar handover.
+
 ## Native move menus must resolve ownership when clicked
 
 - **Trap:** Gemini can mount a conversation menu before updating the trigger's `aria-expanded`
@@ -155,8 +174,19 @@ drop, or hover layout.
   requests within one lifetime; after stop or an intent change, wait for the old mount to settle and
   clean it up before mounting the current request. The mount promise must include asynchronous FAB
   setup, so cleanup cannot race a detached continuation.
+  Switching a completed automatic fallback to explicit closed floating mode must close the old
+  panel before showing the FAB, even when there is no pending mount promise.
 - **Guard:** `src/pages/content/folder/FolderSidebarRuntime.test.ts` covers stop/restart while a
   floating mount is pending with panel-to-panel, panel-to-FAB and FAB-to-panel requests.
+
+## Imported activity timestamps must stay within browser timer limits
+
+- **Trap:** A valid future `lastTurnAt` more than 24.8 days away overflowed the browser timeout
+  range, refreshing Activity on a 1 ms loop instead of waiting for its Priority expiry.
+- **Rule:** Clamp the scheduled delay to the signed 32-bit timeout limit, then recompute expiry
+  when it fires. Preserve the imported timestamp.
+- **Guard:** `src/pages/content/folder/__tests__/folderActivityView.test.ts` covers future data
+  without a refresh loop and ordinary Priority expiry.
 
 ## Folder conversation navigation must not hard-refresh Gemini
 

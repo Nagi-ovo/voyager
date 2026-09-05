@@ -57,13 +57,13 @@ export class FolderTransferController {
     }
   }
 
-  async import(source: ImportSource, strategy: ImportStrategy): Promise<void> {
+  async import(source: ImportSource, strategy: ImportStrategy): Promise<boolean> {
     const context = this.host.getContext();
     const { session } = context;
-    if (!session || (!session.ready && session.accountScope)) return;
+    if (!session?.ready) return false;
     if (this.importInProgress) {
       this.host.notify(t('folder_import_in_progress') || 'Import already in progress', 'info');
-      return;
+      return false;
     }
 
     this.importInProgress = true;
@@ -73,22 +73,22 @@ export class FolderTransferController {
         parsed = FolderImportExportService.parseJSONText(source.text);
         if (!parsed.success) {
           this.host.notify(t('folder_import_invalid_format'), 'error');
-          return;
+          return false;
         }
         if (strategy === 'overwrite' && !window.confirm(t('folder_import_confirm_overwrite')))
-          return;
+          return false;
       } else {
         if (!source.file) {
           this.host.notify(t('folder_import_select_file'), 'error');
-          return;
+          return false;
         }
         if (strategy === 'overwrite' && !window.confirm(t('folder_import_confirm_overwrite')))
-          return;
+          return false;
         parsed = await FolderImportExportService.readJSONFile(source.file);
-        if (!this.isCurrent(context)) return;
+        if (!this.isCurrent(context)) return false;
         if (!parsed.success) {
           this.host.notify(t('folder_import_invalid_format'), 'error');
-          return;
+          return false;
         }
       }
 
@@ -98,23 +98,28 @@ export class FolderTransferController {
           `${t('folder_import_invalid_format')}: ${validated.error.message}`,
           'error',
         );
-        return;
+        return false;
       }
       const result = await FolderImportExportService.importFromPayload(
         validated.data,
         cloneFolderData(session.data),
         { strategy, createBackup: true },
       );
-      if (!this.isCurrent(context)) return;
+      if (!this.isCurrent(context)) return false;
       if (!result.success) {
         this.host.notify(
           t('folder_import_error').replace('{error}', String(result.error)),
           'error',
         );
-        return;
+        return false;
       }
 
-      void this.host.applyData(result.data.data);
+      const saved = await this.host.applyData(result.data.data);
+      if (!this.isCurrent(context)) return false;
+      if (!saved) {
+        this.host.notify(t('folder_save_error'), 'error');
+        return false;
+      }
       this.host.refresh();
       const stats = result.data.stats;
       const skipped =
@@ -128,9 +133,13 @@ export class FolderTransferController {
         .replace('{conversations}', String(stats.conversationsImported))
         .replace('{skipped}', String(skipped));
       this.host.notify(message, 'success');
+      return true;
     } catch (error) {
       console.error('[FolderTransfer] Import failed:', error);
-      this.host.notify(t('folder_import_error').replace('{error}', String(error)), 'error');
+      if (this.isCurrent(context)) {
+        this.host.notify(t('folder_import_error').replace('{error}', String(error)), 'error');
+      }
+      return false;
     } finally {
       this.importInProgress = false;
     }
@@ -263,16 +272,17 @@ export class FolderTransferController {
     importBtn.className = 'gv-folder-dialog-btn gv-folder-dialog-btn-primary';
     importBtn.textContent = t('pm_import');
     importBtn.addEventListener('click', async () => {
+      importBtn.disabled = true;
       const strategy = (mergeOption.querySelector('input') as HTMLInputElement).checked
         ? 'merge'
         : 'overwrite';
       const pasteText = pasteArea.value.trim();
-      if (pasteText) {
-        await this.import({ text: pasteText }, strategy);
-      } else {
-        await this.import({ file: fileInput.files?.[0] ?? null }, strategy);
-      }
-      this.closeImportDialog();
+      const saved = await this.import(
+        pasteText ? { text: pasteText } : { file: fileInput.files?.[0] ?? null },
+        strategy,
+      );
+      if (saved && this.activeImportDialog === overlay) this.closeImportDialog();
+      else importBtn.disabled = false;
     });
 
     const cancelBtn = document.createElement('button');
@@ -336,7 +346,7 @@ export class FolderTransferController {
   async upload(): Promise<void> {
     const context = this.host.getContext();
     const { session } = context;
-    if (!session || (!session.ready && session.accountScope)) return;
+    if (!session?.ready) return;
     const accountScope = this.toSyncAccountScope(session.accountScope);
     const folders = cloneFolderData(session.data);
     try {
@@ -389,7 +399,7 @@ export class FolderTransferController {
   async sync(): Promise<void> {
     const context = this.host.getContext();
     const { session } = context;
-    if (!session || (!session.ready && session.accountScope)) return;
+    if (!session?.ready) return;
     const accountScope = this.toSyncAccountScope(session.accountScope);
     try {
       this.host.notify(t('downloadInProgress'), 'info');
@@ -516,26 +526,29 @@ export class FolderTransferController {
       );
 
       // Apply merged folder data
-      await this.host.applyData(mergedFolders);
+      const saved = await this.host.applyData(mergedFolders);
       if (!this.isCurrent(context)) return;
+      if (!saved) {
+        this.host.notify(t('folder_save_error'), 'error');
+        return;
+      }
 
       // Save merged prompts and starred to storage
-      try {
-        await chrome.storage.local.set({
-          gvPromptItems: mergedPrompts,
-          geminiTimelineStarredMessages: mergedStarred,
-          [timelineHierarchyStorageKey]: mergedTimelineHierarchy,
-        });
-      } catch (err) {
-        console.error('[FolderTransfer] Failed to save merged prompts/starred/hierarchy:', err);
-      }
+      await chrome.storage.local.set({
+        gvPromptItems: mergedPrompts,
+        geminiTimelineStarredMessages: mergedStarred,
+        [timelineHierarchyStorageKey]: mergedTimelineHierarchy,
+      });
+      if (!this.isCurrent(context)) return;
 
       this.host.refresh();
       this.host.notify(t('downloadMergeSuccess'), 'success');
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
       console.error('[FolderTransfer] Cloud sync failed:', error);
-      this.host.notify(t('syncError').replace('{error}', errorMsg), 'error');
+      if (this.isCurrent(context)) {
+        this.host.notify(t('syncError').replace('{error}', errorMsg), 'error');
+      }
     }
   }
 

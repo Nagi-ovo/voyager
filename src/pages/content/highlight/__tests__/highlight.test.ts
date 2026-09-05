@@ -236,6 +236,7 @@ describe('highlight conversation DOM', () => {
 describe('HighlightManager rendering and navigation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(accountIsolationService.resolveAccountScope).mockReset();
     window.history.replaceState(null, '', '/app/test');
   });
 

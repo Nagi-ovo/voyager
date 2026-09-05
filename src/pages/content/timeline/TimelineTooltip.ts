@@ -289,7 +289,7 @@ export class TimelineTooltip {
     // If height not provided, measure after width + content set
     const autoH = !height || height <= 0 ? tip.offsetHeight : height;
     let top = Math.round(dotRect.top + dotRect.height / 2 - autoH / 2);
-    top = Math.max(viewportPad, Math.min(vh - height - viewportPad, top));
+    top = Math.max(viewportPad, Math.min(vh - autoH - viewportPad, top));
     tip.style.left = `${left}px`;
     tip.style.top = `${top}px`;
     tip.setAttribute('data-placement', placement);

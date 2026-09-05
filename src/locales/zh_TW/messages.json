@@ -672,6 +672,10 @@
     "message": "✗ 匯入失敗：{error}",
     "description": "匯入錯誤訊息"
   },
+  "folder_save_error": {
+    "message": "無法儲存資料夾變更，請再試一次。",
+    "description": "資料夾變更儲存失敗時顯示的提示"
+  },
   "folder_export_success": {
     "message": "✓ 資料夾匯出成功",
     "description": "匯出成功訊息"

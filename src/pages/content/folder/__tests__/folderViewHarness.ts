@@ -45,6 +45,7 @@ export async function createFolderViewHarness(data: FolderData) {
   });
   const onChange = vi.fn((reason: FolderStoreChange) => {
     if (destroyed) return;
+    treeView.updateAvailability();
     if (reason === 'account') {
       nativeSidebar.clearTitleSync();
       treeView.clearRenderContext();
@@ -118,6 +119,7 @@ export async function createFolderViewHarness(data: FolderData) {
     },
     onPanelMount: () => {
       treeView.mount();
+      selection.mount();
       navigation.highlightActiveConversation();
       navigation.bind();
     },
@@ -149,6 +151,7 @@ export async function createFolderViewHarness(data: FolderData) {
   const transfer = new FolderTransferController({
     getContext: () => ({ session: store.session, activation: store.activation, data: store.data }),
     applyData: async (next) => {
+      if (!store.canEdit) return false;
       store.data = next;
       return store.saveData();
     },

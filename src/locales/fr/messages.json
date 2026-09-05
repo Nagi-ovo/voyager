@@ -724,6 +724,10 @@
     "message": "✗ Échec : {error}",
     "description": "Import error message"
   },
+  "folder_save_error": {
+    "message": "Impossible d'enregistrer les modifications des dossiers. Veuillez réessayer.",
+    "description": "Shown when folder changes could not be saved"
+  },
   "folder_export_success": {
     "message": "✓ Dossiers exportés avec succès",
     "description": "Export success message"

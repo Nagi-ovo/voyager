@@ -77,6 +77,7 @@ describe('Gemini native conversation title sync', () => {
     };
     (manager as unknown as { hideArchivedConversations: boolean }).hideArchivedConversations =
       hideArchived;
+    await store.init();
     store.data = {
       folders: [
         {

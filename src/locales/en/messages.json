@@ -724,6 +724,10 @@
     "message": "✗ Import failed: {error}",
     "description": "Import error message"
   },
+  "folder_save_error": {
+    "message": "Could not save folder changes. Please try again.",
+    "description": "Shown when folder changes could not be saved"
+  },
   "folder_export_success": {
     "message": "✓ Folders exported successfully",
     "description": "Export success message"

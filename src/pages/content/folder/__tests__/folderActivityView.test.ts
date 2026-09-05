@@ -222,6 +222,24 @@ describe('folder Activity view', () => {
     ).toContain('Active chat');
   });
 
+  it('does not spin refreshes for an imported timestamp beyond the browser timer limit', async () => {
+    const data = activityData();
+    Object.values(data.folderContents)
+      .flat()
+      .forEach((conversation) => {
+        conversation.lastTurnAt = NOW + 30 * 24 * 60 * 60 * 1000;
+      });
+    harness = await createFolderViewHarness(data);
+    harness.onRefresh.mockClear();
+
+    vi.advanceTimersByTime(1_000);
+
+    expect(
+      harness.runtime.panel?.querySelector('.gv-folder-activity-group-priority'),
+    ).not.toBeNull();
+    expect(harness.onRefresh).not.toHaveBeenCalled();
+  });
+
   it('shows leaf folder names while preserving full multi-folder paths for context', async () => {
     harness = await createFolderViewHarness(nestedMultiFolderActivityData());
 

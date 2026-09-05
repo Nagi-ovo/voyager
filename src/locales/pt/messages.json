@@ -721,6 +721,10 @@
     "message": "✗ Falha na importação: {error}",
     "description": "Import error message"
   },
+  "folder_save_error": {
+    "message": "Não foi possível salvar as alterações nas pastas. Tente novamente.",
+    "description": "Shown when folder changes could not be saved"
+  },
   "folder_export_success": {
     "message": "✓ Pastas exportadas com sucesso",
     "description": "Export success message"

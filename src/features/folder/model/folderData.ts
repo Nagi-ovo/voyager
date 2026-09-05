@@ -194,7 +194,7 @@ export function reorderConversations(
       mode,
     );
     let adjustment = 0;
-    for (const id of conversationIds) {
+    for (const id of uniqueIds) {
       const originalIndex = originalSorted.findIndex(
         (conversation) => conversation.conversationId === id,
       );

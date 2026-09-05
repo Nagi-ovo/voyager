@@ -90,6 +90,7 @@ export class FolderManager {
       data: this.store.data,
     }),
     applyData: (data) => {
+      if (!this.store.canEdit) return Promise.resolve(false);
       this.store.data = data;
       return this.store.saveData();
     },
@@ -137,10 +138,12 @@ export class FolderManager {
       accountIsolationEnabled: this.store.accountIsolationEnabled,
       isDestroyed: this.isDestroyed,
     }),
-    onMoveToFolder: ({ id, title, url }) =>
+    onMoveToFolder: ({ id, title, url }) => {
+      if (!this.store.canEdit) return;
       this.dialogs.openMove(this.store.data.folders, (folderId) => {
         this.addConversationToFolderFromNative(folderId, id, title, url);
-      }),
+      });
+    },
     onConfirmedDelete: (id) => this.store.removeConversationFromAllFolders(id),
   });
 
@@ -148,6 +151,7 @@ export class FolderManager {
     createPanel: () => this.treeView.createPanel(),
     onPanelMount: () => {
       this.treeView.mount();
+      this.selection.mount();
       this.navigation.highlightActiveConversation();
       this.navigation.bind();
     },
@@ -165,6 +169,7 @@ export class FolderManager {
     floating: {
       isOpen: () => this.floatingPanelHandle !== null,
       open: async (openPanel) => {
+        this.navigation.bind();
         if (openPanel) await this.openFloatingPanel();
         else await this.showFloatingFab();
       },
@@ -403,6 +408,7 @@ export class FolderManager {
 
     this.floatingPanelHandle = mountFloatingPanel({
       data: this.store.data,
+      dataReady: this.store.canEdit,
       conversationSortMode: this.treeView.sortMode,
       storedPos,
       storedSize,
@@ -586,6 +592,8 @@ export class FolderManager {
 
   private handleStoreChange(reason: FolderStoreChange): void {
     if (this.isDestroyed) return;
+    this.treeView.updateAvailability();
+    this.floatingPanelHandle?.setDataReady(this.store.canEdit);
     if (reason === 'account') {
       this.nativeSidebarObserver.clearTitleSync();
       this.treeView.clearRenderContext();

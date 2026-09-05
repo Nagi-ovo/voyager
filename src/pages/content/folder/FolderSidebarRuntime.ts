@@ -106,6 +106,7 @@ export class FolderSidebarRuntime {
         if (!sidebar || !this.isCurrent(generation) || this.mode !== 'floating') return;
         this.bindNativeSidebar(sidebar);
       });
+      if (!openOnStart && this.options.floating.isOpen()) this.options.floating.close();
       await this.openFloating(openOnStart);
       return;
     }

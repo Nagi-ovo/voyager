@@ -10,6 +10,10 @@ export class FolderDataSession {
   loadVersion = 0;
   saveInProgress = false;
   pendingSave: FolderData | null = null;
+  pendingSaveCompletion: {
+    promise: Promise<boolean>;
+    resolve: (saved: boolean) => void;
+  } | null = null;
   readonly backup: DataBackupService<FolderData>;
   private active = true;
 

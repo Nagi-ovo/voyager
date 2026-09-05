@@ -188,6 +188,31 @@ describe('folder data traversal and removal', () => {
 });
 
 describe('folder data conversation order', () => {
+  it('counts duplicate selected IDs once when adjusting a same-folder insertion gap', () => {
+    const data = freezeData({
+      folders: [],
+      folderContents: {
+        folder: ['a', 'b', 'c', 'd'].map((id, index) => conversation(id, index)),
+      },
+    });
+
+    const result = reorderConversations(data, ['a', 'a'], 'folder', 'folder', 3);
+
+    expect(result.folderContents.folder.map((item) => item.conversationId)).toEqual([
+      'b',
+      'c',
+      'a',
+      'd',
+    ]);
+    expect(result.folderContents.folder.map((item) => item.sortIndex)).toEqual([0, 1, 2, 3]);
+    expect(data.folderContents.folder.map((item) => item.conversationId)).toEqual([
+      'a',
+      'b',
+      'c',
+      'd',
+    ]);
+  });
+
   it('adjusts same-folder insertion within the dragged starred group and retains all metadata', () => {
     const moving = {
       ...conversation('a'),

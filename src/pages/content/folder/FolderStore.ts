@@ -141,6 +141,9 @@ export class FolderStore {
   get session(): FolderDataSession | null {
     return this.dataSession;
   }
+  get canEdit(): boolean {
+    return !this.isDestroyed && this.dataSession?.ready === true;
+  }
   get activation(): number {
     return this.accountScopeRequest;
   }
@@ -161,8 +164,8 @@ export class FolderStore {
   }
 
   destroy(): void {
-    this.isDestroyed = true;
     this.flushPendingSaveData();
+    this.isDestroyed = true;
     this.dataSession?.deactivate();
     this.accountScopeRequest += 1;
     this.teardownConversationActivityTracking();
@@ -181,6 +184,7 @@ export class FolderStore {
   }
 
   createFolder(name: string, parentId: string | null = null): Folder | null {
+    if (!this.canEdit) return null;
     if (parentId !== null && getFolderDepth(this.data, parentId) >= MAX_FOLDER_DEPTH) return null;
     const maxSortIndex = this.data.folders
       .filter((folder) => folder.parentId === parentId)
@@ -202,6 +206,7 @@ export class FolderStore {
   }
 
   renameFolder(folderId: string, name: string): void {
+    if (!this.canEdit) return;
     const folder = this.data.folders.find((item) => item.id === folderId);
     if (!folder) return;
     folder.name = name;
@@ -211,12 +216,14 @@ export class FolderStore {
   }
 
   removeFolder(folderId: string): void {
+    if (!this.canEdit) return;
     this.data = removeFolder(this.data, folderId);
     void this.saveData();
     this.options.onChange('data');
   }
 
   removeConversationsFromFolder(folderId: string, ids: ReadonlySet<string>): void {
+    if (!this.canEdit) return;
     const conversations = this.data.folderContents[folderId];
     if (!conversations) return;
     this.data.folderContents[folderId] = conversations.filter(
@@ -230,6 +237,7 @@ export class FolderStore {
     folderId: string,
     instructions: string | undefined,
   ): Promise<boolean> {
+    if (!this.canEdit) return false;
     const folder = this.data.folders.find((item) => item.id === folderId);
     if (!folder) return false;
     folder.instructions = instructions;
@@ -238,6 +246,7 @@ export class FolderStore {
   }
 
   bufferTitleUpdate(conversation: ConversationReference, title: string): void {
+    if (!this.canEdit) return;
     conversation.title = title;
     this.pendingTitleUpdates.set(conversation.conversationId, title);
   }
@@ -298,6 +307,7 @@ export class FolderStore {
   }
 
   toggleFolder(folderId: string): void {
+    if (!this.canEdit) return;
     const folder = this.data.folders.find((f) => f.id === folderId);
     if (!folder) return;
 
@@ -310,6 +320,7 @@ export class FolderStore {
   }
 
   togglePinFolder(folderId: string): void {
+    if (!this.canEdit) return;
     const folder = this.data.folders.find((f) => f.id === folderId);
     if (!folder) return;
 
@@ -320,6 +331,7 @@ export class FolderStore {
   }
 
   reorderFolder(folderId: string, targetParentId: string, insertIndex: number): void {
+    if (!this.canEdit) return;
     const targetParent = targetParentId === '__root__' ? null : targetParentId;
     const nextData = moveFolder(this.data, folderId, targetParent, Date.now(), insertIndex);
     if (nextData === this.data) return;
@@ -329,6 +341,7 @@ export class FolderStore {
   }
 
   ensureConversationsInFolder(folderId: string, dragData: DragData): void {
+    if (!this.canEdit) return;
     if (!this.data.folderContents[folderId]) {
       this.data.folderContents[folderId] = [];
     }
@@ -396,6 +409,7 @@ export class FolderStore {
     targetParentId: string,
     insertIndex: number,
   ): void {
+    if (!this.canEdit) return;
     const nextData = reorderConversations(
       this.data,
       conversationIds,
@@ -414,6 +428,7 @@ export class FolderStore {
     folderId: string,
     dragData: DragData & { sourceFolderId?: string },
   ): void {
+    if (!this.canEdit) return;
     this.debug('Adding conversation to folder:', {
       folderId,
       dragData,
@@ -473,6 +488,7 @@ export class FolderStore {
     conversations: ConversationReference[],
     sourceFolderId?: string,
   ): void {
+    if (!this.canEdit) return;
     this.debug('Adding multiple conversations to folder:', {
       folderId,
       count: conversations.length,
@@ -547,6 +563,7 @@ export class FolderStore {
   }
 
   addFolderToFolder(targetFolderId: string, dragData: DragData): void {
+    if (!this.canEdit) return;
     const draggedFolderId = dragData.folderId;
     if (!draggedFolderId) return;
 
@@ -566,6 +583,7 @@ export class FolderStore {
   }
 
   moveFolderToRoot(dragData: DragData): void {
+    if (!this.canEdit) return;
     const draggedFolderId = dragData.folderId;
     if (!draggedFolderId) return;
 
@@ -582,6 +600,7 @@ export class FolderStore {
   }
 
   toggleConversationStar(folderId: string, conversationId: string): void {
+    if (!this.canEdit) return;
     const conversations = this.data.folderContents[folderId];
     if (!conversations) return;
 
@@ -601,6 +620,7 @@ export class FolderStore {
   }
 
   setConversationStarAcrossFolders(conversationId: string, starred: boolean): void {
+    if (!this.canEdit) return;
     let changed = false;
     Object.values(this.data.folderContents).forEach((conversations) => {
       conversations.forEach((conversation) => {
@@ -617,6 +637,7 @@ export class FolderStore {
   }
 
   removeConversationFromFolder(folderId: string, conversationId: string): void {
+    if (!this.canEdit) return;
     if (!this.data.folderContents[folderId]) return;
 
     this.data.folderContents[folderId] = this.data.folderContents[folderId].filter(
@@ -628,6 +649,7 @@ export class FolderStore {
   }
 
   changeFolderColor(folderId: string, colorId: string): void {
+    if (!this.canEdit) return;
     const folder = this.data.folders.find((f) => f.id === folderId);
     if (!folder) return;
 
@@ -643,6 +665,7 @@ export class FolderStore {
     targetFolderId: string,
     conv: ConversationReference,
   ): void {
+    if (!this.canEdit) return;
     // Remove from source folder
     if (this.data.folderContents[sourceFolderId]) {
       this.data.folderContents[sourceFolderId] = this.data.folderContents[sourceFolderId].filter(
@@ -681,6 +704,7 @@ export class FolderStore {
     gemId?: string,
     lastTurnAt?: number,
   ): void {
+    if (!this.canEdit) return;
     // Guard: ensure the target folder still exists (it may have been deleted
     // from the sidebar or another tab between selection and message send)
     const folderExists = this.data.folders.some((f) => f.id === folderId);
@@ -740,6 +764,7 @@ export class FolderStore {
   }
 
   private applyConversationTitleUpdate(conversationId: string, newTitle: string): boolean {
+    if (!this.canEdit) return false;
     const title = newTitle.trim();
     if (!title) return false;
 
@@ -800,6 +825,7 @@ export class FolderStore {
   }
 
   async restoreNativeTitleSync(conversationId: string, nativeTitle: string | null): Promise<void> {
+    if (!this.canEdit) return;
     const title = nativeTitle?.trim() || null;
     const updatedAt = Date.now();
     let updated = false;
@@ -828,6 +854,7 @@ export class FolderStore {
   }
 
   removeConversationFromAllFolders(conversationId: string): void {
+    if (!this.canEdit) return;
     // Remove this conversation from all folders when the original conversation is deleted
     let removed = false;
 
@@ -1054,6 +1081,7 @@ export class FolderStore {
   }
 
   scheduleSaveData(): void {
+    if (!this.canEdit) return;
     if (this.saveDebounceTimer !== null) {
       window.clearTimeout(this.saveDebounceTimer);
     }
@@ -1087,7 +1115,7 @@ export class FolderStore {
 
   async saveData(): Promise<boolean> {
     const session = this.dataSession;
-    if (!session || (!session.ready && session.accountScope)) return false;
+    if (!session || !this.canEdit) return false;
     try {
       this.data = normalizeFolderData(this.data);
       const snapshot = cloneFolderData(session.data);
@@ -1097,8 +1125,16 @@ export class FolderStore {
       session.backup.createEmergencyBackup(snapshot);
       if (session.saveInProgress) {
         session.pendingSave = snapshot;
+        // Calls coalesced into this trailing snapshot share its storage result.
+        if (!session.pendingSaveCompletion) {
+          let resolve!: (saved: boolean) => void;
+          const promise = new Promise<boolean>((complete) => {
+            resolve = complete;
+          });
+          session.pendingSaveCompletion = { promise, resolve };
+        }
         this.debug('Save already in progress, queueing one trailing save');
-        return false;
+        return session.pendingSaveCompletion.promise;
       }
 
       return this.persistDataSession(session, snapshot);
@@ -1167,9 +1203,11 @@ export class FolderStore {
     } finally {
       session.saveInProgress = false;
       const pending = session.pendingSave;
+      const completion = session.pendingSaveCompletion;
       session.pendingSave = null;
+      session.pendingSaveCompletion = null;
       if (pending) {
-        void this.persistDataSession(session, pending);
+        void this.persistDataSession(session, pending).then((saved) => completion?.resolve(saved));
       } else if (this.dataSession !== session) {
         this.dataSessions.delete(session.storageKey);
       }
@@ -1342,6 +1380,7 @@ export class FolderStore {
   }
 
   backfillKnownConversationActivity(): void {
+    if (!this.canEdit) return;
     let changed = false;
     Object.values(this.data.folderContents).forEach((conversations) => {
       conversations.forEach((conversation) => {
@@ -1361,6 +1400,7 @@ export class FolderStore {
   }
 
   applyHistoryActivityTimestamps(cids: string[]): void {
+    if (!this.canEdit) return;
     const latestByConversationId = new Map<string, number>();
     cids.forEach((cid) => {
       const nativeConversationId = normalizeConversationId(cid);
@@ -1389,6 +1429,7 @@ export class FolderStore {
   }
 
   markConversationLastTurnAt(conversationId: string, timestamp: number): void {
+    if (!this.canEdit) return;
     let changed = false;
     Object.values(this.data.folderContents).forEach((conversations) => {
       conversations.forEach((conversation) => {
@@ -1459,6 +1500,7 @@ export class FolderStore {
   }
 
   markConversationAsRecentlyOpened(conversationId: string): void {
+    if (!this.canEdit) return;
     const now = Date.now();
     let changed = false;
 
@@ -1485,6 +1527,7 @@ export class FolderStore {
   }
 
   updateConversationGem(hexId: string, gemId: string): void {
+    if (!this.canEdit) return;
     // Update all instances of this conversation in folders
     let updated = false;
 

@@ -203,10 +203,10 @@ describe('folder dialogs', () => {
   });
 
   it('counts instruction characters and closes after the save promise settles', async () => {
-    let finishSave!: () => void;
+    let finishSave!: (saved: boolean) => void;
     const onSave = vi.fn(
       () =>
-        new Promise<void>((resolve) => {
+        new Promise<boolean>((resolve) => {
           finishSave = resolve;
         }),
     );
@@ -224,13 +224,41 @@ describe('folder dialogs', () => {
     query<HTMLButtonElement>('.gv-fi-btn-save').click();
     expect(onSave).toHaveBeenCalledExactlyOnceWith('New instructions');
     expect(document.querySelector('.gv-fi-overlay')).not.toBeNull();
-    finishSave();
+    finishSave(true);
     await Promise.resolve();
     expect(document.querySelector('.gv-fi-overlay')).toBeNull();
   });
 
+  it('preserves an instructions draft after a failed save and permits retry', async () => {
+    let finishSave!: (saved: boolean) => void;
+    const onSave = vi.fn(
+      () =>
+        new Promise<boolean>((resolve) => {
+          finishSave = resolve;
+        }),
+    );
+    dialogs.openInstructions('Original', onSave);
+    const input = query<HTMLTextAreaElement>('.gv-fi-textarea');
+    const save = query<HTMLButtonElement>('.gv-fi-btn-save');
+    input.value = 'Keep this draft';
+    save.click();
+    save.click();
+    expect(onSave).toHaveBeenCalledExactlyOnceWith('Keep this draft');
+    expect(save.disabled).toBe(true);
+    finishSave(false);
+    await Promise.resolve();
+    expect(input.isConnected).toBe(true);
+    expect(input.value).toBe('Keep this draft');
+    expect(save.disabled).toBe(false);
+    save.click();
+    finishSave(true);
+    await Promise.resolve();
+    expect(onSave).toHaveBeenCalledTimes(2);
+    expect(document.querySelector('.gv-fi-overlay')).toBeNull();
+  });
+
   it('saves an empty instructions draft as undefined', async () => {
-    const onSave = vi.fn().mockResolvedValue(undefined);
+    const onSave = vi.fn().mockResolvedValue(true);
     dialogs.openInstructions(undefined, onSave);
     expect(query('.gv-fi-title').textContent).toBe('folderAsProject_setInstructions');
     query<HTMLTextAreaElement>('.gv-fi-textarea').value = '   ';
@@ -241,7 +269,7 @@ describe('folder dialogs', () => {
   });
 
   it.each(['cancel', 'Escape', 'overlay'])('discards instruction changes on %s', (action) => {
-    const onSave = vi.fn().mockResolvedValue(undefined);
+    const onSave = vi.fn().mockResolvedValue(true);
     dialogs.openInstructions('Original', onSave);
     query<HTMLTextAreaElement>('.gv-fi-textarea').value = 'Discarded';
     const oldSave = query<HTMLButtonElement>('.gv-fi-btn-save');
@@ -258,10 +286,10 @@ describe('folder dialogs', () => {
     const onCreate = vi.fn();
     const onConfirm = vi.fn();
     const onColor = vi.fn();
-    let finishSave!: () => void;
+    let finishSave!: (saved: boolean) => void;
     const onSave = vi.fn(
       () =>
-        new Promise<void>((resolve) => {
+        new Promise<boolean>((resolve) => {
           finishSave = resolve;
         }),
     );
@@ -297,8 +325,8 @@ describe('folder dialogs', () => {
     expect(oldFocus).not.toHaveBeenCalled();
     expect(addListener).not.toHaveBeenCalled();
 
-    dialogs.openInstructions('Account B', vi.fn().mockResolvedValue(undefined));
-    finishSave();
+    dialogs.openInstructions('Account B', vi.fn().mockResolvedValue(true));
+    finishSave(true);
     await Promise.resolve();
     expect(query<HTMLTextAreaElement>('.gv-fi-textarea').value).toBe('Account B');
   });

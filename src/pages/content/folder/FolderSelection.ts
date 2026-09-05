@@ -1,3 +1,4 @@
+import { extractRouteUserIdFromPath } from '@/core/services/AccountIsolationService';
 import type { ConversationSortMode } from '@/features/folder/model/folderData';
 import { getTranslationSyncUnsafe as t } from '@/utils/i18n';
 
@@ -56,7 +57,7 @@ export class FolderSelection {
   private conversationReorderRafId: number | null = null;
   private outsideClickHandler: ((e: MouseEvent) => void) | null = null;
   private readonly MAX_BATCH_DELETE_COUNT = 50;
-  private batchDeleteInProgress = false;
+  private batchDeleteController: AbortController | null = null;
   private readonly BATCH_DELETE_CONFIG = {
     DELAY_BETWEEN_DELETIONS: 500, // Delay between each deletion to avoid rate limiting
     PAGE_REFRESH_DELAY: 1500, // Delay before refreshing page after batch delete
@@ -82,6 +83,13 @@ export class FolderSelection {
     this.timers.delete(timer);
   }
 
+  /** Restore retained selection after the replacement panel and its rows are mounted. */
+  mount(): void {
+    if (this.options.getContext().isDestroyed) return;
+    if (this.options.runtime.panel?.isConnected) this.removeFloatingHost();
+    this.updateConversationSelectionUI();
+  }
+
   /** Remove listeners attached to the old toolbar during a sidebar remount. */
   unmount(): void {
     for (const cleanup of this.toolbarCleanups.values()) cleanup();
@@ -100,6 +108,11 @@ export class FolderSelection {
   }
 
   reset(): void {
+    if (this.batchDeleteController) {
+      this.batchDeleteController.abort();
+      this.batchDeleteController = null;
+      this.options.feedback.hideBatchDeleteProgress();
+    }
     for (const timer of this.timers) window.clearTimeout(timer);
     this.timers.clear();
     for (const image of this.dragImages) image.remove();
@@ -579,7 +592,7 @@ export class FolderSelection {
 
         // Programmatic batch delete drives Gemini's own menu via .click() — let
         // every click through unimpeded for the duration of the batch.
-        if (this.batchDeleteInProgress) {
+        if (this.batchDeleteController) {
           return;
         }
 
@@ -1021,7 +1034,8 @@ export class FolderSelection {
   }
 
   private async batchDeleteNativeConversations(): Promise<void> {
-    if (this.batchDeleteInProgress) {
+    if (this.options.getContext().isDestroyed) return;
+    if (this.batchDeleteController) {
       debug('log', 'Batch delete already in progress');
       return;
     }
@@ -1034,7 +1048,15 @@ export class FolderSelection {
     const confirmed = confirm(confirmMessage);
     if (!confirmed) return;
 
-    this.batchDeleteInProgress = true;
+    const controller = new AbortController();
+    this.batchDeleteController = controller;
+    const activation = this.options.store.activation;
+    const routeUserId = extractRouteUserIdFromPath(window.location.pathname) ?? '0';
+    const isCurrent = () =>
+      !controller.signal.aborted &&
+      !this.options.getContext().isDestroyed &&
+      this.options.store.activation === activation &&
+      (extractRouteUserIdFromPath(window.location.pathname) ?? '0') === routeUserId;
     const conversationIds = Array.from(this.selectedConversations);
     let successCount = 0;
     let failedCount = 0;
@@ -1044,6 +1066,7 @@ export class FolderSelection {
       this.options.feedback.showBatchDeleteProgress(0, count);
 
       for (let i = 0; i < conversationIds.length; i++) {
+        if (!isCurrent()) return;
         const conversationId = conversationIds[i];
         debug('log', `Deleting conversation ${i + 1}/${count}: ${conversationId}`);
 
@@ -1051,7 +1074,11 @@ export class FolderSelection {
         this.options.feedback.updateBatchDeleteProgress(i + 1, count);
 
         try {
-          const success = await this.options.nativeMenus.deleteConversation(conversationId);
+          const success = await this.options.nativeMenus.deleteConversation(
+            conversationId,
+            controller.signal,
+          );
+          if (!isCurrent()) return;
           if (success) {
             successCount++;
           } else {
@@ -1065,12 +1092,11 @@ export class FolderSelection {
 
         // Add delay between deletions to avoid rate limiting
         if (i < conversationIds.length - 1) {
-          await this.delay(this.BATCH_DELETE_CONFIG.DELAY_BETWEEN_DELETIONS);
+          await this.delay(this.BATCH_DELETE_CONFIG.DELAY_BETWEEN_DELETIONS, controller.signal);
         }
       }
 
-      // Hide progress indicator
-      this.options.feedback.hideBatchDeleteProgress();
+      if (!isCurrent()) return;
 
       // Show result summary
       if (failedCount === 0) {
@@ -1090,16 +1116,28 @@ export class FolderSelection {
       if (successCount > 0) {
         debug('log', 'Refreshing page after batch delete');
         this.schedule(() => {
-          window.location.reload();
+          if (isCurrent()) window.location.reload();
         }, this.BATCH_DELETE_CONFIG.PAGE_REFRESH_DELAY);
       }
     } finally {
-      this.batchDeleteInProgress = false;
+      if (this.batchDeleteController === controller) {
+        this.batchDeleteController = null;
+        this.options.feedback.hideBatchDeleteProgress();
+      }
     }
   }
 
-  private delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+  private delay(ms: number, signal: AbortSignal): Promise<void> {
+    return new Promise((resolve) => {
+      if (signal.aborted) return resolve();
+      const finish = () => {
+        window.clearTimeout(timer);
+        signal.removeEventListener('abort', finish);
+        resolve();
+      };
+      const timer = window.setTimeout(finish, ms);
+      signal.addEventListener('abort', finish, { once: true });
+    });
   }
 
   private clearSelection(): void {
