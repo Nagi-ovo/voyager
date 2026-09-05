@@ -130,7 +130,7 @@ describe('FolderStore ownership', () => {
     expect(saved.folderContents.root).toHaveLength(2);
   });
 
-  it('persists project instructions without rebuilding the current folder list', async () => {
+  it('persists project instructions and publishes the saved data', async () => {
     const savedSuccessfully = await store.setFolderInstructions(
       'root',
       'Keep the original citations.',
@@ -138,7 +138,9 @@ describe('FolderStore ownership', () => {
     expect(savedSuccessfully).toBe(true);
     expect(saved.folders[0].instructions).toBe('Keep the original citations.');
     expect(saved.folders[0].updatedAt).toBeGreaterThan(1);
-    expect(onChange).toHaveBeenCalledExactlyOnceWith('saved');
+    expect(store.data).toEqual(saved);
+    expect(store.canEdit).toBe(true);
+    expect(onChange).toHaveBeenCalledWith('data');
   });
 
   it('buffers the rendered record without overwriting a separate custom title for the same conversation', async () => {

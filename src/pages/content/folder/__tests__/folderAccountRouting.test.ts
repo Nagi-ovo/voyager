@@ -6,6 +6,7 @@ import {
   buildScopedFolderStorageKey,
 } from '@/core/services/AccountIsolationService';
 import { StorageKeys } from '@/core/types/common';
+import { FolderImportExportService } from '@/features/folder/services/FolderImportExportService';
 
 import { FolderStore } from '../FolderStore';
 import { FolderManager } from '../manager';
@@ -81,6 +82,7 @@ describe('FolderManager account routes across mounted surfaces', () => {
     vi.useFakeTimers();
     vi.clearAllMocks();
     localStorage.clear();
+    sessionStorage.clear();
     document.body.innerHTML = '';
     history.replaceState({}, '', '/u/1/app');
     mountSidebar();
@@ -110,6 +112,7 @@ describe('FolderManager account routes across mounted surfaces', () => {
     manager = null;
     document.body.innerHTML = '';
     localStorage.clear();
+    sessionStorage.clear();
     vi.useRealTimers();
     vi.restoreAllMocks();
   });
@@ -176,6 +179,47 @@ describe('FolderManager account routes across mounted surfaces', () => {
       );
     },
   );
+
+  it('renders an issued import when it finishes after leaving and returning to account A', async () => {
+    const instance = await initialize('sidebar');
+    const write = deferred<boolean>();
+    vi.mocked(adapter.saveData).mockReturnValueOnce(write.promise);
+    const imported = accountData('imported-a');
+    imported.folders[0].name = 'Imported A';
+
+    document.querySelector<HTMLButtonElement>('.gv-folder-import-export-btn')!.click();
+    Array.from(document.querySelectorAll<HTMLButtonElement>('.gv-folder-menu-item'))
+      .find((button) => button.textContent?.endsWith('folder_import'))!
+      .click();
+    document.querySelector<HTMLButtonElement>('.gv-folder-import-paste-toggle')!.click();
+    document.querySelector<HTMLTextAreaElement>('.gv-folder-import-paste-area')!.value =
+      JSON.stringify(FolderImportExportService.exportToPayload(imported));
+    document.querySelector<HTMLButtonElement>('.gv-folder-dialog-btn-primary')!.click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(adapter.saveData).toHaveBeenCalledExactlyOnceWith(
+      buildScopedFolderStorageKey('email:a'),
+      expect.objectContaining({
+        folders: expect.arrayContaining([expect.objectContaining({ name: 'Imported A' })]),
+      }),
+    );
+
+    history.pushState({}, '', '/u/2/app');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(document.querySelector('.gv-folder-list')?.textContent).toContain('Private b');
+    expect(document.querySelector('.gv-folder-list')?.textContent).not.toContain('Imported A');
+    expect(document.querySelector('.gv-folder-import-dialog')).toBeNull();
+    history.pushState({}, '', '/u/1/app');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(instance.getFolders().map((folder) => folder.name)).toEqual(['Private a']);
+    expect(document.querySelector('.gv-folder-list')?.textContent).toContain('Private a');
+
+    write.resolve(true);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(instance.getFolders().map((folder) => folder.name)).toEqual(['Private a', 'Imported A']);
+    expect(document.querySelector('.gv-folder-list')?.textContent).toContain('Imported A');
+    expect(document.querySelector('.gv-folder-list')?.textContent).not.toContain('Private b');
+    expect(document.querySelector('.gv-notification-success')).toBeNull();
+  });
 
   it.each(['floating', 'fab'] as const)(
     '%s rebinds once after disable/re-enable and stops reacting after destroy',

@@ -148,6 +148,168 @@ describe('FolderStore editable account and save completion', () => {
   });
 
   it.each(['false', 'throw'] as const)(
+    'does not carry failed instructions into a later save when storage returns %s',
+    async (failure) => {
+      const original = structuredClone(store.data);
+      if (failure === 'throw') {
+        vi.mocked(adapter.saveData).mockRejectedValueOnce(new Error('storage unavailable'));
+      } else {
+        vi.mocked(adapter.saveData).mockResolvedValueOnce(false).mockResolvedValueOnce(false);
+      }
+
+      expect(await store.setFolderInstructions('root', 'Cancelled instructions')).toBe(false);
+      store.createFolder('Later edit');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(saved.get('gvFolderData')?.folders.find((folder) => folder.id === 'root')).toEqual(
+        original.folders[0],
+      );
+
+      expect(await store.setFolderInstructions('root', 'Retried instructions')).toBe(true);
+      expect(store.data.folders[0].instructions).toBe('Retried instructions');
+      expect(saved.get('gvFolderData')?.folders[0].instructions).toBe('Retried instructions');
+    },
+  );
+
+  it.each([false, true])(
+    'finishes accepted edits before a draft save resolves as %s',
+    async (succeeds) => {
+      const gates = [deferred<void>(), deferred<void>()];
+      const draftGate = deferred<boolean>();
+      const writes: FolderData[] = [];
+      vi.mocked(adapter.saveData).mockImplementation(async (key, data) => {
+        const snapshot = structuredClone(data);
+        const index = writes.push(snapshot) - 1;
+        if (snapshot.folders[0].name === 'Imported') {
+          if (!(await draftGate.promise)) return false;
+        } else {
+          await gates[index]?.promise;
+        }
+        saved.set(key, snapshot);
+        return true;
+      });
+
+      const first = store.saveData();
+      store.renameFolder('root', 'Accepted rename');
+      store.toggleFolder('root');
+      const original = structuredClone(store.data);
+      const draft = structuredClone(original);
+      draft.folders[0].name = 'Imported';
+      const replacement = store.replaceData(draft);
+      expect(store.canEdit).toBe(false);
+      expect(store.createFolder('While saving')).toBeNull();
+      await store.loadData();
+      expect(store.data).toEqual(original);
+      expect(writes).toHaveLength(1);
+
+      gates[0].resolve();
+      expect(await first).toBe(true);
+      expect(writes).toHaveLength(2);
+      gates[1].resolve();
+      await vi.advanceTimersByTimeAsync(500);
+      expect(writes).toHaveLength(3);
+      expect(saved.get('gvFolderData')).toEqual(original);
+      expect(store.data).toEqual(original);
+      window.dispatchEvent(new Event('beforeunload'));
+      expect(Object.values(localStorage).join('')).not.toContain('Imported');
+
+      draftGate.resolve(succeeds);
+      expect(await replacement).toBe(succeeds);
+      expect(store.canEdit).toBe(true);
+      expect(store.data).toEqual(succeeds ? draft : original);
+      store.createFolder('After saving');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(saved.get('gvFolderData')).toEqual(store.data);
+      expect(store.data.folders[0].name).toBe(succeeds ? 'Imported' : 'Accepted rename');
+    },
+  );
+
+  it.each([false, true])(
+    'keeps an in-flight draft in its original account through A → B → A when saving returns %s',
+    async (succeeds) => {
+      const aScope = accountScope('a');
+      const bScope = accountScope('b');
+      const aKey = buildScopedFolderStorageKey(aScope.accountKey);
+      const bKey = buildScopedFolderStorageKey(bScope.accountKey);
+      saved.set(aKey, sampleData('Account A'));
+      saved.set(bKey, sampleData('Account B'));
+      vi.spyOn(accountIsolationService, 'resolveAccountScope')
+        .mockResolvedValueOnce(aScope)
+        .mockResolvedValueOnce(bScope)
+        .mockResolvedValueOnce(aScope);
+      await store.setAccountIsolationEnabled(true);
+      const original = structuredClone(store.data);
+      const gate = deferred<boolean>();
+      vi.mocked(adapter.saveData).mockImplementation(async (key, data) => {
+        const snapshot = structuredClone(data);
+        if (key === aKey && snapshot.folders[0].name === 'Imported A' && !(await gate.promise))
+          return false;
+        saved.set(key, snapshot);
+        return true;
+      });
+
+      const replacement = store.replaceData(sampleData('Imported A'));
+      await store.refreshAccountScope();
+      await store.loadData();
+      expect(store.canEdit).toBe(true);
+      store.createFolder('New B');
+      await vi.advanceTimersByTimeAsync(0);
+      const savedB = structuredClone(saved.get(bKey));
+      await store.refreshAccountScope();
+      await store.loadData();
+      expect(store.data).toEqual(original);
+      expect(store.canEdit).toBe(false);
+
+      gate.resolve(succeeds);
+      expect(await replacement).toBe(succeeds);
+      expect(store.canEdit).toBe(true);
+      expect(store.data.folders[0].name).toBe(succeeds ? 'Imported A' : 'Account A');
+      expect(saved.get(bKey)).toEqual(savedB);
+      expect(await store.saveData()).toBe(true);
+      expect(saved.get(aKey)?.folders[0].name).toBe(succeeds ? 'Imported A' : 'Account A');
+    },
+  );
+
+  it('abandons a draft still waiting for accepted writes when its account activation ends', async () => {
+    const gate = deferred<void>();
+    vi.mocked(adapter.saveData).mockImplementationOnce(async (key, data) => {
+      await gate.promise;
+      saved.set(key, structuredClone(data));
+      return true;
+    });
+    const accepted = store.saveData();
+    const replacement = store.replaceData(sampleData('Abandoned draft'));
+    await store.refreshAccountScope();
+    await store.loadData();
+    gate.resolve();
+    expect(await accepted).toBe(true);
+    expect(await replacement).toBe(false);
+    expect(store.canEdit).toBe(true);
+    expect(store.data.folders[0].name).toBe('Original');
+    expect(adapter.saveData).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores a storage read that began before a draft replacement', async () => {
+    const original = structuredClone(store.data);
+    const loadGate = deferred<FolderData>();
+    const loadStarted = deferred<void>();
+    const saveGate = deferred<boolean>();
+    vi.mocked(adapter.loadData).mockImplementationOnce(() => {
+      loadStarted.resolve();
+      return loadGate.promise;
+    });
+    vi.mocked(adapter.saveData).mockReturnValueOnce(saveGate.promise);
+    const loading = store.loadData();
+    await loadStarted.promise;
+    const replacement = store.replaceData(sampleData('Imported'));
+    loadGate.resolve(sampleData('Stale disk data'));
+    await loading;
+    expect(store.data).toEqual(original);
+    saveGate.resolve(true);
+    expect(await replacement).toBe(true);
+    expect(store.data.folders[0].name).toBe('Imported');
+  });
+
+  it.each(['false', 'throw'] as const)(
     'settles a failed trailing save as false after storage returns %s',
     async (failure) => {
       const firstGate = deferred<void>();

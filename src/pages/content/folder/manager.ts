@@ -89,11 +89,7 @@ export class FolderManager {
       activation: this.store.activation,
       data: this.store.data,
     }),
-    applyData: (data) => {
-      if (!this.store.canEdit) return Promise.resolve(false);
-      this.store.data = data;
-      return this.store.saveData();
-    },
+    applyData: (data) => this.store.replaceData(data),
     refresh: () => this.refresh(),
     notify: (message, type) => this.feedback.showNotification(message, type),
   });
@@ -607,6 +603,7 @@ export class FolderManager {
       this.applyHideArchivedSetting();
     } else if (reason === 'data') {
       this.refresh();
+      this.floatingPanelHandle?.update(this.store.data, this.treeView.sortMode);
     } else if (reason === 'title') {
       this.treeView.render();
     } else if (reason === 'activity') {

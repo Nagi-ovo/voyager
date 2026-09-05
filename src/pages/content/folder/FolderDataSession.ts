@@ -9,6 +9,8 @@ export class FolderDataSession {
   ready = false;
   loadVersion = 0;
   saveInProgress = false;
+  activeSave: Promise<boolean> | null = null;
+  replacingData = false;
   pendingSave: FolderData | null = null;
   pendingSaveCompletion: {
     promise: Promise<boolean>;

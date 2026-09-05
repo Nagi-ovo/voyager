@@ -79,6 +79,22 @@ mirrors, clear markers, or Drive sync.
   `src/pages/content/folder/__tests__/FolderTransferController.test.ts`
   and `src/pages/content/folder/folderDialogs.test.ts` cover save failures and stale completions.
 
+## Failed folder drafts must not become later ordinary saves
+
+- **Trap:** Import and instructions editors changed live folder data before saving. A failed save
+  kept the dialog open, but cancelling it left the draft in memory and recovery backups; the next
+  ordinary edit could persist the cancelled import, including an overwrite of existing folders.
+- **Rule:** Persist drafts through `FolderStore.replaceData`, then publish them only on success.
+  Flush and finish accepted ordinary writes first; keep the current account's editing controls
+  disabled during replacement so old live snapshots cannot overwrite the draft. Keep drafts out of
+  emergency/unload backups, retain the account owner while replacing, and submit an issued write's
+  successful result only to that owner. A draft still waiting for ordinary writes is abandoned when
+  its account activation ends.
+- **Guard:** `src/pages/content/folder/__tests__/folderImportPersistence.test.ts` exercises the real
+  manager UI through failed merge/overwrite, cancellation, a later ordinary save and successful retry.
+  `src/pages/content/folder/FolderStorePersistence.test.ts` covers failed instructions, queued writes,
+  debounce/unload backups and account changes while a draft is pending.
+
 ## Highlight cleanup must preserve account clear markers
 
 - **Trap:** After a user cleared all highlights from Storage Manager, a later Google Drive pull

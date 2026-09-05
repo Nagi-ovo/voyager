@@ -65,7 +65,14 @@ function validateFolderData(data: unknown): boolean {
   return Array.isArray(value.folders) && typeof value.folderContents === 'object';
 }
 
-export type FolderStoreChange = 'account' | 'data' | 'title' | 'activity' | 'loaded' | 'saved';
+export type FolderStoreChange =
+  | 'account'
+  | 'data'
+  | 'title'
+  | 'activity'
+  | 'loaded'
+  | 'saved'
+  | 'availability';
 
 export interface FolderStoreOptions {
   getContext: () => {
@@ -142,7 +149,7 @@ export class FolderStore {
     return this.dataSession;
   }
   get canEdit(): boolean {
-    return !this.isDestroyed && this.dataSession?.ready === true;
+    return !this.isDestroyed && this.dataSession?.ready === true && !this.dataSession.replacingData;
   }
   get activation(): number {
     return this.accountScopeRequest;
@@ -238,11 +245,12 @@ export class FolderStore {
     instructions: string | undefined,
   ): Promise<boolean> {
     if (!this.canEdit) return false;
-    const folder = this.data.folders.find((item) => item.id === folderId);
+    const data = cloneFolderData(this.data);
+    const folder = data.folders.find((item) => item.id === folderId);
     if (!folder) return false;
     folder.instructions = instructions;
     folder.updatedAt = Date.now();
-    return this.saveData();
+    return this.replaceData(data);
   }
 
   bufferTitleUpdate(conversation: ConversationReference, title: string): void {
@@ -884,7 +892,7 @@ export class FolderStore {
     const session = this.dataSession;
     if (!session) return;
     // A returning account may still own a queued edit that is newer than disk.
-    if (session.saveInProgress && session.ready) return;
+    if ((session.saveInProgress || session.replacingData) && session.ready) return;
     const version = ++session.loadVersion;
     const isCurrent = () =>
       this.dataSession === session && session.loadVersion === version && !this.isDestroyed;
@@ -1030,7 +1038,8 @@ export class FolderStore {
       );
       session.data = migratedData;
       session.markReady();
-      const saved = await this.persistDataSession(session, cloneFolderData(session.data));
+      session.activeSave = this.persistDataSession(session, cloneFolderData(session.data));
+      const saved = await session.activeSave;
       if (!saved) {
         console.warn('[FolderStore] Failed to persist scoped migration data');
       }
@@ -1113,6 +1122,44 @@ export class FolderStore {
     return true;
   }
 
+  /** Persist a draft without exposing it to edits, exports or recovery before success. */
+  async replaceData(data: FolderData): Promise<boolean> {
+    const session = this.dataSession;
+    const activation = this.accountScopeRequest;
+    if (!session || !this.canEdit) return false;
+    const snapshot = normalizeFolderData(cloneFolderData(data));
+
+    this.flushPendingSaveData();
+    session.replacingData = true;
+    session.loadVersion += 1;
+    this.options.onChange('availability');
+    let saved = false;
+    try {
+      // Finish accepted edits first. A draft must not replace their coalesced tail.
+      const pending = session.pendingSaveCompletion?.promise ?? session.activeSave;
+      if (pending) await pending;
+      if (
+        this.isDestroyed ||
+        this.dataSession !== session ||
+        this.accountScopeRequest !== activation
+      )
+        return false;
+
+      session.activeSave = this.persistDataSession(session, snapshot);
+      saved = await session.activeSave;
+      // An issued write still belongs to this session if the user has since left it.
+      if (saved) session.data = snapshot;
+      return saved;
+    } finally {
+      session.replacingData = false;
+      if (this.dataSession === session && !this.isDestroyed) {
+        this.options.onChange(saved ? 'data' : 'availability');
+      } else if (!session.saveInProgress) {
+        this.dataSessions.delete(session.storageKey);
+      }
+    }
+  }
+
   async saveData(): Promise<boolean> {
     const session = this.dataSession;
     if (!session || !this.canEdit) return false;
@@ -1137,7 +1184,8 @@ export class FolderStore {
         return session.pendingSaveCompletion.promise;
       }
 
-      return this.persistDataSession(session, snapshot);
+      session.activeSave = this.persistDataSession(session, snapshot);
+      return session.activeSave;
     } catch (error) {
       console.error('[FolderStore] Save data error:', error);
       return false;
@@ -1207,9 +1255,13 @@ export class FolderStore {
       session.pendingSave = null;
       session.pendingSaveCompletion = null;
       if (pending) {
-        void this.persistDataSession(session, pending).then((saved) => completion?.resolve(saved));
-      } else if (this.dataSession !== session) {
-        this.dataSessions.delete(session.storageKey);
+        session.activeSave = this.persistDataSession(session, pending);
+        void session.activeSave.then((saved) => completion?.resolve(saved));
+      } else {
+        session.activeSave = null;
+        if (this.dataSession !== session && !session.replacingData) {
+          this.dataSessions.delete(session.storageKey);
+        }
       }
     }
 
@@ -1235,7 +1287,9 @@ export class FolderStore {
     // Flush the old account's pending debounce before releasing its data owner.
     this.flushPendingSaveData();
     previous?.deactivate();
-    if (previous && !previous.saveInProgress) this.dataSessions.delete(previous.storageKey);
+    if (previous && !previous.saveInProgress && !previous.replacingData) {
+      this.dataSessions.delete(previous.storageKey);
+    }
     this.dataSession = null;
     this.unresolvedData = { folders: [], folderContents: {} };
     this.accountScope = null;
