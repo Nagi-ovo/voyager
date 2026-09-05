@@ -1,6 +1,7 @@
 import browser, { type Runtime } from 'webextension-polyfill';
 
 import { createBellIcon } from '@/core/icons/bellIcon';
+import { CLOUD_SYNC_PATH, CLOUD_UPLOAD_PATH } from '@/core/icons/cloudSyncPaths';
 import {
   createChevronDownIcon,
   createChevronRightIcon,
@@ -77,6 +78,7 @@ import {
 } from './floatingPanel';
 import { FOLDER_COLORS, getFolderColor, isDarkMode } from './folderColors';
 import { DEFAULT_CONVERSATION_ICON, GEM_CONFIG, getGemIcon } from './gemConfig';
+import { createFolderHeaderMenus } from './headerMenus';
 import {
   mountHideArchivedNudge,
   shouldShowHideArchivedNudge,
@@ -105,12 +107,6 @@ const AI_ORG_COLLECT_POLL_MS = 150;
 const ROOT_CONVERSATIONS_ID = '__root_conversations__'; // Special ID for root-level conversations
 const NOTIFICATION_TIMEOUT_MS = 10000; // Duration to show data loss notification
 const FOLDER_TREE_INDENT_MIN = -8;
-const GEMINI_SIDEBAR_WIDTH_MIN_PX = 180;
-const GEMINI_SIDEBAR_WIDTH_MAX_PX = 540;
-const GEMINI_SIDEBAR_WIDTH_DEFAULT_PX = 312;
-const GEMINI_SIDEBAR_WIDTH_STEP_PX = 8;
-const LEGACY_SIDEBAR_WIDTH_MAX_PERCENT = 45;
-const LEGACY_SIDEBAR_WIDTH_BASELINE_PX = 1200;
 const FOLDER_TREE_INDENT_MAX = 32;
 const FOLDER_TREE_INDENT_DEFAULT = -8;
 const NATIVE_TITLE_SYNC_DEBOUNCE_MS = 300;
@@ -398,10 +394,8 @@ export class FolderManager {
 
   // Track active UI elements to prevent duplicate creation
   private activeFolderInput: HTMLElement | null = null; // Currently open folder name input
-  private activeImportExportMenu: HTMLElement | null = null; // Currently open import/export menu
   private activeImportDialog: HTMLElement | null = null; // Currently open import dialog
-  private activeImportExportMenuCloseHandler: ((e: MouseEvent) => void) | null = null;
-  private activeImportExportMenuListenerTimeout: number | null = null;
+  private readonly headerMenus = createFolderHeaderMenus();
 
   // Cleanup references
   private routeChangeCleanup: (() => void) | null = null;
@@ -704,7 +698,7 @@ export class FolderManager {
       this.activeColorPickerFolderId = null;
     }
 
-    this.closeActiveImportExportMenu();
+    this.headerMenus.close();
     this.closeActiveImportDialog();
     this.closeFolderConversationMenus();
     this.clearActiveFolderInput();
@@ -812,7 +806,7 @@ export class FolderManager {
     }
 
     this.removeOutsideClickHandler();
-    this.closeActiveImportExportMenu();
+    this.headerMenus.close();
     this.closeActiveImportDialog();
     this.closeFolderConversationMenus();
     this.clearActiveFolderInput();
@@ -853,27 +847,6 @@ export class FolderManager {
       this.activeImportDialog.remove();
       this.activeImportDialog = null;
     }
-  }
-
-  private removeActiveImportExportMenuCloseHandler(): void {
-    if (this.activeImportExportMenuListenerTimeout !== null) {
-      clearTimeout(this.activeImportExportMenuListenerTimeout);
-      this.activeImportExportMenuListenerTimeout = null;
-    }
-
-    if (this.activeImportExportMenuCloseHandler) {
-      document.removeEventListener('click', this.activeImportExportMenuCloseHandler);
-      this.activeImportExportMenuCloseHandler = null;
-    }
-  }
-
-  private closeActiveImportExportMenu(): void {
-    if (this.activeImportExportMenu) {
-      this.activeImportExportMenu.remove();
-      this.activeImportExportMenu = null;
-    }
-
-    this.removeActiveImportExportMenuCloseHandler();
   }
 
   private async initializeFolderUI(): Promise<void> {
@@ -1961,7 +1934,20 @@ export class FolderManager {
     importExportButton.replaceChildren(createFolderIcon(18));
     importExportButton.title = this.t('folder_import_export');
     importExportButton.setAttribute('aria-label', this.t('folder_import_export'));
-    importExportButton.addEventListener('click', (e) => this.showImportExportMenu(e));
+    importExportButton.addEventListener('click', (event) => {
+      this.headerMenus.openActions(event, [
+        {
+          label: this.t('folder_import'),
+          icon: 'upload',
+          action: () => this.showImportDialog(),
+        },
+        {
+          label: this.t('folder_export'),
+          icon: 'download',
+          action: () => this.exportFolders(),
+        },
+      ]);
+    });
 
     actionsContainer.appendChild(filterUserButton);
     actionsContainer.appendChild(importExportButton);
@@ -1974,7 +1960,25 @@ export class FolderManager {
       cloudButton.replaceChildren(createCloudIcon(18));
       cloudButton.title = this.t('folder_cloud');
       cloudButton.setAttribute('aria-label', this.t('folder_cloud'));
-      cloudButton.addEventListener('click', (e) => this.showCloudMenu(e));
+      cloudButton.addEventListener('click', (event) => {
+        // Gemini's bundled symbol font lacks these cloud glyphs.
+        this.headerMenus.openActions(event, [
+          {
+            label: this.t('folder_cloud_upload'),
+            iconHtml: `<svg xmlns="http://www.w3.org/2000/svg" height="20px" viewBox="0 -960 960 960" width="20px" fill="currentColor"><path d="${CLOUD_UPLOAD_PATH}"/></svg>`,
+            action: () => {
+              void this.handleCloudUpload();
+            },
+          },
+          {
+            label: this.t('folder_cloud_sync'),
+            iconHtml: `<svg xmlns="http://www.w3.org/2000/svg" height="20px" viewBox="0 -960 960 960" width="20px" fill="currentColor"><path d="${CLOUD_SYNC_PATH}"/></svg>`,
+            action: () => {
+              void this.handleCloudSync();
+            },
+          },
+        ]);
+      });
       actionsContainer.appendChild(cloudButton);
     }
 
@@ -1985,7 +1989,11 @@ export class FolderManager {
     settingsButton.replaceChildren(createSettingsIcon(18));
     settingsButton.title = this.t('folder_settings');
     settingsButton.setAttribute('aria-label', this.t('folder_settings'));
-    settingsButton.addEventListener('click', (e) => this.showFolderSettingsMenu(e));
+    settingsButton.addEventListener('click', (event) => {
+      this.headerMenus.openSettings(event, this.conversationSortMode, (mode) => {
+        this.setConversationSortMode(mode);
+      });
+    });
     actionsContainer.appendChild(settingsButton);
 
     // Add folder button
@@ -3862,7 +3870,7 @@ export class FolderManager {
         }
       }
 
-      this.closeActiveImportExportMenu();
+      this.headerMenus.close();
       this.closeActiveImportDialog();
       this.closeFolderConversationMenus();
       this.clearActiveFolderInput();
@@ -8128,7 +8136,7 @@ export class FolderManager {
     this.clearNativeTitleSyncTimer();
     this.clearFolderNavigationConfirmation();
     this.clearActiveFolderInput();
-    this.closeActiveImportExportMenu();
+    this.headerMenus.close();
     this.closeActiveImportDialog();
     this.closeFolderConversationMenus();
     if (this.isMultiSelectMode) this.exitMultiSelectMode();
@@ -10496,442 +10504,6 @@ export class FolderManager {
       notification.classList.remove('show');
       setTimeout(() => notification.remove(), 300);
     }, 3000);
-  }
-
-  /**
-   * Generic header dropdown menu opener. Used by import/export, cloud, and any
-   * other header action that wants a "click button → click an item" popover.
-   * Reuses the activeImportExportMenu slot so only one header menu is open at
-   * a time across the entire header.
-   */
-  private openHeaderMenu(
-    event: MouseEvent,
-    items: Array<{ label: string; icon?: string; iconHtml?: string; action: () => void }>,
-  ): void {
-    event.stopPropagation();
-
-    if (this.activeImportExportMenu && !this.activeImportExportMenu.isConnected) {
-      this.activeImportExportMenu = null;
-      this.removeActiveImportExportMenuCloseHandler();
-    }
-
-    if (this.activeImportExportMenu) {
-      this.closeActiveImportExportMenu();
-      return;
-    }
-
-    const menu = document.createElement('div');
-    menu.className = 'gv-folder-menu';
-    menu.style.position = 'fixed';
-    menu.style.left = `${event.clientX}px`;
-    menu.style.top = `${event.clientY}px`;
-
-    items.forEach((item) => {
-      const menuItem = document.createElement('button');
-      menuItem.className = 'gv-folder-menu-item';
-      const iconMarkup = item.iconHtml
-        ? `<span class="gv-folder-menu-icon" aria-hidden="true">${item.iconHtml}</span>`
-        : `<mat-icon role="img" class="mat-icon notranslate google-symbols mat-ligature-font mat-icon-no-color" aria-hidden="true" style="font-size: 18px; line-height: 1; margin-right: 8px;">${item.icon ?? ''}</mat-icon>`;
-      menuItem.innerHTML = `${iconMarkup}${item.label}`;
-      menuItem.addEventListener('click', () => {
-        this.closeActiveImportExportMenu();
-        item.action();
-      });
-      menu.appendChild(menuItem);
-    });
-
-    document.body.appendChild(menu);
-    this.activeImportExportMenu = menu;
-
-    const closeMenu = (e: MouseEvent) => {
-      if (!menu.contains(e.target as Node)) {
-        this.closeActiveImportExportMenu();
-      }
-    };
-    this.activeImportExportMenuCloseHandler = closeMenu;
-    this.activeImportExportMenuListenerTimeout = window.setTimeout(() => {
-      document.addEventListener('click', closeMenu);
-      this.activeImportExportMenuListenerTimeout = null;
-    }, 0);
-  }
-
-  /**
-   * Show import/export dropdown menu
-   */
-  private showImportExportMenu(event: MouseEvent): void {
-    this.openHeaderMenu(event, [
-      {
-        label: this.t('folder_import'),
-        icon: 'upload',
-        action: () => this.showImportDialog(),
-      },
-      {
-        label: this.t('folder_export'),
-        icon: 'download',
-        action: () => this.exportFolders(),
-      },
-    ]);
-  }
-
-  /**
-   * Cloud popover — replaces the previous two-button Upload/Sync split.
-   * Uses the original inline SVG glyphs because Gemini's bundled Material
-   * Symbols font does not include `cloud_upload` / `cloud_download` ligatures.
-   */
-  private showCloudMenu(event: MouseEvent): void {
-    const uploadSvg = `<svg xmlns="http://www.w3.org/2000/svg" height="20px" viewBox="0 -960 960 960" width="20px" fill="currentColor"><path d="M260-160q-91 0-155.5-63T40-377q0-78 47-139t123-78q25-92 100-149t170-57q117 0 198.5 81.5T760-520q69 8 114.5 59.5T920-340q0 75-52.5 127.5T740-160H520q-33 0-56.5-23.5T440-240v-206l-64 62-56-56 160-160 160 160-56 56-64-62v206h220q42 0 71-29t29-71q0-42-29-71t-71-29h-60v-80q0-83-58.5-141.5T480-720q-83 0-141.5 58.5T280-520h-20q-58 0-99 41t-41 99q0 58 41 99t99 41h100v80H260Zm220-280Z"/></svg>`;
-    const syncSvg = `<svg xmlns="http://www.w3.org/2000/svg" height="20px" viewBox="0 -960 960 960" width="20px" fill="currentColor"><path d="M260-160q-91 0-155.5-63T40-377q0-78 47-139t123-78q17-72 85-137t145-65q33 0 56.5 23.5T520-716v242l64-62 56 56-160 160-160-160 56-56 64 62v-242q-76 14-118 73.5T280-520h-20q-58 0-99 41t-41 99q0 58 41 99t99 41h480q42 0 71-29t29-71q0-42-29-71t-71-29h-60v-80q0-48-22-89.5T600-680v-93q74 35 117 103.5T760-520q69 8 114.5 59.5T920-340q0 75-52.5 127.5T740-160H260Zm220-358Z"/></svg>`;
-
-    this.openHeaderMenu(event, [
-      {
-        label: this.t('folder_cloud_upload'),
-        iconHtml: uploadSvg,
-        action: () => {
-          void this.handleCloudUpload();
-        },
-      },
-      {
-        label: this.t('folder_cloud_sync'),
-        iconHtml: syncSvg,
-        action: () => {
-          void this.handleCloudSync();
-        },
-      },
-    ]);
-  }
-
-  /**
-   * Folder settings popover. Hosts folder-scoped settings (conversation order,
-   * font size, spacing, and subfolder indent). Settings live next to the feature
-   * they control so users don't have to dig into the popup to tune them.
-   */
-  private showFolderSettingsMenu(event: MouseEvent): void {
-    event.stopPropagation();
-
-    if (this.activeImportExportMenu && !this.activeImportExportMenu.isConnected) {
-      this.activeImportExportMenu = null;
-      this.removeActiveImportExportMenuCloseHandler();
-    }
-
-    if (this.activeImportExportMenu) {
-      this.closeActiveImportExportMenu();
-      return;
-    }
-
-    const menu = document.createElement('div');
-    menu.className = 'gv-folder-menu gv-folder-settings-menu';
-    menu.style.position = 'fixed';
-    menu.style.left = `${event.clientX}px`;
-    menu.style.top = `${event.clientY}px`;
-
-    menu.appendChild(this.createConversationSortSettingsRow());
-    menu.appendChild(this.createSidebarWidthSettingsRow());
-
-    const steppers: Array<{
-      labelKey: string;
-      storageKey: string;
-      min: number;
-      max: number;
-      defaultValue: number;
-      unit?: string;
-    }> = [
-      {
-        labelKey: 'folder_item_font_size',
-        storageKey: StorageKeys.GV_FOLDER_ITEM_FONT_SIZE,
-        min: 12,
-        max: 18,
-        defaultValue: 13,
-        unit: 'px',
-      },
-      {
-        labelKey: 'folderSpacing',
-        storageKey: StorageKeys.GV_FOLDER_SPACING,
-        min: 0,
-        max: 16,
-        defaultValue: 2,
-      },
-      {
-        labelKey: 'folderTreeIndent',
-        storageKey: StorageKeys.GV_FOLDER_TREE_INDENT,
-        min: -8,
-        max: 32,
-        defaultValue: -8,
-      },
-    ];
-
-    steppers.forEach((config) => {
-      menu.appendChild(this.createSettingsStepperRow(config));
-    });
-
-    // Swallow clicks that originated inside the settings menu so a stepper press
-    // can't bubble up to the document-level "click outside → close" handler. This
-    // is a belt-and-suspenders layer on top of per-button stopPropagation, since
-    // some browsers re-target clicks when the focused element becomes disabled
-    // mid-event.
-    menu.addEventListener('click', (e) => e.stopPropagation());
-
-    document.body.appendChild(menu);
-    this.activeImportExportMenu = menu;
-
-    const closeMenu = (e: MouseEvent) => {
-      if (!menu.contains(e.target as Node)) {
-        this.closeActiveImportExportMenu();
-      }
-    };
-    this.activeImportExportMenuCloseHandler = closeMenu;
-    this.activeImportExportMenuListenerTimeout = window.setTimeout(() => {
-      document.addEventListener('click', closeMenu);
-      this.activeImportExportMenuListenerTimeout = null;
-    }, 0);
-  }
-
-  private createConversationSortSettingsRow(): HTMLElement {
-    const row = document.createElement('div');
-    row.className = 'gv-folder-settings-row gv-folder-sort-settings-row';
-
-    const label = document.createElement('span');
-    label.className = 'gv-folder-settings-label';
-    label.textContent = this.t('folder_sort');
-
-    const options = document.createElement('div');
-    options.className = 'gv-folder-sort-options';
-    options.setAttribute('role', 'group');
-    options.setAttribute('aria-label', this.t('folder_sort'));
-
-    const buttons = new Map<ConversationSortMode, HTMLButtonElement>();
-    const render = () => {
-      buttons.forEach((button, mode) => {
-        const active = this.conversationSortMode === mode;
-        button.classList.toggle('is-active', active);
-        button.setAttribute('aria-pressed', String(active));
-      });
-    };
-
-    (['manual', 'recent'] as const).forEach((mode) => {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'gv-folder-sort-option';
-      button.textContent = this.t(mode === 'manual' ? 'folder_sort_manual' : 'folder_sort_recent');
-      button.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.setConversationSortMode(mode);
-        render();
-      });
-      buttons.set(mode, button);
-      options.appendChild(button);
-    });
-
-    render();
-    row.append(label, options);
-    return row;
-  }
-
-  private createSidebarWidthSettingsRow(): HTMLElement {
-    const clampWidth = (value: number) =>
-      Math.min(
-        GEMINI_SIDEBAR_WIDTH_MAX_PX,
-        Math.max(GEMINI_SIDEBAR_WIDTH_MIN_PX, Math.round(value)),
-      );
-    const normalizeStoredWidth = (value: unknown) => {
-      const numeric = typeof value === 'number' ? value : Number(value);
-      if (!Number.isFinite(numeric)) return GEMINI_SIDEBAR_WIDTH_DEFAULT_PX;
-      if (numeric <= LEGACY_SIDEBAR_WIDTH_MAX_PERCENT) {
-        return clampWidth((numeric / 100) * LEGACY_SIDEBAR_WIDTH_BASELINE_PX);
-      }
-      return clampWidth(numeric);
-    };
-
-    const row = document.createElement('div');
-    row.className = 'gv-folder-settings-row gv-folder-width-settings-row';
-
-    const header = document.createElement('div');
-    header.className = 'gv-folder-width-settings-header';
-
-    const label = document.createElement('span');
-    label.className = 'gv-folder-settings-label';
-    label.textContent = this.t('sidebarWidth');
-
-    const controls = document.createElement('div');
-    controls.className = 'gv-folder-width-settings-controls';
-
-    const value = document.createElement('output');
-    value.className = 'gv-folder-width-value';
-
-    const toggle = document.createElement('button');
-    toggle.type = 'button';
-    toggle.className = 'gv-folder-width-switch';
-    toggle.setAttribute('role', 'switch');
-    toggle.setAttribute('aria-label', this.t('sidebarWidth'));
-
-    const knob = document.createElement('span');
-    knob.className = 'gv-folder-width-switch-knob';
-    toggle.appendChild(knob);
-
-    const slider = document.createElement('input');
-    slider.type = 'range';
-    slider.className = 'gv-folder-width-slider';
-    slider.min = String(GEMINI_SIDEBAR_WIDTH_MIN_PX);
-    slider.max = String(GEMINI_SIDEBAR_WIDTH_MAX_PX);
-    slider.step = String(GEMINI_SIDEBAR_WIDTH_STEP_PX);
-    slider.setAttribute('aria-label', this.t('sidebarWidth'));
-
-    let current = GEMINI_SIDEBAR_WIDTH_DEFAULT_PX;
-    let enabled = false;
-
-    const render = () => {
-      const progress =
-        ((current - GEMINI_SIDEBAR_WIDTH_MIN_PX) /
-          (GEMINI_SIDEBAR_WIDTH_MAX_PX - GEMINI_SIDEBAR_WIDTH_MIN_PX)) *
-        100;
-      value.textContent = `${current}px`;
-      slider.value = String(current);
-      slider.disabled = !enabled;
-      slider.setAttribute('aria-valuetext', `${current}px`);
-      slider.style.setProperty('--gv-folder-width-progress', `${progress}%`);
-      toggle.setAttribute('aria-checked', String(enabled));
-      row.classList.toggle('is-disabled', !enabled);
-    };
-
-    toggle.addEventListener('click', (event) => {
-      event.stopPropagation();
-      enabled = !enabled;
-      render();
-      try {
-        void browser.storage.sync
-          .set({ [StorageKeys.SIDEBAR_WIDTH_ENABLED]: enabled })
-          .catch((error) => {
-            console.warn('[FolderManager] Failed to toggle sidebar width:', error);
-          });
-      } catch (error) {
-        console.warn('[FolderManager] Failed to toggle sidebar width:', error);
-      }
-    });
-
-    slider.addEventListener('input', (event) => {
-      event.stopPropagation();
-      current = clampWidth(Number((event.currentTarget as HTMLInputElement).value));
-      render();
-    });
-
-    slider.addEventListener('change', (event) => {
-      event.stopPropagation();
-      try {
-        void browser.storage.sync.set({ [StorageKeys.SIDEBAR_WIDTH]: current }).catch((error) => {
-          console.warn('[FolderManager] Failed to save sidebar width:', error);
-        });
-      } catch (error) {
-        console.warn('[FolderManager] Failed to save sidebar width:', error);
-      }
-    });
-
-    try {
-      void browser.storage.sync
-        .get({
-          [StorageKeys.SIDEBAR_WIDTH]: GEMINI_SIDEBAR_WIDTH_DEFAULT_PX,
-          [StorageKeys.SIDEBAR_WIDTH_ENABLED]: false,
-        })
-        .then((result) => {
-          current = normalizeStoredWidth(result?.[StorageKeys.SIDEBAR_WIDTH]);
-          enabled = result?.[StorageKeys.SIDEBAR_WIDTH_ENABLED] === true;
-          render();
-        })
-        .catch((error) => {
-          console.warn('[FolderManager] Failed to load sidebar width:', error);
-        });
-    } catch {
-      // Fall through to the defaults rendered below.
-    }
-
-    controls.append(value, toggle);
-    header.append(label, controls);
-    row.append(header, slider);
-    render();
-    return row;
-  }
-
-  private createSettingsStepperRow(config: {
-    labelKey: string;
-    storageKey: string;
-    min: number;
-    max: number;
-    defaultValue: number;
-    unit?: string;
-  }): HTMLElement {
-    const { labelKey, storageKey, min, max, defaultValue, unit } = config;
-    const clamp = (n: number) =>
-      Math.min(max, Math.max(min, Math.round(Number.isFinite(n) ? n : defaultValue)));
-
-    const row = document.createElement('div');
-    row.className = 'gv-folder-settings-row';
-
-    const label = document.createElement('span');
-    label.className = 'gv-folder-settings-label';
-    label.textContent = this.t(labelKey);
-
-    const stepper = document.createElement('div');
-    stepper.className = 'gv-folder-stepper';
-
-    const minus = document.createElement('button');
-    minus.className = 'gv-folder-stepper-btn';
-    minus.type = 'button';
-    minus.innerHTML = `<mat-icon role="img" class="mat-icon notranslate google-symbols mat-ligature-font mat-icon-no-color" aria-hidden="true">remove</mat-icon>`;
-    minus.title = this.t('folder_item_font_size_decrease');
-
-    const value = document.createElement('span');
-    value.className = 'gv-folder-stepper-value';
-
-    const plus = document.createElement('button');
-    plus.className = 'gv-folder-stepper-btn';
-    plus.type = 'button';
-    plus.innerHTML = `<mat-icon role="img" class="mat-icon notranslate google-symbols mat-ligature-font mat-icon-no-color" aria-hidden="true">add</mat-icon>`;
-    plus.title = this.t('folder_item_font_size_increase');
-
-    let current = defaultValue;
-
-    const render = () => {
-      value.textContent = unit ? `${current}${unit}` : `${current}`;
-      minus.disabled = current <= min;
-      plus.disabled = current >= max;
-    };
-
-    const persist = (next: number) => {
-      current = clamp(next);
-      render();
-      try {
-        void chrome.storage.sync.set({ [storageKey]: current });
-      } catch (err) {
-        console.warn(`[FolderManager] Failed to save ${storageKey}:`, err);
-      }
-    };
-
-    minus.addEventListener('click', (e) => {
-      e.stopPropagation();
-      persist(current - 1);
-    });
-    plus.addEventListener('click', (e) => {
-      e.stopPropagation();
-      persist(current + 1);
-    });
-
-    try {
-      void chrome.storage.sync.get({ [storageKey]: defaultValue }).then((res) => {
-        const raw = (res as Record<string, unknown>)?.[storageKey];
-        const n = typeof raw === 'number' ? raw : Number(raw);
-        current = Number.isFinite(n) ? clamp(n) : defaultValue;
-        render();
-      });
-    } catch {
-      // Fall through to default render below.
-    }
-    render();
-
-    stepper.appendChild(minus);
-    stepper.appendChild(value);
-    stepper.appendChild(plus);
-
-    row.appendChild(label);
-    row.appendChild(stepper);
-    return row;
   }
 
   /**

@@ -22,14 +22,17 @@ The folder manager allows users to:
 | Account data, backup ownership and unload lifetime            | [`FolderDataSession.ts`](FolderDataSession.ts). Each asynchronous load/save belongs to the session in which it started.                                                                                                                      |
 | Gemini DOM, user commands and runtime coordination            | [`manager.ts`](manager.ts). The existing public entry points remain available while responsibilities move out incrementally.                                                                                                                 |
 | AI Studio host integration                                    | [`aistudio.ts`](aistudio.ts). Shares the persisted schema and account session, with its own navigation and storage path.                                                                                                                     |
-| Floating view                                                 | [`floatingPanel.ts`](floatingPanel.ts). Mount with data/callbacks; update or destroy through the returned handle.                                                                                                                            |
+| Floating view                                                 | [`floatingPanel.ts`](floatingPanel.ts). Mount with data/callbacks; update normal changes, reset on account changes and destroy on teardown.                                                                                                  |
+| Header action menus and settings                              | [`headerMenus.ts`](headerMenus.ts). Owns the popover, settings controls, delayed listener and cleanup. The manager supplies action descriptions and the sort-change callback.                                                                |
 | Browser storage implementations                               | [`storage/FolderStorageAdapter.ts`](storage/FolderStorageAdapter.ts). Preserve Safari's durable storage and Chromium's mirror behavior.                                                                                                      |
 | JSON import/export                                            | [`FolderImportExportService.ts`](../../../features/folder/services/FolderImportExportService.ts). Shared keys live in the feature's [`constants.ts`](../../../features/folder/constants.ts); this service must not import a content manager. |
 | Gem metadata and startup                                      | [`gemConfig.ts`](gemConfig.ts), [`index.ts`](index.ts).                                                                                                                                                                                      |
 
 Test tree and ordering changes directly in the [model tests](../../../features/folder/model/__tests__/folderData.test.ts).
-Keep DOM, storage-event and navigation assertions in the content integration tests. Do not pass a
-manager into a model helper or add a manager wrapper solely to keep a private test interface alive.
+Test menu controls and close/reopen behavior in [`headerMenus.test.ts`](headerMenus.test.ts).
+Keep header command wiring, storage-event and navigation assertions in the content integration tests.
+Do not pass a manager into an extracted module or add a manager wrapper solely to keep a private
+test interface alive.
 
 Account changes, sidebar remounts and full destruction have different lifetimes. In-flight writes
 retain their original session and snapshot; a sidebar remount keeps the native deletion tracker.
@@ -37,6 +40,11 @@ Read the [state/identity](../../../../.github/docs/regressions/state-identity-sy
 [folder UI](../../../../.github/docs/regressions/folders-timeline-ui.md) regression notes before
 changing those boundaries. For future extraction, move a complete responsibility together with its
 setup, cleanup and behavioral tests.
+
+The next substantial boundary is the native sidebar runtime: observer batching, enhancement queues
+and native deletion tracking must move with their setup, drain and cancellation paths. Conversation
+navigation and the import/cloud workflows remain in the manager; preserve their account-session
+checks when extracting them.
 
 ## Adding Support for New Gems
 

@@ -42,7 +42,6 @@ type TestableManager = {
   sidebarContainer: HTMLElement | null;
   activeFolderInput: HTMLElement | null;
   activeImportDialog: HTMLElement | null;
-  activeImportExportMenu: HTMLElement | null;
   enterMultiSelectMode: (
     initialConversationId?: string,
     source?: 'folder' | 'native',
@@ -55,9 +54,10 @@ type TestableManager = {
   initializeFolderUI: () => Promise<void>;
   reinitializeFolderUI: () => void;
   createHeader: () => HTMLElement;
-  showFolderSettingsMenu: (event: MouseEvent) => void;
   showImportDialog: () => void;
-  showImportExportMenu: (event: MouseEvent) => void;
+  exportFolders: () => void;
+  handleCloudUpload: () => Promise<void>;
+  handleCloudSync: () => Promise<void>;
   startFloatingMode: () => Promise<void>;
   drainEnhancementQueue: () => void;
 };
@@ -151,131 +151,54 @@ describe('folder duplicate click guards', () => {
     expect(typedManager.activeFolderInput).not.toBeNull();
   });
 
-  it('toggles the import/export menu instead of stacking duplicates', () => {
+  it('runs the chosen import, export or cloud action through the header buttons', () => {
     manager = new FolderManager();
     const typedManager = manager as unknown as TestableManager;
+    const importAction = vi.spyOn(typedManager, 'showImportDialog').mockImplementation(() => {});
+    const exportAction = vi.spyOn(typedManager, 'exportFolders').mockImplementation(() => {});
+    const uploadAction = vi.spyOn(typedManager, 'handleCloudUpload').mockResolvedValue(undefined);
+    const syncAction = vi.spyOn(typedManager, 'handleCloudSync').mockResolvedValue(undefined);
+    const header = typedManager.createHeader();
+    document.body.appendChild(header);
 
-    typedManager.showImportExportMenu(
-      new MouseEvent('click', { bubbles: true, clientX: 24, clientY: 16 }),
-    );
+    for (const [buttonSelector, label, action] of [
+      ['.gv-folder-import-export-btn', 'folder_import', importAction],
+      ['.gv-folder-import-export-btn', 'folder_export', exportAction],
+      ['.gv-folder-cloud-btn', 'folder_cloud_upload', uploadAction],
+      ['.gv-folder-cloud-btn', 'folder_cloud_sync', syncAction],
+    ] as const) {
+      header.querySelector<HTMLButtonElement>(buttonSelector)?.click();
+      const item = Array.from(
+        document.querySelectorAll<HTMLButtonElement>('.gv-folder-menu-item'),
+      ).find((candidate) => candidate.textContent?.endsWith(label));
+      expect(item).toBeDefined();
+      item?.click();
 
-    expect(document.querySelectorAll('.gv-folder-menu')).toHaveLength(1);
-    expect(typedManager.activeImportExportMenu).not.toBeNull();
-
-    typedManager.showImportExportMenu(
-      new MouseEvent('click', { bubbles: true, clientX: 28, clientY: 20 }),
-    );
-
-    expect(document.querySelectorAll('.gv-folder-menu')).toHaveLength(0);
-    expect(typedManager.activeImportExportMenu).toBeNull();
-
-    vi.runOnlyPendingTimers();
-    document.body.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-
-    typedManager.showImportExportMenu(
-      new MouseEvent('click', { bubbles: true, clientX: 32, clientY: 24 }),
-    );
-
-    expect(document.querySelectorAll('.gv-folder-menu')).toHaveLength(1);
-    expect(typedManager.activeImportExportMenu).not.toBeNull();
+      expect(action).toHaveBeenCalledTimes(1);
+      expect(document.querySelector('.gv-folder-menu')).toBeNull();
+    }
+    for (const action of [importAction, exportAction, uploadAction, syncAction]) {
+      expect(action).toHaveBeenCalledTimes(1);
+    }
   });
 
-  it('keeps conversation order in folder settings instead of adding a header button', () => {
+  it('persists a sort choice made through the header settings button', () => {
     manager = new FolderManager();
     const typedManager = manager as unknown as TestableManager;
-
     const header = typedManager.createHeader();
+    document.body.appendChild(header);
     expect(header.querySelector('.gv-folder-sort-btn')).toBeNull();
 
-    typedManager.showFolderSettingsMenu(
-      new MouseEvent('click', { bubbles: true, clientX: 24, clientY: 16 }),
+    header.querySelector<HTMLButtonElement>('.gv-folder-settings-btn')?.click();
+    const recentOption = document.querySelector<HTMLButtonElement>(
+      '.gv-folder-sort-option:last-child',
     );
+    expect(recentOption).not.toBeNull();
+    recentOption?.click();
 
-    const menu = document.querySelector('.gv-folder-settings-menu');
-    const options = Array.from(
-      menu?.querySelectorAll<HTMLButtonElement>('.gv-folder-sort-option') ?? [],
-    );
-
-    expect(options.map((button) => button.textContent)).toEqual([
-      'folder_sort_manual',
-      'folder_sort_recent',
-    ]);
-    expect(options[0]?.getAttribute('aria-pressed')).toBe('true');
-
-    options[1]?.click();
-
-    expect(options[1]?.getAttribute('aria-pressed')).toBe('true');
     expect(browser.storage.sync.set).toHaveBeenCalledWith({
       [StorageKeys.FOLDER_CONVERSATION_SORT_MODE]: 'recent',
     });
-  });
-
-  it('controls the existing sidebar width setting from folder settings', async () => {
-    vi.mocked(browser.storage.sync.get).mockImplementation(async (defaults) => ({
-      ...(defaults as Record<string, unknown>),
-      [StorageKeys.SIDEBAR_WIDTH]: 26,
-      [StorageKeys.SIDEBAR_WIDTH_ENABLED]: true,
-    }));
-
-    manager = new FolderManager();
-    const typedManager = manager as unknown as TestableManager;
-    typedManager.showFolderSettingsMenu(
-      new MouseEvent('click', { bubbles: true, clientX: 24, clientY: 16 }),
-    );
-    await Promise.resolve();
-
-    const toggle = document.querySelector<HTMLButtonElement>('.gv-folder-width-switch');
-    const slider = document.querySelector<HTMLInputElement>('.gv-folder-width-slider');
-    const value = document.querySelector<HTMLOutputElement>('.gv-folder-width-value');
-
-    await vi.waitFor(() => expect(toggle?.getAttribute('aria-checked')).toBe('true'));
-    expect(slider?.disabled).toBe(false);
-    expect(slider?.value).toBe('312');
-    expect(value?.textContent).toBe('312px');
-
-    if (!slider || !toggle) throw new Error('Sidebar width controls were not rendered');
-    slider.value = '360';
-    slider.dispatchEvent(new Event('input', { bubbles: true }));
-    expect(value?.textContent).toBe('360px');
-
-    slider.dispatchEvent(new Event('change', { bubbles: true }));
-    expect(browser.storage.sync.set).toHaveBeenCalledWith({
-      [StorageKeys.SIDEBAR_WIDTH]: 360,
-    });
-
-    toggle.click();
-    expect(toggle.getAttribute('aria-checked')).toBe('false');
-    expect(slider.disabled).toBe(true);
-    expect(browser.storage.sync.set).toHaveBeenCalledWith({
-      [StorageKeys.SIDEBAR_WIDTH_ENABLED]: false,
-    });
-  });
-
-  it('removes stale menu listeners when toggling closed before reopening', () => {
-    manager = new FolderManager();
-    const typedManager = manager as unknown as TestableManager;
-
-    typedManager.showImportExportMenu(
-      new MouseEvent('click', { bubbles: true, clientX: 24, clientY: 16 }),
-    );
-    vi.runOnlyPendingTimers();
-
-    typedManager.showImportExportMenu(
-      new MouseEvent('click', { bubbles: true, clientX: 28, clientY: 20 }),
-    );
-    expect(typedManager.activeImportExportMenu).toBeNull();
-
-    typedManager.showImportExportMenu(
-      new MouseEvent('click', { bubbles: true, clientX: 32, clientY: 24 }),
-    );
-    vi.runOnlyPendingTimers();
-
-    const reopenedMenu = document.querySelector('.gv-folder-menu') as HTMLElement | null;
-    expect(reopenedMenu).not.toBeNull();
-    reopenedMenu?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-
-    expect(document.querySelectorAll('.gv-folder-menu')).toHaveLength(1);
-    expect(typedManager.activeImportExportMenu).toBe(reopenedMenu);
   });
 
   it('keeps the import dialog singleton and reopens cleanly after closing', () => {
@@ -314,9 +237,9 @@ describe('folder duplicate click guards', () => {
     mountFolderList(typedManager);
     typedManager.createFolder();
     typedManager.showImportDialog();
-    typedManager.showImportExportMenu(
-      new MouseEvent('click', { bubbles: true, clientX: 24, clientY: 16 }),
-    );
+    const header = typedManager.createHeader();
+    document.body.appendChild(header);
+    header.querySelector<HTMLButtonElement>('.gv-folder-import-export-btn')?.click();
     vi.runOnlyPendingTimers();
 
     expect(document.querySelectorAll('.gv-folder-inline-input')).toHaveLength(1);
@@ -331,7 +254,6 @@ describe('folder duplicate click guards', () => {
     expect(document.querySelectorAll('.gv-folder-menu')).toHaveLength(0);
     expect(typedManager.activeFolderInput).toBeNull();
     expect(typedManager.activeImportDialog).toBeNull();
-    expect(typedManager.activeImportExportMenu).toBeNull();
   });
 
   it('shows native multi-select actions without the sidebar folder container', () => {
