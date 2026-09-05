@@ -208,15 +208,16 @@ export class NativeConversationMenus {
   ): void {
     if (this.callbacks.getContext().isDestroyed || !panel.isConnected) return;
 
-    const context = getConversationMenuContext(panel);
-    if (!context) return; // not a conversation menu (e.g. model picker / response menu)
+    if (!getConversationMenuContext(panel)) return;
 
     const label = getTranslationSyncUnsafe('conversation_move_to_folder');
     const injected = injectConversationMenuMoveToFolderButton(panel, {
       label,
       tooltip: label,
       onClick: () => {
-        const info = this.resolveConversationInfoForMenu(context);
+        // Gemini can link the expanded trigger after the panel is injected.
+        const context = getConversationMenuContext(panel);
+        const info = context ? this.resolveConversationInfoForMenu(context) : null;
         if (info) {
           this.callbacks.onMoveToFolder(info);
         } else {

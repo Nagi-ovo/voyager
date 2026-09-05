@@ -172,6 +172,51 @@ describe('native move menu → folder command', () => {
     target!.click();
   }
 
+  it.each([
+    ['another conversation is open', '/u/1/app/aaaaaaaaaaaaaaaa'],
+    ['no conversation is open', '/u/1/app'],
+  ])('resolves a sidebar trigger linked after menu injection when %s', async (_, route) => {
+    window.history.replaceState({}, '', route);
+    const row = document.createElement('div');
+    row.setAttribute('data-test-id', 'conversation');
+    row.setAttribute('jslog', '["c_bbbbbbbbbbbbbbbb"]');
+    row.innerHTML =
+      '<a href="/u/1/app/bbbbbbbbbbbbbbbb"><span class="title-text">Sidebar conversation</span></a>';
+    const trigger = document.createElement('button');
+    trigger.setAttribute('data-test-id', 'actions-menu-button');
+    trigger.setAttribute('aria-haspopup', 'menu');
+    trigger.setAttribute('aria-expanded', 'false');
+    row.appendChild(trigger);
+    sidebar.appendChild(row);
+    trigger.click();
+
+    const menu = document.createElement('gem-menu');
+    menu.id = 'late-linked-menu';
+    menu.innerHTML =
+      '<gem-menu-item data-test-id="rename-button"><mat-icon fonticon="edit">edit</mat-icon><span class="label">Rename</span></gem-menu-item>';
+    document.body.appendChild(menu);
+    await vi.advanceTimersByTimeAsync(40);
+    expect(menu.querySelector('.gv-move-to-folder-btn')).not.toBeNull();
+
+    // Gemini links the expanded trigger after rendering the panel. Later retries
+    // see this linkage, but the already injected action must also use it on click.
+    trigger.setAttribute('aria-expanded', 'true');
+    trigger.setAttribute('aria-controls', menu.id);
+    await vi.advanceTimersByTimeAsync(80);
+    expect(menu.querySelectorAll('.gv-move-to-folder-btn')).toHaveLength(1);
+    menu.querySelector<HTMLElement>('.gv-move-to-folder-btn')!.click();
+    selectFolder();
+
+    expect(typed.data.folderContents.f1).toEqual([
+      expect.objectContaining({
+        conversationId: 'bbbbbbbbbbbbbbbb',
+        title: 'Sidebar conversation',
+        url: 'https://gemini.google.com/u/1/app/bbbbbbbbbbbbbbbb',
+      }),
+    ]);
+    expect(typed.saveData).toHaveBeenCalledTimes(1);
+  });
+
   it('moves the sidebar conversation with its current native title and scoped URL', async () => {
     const row = document.createElement('div');
     row.setAttribute('data-test-id', 'conversation');

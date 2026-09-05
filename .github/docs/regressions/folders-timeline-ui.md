@@ -62,6 +62,20 @@ drop, or hover layout.
   `preserves folder entries when native deletion is cancelled after sidebar reinitialization`,
   and `clears native deletion on destroy after remount (confirmed: %s)`).
 
+## Native move menus must resolve ownership when clicked
+
+- **Trap:** Gemini can mount a conversation menu before updating the trigger's `aria-expanded`
+  and `aria-controls`. Capturing menu context during injection binds the button to a missing or
+  incorrect trigger. A sidebar move then does nothing on the new-chat page, or saves the currently
+  open conversation instead of the selected sidebar conversation. Injection retries only update
+  the existing button's label, so they cannot repair its captured callback context.
+- **Rule:** Read the live menu context when the injected Move to folder action is clicked. Resolve
+  the sidebar conversation from that trigger; never use the current page to replace an unresolved
+  sidebar identity.
+- **Guard:** `src/pages/content/folder/__tests__/topMenuInjection.test.ts`
+  (`resolves a sidebar trigger linked after menu injection when %s`, with and without another
+  conversation open).
+
 ## Timeline navigation must validate the live scroll viewport
 
 - **Trap:** Timeline dots, preview-list items, and `j`/`k` shortcuts could all appear inert after
