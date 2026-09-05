@@ -1,16 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { TimelineManager } from '../manager';
+import { TimelineTurns } from '../TimelineTurns';
 
-type FilterInternal = {
-  filterTopLevel: (elements: Element[]) => HTMLElement[];
-};
-
-function filter(manager: TimelineManager, elements: Element[]): HTMLElement[] {
-  return (manager as unknown as FilterInternal).filterTopLevel(elements);
-}
-
-describe('TimelineManager top-level turn filtering', () => {
+describe('TimelineTurns top-level turn filtering', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
     vi.restoreAllMocks();
@@ -28,9 +20,9 @@ describe('TimelineManager top-level turn filtering', () => {
     secondTopLevel.appendChild(secondNested);
     document.body.append(firstTopLevel, secondTopLevel);
 
-    const manager = new TimelineManager();
+    const manager = new TimelineTurns();
     expect(
-      filter(manager, [deeplyNested, secondTopLevel, nested, firstTopLevel, secondNested]),
+      manager.filterTopLevel([deeplyNested, secondTopLevel, nested, firstTopLevel, secondNested]),
     ).toEqual([secondTopLevel, firstTopLevel]);
   });
 
@@ -41,8 +33,8 @@ describe('TimelineManager top-level turn filtering', () => {
     wrapper.append(first, second);
     document.body.appendChild(wrapper);
 
-    const manager = new TimelineManager();
-    expect(filter(manager, [first, second])).toEqual([first, second]);
+    const manager = new TimelineTurns();
+    expect(manager.filterTopLevel([first, second])).toEqual([first, second]);
   });
 
   it('does not perform pairwise contains checks for large flat lists', () => {
@@ -53,8 +45,8 @@ describe('TimelineManager top-level turn filtering', () => {
     });
     const contains = vi.spyOn(Node.prototype, 'contains');
 
-    const manager = new TimelineManager();
-    expect(filter(manager, elements)).toEqual(elements);
+    const manager = new TimelineTurns();
+    expect(manager.filterTopLevel(elements)).toEqual(elements);
     expect(contains).not.toHaveBeenCalled();
   });
 });

@@ -2,7 +2,6 @@
  * ForkNodesService - communicates with background script for fork node persistence
  * Follows the same pattern as StarredMessagesService
  */
-import { eventBus } from '../timeline/EventBus';
 import type { ForkNode, ForkNodesData } from './forkTypes';
 
 async function sendMessage<T>(type: string, payload?: unknown): Promise<T> {
@@ -28,13 +27,7 @@ async function sendMessage<T>(type: string, payload?: unknown): Promise<T> {
 export class ForkNodesService {
   static async addForkNode(node: ForkNode): Promise<boolean> {
     const response = await sendMessage<{ ok: boolean; added: boolean }>('gv.fork.add', node);
-    if (response.added) {
-      eventBus.emit('fork:added', {
-        conversationId: node.conversationId,
-        turnId: node.turnId,
-        forkGroupId: node.forkGroupId,
-      });
-    }
+
     return response.added;
   }
 
@@ -48,9 +41,7 @@ export class ForkNodesService {
       turnId,
       forkGroupId,
     });
-    if (response.removed) {
-      eventBus.emit('fork:removed', { conversationId, turnId, forkGroupId });
-    }
+
     return response.removed;
   }
 

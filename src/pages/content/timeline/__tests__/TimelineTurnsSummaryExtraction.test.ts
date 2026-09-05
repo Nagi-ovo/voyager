@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { TimelineManager } from '../manager';
+import { TimelineTurns } from '../TimelineTurns';
 
 function setElementTop(el: HTMLElement, top: number): void {
   Object.defineProperty(el, 'offsetTop', { value: top, configurable: true });
@@ -17,70 +17,7 @@ function setElementTop(el: HTMLElement, top: number): void {
   } as DOMRect);
 }
 
-type TimelineMarker = {
-  id: string;
-  summary: string;
-  assistantSummary: string;
-};
-
-type TimelineManagerInternal = {
-  conversationContainer: HTMLElement | null;
-  scrollContainer: HTMLElement | null;
-  userTurnSelector: string | null;
-  ui: { timelineBar: HTMLElement | null; trackContent: HTMLElement | null };
-  markers: TimelineMarker[];
-  recalculateAndRenderMarkers: () => void;
-  updateTimelineGeometry: () => void;
-  updateIntersectionObserverTargetsFromMarkers: () => void;
-  syncTimelineTrackToMain: () => void;
-  updateVirtualRangeAndRender: () => void;
-  updateActiveDotUI: () => void;
-  scheduleScrollSync: () => void;
-};
-
-function setupForRecalc(container: HTMLElement): {
-  manager: TimelineManager;
-  internal: TimelineManagerInternal;
-} {
-  const scrollContainer = document.createElement('div');
-  scrollContainer.scrollTop = 0;
-  Object.defineProperty(scrollContainer, 'clientHeight', { value: 400, configurable: true });
-  vi.spyOn(scrollContainer, 'getBoundingClientRect').mockReturnValue({
-    x: 0,
-    y: 0,
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 400,
-    width: 300,
-    height: 400,
-    toJSON: () => ({}),
-  } as DOMRect);
-  scrollContainer.appendChild(container);
-  document.body.appendChild(scrollContainer);
-
-  const timelineBar = document.createElement('div');
-  const trackContent = document.createElement('div');
-  timelineBar.appendChild(trackContent);
-  document.body.appendChild(timelineBar);
-
-  const manager = new TimelineManager();
-  const internal = manager as unknown as TimelineManagerInternal;
-  internal.conversationContainer = container;
-  internal.scrollContainer = scrollContainer;
-  internal.userTurnSelector = '.user-query-bubble-with-background';
-  internal.ui.timelineBar = timelineBar;
-  internal.ui.trackContent = trackContent;
-  internal.updateTimelineGeometry = vi.fn();
-  internal.updateIntersectionObserverTargetsFromMarkers = vi.fn();
-  internal.syncTimelineTrackToMain = vi.fn();
-  internal.updateVirtualRangeAndRender = vi.fn();
-  internal.updateActiveDotUI = vi.fn();
-  internal.scheduleScrollSync = vi.fn();
-  return { manager, internal };
-}
-
-describe('TimelineManager summary extraction', () => {
+describe('TimelineTurns summary extraction', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
     vi.restoreAllMocks();
@@ -101,12 +38,10 @@ describe('TimelineManager summary extraction', () => {
     setElementTop(turn, 0);
     container.appendChild(turn);
 
-    const { manager, internal } = setupForRecalc(container);
-    internal.recalculateAndRenderMarkers();
+    const markers = new TimelineTurns().collect(container, '.user-query-bubble-with-background');
 
-    expect(internal.markers).toHaveLength(1);
-    expect(internal.markers[0]?.summary).toBe('嗯嗯！');
-    manager.destroy();
+    expect(markers).toHaveLength(1);
+    expect(markers[0]?.summary).toBe('嗯嗯！');
   });
 
   it('excludes .gv-fork-btn button text from marker summary', () => {
@@ -120,13 +55,11 @@ describe('TimelineManager summary extraction', () => {
     setElementTop(turn, 0);
     container.appendChild(turn);
 
-    const { manager, internal } = setupForRecalc(container);
-    internal.recalculateAndRenderMarkers();
+    const markers = new TimelineTurns().collect(container, '.user-query-bubble-with-background');
 
-    expect(internal.markers).toHaveLength(1);
-    expect(internal.markers[0]?.summary).toBe('Hello world');
-    expect(internal.markers[0]?.summary).not.toContain('Fork');
-    manager.destroy();
+    expect(markers).toHaveLength(1);
+    expect(markers[0]?.summary).toBe('Hello world');
+    expect(markers[0]?.summary).not.toContain('Fork');
   });
 
   it('assigns unique marker IDs to turns with identical text at different positions', () => {
@@ -145,14 +78,12 @@ describe('TimelineManager summary extraction', () => {
     container.appendChild(first);
     container.appendChild(second);
 
-    const { manager, internal } = setupForRecalc(container);
-    internal.recalculateAndRenderMarkers();
+    const markers = new TimelineTurns().collect(container, '.user-query-bubble-with-background');
 
-    expect(internal.markers).toHaveLength(2);
-    expect(internal.markers[0]?.id).not.toBe(internal.markers[1]?.id);
-    expect(internal.markers[0]?.summary).toBe('好的，继续执行下一步');
-    expect(internal.markers[1]?.summary).toBe('好的，继续执行下一步');
-    manager.destroy();
+    expect(markers).toHaveLength(2);
+    expect(markers[0]?.id).not.toBe(markers[1]?.id);
+    expect(markers[0]?.summary).toBe('好的，继续执行下一步');
+    expect(markers[1]?.summary).toBe('好的，继续执行下一步');
   });
 
   it('pairs each user question with the model response before the next turn', () => {
@@ -180,16 +111,14 @@ describe('TimelineManager summary extraction', () => {
 
     container.append(first, firstResponse, second, secondResponse);
 
-    const { manager, internal } = setupForRecalc(container);
-    internal.recalculateAndRenderMarkers();
+    const markers = new TimelineTurns().collect(container, '.user-query-bubble-with-background');
 
-    expect(internal.markers).toHaveLength(2);
-    expect(internal.markers[0]?.assistantSummary).toBe(
+    expect(markers).toHaveLength(2);
+    expect(markers[0]?.assistantSummary).toBe(
       'Yes. The ruler can follow the active turn smoothly.',
     );
-    expect(internal.markers[0]?.assistantSummary).not.toContain('Hidden reasoning');
-    expect(internal.markers[1]?.assistantSummary).toBe('Yes, with a quieter model-response style.');
-    manager.destroy();
+    expect(markers[0]?.assistantSummary).not.toContain('Hidden reasoning');
+    expect(markers[1]?.assistantSummary).toBe('Yes, with a quieter model-response style.');
   });
 
   it('deduplicates turns by visible text when visually-hidden labels differ', () => {
@@ -207,11 +136,9 @@ describe('TimelineManager summary extraction', () => {
     container.appendChild(first);
     container.appendChild(second);
 
-    const { manager, internal } = setupForRecalc(container);
-    internal.recalculateAndRenderMarkers();
+    const markers = new TimelineTurns().collect(container, '.user-query-bubble-with-background');
 
-    expect(internal.markers).toHaveLength(1);
-    expect(internal.markers[0]?.summary).toBe('same content');
-    manager.destroy();
+    expect(markers).toHaveLength(1);
+    expect(markers[0]?.summary).toBe('same content');
   });
 });

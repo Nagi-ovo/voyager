@@ -1,98 +1,34 @@
-/**
- * Simple Event Bus implementation using Observer pattern
- * Provides type-safe event communication between components
- */
+type StarredEvent = 'starred:added' | 'starred:removed';
+type StarredChange = { conversationId: string; turnId: string };
+type Listener = (change: StarredChange) => void;
 
-export type EventCallback<T = unknown> = (data: T) => void;
+/** Same-page star updates; extension storage handles cross-page notifications. */
+class EventBus {
+  private readonly listeners = new Map<StarredEvent, Set<Listener>>();
 
-interface EventMap {
-  'starred:added': { conversationId: string; turnId: string };
-  'starred:removed': { conversationId: string; turnId: string };
-  'starred:updated': { conversationId: string };
-  'fork:added': { conversationId: string; turnId: string; forkGroupId: string };
-  'fork:removed': { conversationId: string; turnId: string; forkGroupId: string };
-}
-
-export class EventBus {
-  private static instance: EventBus;
-  private listeners: Map<string, Set<EventCallback<unknown>>> = new Map();
-
-  private constructor() {}
-
-  /**
-   * Singleton pattern: Get EventBus instance
-   */
-  static getInstance(): EventBus {
-    if (!EventBus.instance) {
-      EventBus.instance = new EventBus();
+  on(event: StarredEvent, listener: Listener): () => void {
+    let listeners = this.listeners.get(event);
+    if (!listeners) {
+      listeners = new Set();
+      this.listeners.set(event, listeners);
     }
-    return EventBus.instance;
+    listeners.add(listener);
+    return () => {
+      const current = this.listeners.get(event);
+      current?.delete(listener);
+      if (current?.size === 0) this.listeners.delete(event);
+    };
   }
 
-  /**
-   * Subscribe to an event
-   */
-  on<K extends keyof EventMap>(event: K, callback: EventCallback<EventMap[K]>): () => void {
-    if (!this.listeners.has(event)) {
-      this.listeners.set(event, new Set());
-    }
-
-    this.listeners.get(event)!.add(callback as EventCallback<unknown>);
-
-    // Return unsubscribe function
-    return () => this.off(event, callback);
-  }
-
-  /**
-   * Unsubscribe from an event
-   */
-  off<K extends keyof EventMap>(event: K, callback: EventCallback<EventMap[K]>): void {
-    const callbacks = this.listeners.get(event);
-    if (callbacks) {
-      callbacks.delete(callback as EventCallback<unknown>);
-      if (callbacks.size === 0) {
-        this.listeners.delete(event);
+  emit(event: StarredEvent, change: StarredChange): void {
+    for (const listener of this.listeners.get(event) ?? []) {
+      try {
+        listener(change);
+      } catch (error) {
+        console.error(`[EventBus] Error in ${event} listener:`, error);
       }
     }
   }
-
-  /**
-   * Emit an event
-   */
-  emit<K extends keyof EventMap>(event: K, data: EventMap[K]): void {
-    const callbacks = this.listeners.get(event);
-    if (callbacks) {
-      callbacks.forEach((callback) => {
-        try {
-          callback(data);
-        } catch (error) {
-          console.error(`[EventBus] Error in ${event} listener:`, error);
-        }
-      });
-    }
-  }
-
-  /**
-   * Clear all listeners (useful for cleanup)
-   */
-  clear(): void {
-    this.listeners.clear();
-  }
-
-  /**
-   * Get listener count for debugging
-   */
-  getListenerCount(event?: keyof EventMap): number {
-    if (event) {
-      return this.listeners.get(event)?.size || 0;
-    }
-    let total = 0;
-    this.listeners.forEach((callbacks) => {
-      total += callbacks.size;
-    });
-    return total;
-  }
 }
 
-// Export singleton instance
-export const eventBus = EventBus.getInstance();
+export const eventBus = new EventBus();

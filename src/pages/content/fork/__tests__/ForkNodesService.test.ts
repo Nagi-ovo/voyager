@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { eventBus } from '../../timeline/EventBus';
 import { ForkNodesService } from '../ForkNodesService';
 import type { ForkNode, ForkNodesData } from '../forkTypes';
 
@@ -29,9 +28,8 @@ describe('ForkNodesService', () => {
   });
 
   describe('addForkNode', () => {
-    it('should send gv.fork.add message and emit event when added', async () => {
+    it('sends gv.fork.add and returns whether the node was added', async () => {
       const node = createForkNode();
-      const emitSpy = vi.spyOn(eventBus, 'emit');
 
       sendMessageMock.mockImplementation(
         (_message: unknown, callback: (response: unknown) => void) => {
@@ -46,18 +44,10 @@ describe('ForkNodesService', () => {
         { type: 'gv.fork.add', payload: node },
         expect.any(Function),
       );
-      expect(emitSpy).toHaveBeenCalledWith('fork:added', {
-        conversationId: 'conv1',
-        turnId: 'u-0',
-        forkGroupId: 'fork-group-1',
-      });
-
-      emitSpy.mockRestore();
     });
 
-    it('should not emit event when node was not added', async () => {
+    it('returns false when the node was not added', async () => {
       const node = createForkNode();
-      const emitSpy = vi.spyOn(eventBus, 'emit');
 
       sendMessageMock.mockImplementation(
         (_message: unknown, callback: (response: unknown) => void) => {
@@ -68,9 +58,6 @@ describe('ForkNodesService', () => {
       const result = await ForkNodesService.addForkNode(node);
 
       expect(result).toBe(false);
-      expect(emitSpy).not.toHaveBeenCalled();
-
-      emitSpy.mockRestore();
     });
 
     it('should reject on runtime error', async () => {
@@ -99,9 +86,7 @@ describe('ForkNodesService', () => {
   });
 
   describe('removeForkNode', () => {
-    it('should send gv.fork.remove message and emit event when removed', async () => {
-      const emitSpy = vi.spyOn(eventBus, 'emit');
-
+    it('sends gv.fork.remove and returns whether the node was removed', async () => {
       sendMessageMock.mockImplementation(
         (_message: unknown, callback: (response: unknown) => void) => {
           callback({ ok: true, removed: true });
@@ -118,13 +103,6 @@ describe('ForkNodesService', () => {
         },
         expect.any(Function),
       );
-      expect(emitSpy).toHaveBeenCalledWith('fork:removed', {
-        conversationId: 'conv1',
-        turnId: 'u-0',
-        forkGroupId: 'fork-group-1',
-      });
-
-      emitSpy.mockRestore();
     });
   });
 

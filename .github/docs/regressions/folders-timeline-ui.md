@@ -85,10 +85,39 @@ drop, or hover layout.
 - **Rule:** Before navigation, validate the target's nearest scroll container against the cached
   viewport. Rebind and recalculate markers when it changed, including preview-panel navigation.
 - **Guard:** `src/pages/content/timeline/__tests__/TimelineManagerFlowClickActiveReset.test.ts`
-  (`refreshes connected markers when Gemini inserts a new scroll viewport` and
-  `refreshes the scroll viewport before preview-panel navigation`) and
+  (`rebinds a connected nested viewport before %s navigation`, covering dots and preview items) and
   `src/pages/content/timeline/__tests__/TimelineManagerNavigationRefresh.test.ts`
-  (`rebinds a connected stale scroll viewport before shortcut navigation`).
+  (`rebinds a connected stale viewport before shortcut navigation`).
+
+## Timeline state changes must preserve rail browsing position
+
+- **Trap:** Calling the full view render after a star or hierarchy change also synchronized the rail
+  to the native chat viewport. A user browsing a long rail with its slider was pulled back to the
+  current chat position when editing a marker.
+- **Rule:** State changes update geometry, virtual dots, slider and preview without synchronizing
+  the rail to the chat. Keep that synchronization in native scrolling and navigation paths.
+- **Guard:** `src/pages/content/timeline/__tests__/TimelineManagerFlowClickActiveReset.test.ts`
+  (`preserves the manually scrolled rail when a marker level changes`).
+
+## Timeline surfaces must cancel work that has not become visible
+
+- **Trap:** Clearing tooltip DOM without cancelling a queued animation frame could revive it after
+  an immediate hide; an old hide timer could close a newer tooltip. A pending long press could also
+  star a turn after its interaction owner was destroyed.
+- **Rule:** Tooltip visibility and marker interactions own their complete timer/animation/listener
+  lifetimes. Hide cancels pending visibility work; destroy cancels pending input actions as well.
+- **Guard:** `src/pages/content/timeline/__tests__/TimelineTooltip.test.ts` and
+  `src/pages/content/timeline/__tests__/TimelineMarkerInteractions.test.ts` cover queued frames,
+  overlapping hide/show and teardown during long press.
+
+## Timestamp opt-in changes can arrive during initialization
+
+- **Trap:** Moving the timestamp setting listener to the end of manager initialization lost changes
+  made while history or keyboard settings were loading, leaving timestamps enabled after opt-out.
+- **Rule:** The timestamp owner subscribes before its first asynchronous read and preserves settings
+  changes received while that read is pending. Unsubscribe when the owner is destroyed.
+- **Guard:** `src/pages/content/timeline/__tests__/TimelineTimestamps.test.ts` covers setting changes
+  during pending initialization and shared history-store lifetime.
 
 ## Folder recovery must remove untracked sidebar clones
 

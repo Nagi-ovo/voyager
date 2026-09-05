@@ -5,7 +5,6 @@
 
 // Types
 export * from './types/common';
-export * from './types/timeline';
 export * from './types/folder';
 
 // Errors

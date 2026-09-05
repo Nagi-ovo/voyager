@@ -109,7 +109,7 @@ mirrors, clear markers, or Drive sync.
   record but do not show, migrate, or delete it. Timeline, hierarchy, timestamps, forks, highlights,
   and exports share this resolver.
 - **Guard:** `src/pages/content/timeline/__tests__/starredResolution.test.ts`,
-  `src/pages/content/timeline/__tests__/TimelineManagerStarredRelocation.test.ts`,
-  `src/pages/content/timeline/__tests__/TimelineManagerIdentityAliases.test.ts`, and
+  `src/pages/content/timeline/__tests__/TimelineStateStars.test.ts`,
+  `src/pages/content/timeline/__tests__/TimelineStateIdentity.test.ts`, and
   `src/pages/content/timestamp/__tests__/historyTimestamps.test.ts` cover complete-map identity and
   safe legacy handling.
