@@ -13,12 +13,6 @@ type TestableManager = {
   createFolderElement: (folder: Folder, level?: number) => HTMLElement;
   toggleFolder: (folderId: string) => void;
   renameFolder: (folderId: string) => void;
-  // Expose private method via type casting for testing only
-  extractConversationData: (element: HTMLElement) => {
-    url: string;
-    isGem: boolean;
-    gemId?: string;
-  };
 };
 
 function createFolder(): Folder {
@@ -89,26 +83,5 @@ describe('folder name click/double-click interaction', () => {
     expect(toggleSpy).not.toHaveBeenCalled();
     expect(renameSpy).toHaveBeenCalledTimes(1);
     expect(renameSpy).toHaveBeenCalledWith('folder-1');
-  });
-
-  it('builds conversation URL without embedding /u/{num} segment', () => {
-    manager = new FolderManager();
-    const typedManager = manager as unknown as TestableManager & {
-      accountIsolationEnabled: boolean;
-    };
-
-    // Enable hard isolation so that URL normalization logic is active
-    typedManager.accountIsolationEnabled = true;
-
-    // Simulate current URL containing /u/1/app?foo=bar (same-origin relative path)
-    window.history.pushState({}, '', '/u/1/app?foo=bar');
-
-    const convEl = document.createElement('div');
-    convEl.setAttribute('jslog', '["c_2b6fe5971f124c03"]');
-
-    const data = typedManager.extractConversationData(convEl);
-
-    expect(data.url).toContain('/app/2b6fe5971f124c03');
-    expect(data.url).not.toContain('/u/1/');
   });
 });

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import browser from 'webextension-polyfill';
 
 import { FolderManager } from '../manager';
+import type { FolderData } from '../types';
 
 const { mountFloatingFabMock, mountFloatingPanelMock } = vi.hoisted(() => ({
   mountFloatingFabMock: vi.fn(),
@@ -35,20 +36,13 @@ vi.mock('../floatingModeFab', () => ({
 }));
 
 type TestableManager = {
-  cleanupTasks: Array<() => void>;
-  containerElement: HTMLElement | null;
-  sidebarContainer: HTMLElement | null;
-  recentSection: HTMLElement | null;
-  conversationObserver: MutationObserver | null;
-  sideNavObserver: MutationObserver | null;
-  nativeMenuObserver: MutationObserver | null;
+  data: FolderData;
   folderEnabled: boolean;
   floatingModeEnabled: boolean;
   floatingOpenOnStart: boolean;
   floatingModeActive: boolean;
   applyFolderEnabledSetting: () => void;
-  setupMutationObserver: () => void;
-  setupSideNavObserver: () => void;
+  initializeFolderUI: () => Promise<void>;
   startFloatingMode: (openPanel?: boolean) => Promise<void>;
   navigateToConversation: (url: string, conversation?: unknown) => void;
 };
@@ -85,47 +79,58 @@ describe('FolderManager disabled runtime teardown', () => {
     manager?.destroy();
     manager = null;
     document.body.innerHTML = '';
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
-  it('removes mounted folder UI and disconnects sidebar observers when disabled', () => {
+  it('stops enhancing native rows and menus when disabled while preserving folder data', async () => {
+    vi.useFakeTimers();
     manager = new FolderManager();
     const typed = manager as unknown as TestableManager;
-    const { sidebar, recents } = mountSidebar();
+    const { recents } = mountSidebar();
+    const row = document.createElement('div');
+    row.setAttribute('data-test-id', 'conversation');
+    row.innerHTML = '<a href="/app/abcdef0123456789">Native conversation</a>';
+    const nextRow = row.cloneNode(true) as HTMLElement;
+    recents.appendChild(row);
 
-    const container = document.createElement('div');
-    container.className = 'gv-folder-container';
-    sidebar.insertBefore(container, recents);
-
-    typed.sidebarContainer = sidebar;
-    typed.recentSection = recents;
-    typed.containerElement = container;
+    const menu = document.createElement('gem-menu');
+    menu.innerHTML = '<gem-menu-item data-test-id="rename-button">Rename</gem-menu-item>';
+    const nextMenu = menu.cloneNode(true) as HTMLElement;
+    const storedData: FolderData = {
+      folders: [
+        {
+          id: 'saved-folder',
+          name: 'Saved folder',
+          parentId: null,
+          isExpanded: false,
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+      folderContents: { 'saved-folder': [] },
+    };
+    typed.data = structuredClone(storedData);
     typed.folderEnabled = true;
-    typed.setupMutationObserver();
-    typed.setupSideNavObserver();
+    await typed.initializeFolderUI();
+    document.body.appendChild(menu);
+    await vi.advanceTimersByTimeAsync(100);
 
-    const nativeMenuObserver = new MutationObserver(() => {});
-    nativeMenuObserver.observe(document.body, { childList: true });
-    typed.nativeMenuObserver = nativeMenuObserver;
-
-    let cleanupRan = false;
-    typed.cleanupTasks = [
-      () => {
-        cleanupRan = true;
-      },
-    ];
+    expect(row.draggable).toBe(true);
+    expect(menu.querySelector('.gv-move-to-folder-btn')).not.toBeNull();
+    expect(document.querySelector('.gv-folder-container')).not.toBeNull();
+    menu.remove();
 
     typed.folderEnabled = false;
     typed.applyFolderEnabledSetting();
+    recents.appendChild(nextRow);
+    document.body.appendChild(nextMenu);
+    await vi.advanceTimersByTimeAsync(100);
 
-    expect(cleanupRan).toBe(true);
-    expect(container.isConnected).toBe(false);
-    expect(typed.containerElement).toBeNull();
-    expect(typed.sidebarContainer).toBeNull();
-    expect(typed.recentSection).toBeNull();
-    expect(typed.conversationObserver).toBeNull();
-    expect(typed.sideNavObserver).toBeNull();
-    expect(typed.nativeMenuObserver).toBeNull();
+    expect(document.querySelector('.gv-folder-container')).toBeNull();
+    expect(nextRow.draggable).toBe(false);
+    expect(nextMenu.querySelector('.gv-move-to-folder-btn')).toBeNull();
+    expect(typed.data).toEqual(storedData);
   });
 
   it('uses floating mode when folders are re-enabled with the floating toggle on', () => {

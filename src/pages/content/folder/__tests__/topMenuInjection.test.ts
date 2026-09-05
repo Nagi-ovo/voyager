@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { FolderData } from '@/core/types/folder';
+
 import { FolderManager } from '../manager';
+import { extractConversationInfoFromPage } from '../nativeSidebarDom';
 
 vi.mock('@/utils/i18n', () => ({
   getTranslationSync: (key: string) => key,
@@ -8,174 +11,70 @@ vi.mock('@/utils/i18n', () => ({
   initI18n: () => Promise.resolve(),
 }));
 
-type TestableManager = {
-  extractConversationInfoFromPage: () => { id: string; title: string; url: string } | null;
-};
+function pageTitle(title: string, containerClass = 'conversation-title-container'): void {
+  const container = document.createElement('div');
+  container.className = containerClass;
+  const label = document.createElement('span');
+  label.setAttribute('data-test-id', 'conversation-title');
+  label.textContent = title;
+  container.appendChild(label);
+  document.body.appendChild(container);
+}
+
+let originalUrl: string;
+let originalTitle: string;
+
+beforeEach(() => {
+  originalUrl = window.location.pathname + window.location.search;
+  originalTitle = document.title;
+  document.title = 'Google Gemini';
+});
+
+afterEach(() => {
+  document.body.innerHTML = '';
+  document.title = originalTitle;
+  window.history.replaceState({}, '', originalUrl);
+  vi.restoreAllMocks();
+});
 
 describe('extractConversationInfoFromPage', () => {
-  let manager: TestableManager;
+  it.each(['/', '/app', '/app/', '/app/a1b2c3', '/app/not-a-valid-id'])(
+    'does not invent a conversation for %s',
+    (route) => {
+      window.history.replaceState({}, '', route);
+      expect(extractConversationInfoFromPage()).toBeNull();
+    },
+  );
 
-  beforeEach(() => {
-    manager = new FolderManager() as unknown as TestableManager;
-  });
+  it.each(['/app/a1b2c3d4e5f6a7b8', '/gem/my-gem/a1b2c3d4e5f6a7b8', '/u/1/app/a1b2c3d4e5f6a7b8'])(
+    'extracts the current title and preserves the full conversation route for %s',
+    (route) => {
+      window.history.replaceState({}, '', route);
+      pageTitle('My Chat Title');
 
-  afterEach(() => {
-    // Restore any mocked globals
-    vi.restoreAllMocks();
-    // Clean up any added DOM elements
-    document.querySelectorAll('.conversation-title-container, top-bar-actions').forEach((el) => {
-      el.remove();
+      expect(extractConversationInfoFromPage()).toEqual({
+        id: 'a1b2c3d4e5f6a7b8',
+        title: 'My Chat Title',
+        url: window.location.href,
+      });
+    },
+  );
+
+  it.each([
+    ['Async Title - Gemini', 'Async Title'],
+    ['Google Gemini', 'Untitled'],
+  ])('falls back to the document title %s when the header is missing', (title, expected) => {
+    window.history.replaceState({}, '', '/app/a1b2c3d4e5f6a7b8');
+    document.title = title;
+
+    expect(extractConversationInfoFromPage()).toMatchObject({
+      id: 'a1b2c3d4e5f6a7b8',
+      title: expected,
     });
-    // Reset location via JSDOM
-    window.history.pushState({}, '', '/');
-  });
-
-  it('returns null when URL has no conversation ID', () => {
-    window.history.pushState({}, '', '/');
-    expect(manager.extractConversationInfoFromPage()).toBeNull();
-  });
-
-  it('returns null on the homepage (/app)', () => {
-    window.history.pushState({}, '', '/app');
-    expect(manager.extractConversationInfoFromPage()).toBeNull();
-  });
-
-  it('returns null on /app/ with no hex ID', () => {
-    window.history.pushState({}, '', '/app/');
-    expect(manager.extractConversationInfoFromPage()).toBeNull();
-  });
-
-  it('extracts ID from /app/<hexId> URL', () => {
-    const hexId = 'a1b2c3d4e5f6a7b8';
-    window.history.pushState({}, '', `/app/${hexId}`);
-
-    // Add a title element to the DOM
-    const titleContainer = document.createElement('div');
-    titleContainer.className = 'conversation-title-container';
-    const titleSpan = document.createElement('span');
-    titleSpan.setAttribute('data-test-id', 'conversation-title');
-    titleSpan.textContent = 'My Chat Title';
-    titleContainer.appendChild(titleSpan);
-    document.body.appendChild(titleContainer);
-
-    const result = manager.extractConversationInfoFromPage();
-    expect(result).not.toBeNull();
-    expect(result!.id).toBe(hexId);
-    expect(result!.title).toBe('My Chat Title');
-    expect(result!.url).toContain(hexId);
-
-    titleContainer.remove();
-  });
-
-  it('extracts ID from /gem/<gemId>/<hexId> URL', () => {
-    const hexId = 'deadbeef12345678';
-    window.history.pushState({}, '', `/gem/my-gem/${hexId}`);
-
-    const titleContainer = document.createElement('div');
-    titleContainer.className = 'conversation-title-container';
-    const titleSpan = document.createElement('span');
-    titleSpan.setAttribute('data-test-id', 'conversation-title');
-    titleSpan.textContent = 'Gem Chat';
-    titleContainer.appendChild(titleSpan);
-    document.body.appendChild(titleContainer);
-
-    const result = manager.extractConversationInfoFromPage();
-    expect(result).not.toBeNull();
-    expect(result!.id).toBe(hexId);
-    expect(result!.url).toContain(`/gem/my-gem/${hexId}`);
-
-    titleContainer.remove();
-  });
-
-  it('extracts ID from /u/1/app/<hexId> (multi-user prefix)', () => {
-    const hexId = 'abcdef0123456789';
-    window.history.pushState({}, '', `/u/1/app/${hexId}`);
-
-    const el = document.createElement('div');
-    el.className = 'conversation-title-container';
-    const span = document.createElement('span');
-    span.setAttribute('data-test-id', 'conversation-title');
-    span.textContent = 'Multi-user chat';
-    el.appendChild(span);
-    document.body.appendChild(el);
-
-    const result = manager.extractConversationInfoFromPage();
-    expect(result).not.toBeNull();
-    expect(result!.id).toBe(hexId);
-
-    el.remove();
-  });
-
-  it('falls back to document.title when DOM title element is missing', () => {
-    const hexId = 'a1b2c3d4e5f6a7b8';
-    window.history.pushState({}, '', `/app/${hexId}`);
-
-    // No title element in DOM — simulate document.title set by Gemini
-    Object.defineProperty(document, 'title', {
-      value: 'Async Title - Gemini',
-      writable: true,
-      configurable: true,
-    });
-
-    const result = manager.extractConversationInfoFromPage();
-    expect(result).not.toBeNull();
-    expect(result!.title).toBe('Async Title');
-    expect(result!.id).toBe(hexId);
-  });
-
-  it('falls back to "Untitled" when no title source is available', () => {
-    const hexId = 'a1b2c3d4e5f6a7b8';
-    window.history.pushState({}, '', `/app/${hexId}`);
-
-    // No title element, document.title is default
-    Object.defineProperty(document, 'title', {
-      value: 'Google Gemini',
-      writable: true,
-      configurable: true,
-    });
-
-    const result = manager.extractConversationInfoFromPage();
-    expect(result).not.toBeNull();
-    expect(result!.title).toBe('Untitled');
-    expect(result!.id).toBe(hexId);
-  });
-
-  it('returns null for short hex IDs (less than 8 chars)', () => {
-    window.history.pushState({}, '', '/app/a1b2c3');
-    expect(manager.extractConversationInfoFromPage()).toBeNull();
-  });
-
-  it('returns null for non-hex IDs', () => {
-    window.history.pushState({}, '', '/app/not-a-valid-id');
-    expect(manager.extractConversationInfoFromPage()).toBeNull();
-  });
-
-  it('ignores disallowed titles like "New chat"', () => {
-    const hexId = 'a1b2c3d4e5f6a7b8';
-    window.history.pushState({}, '', `/app/${hexId}`);
-
-    const el = document.createElement('div');
-    el.className = 'conversation-title-container';
-    const span = document.createElement('span');
-    span.setAttribute('data-test-id', 'conversation-title');
-    span.textContent = 'New chat';
-    el.appendChild(span);
-    document.body.appendChild(el);
-
-    Object.defineProperty(document, 'title', {
-      value: 'Google Gemini',
-      writable: true,
-      configurable: true,
-    });
-
-    const result = manager.extractConversationInfoFromPage();
-    expect(result).not.toBeNull();
-    expect(result!.title).toBe('Untitled');
-
-    el.remove();
   });
 
   it.each([
+    'New chat',
     '新对话',
     '新對話',
     '新しいチャット',
@@ -185,58 +84,145 @@ describe('extractConversationInfoFromPage', () => {
     'Novo chat',
     'Новый чат',
     'محادثة جديدة',
-  ])('ignores localized "New chat" placeholder: %s', (placeholder) => {
-    const hexId = 'a1b2c3d4e5f6a7b8';
-    window.history.pushState({}, '', `/app/${hexId}`);
+  ])('ignores the localized new-chat placeholder %s', (placeholder) => {
+    window.history.replaceState({}, '', '/app/a1b2c3d4e5f6a7b8');
+    pageTitle(placeholder);
 
-    const el = document.createElement('div');
-    el.className = 'conversation-title-container';
-    const span = document.createElement('span');
-    span.setAttribute('data-test-id', 'conversation-title');
-    span.textContent = placeholder;
-    el.appendChild(span);
-    document.body.appendChild(el);
-
-    Object.defineProperty(document, 'title', {
-      value: 'Google Gemini',
-      writable: true,
-      configurable: true,
-    });
-
-    const result = manager.extractConversationInfoFromPage();
-    expect(result).not.toBeNull();
-    expect(result!.title).toBe('Untitled');
-
-    el.remove();
+    expect(extractConversationInfoFromPage()?.title).toBe('Untitled');
   });
 
-  it('uses second selector when first has disallowed title', () => {
-    const hexId = 'a1b2c3d4e5f6a7b8';
-    window.history.pushState({}, '', `/app/${hexId}`);
+  it('uses the next title selector when the first only contains a placeholder', () => {
+    window.history.replaceState({}, '', '/app/a1b2c3d4e5f6a7b8');
+    pageTitle('Gemini');
+    pageTitle('Valid Title', 'top-bar-actions');
 
-    // First selector returns disallowed title
-    const el1 = document.createElement('div');
-    el1.className = 'conversation-title-container';
-    const span1 = document.createElement('span');
-    span1.setAttribute('data-test-id', 'conversation-title');
-    span1.textContent = 'Gemini';
-    el1.appendChild(span1);
-    document.body.appendChild(el1);
+    expect(extractConversationInfoFromPage()?.title).toBe('Valid Title');
+  });
+});
 
-    // Second selector returns valid title
-    const el2 = document.createElement('div');
-    el2.className = 'top-bar-actions';
-    const span2 = document.createElement('span');
-    span2.setAttribute('data-test-id', 'conversation-title');
-    span2.textContent = 'Valid Title';
-    el2.appendChild(span2);
-    document.body.appendChild(el2);
+type TestableManager = {
+  data: FolderData;
+  sidebarContainer: HTMLElement | null;
+  accountIsolationEnabled: boolean;
+  ensureDomRecoveryWatchers: () => void;
+  waitForSidebar: () => Promise<boolean>;
+  initializeFolderUI: () => Promise<void>;
+  saveData: () => Promise<boolean>;
+  refresh: () => void;
+};
 
-    const result = manager.extractConversationInfoFromPage();
-    expect(result).not.toBeNull();
-    expect(result!.title).toBe('Valid Title');
+describe('native move menu → folder command', () => {
+  let manager: FolderManager;
+  let typed: TestableManager;
+  let sidebar: HTMLElement;
 
-    el1.remove();
-    el2.remove();
+  beforeEach(async () => {
+    vi.useFakeTimers();
+    manager = new FolderManager();
+    typed = manager as unknown as TestableManager;
+    typed.accountIsolationEnabled = true;
+    typed.data = {
+      folders: [
+        { id: 'f1', name: 'Target', parentId: null, isExpanded: true, createdAt: 1, updatedAt: 1 },
+      ],
+      folderContents: { f1: [] },
+    };
+    sidebar = document.createElement('div');
+    sidebar.setAttribute('data-test-id', 'overflow-container');
+    document.body.appendChild(sidebar);
+    typed.sidebarContainer = sidebar;
+    vi.spyOn(typed, 'ensureDomRecoveryWatchers').mockImplementation(() => {});
+    vi.spyOn(typed, 'waitForSidebar').mockResolvedValue(false);
+    vi.spyOn(typed, 'saveData').mockResolvedValue(true);
+    vi.spyOn(typed, 'refresh').mockImplementation(() => {});
+    await typed.initializeFolderUI();
+    window.history.replaceState({}, '', '/u/1/app/aaaaaaaaaaaaaaaa');
+    pageTitle('Current page title');
+  });
+
+  afterEach(() => {
+    manager.destroy();
+    vi.useRealTimers();
+  });
+
+  async function openMenu(parent: HTMLElement): Promise<HTMLElement> {
+    const trigger = document.createElement('button');
+    trigger.setAttribute('data-test-id', 'actions-menu-button');
+    trigger.setAttribute('aria-haspopup', 'menu');
+    trigger.setAttribute('aria-expanded', 'true');
+    trigger.setAttribute('aria-controls', 'native-menu');
+    parent.appendChild(trigger);
+    const menu = document.createElement('gem-menu');
+    menu.id = 'native-menu';
+    menu.innerHTML =
+      '<gem-menu-item data-test-id="rename-button"><mat-icon fonticon="edit">edit</mat-icon><span class="label">Rename</span></gem-menu-item>';
+    document.body.appendChild(menu);
+    trigger.click();
+    await vi.advanceTimersByTimeAsync(40);
+    const move = menu.querySelector<HTMLElement>('.gv-move-to-folder-btn');
+    expect(move).not.toBeNull();
+    return move!;
+  }
+
+  function selectFolder(): void {
+    const target = document.querySelector<HTMLButtonElement>(
+      '.gv-folder-dialog-item[data-folder-id="f1"]',
+    );
+    expect(target).not.toBeNull();
+    target!.click();
+  }
+
+  it('moves the sidebar conversation with its current native title and scoped URL', async () => {
+    const row = document.createElement('div');
+    row.setAttribute('data-test-id', 'conversation');
+    row.setAttribute('jslog', '["c_bbbbbbbbbbbbbbbb"]');
+    row.innerHTML =
+      '<a href="/u/1/app/bbbbbbbbbbbbbbbb"><span class="title-text">Sidebar title before rename</span></a>';
+    sidebar.appendChild(row);
+    const move = await openMenu(row);
+    row.querySelector('.title-text')!.textContent = 'Renamed sidebar title';
+
+    move.click();
+    selectFolder();
+
+    expect(typed.data.folderContents.f1).toEqual([
+      expect.objectContaining({
+        conversationId: 'bbbbbbbbbbbbbbbb',
+        title: 'Renamed sidebar title',
+        url: 'https://gemini.google.com/u/1/app/bbbbbbbbbbbbbbbb',
+      }),
+    ]);
+    expect(typed.saveData).toHaveBeenCalledTimes(1);
+    expect(typed.refresh).toHaveBeenCalledTimes(1);
+    expect(document.querySelector('.gv-folder-dialog-overlay')).toBeNull();
+  });
+
+  it('moves the current page conversation from its top menu', async () => {
+    const move = await openMenu(document.body);
+
+    move.click();
+    selectFolder();
+
+    expect(typed.data.folderContents.f1).toEqual([
+      expect.objectContaining({
+        conversationId: 'aaaaaaaaaaaaaaaa',
+        title: 'Current page title',
+        url: window.location.href,
+      }),
+    ]);
+  });
+
+  it('leaves an unresolved sidebar menu unbound even while a valid page conversation is open', async () => {
+    const row = document.createElement('div');
+    row.setAttribute('data-test-id', 'conversation');
+    row.textContent = 'Still loading';
+    sidebar.appendChild(row);
+    const move = await openMenu(row);
+
+    move.click();
+
+    expect(document.querySelector('.gv-folder-dialog-overlay')).toBeNull();
+    expect(typed.data.folderContents.f1).toEqual([]);
+    expect(typed.saveData).not.toHaveBeenCalled();
   });
 });

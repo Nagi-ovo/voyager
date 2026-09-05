@@ -50,7 +50,6 @@ type TestableManager = {
   exitMultiSelectMode: () => void;
   reinitializePromise: Promise<void> | null;
   createFolder: (parentId?: string | null) => void;
-  findNativeConversationElement: (conversationId: string) => HTMLElement | null;
   initializeFolderUI: () => Promise<void>;
   reinitializeFolderUI: () => void;
   createHeader: () => HTMLElement;
@@ -59,7 +58,6 @@ type TestableManager = {
   handleCloudUpload: () => Promise<void>;
   handleCloudSync: () => Promise<void>;
   startFloatingMode: () => Promise<void>;
-  drainEnhancementQueue: () => void;
 };
 
 function mountFolderList(manager: TestableManager): HTMLElement {
@@ -284,9 +282,8 @@ describe('folder duplicate click guards', () => {
     const conversation = mountNativeSidebar('c_abc123');
 
     await typedManager.startFloatingMode();
-    // Per-row enhancement work is queued and drained under a frame budget
-    // (issue #753) — drive the drain deterministically.
-    typedManager.drainEnhancementQueue();
+    // Run the scheduled row enhancement through its production frame/idle path.
+    await vi.advanceTimersByTimeAsync(100);
 
     expect(conversation.dataset.gvConvDragAttached).toBe('true');
 
@@ -302,15 +299,5 @@ describe('folder duplicate click guards', () => {
       '1 selected',
     );
     expect(floatingHost?.querySelector('.gv-multi-select-delete-btn')).not.toBeNull();
-  });
-
-  it('finds native conversations from the document when no sidebar reference is cached', () => {
-    manager = new FolderManager();
-    const typedManager = manager as unknown as TestableManager;
-    const conversation = mountNativeSidebar('c_def456');
-
-    typedManager.sidebarContainer = null;
-
-    expect(typedManager.findNativeConversationElement('c_def456')).toBe(conversation);
   });
 });

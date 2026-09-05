@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PromptItem } from '@/core/types/sync';
 
 import { FolderManager } from '../manager';
+import * as nativeSidebarDom from '../nativeSidebarDom';
 import type { FolderData } from '../types';
 
 const { mockBrowser } = vi.hoisted(() => ({
@@ -42,7 +43,6 @@ type StorageChangeListener = (
 type TestableManager = {
   data: FolderData;
   activeStorageKey: string;
-  accountIsolationEnabled: boolean;
   containerElement: HTMLElement | null;
   hideArchivedConversations: boolean;
   folderSearchEnabled: boolean;
@@ -58,22 +58,11 @@ type TestableManager = {
   reloadFoldersFromStorage: () => Promise<void>;
   refresh: () => void;
   toggleFolder: (folderId: string) => void;
-  buildNativeConversationTitleMap: () => Map<string, string>;
-  lookupNativeConversationTitle: (conversationId: string) => string | null;
-  syncConversationTitleFromNative: (conversationId: string) => string | null;
-  buildConversationUrlFromId: (hexId: string) => string;
   createFoldersList: () => HTMLElement;
   createFolderSearch: () => HTMLElement;
   mergePrompts: (local: PromptItem[], cloud: PromptItem[]) => PromptItem[];
   storage: { saveData: (key: string, data: FolderData) => Promise<boolean> };
 };
-
-interface LocationMock {
-  pathname: string;
-  origin: string;
-  href: string;
-  reload: ReturnType<typeof vi.fn>;
-}
 
 function makeManager(): { manager: FolderManager; internals: TestableManager } {
   const manager = new FolderManager();
@@ -96,12 +85,10 @@ function makeFolderData(): FolderData {
   };
 }
 
-function appendNativeRow(hexId: string, title: string, options?: { omitJslog?: boolean }): void {
+function appendNativeRow(hexId: string, title: string): void {
   const row = document.createElement('div');
   row.setAttribute('data-test-id', 'conversation');
-  if (!options?.omitJslog) {
-    row.setAttribute('jslog', `["c_${hexId}"]`);
-  }
+  row.setAttribute('jslog', `["c_${hexId}"]`);
   const link = document.createElement('a');
   link.href = `/app/${hexId}`;
   const titleEl = document.createElement('span');
@@ -294,28 +281,6 @@ describe('folder manager audit fixes', () => {
   // ── H6: native title lookup table ─────────────────────────────────────────
 
   describe('native title lookup table (H6)', () => {
-    it('matches the legacy per-conversation scan for every id shape', () => {
-      const hexA = 'abc123def4567890';
-      const hexB = '1111222233334444';
-      const hexC = 'feedfacecafebeef';
-      appendNativeRow(hexA, 'Title A');
-      appendNativeRow(hexB, 'Title B');
-      appendNativeRow(hexC, 'Title C', { omitJslog: true }); // href-only row
-
-      const { manager: m, internals } = makeManager();
-      manager = m;
-
-      internals.nativeTitleLookup = internals.buildNativeConversationTitleMap();
-
-      const ids = [`c_${hexA}`, hexA, `c_${hexB}`, hexB, hexC, 'c_deadbeef00000000'];
-      for (const id of ids) {
-        const legacy = internals.syncConversationTitleFromNative(id);
-        const viaLookup = internals.lookupNativeConversationTitle(id);
-        expect(viaLookup).toBe(legacy);
-      }
-      internals.nativeTitleLookup = null;
-    });
-
     it('render pass uses the lookup table instead of per-conversation scans', () => {
       const hexId = 'abc123def4567890';
       appendNativeRow(hexId, 'Fresh native title');
@@ -336,7 +301,7 @@ describe('folder manager audit fixes', () => {
         },
       };
 
-      const legacyScanSpy = vi.spyOn(internals, 'syncConversationTitleFromNative');
+      const legacyScanSpy = vi.spyOn(nativeSidebarDom, 'syncConversationTitleFromNative');
       const list = internals.createFoldersList();
 
       expect(legacyScanSpy).not.toHaveBeenCalled();
@@ -368,8 +333,8 @@ describe('folder manager audit fixes', () => {
         },
       };
 
-      const buildSpy = vi.spyOn(internals, 'buildNativeConversationTitleMap');
-      const legacyScanSpy = vi.spyOn(internals, 'syncConversationTitleFromNative');
+      const buildSpy = vi.spyOn(nativeSidebarDom, 'buildNativeConversationTitleMap');
+      const legacyScanSpy = vi.spyOn(nativeSidebarDom, 'syncConversationTitleFromNative');
       const list = internals.createFoldersList();
 
       expect(buildSpy).not.toHaveBeenCalled();
@@ -496,77 +461,6 @@ describe('folder manager audit fixes', () => {
 
       vi.advanceTimersByTime(250);
       expect(refreshSpy).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  // ── M8: account prefix in jslog-fallback URLs ─────────────────────────────
-
-  describe('buildConversationUrlFromId account scope (M8)', () => {
-    let locationMock: LocationMock;
-    let originalLocation: Location;
-
-    beforeEach(() => {
-      originalLocation = window.location;
-      locationMock = {
-        pathname: '/app',
-        origin: 'https://gemini.google.com',
-        href: '',
-        reload: vi.fn(),
-      };
-      Object.defineProperty(window, 'location', {
-        value: locationMock,
-        writable: true,
-        configurable: true,
-      });
-    });
-
-    afterEach(() => {
-      Object.defineProperty(window, 'location', {
-        value: originalLocation,
-        writable: true,
-        configurable: true,
-      });
-    });
-
-    it('preserves the /u/N account prefix on /app URLs', () => {
-      locationMock.pathname = '/u/1/app/existing123';
-      const { manager: m, internals } = makeManager();
-      manager = m;
-
-      expect(internals.buildConversationUrlFromId('abc123def4567890')).toBe(
-        'https://gemini.google.com/u/1/app/abc123def4567890',
-      );
-    });
-
-    it('preserves the /u/N account prefix on gem URLs', () => {
-      locationMock.pathname = '/u/2/gem/gem-42/existing123';
-      const { manager: m, internals } = makeManager();
-      manager = m;
-
-      expect(internals.buildConversationUrlFromId('abc123def4567890')).toBe(
-        'https://gemini.google.com/u/2/gem/gem-42/abc123def4567890',
-      );
-    });
-
-    it('emits no prefix outside multi-account routes', () => {
-      locationMock.pathname = '/app/existing123';
-      const { manager: m, internals } = makeManager();
-      manager = m;
-
-      expect(internals.buildConversationUrlFromId('abc123def4567890')).toBe(
-        'https://gemini.google.com/app/abc123def4567890',
-      );
-    });
-
-    it('omits the prefix under hard account isolation (rebuilt at navigation time)', () => {
-      locationMock.pathname = '/u/3/app/existing123';
-      const { manager: m, internals } = makeManager();
-      manager = m;
-      internals.accountIsolationEnabled = true;
-
-      expect(internals.buildConversationUrlFromId('abc123def4567890')).toBe(
-        'https://gemini.google.com/app/abc123def4567890',
-      );
     });
   });
 });

@@ -49,24 +49,18 @@ drop, or hover layout.
   pin/rename/delete markers take precedence over overlapping report/export markers.
 - **Guard:** `src/pages/content/export/__tests__/conversationMenuInjection.test.ts`
   (`keeps current top conversation menus distinct when they also export to Docs`) and
-  `src/pages/content/folder/__tests__/observerBatching.test.ts`
-  (`resolves the current conversation when the top Delete menu trigger has no test id`,
-  `removes only the confirmed current conversation when the sidebar reinitializes before confirmation`,
-  `removes the deleted current conversation when Gemini lands on pageId=none`,
-  `ignores a hidden stale native row after current deletion completes at pageId=none`,
-  `ignores a Voyager-hidden archived row after confirmed current deletion`,
-  `ignores a Voyager-hidden archived row marked on legacy actions after deletion`,
-  `preserves a live row when Gemini temporarily hides the sidebar ancestor`,
-  `preserves a hidden native row when current deletion never reaches pageId=none`,
+  `src/pages/content/folder/NativeConversationMenus.test.ts`
+  (`requires native confirmation, then waits for the current route and row to leave`,
+  `checks the row itself after a confirmed current deletion with a %s`,
+  `preserves a conversation after %s even when Gemini reaches pageId=none`,
+  `preserves a hidden row when the current deletion never reaches its completion route`,
+  `expires rejected deletion checks instead of deleting after a later unrelated navigation`, and
+  `keeps an explicit deletion check across a transient native-row re-add`). Manager integration
+  remains in `src/pages/content/folder/__tests__/observerBatching.test.ts`
+  (`removes only the confirmed current conversation after sidebar reinitialization and settlement at %s`,
+  `discards a pending native deletion after the %s changes`,
   `preserves folder entries when native deletion is cancelled after sidebar reinitialization`,
-  `does not infer deletion from pageId=none without an explicit confirmation`,
-  `preserves folder entries when native deletion is cancelled with Escape`,
-  `preserves folder entries when native deletion is cancelled by clicking the overlay backdrop`,
-  `discards a pending native deletion after the storage key changes`,
-  `discards a pending native deletion after the route account changes`,
-  `clears native deletion state on destroy after sidebar reinitialization`,
-  `retries a confirmed current-conversation deletion until the route and row settle`, and
-  `stops retrying a rejected native deletion and preserves the folder entry`).
+  and `clears native deletion on destroy after remount (confirmed: %s)`).
 
 ## Timeline navigation must validate the live scroll viewport
 

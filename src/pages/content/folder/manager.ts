@@ -45,12 +45,6 @@ import {
 
 import { hasSeenCoachmark, markCoachmarkSeen } from '../coachmark';
 import {
-  MENU_PANEL_SELECTOR as CONVERSATION_MENU_PANEL_SELECTOR,
-  type ConversationMenuContext,
-  getConversationMenuContext,
-  injectConversationMenuMoveToFolderButton,
-} from '../export/conversationMenuInjection';
-import {
   getTimelineHierarchyStorageKey,
   getTimelineHierarchyStorageKeysToRead,
   resolveTimelineHierarchyDataForStorageScope,
@@ -60,6 +54,8 @@ import { TimestampService } from '../timestamp/TimestampService';
 import { historyTimestampStore } from '../timestamp/historyTimestamps';
 import { watchRouteChanges } from '../utils/routeWatcher';
 import { FolderDataSession } from './FolderDataSession';
+import { NativeConversationMenus } from './NativeConversationMenus';
+import { NativeSidebarObserver } from './NativeSidebarObserver';
 import {
   ACTIVITY_PRIORITY_WINDOW_MS,
   type ConversationActivityGroup,
@@ -77,7 +73,7 @@ import {
   mountFloatingPanel,
 } from './floatingPanel';
 import { FOLDER_COLORS, getFolderColor, isDarkMode } from './folderColors';
-import { DEFAULT_CONVERSATION_ICON, GEM_CONFIG, getGemIcon } from './gemConfig';
+import { DEFAULT_CONVERSATION_ICON, getGemIcon } from './gemConfig';
 import { createFolderHeaderMenus } from './headerMenus';
 import {
   mountHideArchivedNudge,
@@ -85,36 +81,41 @@ import {
   unmountHideArchivedNudge,
 } from './hideArchivedNudge';
 import {
+  buildConversationUrlFromId,
+  buildNativeConversationTitleMap,
+  collectAllSidebarConversations,
+  extractConversationData,
+  extractConversationId,
+  extractConversationIdFromElement,
+  extractNativeConversationId,
+  extractNativeConversationTitle,
+  extractNativeDragTitle,
+  findNativeConversationElement,
+  findNativeConversationLinkById,
+  getCurrentConversationId,
+  getCurrentHexIdFromLocation,
+  getNativeConversationElements,
+  getNativeConversationRoot,
+  lookupNativeConversationTitle,
+  normalizeConversationId,
+  resolveConversationRouteId,
+  syncConversationTitleFromNative,
+  triggerNativeConversationClick,
+} from './nativeSidebarDom';
+import {
   type IFolderStorageAdapter,
   createFolderStorageAdapter,
 } from './storage/FolderStorageAdapter';
 import type { ConversationReference, DragData, Folder, FolderData } from './types';
 
 const STORAGE_KEY = 'gvFolderData';
-const IS_DEBUG = false; // Set to true to enable debug logging
-// Native ⋮ menu content (the action items) renders asynchronously after the
-// panel element appears, so injection is retried a few times before giving up.
-const MOVE_MENU_INJECTION_RETRY_LIMIT = 8;
-const MOVE_MENU_INJECTION_RETRY_DELAY_MS = 80;
-const CONVERSATION_MENU_TRIGGER_SELECTOR =
-  '[data-test-id="actions-menu-button"], [data-test-id="conversation-actions-menu-icon-button"]';
-const VOYAGER_CONVERSATION_MENU_ACTION_SELECTOR =
-  '.gv-export-conversation-menu-btn, .gv-export-response-menu-btn, .gv-move-to-folder-btn';
-// AI Organize: the lr26 sidebar populates conversation rows lazily, so wait
-// briefly for at least one row to gain its link before collecting (see #725).
-const AI_ORG_COLLECT_TIMEOUT_MS = 3000;
-const AI_ORG_COLLECT_POLL_MS = 150;
+const IS_DEBUG = false;
 const ROOT_CONVERSATIONS_ID = '__root_conversations__'; // Special ID for root-level conversations
 const NOTIFICATION_TIMEOUT_MS = 10000; // Duration to show data loss notification
 const FOLDER_TREE_INDENT_MIN = -8;
 const FOLDER_TREE_INDENT_MAX = 32;
 const FOLDER_TREE_INDENT_DEFAULT = -8;
-const NATIVE_TITLE_SYNC_DEBOUNCE_MS = 300;
 const ARCHIVED_CONVERSATION_ACTIONS_CLASS = 'gv-conversation-archived-actions';
-// Issue #753: idle-slice budget for draining queued per-row enhancement work,
-// and how long the legacy actions-container layout probe stays cached.
-const ENHANCEMENT_IDLE_BUDGET_MS = 8;
-const ENHANCEMENT_IDLE_TIMEOUT_MS = 500;
 const LEGACY_ACTIONS_PROBE_TTL_MS = 1000;
 const SIDEBAR_ANCHOR_FALLBACK_GRACE_MS = 6000;
 // Grace before treating an attached-but-invisible folder as broken. Long enough
@@ -129,14 +130,6 @@ const FOLDER_HIDDEN_ANOMALY_GRACE_MS = 1500;
 const MAX_FOLDER_DEPTH = 1;
 const FOLDER_NAME_SINGLE_CLICK_DELAY_MS = 220;
 const FOLDER_NAVIGATION_CONFIRM_DELAY_MS = 1200;
-// A native delete menu can remain open while the user reads the confirmation
-// dialog. Keep only the conversation ID (never the title/content), and expire
-// it so an abandoned dialog cannot affect a later unrelated action.
-const NATIVE_DELETE_CANDIDATE_TIMEOUT_MS = 60_000;
-// Gemini may keep the deleted conversation route and sidebar row around for
-// several render ticks after confirmation. Poll for a bounded ~6 seconds;
-// timeout remains conservative and preserves the folder entry.
-const NATIVE_DELETE_SETTLE_CHECK_LIMIT = 20;
 // Trailing debounce for persisting pure-UI state changes (expand/collapse,
 // recently-opened marks). Data mutations still save immediately.
 const SAVE_DEBOUNCE_MS = 300;
@@ -189,11 +182,6 @@ interface FolderDialogOption {
   folder: Folder;
   level: number;
   path: string;
-}
-
-interface NativeDeleteScope {
-  storageKey: string;
-  routeUserId: string | null;
 }
 
 type ConversationReorderPlacement = 'above' | 'below';
@@ -285,7 +273,6 @@ export class FolderManager {
   private tooltipElement: HTMLElement | null = null;
   private tooltipTimeout: number | null = null;
   private sideNavObserver: MutationObserver | null = null;
-  private conversationObserver: MutationObserver | null = null; // Observer for conversation additions/removals
   // Watches the sidebar for re-renders that would leave the folder container in
   // the wrong slot relative to the Recents section. Gemini occasionally replaces
   // the `expandable-section[data-test-id="chats-expandable-section"]` element
@@ -340,26 +327,8 @@ export class FolderManager {
   private accountScope: AccountScope | null = null; // Resolved account scope for current page
   private activeStorageKey: string = STORAGE_KEY; // Storage key currently used for folder data
   private lastPathname: string | null = null;
-  private nativeTitleSyncTimer: number | null = null;
   private nativeTitleSyncInProgress: boolean = false;
-  private pendingTitleUpdates: Map<string, string> = new Map(); // Buffer title updates during render
-  private pendingRemovals: Map<string, number> = new Map(); // Pending conversation removals with timer IDs
-  private removalCheckDelay: number = 300; // Delay (ms) before confirming conversation deletion
-  // Batched mutation processing for the sidebar observer. Gemini emits a
-  // burst of mutations every time the user clicks a conversation row (it
-  // re-renders rows to update active state). Doing per-element setup work
-  // synchronously inside the observer callback caused noticeable click
-  // jank — issue #678. We now coalesce mutations to the next animation frame
-  // and dedupe by element/conversationId before doing any work.
-  private mutationBatchQueue: MutationRecord[] = [];
-  private mutationFlushScheduled: boolean = false;
-  private mutationFlushRafId: number | null = null;
-  // Per-row enhancement work (drag listeners, hide-archived state) for added
-  // conversations is drained from this queue during idle time instead of the
-  // sidebar-open animation frame — a burst can add every Recents row at once
-  // and this work is allowed to lag behind paint (issue #753).
-  private enhancementQueue: Set<HTMLElement> = new Set();
-  private enhancementDrainIdleId: number | null = null;
+  private pendingTitleUpdates: Map<string, string> = new Map();
   // Cached result of the legacy `.conversation-actions-container` layout
   // probe — see `hasLegacyActionsContainer` (issue #753).
   private legacyActionsProbe: { present: boolean; at: number } | null = null;
@@ -396,24 +365,29 @@ export class FolderManager {
   private activeFolderInput: HTMLElement | null = null; // Currently open folder name input
   private activeImportDialog: HTMLElement | null = null; // Currently open import dialog
   private readonly headerMenus = createFolderHeaderMenus();
+  private readonly nativeSidebarObserver = new NativeSidebarObserver({
+    isDestroyed: () => this.isDestroyed,
+    enhanceConversation: (row) => {
+      this.makeConversationDraggable(row);
+      this.applyHideArchivedToConversation(row);
+    },
+    hasStoredConversations: () => this.hasStoredConversations(),
+    onTitlesChanged: () => this.syncConversationTitlesFromNative(),
+  });
+  private readonly nativeConversationMenus = new NativeConversationMenus({
+    getContext: () => ({
+      sidebar: this.sidebarContainer,
+      storageKey: this.activeStorageKey,
+      accountIsolationEnabled: this.accountIsolationEnabled,
+      isDestroyed: this.isDestroyed,
+    }),
+    onMoveToFolder: ({ id, title, url }) => this.showMoveToFolderDialog(id, title, url),
+    onConfirmedDelete: (id) => this.removeConversationFromAllFolders(id),
+  });
 
   // Cleanup references
   private routeChangeCleanup: (() => void) | null = null;
   private sidebarClickListener: ((e: Event) => void) | null = null;
-  private nativeMenuObserver: MutationObserver | null = null;
-  // Capture-phase listener that injects "Move to folder" when a conversation ⋮
-  // menu trigger is clicked (belt-and-suspenders alongside nativeMenuObserver).
-  private moveMenuTriggerHandler: ((event: Event) => void) | null = null;
-  private moveMenuKeydownHandler: ((event: Event) => void) | null = null;
-  private nativeDeleteCandidateId: string | null = null;
-  private nativeDeleteCandidateScope: NativeDeleteScope | null = null;
-  private nativeDeleteCandidateTimer: number | null = null;
-  private nativeDeleteCandidateWasCurrent = false;
-  private currentNativeDeletionChecks = new Set<string>();
-  private pendingNativeDeletionScopes = new Map<string, NativeDeleteScope>();
-  // Tracks the last input modality so menu-close focus handling stays a11y-safe:
-  // pointer dismissals drop trigger focus, keyboard dismissals preserve it.
-  private lastInputModality: 'pointer' | 'keyboard' = 'pointer';
   private outsideClickHandler: ((e: MouseEvent) => void) | null = null; // For exiting multi-select on outside click
 
   // Batch delete related properties
@@ -424,11 +398,6 @@ export class FolderManager {
   // Batch delete timing configuration (in milliseconds)
   private readonly BATCH_DELETE_CONFIG = {
     DELAY_BETWEEN_DELETIONS: 500, // Delay between each deletion to avoid rate limiting
-    MENU_APPEAR_DELAY: 300, // Wait for context menu to appear after clicking "more" button
-    DIALOG_APPEAR_DELAY: 300, // Wait for confirmation dialog to appear
-    DELETION_COMPLETE_DELAY: 500, // Wait for deletion animation/API call to complete
-    MAX_BUTTON_WAIT_TIME: 3000, // Maximum time to wait for delete/confirm button to appear
-    BUTTON_CHECK_INTERVAL: 100, // Interval for polling button appearance
     PAGE_REFRESH_DELAY: 1500, // Delay before refreshing page after batch delete
   } as const;
 
@@ -581,21 +550,6 @@ export class FolderManager {
     this.debug('Destroying FolderManager - cleaning up resources');
     this.isDestroyed = true;
 
-    // Clear all pending removal timers
-    let clearedCount = 0;
-    this.pendingRemovals.forEach((timerId, conversationId) => {
-      clearTimeout(timerId);
-      clearedCount++;
-      this.debug(`Cleared pending removal timer for ${conversationId}`);
-    });
-    this.pendingRemovals.clear();
-    this.currentNativeDeletionChecks.clear();
-    this.pendingNativeDeletionScopes.clear();
-
-    if (clearedCount > 0) {
-      this.debug(`Cleared ${clearedCount} pending removal timer(s)`);
-    }
-
     // Clear other timers
     if (this.longPressTimeout) {
       clearTimeout(this.longPressTimeout);
@@ -614,7 +568,6 @@ export class FolderManager {
       this.tooltipTimeout = null;
     }
 
-    this.clearNativeTitleSyncTimer();
     this.clearConversationReorderIndicator();
 
     this.teardownDomRecoveryWatchers();
@@ -638,19 +591,9 @@ export class FolderManager {
       this.sideNavObserver = null;
     }
 
-    if (this.conversationObserver) {
-      this.conversationObserver.disconnect();
-      this.conversationObserver = null;
-    }
-    this.cancelMutationBatchFlush();
-    this.mutationBatchQueue.length = 0;
-    this.cancelEnhancementDrain();
+    this.nativeSidebarObserver.stop();
 
-    if (this.nativeMenuObserver) {
-      this.nativeMenuObserver.disconnect();
-      this.nativeMenuObserver = null;
-    }
-    this.teardownMoveMenuTriggerListener();
+    this.nativeConversationMenus.stop();
 
     this.teardownPositionEnforcer();
     this.cleanupNotebooksAnchorButton();
@@ -739,11 +682,6 @@ export class FolderManager {
   private teardownMountedFolderRuntime(): void {
     this.runCleanupTasks();
 
-    this.pendingRemovals.forEach((timerId) => clearTimeout(timerId));
-    this.pendingRemovals.clear();
-    this.currentNativeDeletionChecks.clear();
-    this.pendingNativeDeletionScopes.clear();
-
     if (this.longPressTimeout) {
       clearTimeout(this.longPressTimeout);
       this.longPressTimeout = null;
@@ -753,8 +691,6 @@ export class FolderManager {
       clearTimeout(this.folderNameClickTimeout);
       this.folderNameClickTimeout = null;
     }
-
-    this.clearNativeTitleSyncTimer();
 
     this.teardownDomRecoveryWatchers();
     this.folderRecoveryInFlight = false;
@@ -766,19 +702,9 @@ export class FolderManager {
       this.sideNavObserver = null;
     }
 
-    if (this.conversationObserver) {
-      this.conversationObserver.disconnect();
-      this.conversationObserver = null;
-    }
-    this.cancelMutationBatchFlush();
-    this.mutationBatchQueue.length = 0;
-    this.cancelEnhancementDrain();
+    this.nativeSidebarObserver.stop();
 
-    if (this.nativeMenuObserver) {
-      this.nativeMenuObserver.disconnect();
-      this.nativeMenuObserver = null;
-    }
-    this.teardownMoveMenuTriggerListener();
+    this.nativeConversationMenus.stop();
 
     this.teardownPositionEnforcer();
     this.cleanupNotebooksAnchorButton();
@@ -854,8 +780,8 @@ export class FolderManager {
     // lazily rendered sidebar. If that initial wait times out, these lifetime
     // watchers are what notice the sidebar later and finish initialization.
     this.ensureDomRecoveryWatchers();
-    this.setupConversationClickTracking();
-    this.setupNativeConversationMenuObserver();
+    this.nativeConversationMenus.startTracking();
+    this.nativeConversationMenus.observePanels();
 
     // Wait for sidebar to be available (with a hard timeout so a DOM change on
     // Gemini's side doesn't silently hang the folder feature forever).
@@ -873,7 +799,11 @@ export class FolderManager {
     // Create and inject folder UI
     this.createFolderUI();
 
-    this.setupNativeSidebarConversationEnhancements();
+    this.nativeSidebarObserver.enqueueConversations(
+      getNativeConversationRoot(this.sidebarContainer),
+    );
+
+    if (this.sidebarContainer) this.nativeSidebarObserver.observe(this.sidebarContainer);
 
     // Set up sidebar visibility observer
     this.setupSideNavObserver();
@@ -996,7 +926,10 @@ export class FolderManager {
       this.sidebarAnchorMissingSince = null;
       if (currentSidebar && this.sidebarContainer !== currentSidebar) {
         this.sidebarContainer = currentSidebar;
-        this.setupNativeSidebarConversationEnhancements();
+        this.nativeSidebarObserver.enqueueConversations(
+          getNativeConversationRoot(this.sidebarContainer),
+        );
+        if (this.sidebarContainer) this.nativeSidebarObserver.observe(this.sidebarContainer);
         this.setupPositionEnforcer();
       }
 
@@ -1132,16 +1065,14 @@ export class FolderManager {
     });
   }
 
-  private setupNativeSidebarConversationEnhancements(): void {
-    this.makeConversationsDraggable();
-    this.setupMutationObserver();
-  }
-
   private setupFloatingModeSidebarInteractions(): void {
     const existingSidebar = this.findCurrentSidebarContainer();
     if (existingSidebar instanceof HTMLElement) {
       this.sidebarContainer = existingSidebar;
-      this.setupNativeSidebarConversationEnhancements();
+      this.nativeSidebarObserver.enqueueConversations(
+        getNativeConversationRoot(this.sidebarContainer),
+      );
+      if (this.sidebarContainer) this.nativeSidebarObserver.observe(this.sidebarContainer);
       return;
     }
 
@@ -1152,7 +1083,10 @@ export class FolderManager {
           return;
         }
         if (this.isDestroyed || !this.folderEnabled || !this.floatingModeActive) return;
-        this.setupNativeSidebarConversationEnhancements();
+        this.nativeSidebarObserver.enqueueConversations(
+          getNativeConversationRoot(this.sidebarContainer),
+        );
+        if (this.sidebarContainer) this.nativeSidebarObserver.observe(this.sidebarContainer);
       })
       .catch((error) => {
         this.debugWarn('Failed to initialize native sidebar interactions in floating mode:', error);
@@ -1199,8 +1133,8 @@ export class FolderManager {
     this.floatingModeActive = true;
     this.debug('Entering floating mode');
 
-    this.setupConversationClickTracking();
-    this.setupNativeConversationMenuObserver();
+    this.nativeConversationMenus.startTracking();
+    this.nativeConversationMenus.observePanels();
     this.setupFloatingModeSidebarInteractions();
 
     if (openPanel) {
@@ -2101,7 +2035,7 @@ export class FolderManager {
     // skip the sidebar scan entirely.
     this.nativeTitleLookup =
       !this.hideArchivedConversations && !isSearchActive
-        ? this.buildNativeConversationTitleMap()
+        ? buildNativeConversationTitleMap()
         : new Map();
     try {
       return this.populateFoldersList(list, isSearchActive);
@@ -2555,8 +2489,8 @@ export class FolderManager {
       // Render passes populate `nativeTitleLookup` once up front (see
       // createFoldersList); outside a render pass fall back to the direct scan.
       const syncedTitle = this.nativeTitleLookup
-        ? this.lookupNativeConversationTitle(conv.conversationId)
-        : this.syncConversationTitleFromNative(conv.conversationId);
+        ? lookupNativeConversationTitle(this.nativeTitleLookup, conv.conversationId)
+        : syncConversationTitleFromNative(conv.conversationId);
       if (syncedTitle && syncedTitle !== conv.title) {
         conv.title = syncedTitle;
         displayTitle = syncedTitle;
@@ -2778,7 +2712,7 @@ export class FolderManager {
   }
 
   private getFolderConversationHref(conversation: ConversationReference): string {
-    const routeId = this.resolveConversationRouteId(conversation.url, conversation.conversationId);
+    const routeId = resolveConversationRouteId(conversation.url, conversation.conversationId);
 
     try {
       const storedUrl = new URL(conversation.url, window.location.origin);
@@ -2794,7 +2728,9 @@ export class FolderManager {
       this.debug('Failed to build folder conversation href:', error);
     }
 
-    return routeId ? this.buildConversationUrlFromId(routeId) : window.location.href;
+    return routeId
+      ? buildConversationUrlFromId(routeId, this.accountIsolationEnabled)
+      : window.location.href;
   }
 
   private setupDropZone(element: HTMLElement, folderId: string): void {
@@ -2955,25 +2891,6 @@ export class FolderManager {
     });
   }
 
-  private getNativeConversationRoot(): ParentNode {
-    return this.sidebarContainer?.isConnected ? this.sidebarContainer : document;
-  }
-
-  private getNativeConversationElements(): NodeListOf<Element> {
-    return this.getNativeConversationRoot().querySelectorAll('[data-test-id="conversation"]');
-  }
-
-  private makeConversationsDraggable(): void {
-    // Full sweeps (init, reinit, recovery) go through the same budgeted
-    // drain as observer bursts so a large Recents list never blocks one
-    // frame for the whole sweep (issue #753).
-    const conversations = this.getNativeConversationElements();
-    conversations.forEach((conv) => {
-      this.enhancementQueue.add(conv as HTMLElement);
-    });
-    this.scheduleEnhancementDrain();
-  }
-
   /**
    * Pinned folders are fixed in place and cannot be dragged.
    * Non-pinned folders can be moved even when they have descendants.
@@ -3118,7 +3035,7 @@ export class FolderManager {
       if (e.button !== 0) return; // Only left mouse button
       longPressTriggered = false;
 
-      const conversationId = this.extractConversationId(element);
+      const conversationId = extractConversationId(element);
 
       longPressTimeoutId = window.setTimeout(() => {
         longPressTriggered = true;
@@ -3184,7 +3101,7 @@ export class FolderManager {
           // Multi-select mode: toggle selection
           e.preventDefault();
           e.stopPropagation();
-          const conversationId = this.extractConversationId(element);
+          const conversationId = extractConversationId(element);
           this.toggleConversationSelection(conversationId);
 
           // Update visual state
@@ -3202,11 +3119,11 @@ export class FolderManager {
     ); // Use capture phase to intercept before navigation
 
     element.addEventListener('dragstart', (e) => {
-      const conversationId = this.extractConversationId(element);
-      const title = this.extractNativeDragTitle(element, conversationId);
+      const conversationId = extractConversationId(element);
+      const title = extractNativeDragTitle(element, conversationId);
 
       // Extract URL and conversation metadata together
-      const conversationData = this.extractConversationData(element);
+      const conversationData = extractConversationData(element, this.accountIsolationEnabled);
 
       // Restrict to move-only to prevent Chrome from triggering split-screen/tab tiling
       if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
@@ -3233,8 +3150,8 @@ export class FolderManager {
         this.selectedConversations.forEach((id) => {
           const convEl = this.findConversationElement(id);
           if (convEl) {
-            const convTitle = this.extractNativeDragTitle(convEl, id);
-            const convData = this.extractConversationData(convEl);
+            const convTitle = extractNativeDragTitle(convEl, id);
+            const convData = extractConversationData(convEl, this.accountIsolationEnabled);
 
             selectedConvs.push({
               conversationId: id,
@@ -3314,392 +3231,15 @@ export class FolderManager {
     if (folderConv) return folderConv;
 
     // Check in native conversations (Recent section)
-    const nativeConvs = this.getNativeConversationElements();
+    const nativeConvs = getNativeConversationElements(this.sidebarContainer);
     for (const conv of Array.from(nativeConvs)) {
-      const id = this.extractConversationId(conv as HTMLElement);
+      const id = extractConversationId(conv as HTMLElement);
       if (id === conversationId) {
         return conv as HTMLElement;
       }
     }
 
     return null;
-  }
-
-  private extractNativeDragTitle(element: HTMLElement, conversationId?: string): string {
-    const title =
-      this.extractNativeConversationTitle(element) ||
-      (conversationId ? this.syncConversationTitleFromNative(conversationId) : null);
-
-    return title || 'Untitled';
-  }
-
-  private extractConversationId(element: HTMLElement): string {
-    // Strategy 1: Extract from jslog attribute
-    // This is the preferred method as it follows the internal ID format
-    const jslog = element.getAttribute('jslog');
-    if (jslog) {
-      // Match conversation ID - it appears in quotes like ["c_3456c77162722c1a",...]
-      const match = jslog.match(/[",[]c_([a-f0-9]+)[",\]]/);
-      if (match) {
-        const conversationId = `c_${match[1]}`;
-        this.debug('Extracted conversation ID:', conversationId, 'from jslog:', jslog);
-        return conversationId;
-      }
-      // Fallback: match without surrounding characters
-      const simpleMatch = jslog.match(/c_[a-f0-9]+/);
-      if (simpleMatch) {
-        this.debug('Extracted conversation ID (simple):', simpleMatch[0]);
-        return simpleMatch[0];
-      }
-    }
-
-    // Strategy 2: Extract from href (fallback when jslog is missing/broken)
-    // This ensures we can still identify conversations even if Gemini UI changes traits
-    const link = element.querySelector(
-      'a[href*="/app/"], a[href*="/gem/"]',
-    ) as HTMLAnchorElement | null;
-    if (link) {
-      const href = link.href;
-      // Try /app/<hexId>
-      let match = href.match(/\/app\/([^/?#]+)/);
-      if (match && match[1]) {
-        // Enforce c_ prefix to match jslog format standard
-        return `c_${match[1]}`;
-      }
-      // Try /gem/<gemId>/<hexId>
-      match = href.match(/\/gem\/[^/]+\/([^/?#]+)/);
-      if (match && match[1]) {
-        return `c_${match[1]}`;
-      }
-    }
-
-    // Fallback: generate unique ID from element attributes
-    // Use multiple attributes to ensure uniqueness
-    const title = this.extractNativeConversationTitle(element) || '';
-    const index = Array.from(element.parentElement?.children || []).indexOf(element);
-
-    // Generate unique ID combining title, index, random, and timestamp
-    const uniqueString = `${title}_${index}_${Math.random()}_${Date.now()}`;
-    const fallbackId = `conv_${this.hashString(uniqueString)}`;
-    this.debugWarn('Could not extract ID from jslog or href, using fallback:', fallbackId);
-    return fallbackId;
-  }
-
-  private extractConversationData(element: HTMLElement): {
-    url: string;
-    isGem: boolean;
-    gemId?: string;
-  } {
-    // Try to extract from jslog first
-    const jslog = element.getAttribute('jslog');
-    let hexId: string | null = null;
-
-    if (jslog) {
-      const match = jslog.match(/[",[]c_([a-f0-9]+)[",\]]/);
-      if (match) {
-        hexId = match[1];
-        this.debug('Extracted hex ID from jslog:', hexId);
-      }
-    }
-
-    // Try to extract from href if jslog failed
-    if (!hexId) {
-      const link = element.querySelector(
-        'a[href*="/app/"], a[href*="/gem/"]',
-      ) as HTMLAnchorElement | null;
-      if (link) {
-        const href = link.href;
-        // Try /app/<hexId>
-        let match = href.match(/\/app\/([^/?#]+)/);
-        if (match && match[1]) {
-          hexId = match[1];
-        } else {
-          // Try /gem/<gemId>/<hexId>
-          match = href.match(/\/gem\/[^/]+\/([^/?#]+)/);
-          if (match && match[1]) {
-            hexId = match[1];
-          }
-        }
-      }
-    }
-
-    if (!hexId) {
-      return { url: window.location.href, isGem: false };
-    }
-
-    const origin = window.location.origin;
-    const currentUrl = new URL(window.location.href);
-    const searchParams = currentUrl.searchParams.toString();
-
-    let url: string;
-
-    if (this.accountIsolationEnabled) {
-      // In hard isolation mode, intentionally do not persist the /u/{num} account index;
-      // only store the path that is intrinsic to the conversation itself.
-      // At navigation time we rebuild the correct /u/{num} segment based on the
-      // current window/account context, so that URLs stay valid even if the
-      // account index changes (e.g. saved with /u/1, later browsing under /u/2).
-      url = `${origin}/app/${hexId}`;
-    } else {
-      // Backward-compatible behavior: preserve the current /u/{num} segment
-      // when hard isolation is disabled, matching legacy URL structure.
-      const currentPath = window.location.pathname;
-      const userMatch = currentPath.match(/\/u\/(\d+)\//);
-
-      if (userMatch) {
-        url = `${origin}/u/${userMatch[1]}/app/${hexId}`;
-      } else {
-        url = `${origin}/app/${hexId}`;
-      }
-    }
-
-    if (searchParams) {
-      url += `?${searchParams}`;
-    }
-
-    this.debug('Built conversation URL:', url);
-    return { url, isGem: false, gemId: undefined };
-  }
-
-  /**
-   * Extract conversation ID from a DOM element
-   * Used for handling removed/added conversations in MutationObserver
-   *
-   * @param element - The conversation element to extract ID from
-   * @returns The conversation ID (hex only, without 'c_' prefix) or undefined if not found
-   *
-   * @remarks
-   * This method attempts two extraction strategies:
-   * 1. From jslog attribute (e.g., jslog="c_abc123def456")
-   * 2. From href in anchor tags (e.g., /app/abc123def456 or /gem/xxx/abc123def456)
-   */
-  private extractConversationIdFromElement(element: Element): string | undefined {
-    // Strategy 1: Extract from jslog attribute
-    const jslog = element.getAttribute('jslog');
-    if (jslog) {
-      const match = jslog.match(/c_([a-f0-9]{8,})/i);
-      if (match && match[1]) {
-        return match[1];
-      }
-    }
-
-    // Strategy 2: Extract from href
-    const link = element.querySelector(
-      'a[href*="/app/"], a[href*="/gem/"]',
-    ) as HTMLAnchorElement | null;
-    if (link) {
-      const href = link.href;
-      const appMatch = href.match(/\/app\/([^/?#]+)/);
-      const gemMatch = href.match(/\/gem\/[^/]+\/([^/?#]+)/);
-      return appMatch?.[1] || gemMatch?.[1];
-    }
-
-    return undefined;
-  }
-
-  private setupMutationObserver(): void {
-    if (!this.sidebarContainer) return;
-
-    // Disconnect existing observer to prevent duplicates
-    if (this.conversationObserver) {
-      this.conversationObserver.disconnect();
-      this.conversationObserver = null;
-    }
-
-    this.conversationObserver = new MutationObserver((mutations) => {
-      // Coalesce mutations to the next animation frame instead of processing
-      // them synchronously. Synchronous processing caused sidebar-click
-      // jank — see issue #678. Flush is implemented in `flushMutationBatch`.
-      for (const mutation of mutations) this.mutationBatchQueue.push(mutation);
-      this.scheduleMutationBatchFlush();
-    });
-
-    this.conversationObserver.observe(this.sidebarContainer, {
-      childList: true,
-      subtree: true,
-      characterData: true,
-      attributes: true,
-      attributeFilter: ['aria-label', 'href', 'title'],
-    });
-  }
-
-  private scheduleMutationBatchFlush(): void {
-    if (this.mutationFlushScheduled) return;
-    this.mutationFlushScheduled = true;
-    this.mutationFlushRafId = window.requestAnimationFrame(() => {
-      this.mutationFlushRafId = null;
-      this.mutationFlushScheduled = false;
-      if (this.isDestroyed) {
-        this.mutationBatchQueue.length = 0;
-        return;
-      }
-      this.flushMutationBatch();
-    });
-  }
-
-  private cancelMutationBatchFlush(): void {
-    if (this.mutationFlushRafId !== null) {
-      window.cancelAnimationFrame(this.mutationFlushRafId);
-      this.mutationFlushRafId = null;
-    }
-    this.mutationFlushScheduled = false;
-  }
-
-  private scheduleEnhancementDrain(): void {
-    if (this.enhancementQueue.size === 0) return;
-    if (this.enhancementDrainIdleId !== null) return;
-
-    const drain = (deadline?: IdleDeadline) => {
-      this.enhancementDrainIdleId = null;
-      if (this.isDestroyed) {
-        this.enhancementQueue.clear();
-        return;
-      }
-      this.drainEnhancementQueue(deadline);
-    };
-
-    if (typeof window.requestIdleCallback === 'function') {
-      this.enhancementDrainIdleId = window.requestIdleCallback(drain, {
-        timeout: ENHANCEMENT_IDLE_TIMEOUT_MS,
-      });
-    } else {
-      this.enhancementDrainIdleId = window.setTimeout(() => drain(), 0);
-    }
-  }
-
-  private cancelEnhancementDrain(): void {
-    if (this.enhancementDrainIdleId !== null) {
-      if (typeof window.cancelIdleCallback === 'function') {
-        window.cancelIdleCallback(this.enhancementDrainIdleId);
-      } else {
-        window.clearTimeout(this.enhancementDrainIdleId);
-      }
-      this.enhancementDrainIdleId = null;
-    }
-    this.enhancementQueue.clear();
-  }
-
-  // Exposed via the private surface so tests can drive draining
-  // deterministically without depending on idle-callback timing in jsdom.
-  private drainEnhancementQueue(deadline?: IdleDeadline): void {
-    const fallbackDeadline = performance.now() + ENHANCEMENT_IDLE_BUDGET_MS;
-    let processed = 0;
-
-    for (const convEl of this.enhancementQueue) {
-      this.enhancementQueue.delete(convEl);
-      if (!convEl.isConnected) continue; // removed while queued
-      this.makeConversationDraggable(convEl);
-      this.applyHideArchivedToConversation(convEl);
-      processed += 1;
-
-      const outOfIdleTime =
-        deadline && !deadline.didTimeout
-          ? deadline.timeRemaining() <= 0
-          : performance.now() >= fallbackDeadline;
-      if (processed > 0 && outOfIdleTime) break;
-    }
-    this.scheduleEnhancementDrain();
-  }
-
-  // Exposed via the private surface so tests can drive flushing
-  // deterministically without depending on animation-frame timing in jsdom.
-  private flushMutationBatch(): void {
-    if (this.mutationBatchQueue.length === 0) return;
-    const mutations = this.mutationBatchQueue;
-    this.mutationBatchQueue = [];
-
-    // Title-sync detection: short-circuits, debounced downstream.
-    if (this.mutationsMayAffectNativeConversationTitles(mutations)) {
-      this.scheduleNativeConversationTitleSync();
-    }
-
-    // Dedupe added conversation elements. Multiple mutations in a single
-    // tick frequently touch the same row; the per-element work
-    // (makeConversationDraggable, applyHideArchivedToConversation) is
-    // idempotent but the upfront DOM queries are not free.
-    const addedConversations = new Set<HTMLElement>();
-    for (const mutation of mutations) {
-      mutation.addedNodes.forEach((node) => {
-        if (!(node instanceof HTMLElement)) return;
-        if (node.matches('[data-test-id="conversation"]')) {
-          addedConversations.add(node);
-        }
-        const nested = node.querySelectorAll('[data-test-id="conversation"]');
-        nested.forEach((conv) => addedConversations.add(conv as HTMLElement));
-      });
-    }
-
-    addedConversations.forEach((convEl) => {
-      if (!convEl.isConnected) return; // re-removed within the same batch
-      // Drag listeners + hide-archived state are deferred to the budgeted
-      // drain — both are idempotent and tolerate a few frames of latency
-      // (issue #753).
-      this.enhancementQueue.add(convEl);
-    });
-    this.scheduleEnhancementDrain();
-
-    // Deliberately ignore removed conversation rows. Gemini virtualizes the
-    // sidebar, so scrolling or re-rendering can detach one real conversation
-    // row at a time. A detached DOM node is therefore not deletion evidence.
-    // Native deletion is tracked from the explicit Delete action in
-    // `setupConversationClickTracking` and confirmed after the UI settles.
-  }
-
-  private mutationsMayAffectNativeConversationTitles(mutations: MutationRecord[]): boolean {
-    for (const mutation of mutations) {
-      if (mutation.type === 'characterData') {
-        if (mutation.target.parentElement?.closest('[data-test-id="conversation"]')) return true;
-        continue;
-      }
-
-      if (mutation.type === 'attributes') {
-        if (
-          mutation.target instanceof Element &&
-          mutation.target.closest('[data-test-id="conversation"]')
-        ) {
-          return true;
-        }
-        continue;
-      }
-
-      if (mutation.type !== 'childList') continue;
-
-      if (
-        mutation.target instanceof Element &&
-        mutation.target.closest('[data-test-id="conversation"]')
-      ) {
-        return true;
-      }
-
-      for (const node of Array.from(mutation.addedNodes)) {
-        if (this.nodeTouchesNativeConversation(node)) return true;
-      }
-    }
-
-    return false;
-  }
-
-  private nodeTouchesNativeConversation(node: Node): boolean {
-    if (!(node instanceof Element)) return false;
-    if (node.matches('[data-test-id="conversation"]')) return true;
-    if (node.closest('[data-test-id="conversation"]')) return true;
-    return !!node.querySelector('[data-test-id="conversation"]');
-  }
-
-  private clearNativeTitleSyncTimer(): void {
-    if (this.nativeTitleSyncTimer === null) return;
-    clearTimeout(this.nativeTitleSyncTimer);
-    this.nativeTitleSyncTimer = null;
-  }
-
-  private scheduleNativeConversationTitleSync(): void {
-    if (!this.hasStoredConversations()) return;
-    if (this.nativeTitleSyncTimer !== null) return;
-
-    this.nativeTitleSyncTimer = window.setTimeout(() => {
-      this.nativeTitleSyncTimer = null;
-      void this.syncConversationTitlesFromNative();
-    }, NATIVE_TITLE_SYNC_DEBOUNCE_MS);
   }
 
   private hasStoredConversations(): boolean {
@@ -3826,15 +3366,9 @@ export class FolderManager {
         this.sideNavObserver = null;
       }
 
-      if (this.conversationObserver) {
-        this.conversationObserver.disconnect();
-        this.conversationObserver = null;
-      }
+      this.nativeSidebarObserver.disconnect();
 
-      if (this.nativeMenuObserver) {
-        this.nativeMenuObserver.disconnect();
-        this.nativeMenuObserver = null;
-      }
+      this.nativeConversationMenus.disconnectPanels();
 
       // The document-level menu tracker is lifetime-scoped and idempotent.
       // Gemini can rebuild the sidebar between Delete and confirmation, so a
@@ -4509,7 +4043,7 @@ export class FolderManager {
     const normalizedTitle = title.trim();
     if (normalizedTitle && normalizedTitle !== 'Untitled') return normalizedTitle;
 
-    return this.syncConversationTitleFromNative(conversationId) || normalizedTitle || 'Untitled';
+    return syncConversationTitleFromNative(conversationId) || normalizedTitle || 'Untitled';
   }
 
   /**
@@ -4882,7 +4416,7 @@ export class FolderManager {
         this.updateBatchDeleteProgress(i + 1, count);
 
         try {
-          const success = await this.triggerNativeDeleteForConversation(conversationId);
+          const success = await this.nativeConversationMenus.deleteConversation(conversationId);
           if (success) {
             successCount++;
           } else {
@@ -4932,174 +4466,33 @@ export class FolderManager {
     }
   }
 
-  /**
-   * Trigger native delete for a single conversation by simulating UI interactions
-   */
-  private async triggerNativeDeleteForConversation(conversationId: string): Promise<boolean> {
-    try {
-      // Step 1: Find the conversation element in the sidebar.
-      // The lr26 sidebar virtualizes rows — if the user has scrolled the list
-      // since selecting, the target row may be unmounted entirely.
-      const conversationEl = this.findNativeConversationElement(conversationId);
-      if (!conversationEl) {
-        console.warn(
-          `[FolderManager] Batch delete: conversation row not in DOM (likely virtualized out): ${conversationId}. ` +
-            'Scroll the sidebar to bring it back into view, or split the batch into smaller chunks.',
-        );
-        return false;
-      }
-
-      const moreButton = await this.findAndClickMoreButton(conversationEl);
-      if (!moreButton) {
-        console.warn(
-          `[FolderManager] Batch delete: actions menu button not found for ${conversationId}`,
-        );
-        return false;
-      }
-
-      await this.delay(this.BATCH_DELETE_CONFIG.MENU_APPEAR_DELAY);
-
-      const deleteSuccess = await this.waitForDeleteButtonAndClick();
-      if (!deleteSuccess) {
-        console.warn(
-          `[FolderManager] Batch delete: Delete menu item not found after ${this.BATCH_DELETE_CONFIG.MAX_BUTTON_WAIT_TIME}ms for ${conversationId}`,
-        );
-        this.clickBackdropToCloseMenu();
-        return false;
-      }
-
-      await this.delay(this.BATCH_DELETE_CONFIG.DIALOG_APPEAR_DELAY);
-      await this.confirmDeleteIfNeeded();
-      await this.delay(this.BATCH_DELETE_CONFIG.DELETION_COMPLETE_DELAY);
-
-      return true;
-    } catch (error) {
-      console.error(`[FolderManager] Error in triggerNativeDeleteForConversation:`, error);
-      return false;
-    }
-  }
-
-  /**
-   * Find native conversation element by conversation ID
-   */
-  private findNativeConversationElement(conversationId: string): HTMLElement | null {
-    const targetId = this.normalizeConversationId(conversationId);
-    if (!targetId) return null;
-
-    // Try multiple strategies to find the conversation
-    const allConversations = this.getNativeConversationElements();
-
-    for (const conv of allConversations) {
-      const id =
-        this.extractConversationIdFromElement(conv) ||
-        this.extractConversationId(conv as HTMLElement);
-      if (this.normalizeConversationId(id) === targetId) {
-        return conv as HTMLElement;
-      }
-    }
-
-    return null;
-  }
-
-  /**
-   * Find and click the more options button for a conversation.
-   *
-   * In Gemini's current sidebar layout the actions-menu-button is rendered
-   * INSIDE the conversation host (<gem-nav-list-item data-test-id="conversation">),
-   * so we look there first. The legacy sibling-container and ancestor-<li>
-   * strategies are kept as fallbacks for older layouts but are no-ops in the
-   * lr26 sidebar.
-   *
-   * The host is also virtualized — a row scrolled far off-screen may exist
-   * only as an empty stub or be missing entirely. Scroll the host into view
-   * before clicking so the trailing actions actually mount.
-   */
-  private async findAndClickMoreButton(conversationEl: HTMLElement): Promise<HTMLElement | null> {
-    const locate = (): HTMLElement | null => {
-      // Primary: button is inside the conversation host (current lr26 layout).
-      const inside = conversationEl.querySelector<HTMLElement>(
-        '[data-test-id="actions-menu-button"]',
-      );
-      if (inside) return inside;
-
-      // Fallback: legacy sibling .conversation-actions-container layout.
-      const actionsContainer = conversationEl.parentElement?.querySelector(
-        '.conversation-actions-container',
-      );
-      const sibling = actionsContainer?.querySelector<HTMLElement>(
-        '[data-test-id="actions-menu-button"]',
-      );
-      if (sibling) return sibling;
-
-      // Fallback: nearest <li> ancestor (very old layout).
-      return (
-        conversationEl
-          .closest('li')
-          ?.querySelector<HTMLElement>('[data-test-id="actions-menu-button"]') ?? null
-      );
-    };
-
-    let moreButton = locate();
-
-    // If the row was virtualized away from the viewport its trailing actions
-    // may not have mounted yet. Scroll it back into view and poll briefly.
-    if (!moreButton) {
-      try {
-        conversationEl.scrollIntoView({ block: 'center', behavior: 'instant' as ScrollBehavior });
-      } catch {
-        /* scrollIntoView may throw in some embedded contexts — ignore */
-      }
-      const maxWait = this.BATCH_DELETE_CONFIG.MAX_BUTTON_WAIT_TIME;
-      const step = this.BATCH_DELETE_CONFIG.BUTTON_CHECK_INTERVAL;
-      let waited = 0;
-      while (waited < maxWait && !moreButton) {
-        await this.delay(step);
-        waited += step;
-        moreButton = locate();
-      }
-    }
-
-    if (moreButton) {
-      moreButton.click();
-      this.debug('Clicked more button');
-      return moreButton;
-    }
-
-    console.warn(
-      '[FolderManager] Could not locate actions-menu-button inside conversation host. ' +
-        'Gemini sidebar DOM may have changed.',
-      conversationEl,
-    );
-    return null;
-  }
-
   private async openNativeRenameForFolderConversation(
     conversation: ConversationReference,
   ): Promise<boolean> {
-    const conversationId = this.resolveConversationRouteId(
+    const conversationId = resolveConversationRouteId(
       conversation.url,
       conversation.conversationId,
     );
     if (!conversationId) return false;
 
-    const conversationEl = this.findNativeConversationElement(conversationId);
+    const conversationEl = findNativeConversationElement(this.sidebarContainer, conversationId);
     if (!conversationEl) {
       this.debugWarn('Could not find native conversation element for rename:', conversationId);
       return false;
     }
 
     const restoreArchivedVisibility = this.temporarilyRevealNativeConversation(conversationEl);
-    const nativeTitle = this.extractNativeConversationTitle(conversationEl);
+    const nativeTitle = extractNativeConversationTitle(conversationEl);
     let moreButton: HTMLElement | null = null;
 
     try {
-      moreButton = await this.findAndClickMoreButton(conversationEl);
+      moreButton = await this.nativeConversationMenus.findAndClickMoreButton(conversationEl);
       if (!moreButton) {
         this.debugWarn('Could not find native more button for rename:', conversationId);
         return false;
       }
 
-      const renamed = await this.waitForRenameButtonAndClick();
+      const renamed = await this.nativeConversationMenus.waitForRenameButtonAndClick();
       if (!renamed) {
         this.debugWarn('Could not find native rename button:', conversationId);
       } else {
@@ -5108,7 +4501,7 @@ export class FolderManager {
       return renamed;
     } finally {
       if (moreButton) {
-        this.resetNativeConversationMenuTrigger(moreButton);
+        this.nativeConversationMenus.resetNativeConversationMenuTrigger(moreButton);
       }
       restoreArchivedVisibility();
     }
@@ -5159,292 +4552,6 @@ export class FolderManager {
         this.setNativeConversationArchivedState(conversationEl, true);
       }
     };
-  }
-
-  private resetNativeConversationMenuTrigger(moreButton: HTMLElement): void {
-    moreButton.blur();
-    const actionsContainer = moreButton.closest('.conversation-actions-container');
-    if (actionsContainer instanceof HTMLElement) {
-      actionsContainer.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true }));
-    }
-  }
-
-  private async waitForRenameButtonAndClick(): Promise<boolean> {
-    const maxWaitTime = this.BATCH_DELETE_CONFIG.MAX_BUTTON_WAIT_TIME;
-    const checkInterval = this.BATCH_DELETE_CONFIG.BUTTON_CHECK_INTERVAL;
-    let elapsed = 0;
-
-    while (elapsed < maxWaitTime) {
-      const renameByTestId = document.querySelector(
-        '[data-test-id="rename-button"]',
-      ) as HTMLElement | null;
-      if (renameByTestId && this.isVisibleElement(renameByTestId)) {
-        renameByTestId.click();
-        this.debug('Clicked rename button (by test-id)');
-        return true;
-      }
-
-      const renameIcons = document.querySelectorAll(
-        '.cdk-overlay-container mat-icon, .cdk-overlay-container .material-icons',
-      );
-
-      for (const icon of renameIcons) {
-        const iconText = icon.textContent?.toLowerCase().trim() || '';
-        if (iconText !== 'edit' && iconText !== 'edit_square') continue;
-
-        const parentButton = icon.closest('button, [role="menuitem"]') as HTMLElement | null;
-        if (parentButton && this.isVisibleElement(parentButton)) {
-          parentButton.click();
-          this.debug('Clicked rename button (by icon)');
-          return true;
-        }
-      }
-
-      await this.delay(checkInterval);
-      elapsed += checkInterval;
-    }
-
-    return false;
-  }
-
-  /**
-   * Wait for delete button to appear in the menu and click it
-   * Uses multiple strategies to find the delete button for resilience to UI changes
-   */
-  private async waitForDeleteButtonAndClick(): Promise<boolean> {
-    const maxWaitTime = this.BATCH_DELETE_CONFIG.MAX_BUTTON_WAIT_TIME;
-    const checkInterval = this.BATCH_DELETE_CONFIG.BUTTON_CHECK_INTERVAL;
-    let elapsed = 0;
-
-    const keywords = this.getDeleteKeywords();
-
-    // Track per-poll state so we can emit one summary diagnostic on timeout.
-    let lastTestIdCount = 0;
-    let lastVisibleTestIdCount = 0;
-    let lastOverlayPanes = 0;
-    let lastMenuPanels = 0;
-    let lastMenuItemTexts: string[] = [];
-
-    while (elapsed < maxWaitTime) {
-      // Strategy 1: data-test-id (primary). Use querySelectorAll because some
-      // layouts render hidden template copies that querySelector would lock
-      // onto, never advancing past an invisible match.
-      const deleteCandidates = Array.from(
-        document.querySelectorAll<HTMLElement>('[data-test-id="delete-button"]'),
-      );
-      lastTestIdCount = deleteCandidates.length;
-      const visibleByTestId = deleteCandidates.filter((el) => this.isVisibleElement(el));
-      lastVisibleTestIdCount = visibleByTestId.length;
-      // Prefer one that lives inside an open menu / overlay panel.
-      const targetByTestId =
-        visibleByTestId.find((el) => el.closest('.mat-mdc-menu-panel, .cdk-overlay-pane')) ??
-        visibleByTestId[0];
-      if (targetByTestId) {
-        targetByTestId.click();
-        this.debug('Clicked delete button (by test-id)');
-        return true;
-      }
-
-      // Strategy 2: scan menu items for matching text (i18n-friendly).
-      const menuItems = Array.from(
-        document.querySelectorAll<HTMLElement>(
-          '.cdk-overlay-container button[role="menuitem"], ' +
-            '.cdk-overlay-container [role="menuitem"], ' +
-            '.mat-mdc-menu-content button, ' +
-            '.mat-menu-content button',
-        ),
-      );
-      lastMenuItemTexts = menuItems.map((el) => el.textContent?.trim().slice(0, 20) || '');
-
-      for (const item of menuItems) {
-        if (!this.isVisibleElement(item)) continue;
-        const text = item.textContent?.toLowerCase().trim() || '';
-        if (
-          text &&
-          keywords.some(
-            (keyword: string) => text === keyword || (text.includes(keyword) && text.length < 20),
-          )
-        ) {
-          item.click();
-          this.debug('Clicked delete button (by text):', text);
-          return true;
-        }
-      }
-
-      // Strategy 3: by icon (mat-icon delete / delete_forever / delete_outline).
-      const deleteIcons = document.querySelectorAll(
-        '.cdk-overlay-container mat-icon, .cdk-overlay-container .material-icons',
-      );
-      for (const icon of deleteIcons) {
-        const iconText = icon.textContent?.toLowerCase().trim() || '';
-        const iconAttr = icon.getAttribute('fonticon') || '';
-        if (
-          iconText === 'delete' ||
-          iconText === 'delete_forever' ||
-          iconText === 'delete_outline' ||
-          iconAttr === 'delete' ||
-          iconAttr === 'delete_forever' ||
-          iconAttr === 'delete_outline'
-        ) {
-          const parentButton = icon.closest('button, [role="menuitem"]') as HTMLElement | null;
-          if (parentButton && this.isVisibleElement(parentButton)) {
-            parentButton.click();
-            this.debug('Clicked delete button (by icon)');
-            return true;
-          }
-        }
-      }
-
-      lastOverlayPanes = document.querySelectorAll('.cdk-overlay-pane').length;
-      lastMenuPanels = document.querySelectorAll('.mat-mdc-menu-panel').length;
-
-      await this.delay(checkInterval);
-      elapsed += checkInterval;
-    }
-
-    // Emit a SINGLE compact diagnostic on timeout so users can paste it
-    // verbatim when reporting batch-delete failures.
-    console.warn(
-      '[FolderManager] Batch delete diagnostics on timeout: ' +
-        JSON.stringify({
-          deleteButtonsFound: lastTestIdCount,
-          deleteButtonsVisible: lastVisibleTestIdCount,
-          overlayPanes: lastOverlayPanes,
-          menuPanels: lastMenuPanels,
-          menuItemTexts: lastMenuItemTexts.slice(0, 10),
-          keywordsTried: keywords,
-        }),
-    );
-    return false;
-  }
-
-  /**
-   * Check for and confirm the delete confirmation dialog if it appears
-   */
-  private async confirmDeleteIfNeeded(): Promise<void> {
-    // Look for confirmation dialog buttons
-    // Gemini typically uses a dialog with confirm/cancel buttons
-    const maxWaitTime = this.BATCH_DELETE_CONFIG.MAX_BUTTON_WAIT_TIME;
-    const checkInterval = this.BATCH_DELETE_CONFIG.BUTTON_CHECK_INTERVAL;
-    let elapsed = 0;
-
-    const keywords = this.getDeleteKeywords();
-
-    while (elapsed < maxWaitTime) {
-      // Strategy 1: Look for button with data-test-id containing "confirm" or "delete"
-      const confirmByTestId = document.querySelector(
-        '[data-test-id*="confirm"], [data-test-id*="delete"]:not([data-test-id="delete-button"])',
-      ) as HTMLElement;
-      if (confirmByTestId && this.isVisibleElement(confirmByTestId)) {
-        confirmByTestId.click();
-        this.debug('Clicked confirmation button (by test-id)');
-        return;
-      }
-
-      // Strategy 2: Look for primary/action buttons in dialogs
-      const primaryButtons = document.querySelectorAll(`
-        .mat-mdc-dialog-container button.mat-primary,
-        .mat-mdc-dialog-container button.mat-accent,
-        .mat-mdc-dialog-container .mat-mdc-dialog-actions button:last-child,
-        .cdk-overlay-container .mat-mdc-dialog-actions button:last-child,
-        .cdk-overlay-container button[color="primary"],
-        .cdk-overlay-container button[color="warn"]
-      `);
-
-      for (const btn of primaryButtons) {
-        if (this.isVisibleElement(btn as HTMLElement)) {
-          const text = btn.textContent?.toLowerCase().trim() || '';
-          // Match keywords from i18n
-          if (
-            text &&
-            keywords.some((keyword: string) => text.includes(keyword) || text === keyword)
-          ) {
-            (btn as HTMLElement).click();
-            this.debug('Clicked confirmation button (primary button):', text);
-            return;
-          }
-        }
-      }
-
-      // Strategy 3: Look for any button in overlay with delete/confirm text
-      const allOverlayButtons = document.querySelectorAll(
-        '.cdk-overlay-container button, .mat-mdc-dialog-container button',
-      );
-
-      for (const btn of allOverlayButtons) {
-        if (!this.isVisibleElement(btn as HTMLElement)) continue;
-
-        const text = btn.textContent?.toLowerCase().trim() || '';
-        // Be more specific - look for exact match or simple inclusion for keywords
-        if (text && keywords.some((keyword: string) => text === keyword)) {
-          (btn as HTMLElement).click();
-          this.debug('Clicked confirmation button (overlay button):', text);
-          return;
-        }
-      }
-
-      // Strategy 4: Look for the second/right button in a two-button dialog (usually the confirm button)
-      const dialogActions = document.querySelector(
-        '.mat-mdc-dialog-actions, .cdk-overlay-container .mat-dialog-actions',
-      );
-      if (dialogActions) {
-        const buttons = dialogActions.querySelectorAll('button');
-        if (buttons.length >= 2) {
-          // The last button is typically the confirm/destructive action
-          const confirmBtn = buttons[buttons.length - 1] as HTMLElement;
-          if (this.isVisibleElement(confirmBtn)) {
-            confirmBtn.click();
-            this.debug('Clicked last button in dialog actions');
-            return;
-          }
-        }
-      }
-
-      await this.delay(checkInterval);
-      elapsed += checkInterval;
-    }
-
-    // No confirmation dialog found, which is fine
-    this.debug('No confirmation dialog detected after', maxWaitTime, 'ms');
-  }
-
-  /**
-   * Get delete/confirm keywords from i18n settings to avoid hardcoding
-   */
-  private getDeleteKeywords(): string[] {
-    const rawPatterns = this.t('batch_delete_match_patterns') || '';
-    // Split on both ASCII and CJK fullwidth commas (and a couple of common
-    // separators) so locales authored with `，` / `、` / `；` don't end up as
-    // one giant unsplittable string.
-    return rawPatterns
-      .split(/[,，、；;]+/)
-      .map((s: string) => s.trim().toLowerCase())
-      .filter((s: string) => s.length > 0);
-  }
-
-  /**
-   * Check if an element is visible
-   */
-  private isVisibleElement(el: HTMLElement): boolean {
-    if (!el) return false;
-    const style = window.getComputedStyle(el);
-    return (
-      style.display !== 'none' &&
-      style.visibility !== 'hidden' &&
-      style.opacity !== '0' &&
-      el.offsetParent !== null
-    );
-  }
-
-  /**
-   * Click backdrop to close any open menu
-   */
-  private clickBackdropToCloseMenu(): void {
-    const backdrop = document.querySelector('.cdk-overlay-backdrop') as HTMLElement;
-    if (backdrop) {
-      backdrop.click();
-      this.debug('Clicked backdrop to close menu');
-    }
   }
 
   /**
@@ -5593,9 +4700,9 @@ export class FolderManager {
       });
     } else if (this.multiSelectSource === 'native') {
       // Only update native conversation elements (Recent section)
-      const nativeConvs = this.getNativeConversationElements();
+      const nativeConvs = getNativeConversationElements(this.sidebarContainer);
       nativeConvs.forEach((el) => {
-        const convId = this.extractConversationId(el as HTMLElement);
+        const convId = extractConversationId(el as HTMLElement);
         if (convId) {
           if (this.selectedConversations.has(convId)) {
             el.classList.add('gv-conversation-selected');
@@ -5709,7 +4816,7 @@ export class FolderManager {
 
   private cleanupSelectionArtifacts(): void {
     // Remove selection classes from all native conversations
-    const nativeConvs = this.getNativeConversationElements();
+    const nativeConvs = getNativeConversationElements(this.sidebarContainer);
     nativeConvs.forEach((el) => {
       (el as HTMLElement).classList.remove('gv-conversation-selected');
       (el as HTMLElement).style.opacity = '1';
@@ -6495,640 +5602,6 @@ export class FolderManager {
     setTimeout(() => textarea.focus(), 50);
   }
 
-  // Detect a freshly-opened conversation ⋮ menu and inject our "Move to folder"
-  // item. Google's "lr26" UI overhaul replaced the old `.mat-mdc-menu-panel`
-  // (rendered into `.cdk-overlay-container`) with a `<gem-menu>` element and
-  // re-creates the overlay container, which silently broke the previous
-  // observer. This mirrors the proven, robust export-button observer: it
-  // watches `document.body`, matches both panel variants, and retries while
-  // the menu items stream in asynchronously.
-  private setupNativeConversationMenuObserver(): void {
-    if (this.nativeMenuObserver) {
-      this.nativeMenuObserver.disconnect();
-      this.nativeMenuObserver = null;
-    }
-
-    const observer = new MutationObserver((mutations) => {
-      if (this.isDestroyed) return;
-      for (const mutation of mutations) {
-        mutation.addedNodes.forEach((node) => {
-          if (!(node instanceof HTMLElement)) return;
-          // Cheap gate before the matches/querySelectorAll/closest triple:
-          // menu panels only ever live inside a CDK overlay (or are a
-          // <gem-menu> themselves), while the overwhelming majority of body
-          // mutations are sidebar/chat re-renders that can't contain one.
-          // Missed edge cases are covered by the click-tracking fallback in
-          // setupConversationClickTracking.
-          const className = typeof node.className === 'string' ? node.className : '';
-          const mayHostMenuPanel =
-            node.tagName === 'GEM-MENU' ||
-            className.includes('mat-mdc-menu-panel') ||
-            className.includes('cdk-overlay') ||
-            node.parentElement?.closest('.cdk-overlay-container') != null;
-          if (!mayHostMenuPanel) return;
-          const panels = new Set<HTMLElement>();
-          if (node.matches(CONVERSATION_MENU_PANEL_SELECTOR)) panels.add(node);
-          node
-            .querySelectorAll<HTMLElement>(CONVERSATION_MENU_PANEL_SELECTOR)
-            .forEach((panel) => panels.add(panel));
-          const closest = node.closest(CONVERSATION_MENU_PANEL_SELECTOR) as HTMLElement | null;
-          if (closest) panels.add(closest);
-          panels.forEach((panel) =>
-            window.setTimeout(() => this.tryInjectMoveToFolderOnPanel(panel), 30),
-          );
-        });
-
-        // When a conversation menu we injected into closes, mat-menu restores
-        // focus to the ⋮ trigger, which keeps the row visually selected via
-        // :focus-within. Drop that focus on pointer-driven dismissals so the
-        // row reverts. See releaseTriggerFocusAfterPointerClose for guards.
-        mutation.removedNodes.forEach((node) => {
-          if (!(node instanceof HTMLElement)) return;
-          const wasInjectedConversationMenu =
-            (node.matches?.(CONVERSATION_MENU_PANEL_SELECTOR) &&
-              node.querySelector('.gv-move-to-folder-btn')) ||
-            node.querySelector?.(`${CONVERSATION_MENU_PANEL_SELECTOR} .gv-move-to-folder-btn`) ||
-            (node.querySelector?.(CONVERSATION_MENU_PANEL_SELECTOR) &&
-              node.querySelector('.gv-move-to-folder-btn'));
-          if (wasInjectedConversationMenu) {
-            this.releaseTriggerFocusAfterPointerClose();
-          }
-        });
-      }
-    });
-
-    observer.observe(document.body, { childList: true, subtree: true });
-    this.nativeMenuObserver = observer;
-
-    // Catch any menu already open at setup time.
-    document
-      .querySelectorAll<HTMLElement>(CONVERSATION_MENU_PANEL_SELECTOR)
-      .forEach((panel) => window.setTimeout(() => this.tryInjectMoveToFolderOnPanel(panel), 30));
-  }
-
-  // Inject the "Move to folder" item into a native conversation menu panel,
-  // retrying while the menu content renders. Conversation info is resolved
-  // lazily on click (from the menu trigger or the open page) so a transient
-  // extraction miss never prevents the item from appearing.
-  private tryInjectMoveToFolderOnPanel(
-    panel: HTMLElement,
-    retriesLeft: number = MOVE_MENU_INJECTION_RETRY_LIMIT,
-  ): void {
-    if (this.isDestroyed || !panel.isConnected) return;
-
-    const context = getConversationMenuContext(panel);
-    if (!context) return; // not a conversation menu (e.g. model picker / response menu)
-
-    const label = this.t('conversation_move_to_folder');
-    const injected = injectConversationMenuMoveToFolderButton(panel, {
-      label,
-      tooltip: label,
-      onClick: () => {
-        const info = this.resolveConversationInfoForMenu(context);
-        if (info) {
-          this.showMoveToFolderDialog(info.id, info.title, info.url);
-        } else {
-          this.debugWarn('Move to folder: could not resolve conversation info on click');
-        }
-      },
-    });
-
-    if (!injected && retriesLeft > 0) {
-      window.setTimeout(
-        () => this.tryInjectMoveToFolderOnPanel(panel, retriesLeft - 1),
-        MOVE_MENU_INJECTION_RETRY_DELAY_MS,
-      );
-    }
-  }
-
-  // Resolve the conversation a menu belongs to. Sidebar menus map back to their
-  // list item via the trigger; the top-bar ⋮ menu maps to the open page.
-  private resolveConversationInfoForMenu(
-    context: ConversationMenuContext,
-  ): { id: string; title: string; url: string } | null {
-    const trigger = context.trigger;
-    if (trigger) {
-      const conversationEl = this.findConversationElementForTrigger(trigger);
-      if (conversationEl) {
-        const id = this.extractNativeConversationId(conversationEl);
-        if (id) {
-          const url =
-            this.extractNativeConversationUrl(conversationEl) ||
-            this.buildConversationUrlFromId(id);
-          const title =
-            this.extractNativeConversationTitle(conversationEl) ||
-            this.extractFallbackTitle(conversationEl) ||
-            'Untitled';
-          if (url) {
-            this.debug('resolveConversationInfoForMenu(sidebar):', { id, title, url });
-            return { id, title, url };
-          }
-        }
-      }
-    }
-
-    // Top-bar menus map to the current page. A sidebar resolution miss must
-    // stay unresolved rather than accidentally targeting the open page.
-    if (context.menuType === 'top') {
-      const pageInfo = this.extractConversationInfoFromPage();
-      if (pageInfo) {
-        this.debug('resolveConversationInfoForMenu(page):', pageInfo);
-        return pageInfo;
-      }
-    }
-    return null;
-  }
-
-  // Map a ⋮ trigger button to its conversation list item. Handles the current
-  // UI (trigger nested inside `[data-test-id="conversation"]`) and the older
-  // sibling layout (`.conversation-actions-container` next to the item).
-  private findConversationElementForTrigger(trigger: HTMLElement): HTMLElement | null {
-    const direct = trigger.closest('[data-test-id="conversation"]') as HTMLElement | null;
-    if (direct) return direct;
-
-    const actionsContainer = trigger.closest('.conversation-actions-container');
-    if (actionsContainer) {
-      let sibling = actionsContainer.previousElementSibling;
-      while (sibling) {
-        if (sibling.getAttribute('data-test-id') === 'conversation') {
-          return sibling as HTMLElement;
-        }
-        sibling = sibling.previousElementSibling;
-      }
-    }
-
-    const historyItem = trigger.closest('[data-test-id^="history-item"]') as HTMLElement | null;
-    if (historyItem) return historyItem;
-
-    return null;
-  }
-
-  // Belt-and-suspenders alongside nativeMenuObserver: when a conversation ⋮
-  // trigger is clicked, resolve the panel it controls (via aria-controls/owns)
-  // and retry injection while the menu renders. This covers cases where the
-  // panel is re-used / re-rendered without a fresh childList mutation.
-  private setupConversationClickTracking(): void {
-    if (this.moveMenuTriggerHandler) return; // already wired (idempotent across reinit)
-
-    const handler = (event: Event) => {
-      if (this.isDestroyed) return;
-      // Any pointerdown/click marks the modality; used to decide whether to drop
-      // trigger focus on menu close (pointer) vs preserve it (keyboard a11y).
-      this.lastInputModality = 'pointer';
-      const target = event.target;
-      if (!(target instanceof HTMLElement)) return;
-
-      if (event.type === 'click' && this.isNativeDeleteCancellationTarget(target)) {
-        this.clearNativeDeleteCandidate();
-        return;
-      }
-
-      if (event.type === 'click' && this.isNativeDeleteOverlayDismissalTarget(target)) {
-        this.clearNativeDeleteCandidate();
-        return;
-      }
-
-      if (event.type === 'click' && this.isNativeDeleteConfirmationTarget(target)) {
-        const conversationId = this.nativeDeleteCandidateId;
-        const deletionScope = this.nativeDeleteCandidateScope;
-        if (conversationId && deletionScope && this.isNativeDeleteScopeCurrent(deletionScope)) {
-          const wasCurrent = this.nativeDeleteCandidateWasCurrent;
-          this.clearNativeDeleteCandidate();
-          if (wasCurrent) this.currentNativeDeletionChecks.add(conversationId);
-          this.pendingNativeDeletionScopes.set(conversationId, deletionScope);
-          this.scheduleConversationRemovalCheck(conversationId);
-        } else {
-          this.clearNativeDeleteCandidate();
-        }
-        return;
-      }
-
-      if (event.type === 'click') {
-        const conversationId = this.resolveNativeDeleteMenuActionConversationId(target);
-        if (conversationId) {
-          this.rememberNativeDeleteCandidate(conversationId);
-          return;
-        }
-      }
-
-      const trigger = target.closest(CONVERSATION_MENU_TRIGGER_SELECTOR) as HTMLElement | null;
-      if (!trigger) return;
-
-      this.clearNativeDeleteCandidate();
-
-      const panelIds = this.parseMenuTriggerPanelIds(trigger);
-      for (let attempt = 0; attempt <= MOVE_MENU_INJECTION_RETRY_LIMIT; attempt++) {
-        window.setTimeout(() => {
-          if (this.isDestroyed) return;
-          if (panelIds.length > 0) {
-            panelIds.forEach((id) => {
-              const panel = document.getElementById(id);
-              if (panel instanceof HTMLElement && panel.matches(CONVERSATION_MENU_PANEL_SELECTOR)) {
-                this.tryInjectMoveToFolderOnPanel(panel);
-              }
-            });
-          } else {
-            document
-              .querySelectorAll<HTMLElement>(CONVERSATION_MENU_PANEL_SELECTOR)
-              .forEach((panel) => this.tryInjectMoveToFolderOnPanel(panel));
-          }
-        }, attempt * MOVE_MENU_INJECTION_RETRY_DELAY_MS);
-      }
-    };
-
-    document.addEventListener('click', handler, true);
-    document.addEventListener('pointerdown', handler, true);
-    this.moveMenuTriggerHandler = handler;
-
-    const keyHandler = (event: Event) => {
-      if (this.isDestroyed) return;
-      if (event instanceof KeyboardEvent && event.key === 'Escape') {
-        this.clearNativeDeleteCandidate();
-      }
-      this.lastInputModality = 'keyboard';
-    };
-    document.addEventListener('keydown', keyHandler, true);
-    this.moveMenuKeydownHandler = keyHandler;
-  }
-
-  private resolveNativeDeleteMenuActionConversationId(target: HTMLElement): string | null {
-    const action = target.closest(
-      '[data-test-id="delete-button"], button[role="menuitem"], [role="menuitem"], gem-menu-item',
-    ) as HTMLElement | null;
-    if (!action || action.matches(VOYAGER_CONVERSATION_MENU_ACTION_SELECTOR)) return null;
-
-    const panel = action.closest(CONVERSATION_MENU_PANEL_SELECTOR) as HTMLElement | null;
-    const context = panel ? getConversationMenuContext(panel) : null;
-    if (!context) return null;
-
-    let isDeleteAction = action.getAttribute('data-test-id') === 'delete-button';
-
-    const icon = action.querySelector('mat-icon, .material-icons');
-    const iconName =
-      icon?.getAttribute('fonticon') ||
-      icon?.getAttribute('data-mat-icon-name') ||
-      icon?.textContent?.trim().toLowerCase();
-    if (iconName === 'delete' || iconName === 'delete_forever' || iconName === 'delete_outline') {
-      isDeleteAction = true;
-    }
-
-    const text = action.textContent?.trim().toLowerCase() || '';
-    if (
-      this.getDeleteKeywords().some(
-        (keyword) => text === keyword || (text.includes(keyword) && text.length < 20),
-      )
-    ) {
-      isDeleteAction = true;
-    }
-    if (!isDeleteAction) return null;
-
-    const info = this.resolveConversationInfoForMenu(context);
-    return this.normalizeConversationId(info?.id);
-  }
-
-  private isNativeDeleteConfirmationTarget(target: HTMLElement): boolean {
-    if (!this.nativeDeleteCandidateId) return false;
-    const button = target.closest('button, [role="button"]') as HTMLElement | null;
-    if (!button) return false;
-    const dialog = button.closest('[role="dialog"], .mat-mdc-dialog-container');
-    if (!dialog) return false;
-
-    const testId = button.getAttribute('data-test-id')?.toLowerCase() || '';
-    if (testId.includes('cancel')) return false;
-    if (testId.includes('confirm') || testId.includes('delete')) return true;
-
-    const text = button.textContent?.trim().toLowerCase() || '';
-    return this.getDeleteKeywords().some(
-      (keyword) => text === keyword || (text.includes(keyword) && text.length < 20),
-    );
-  }
-
-  private isNativeDeleteCancellationTarget(target: HTMLElement): boolean {
-    if (!this.nativeDeleteCandidateId) return false;
-    const button = target.closest('button, [role="button"]') as HTMLElement | null;
-    if (!button?.closest('[role="dialog"], .mat-mdc-dialog-container')) return false;
-
-    const testId = button.getAttribute('data-test-id')?.toLowerCase() || '';
-    if (testId.includes('cancel')) return true;
-
-    const text = button.textContent?.trim().toLowerCase() || '';
-    const cancelLabel = this.t('pm_cancel').trim().toLowerCase();
-    return text === 'cancel' || (!!cancelLabel && text === cancelLabel);
-  }
-
-  private isNativeDeleteOverlayDismissalTarget(target: HTMLElement): boolean {
-    return !!this.nativeDeleteCandidateId && !!target.closest('.cdk-overlay-backdrop');
-  }
-
-  private rememberNativeDeleteCandidate(conversationId: string): void {
-    const normalized = this.normalizeConversationId(conversationId);
-    if (!normalized) return;
-    this.clearNativeDeleteCandidate();
-    this.nativeDeleteCandidateId = normalized;
-    this.nativeDeleteCandidateScope = this.captureNativeDeleteScope();
-    this.nativeDeleteCandidateWasCurrent =
-      this.normalizeConversationId(this.getCurrentConversationId()) === normalized;
-
-    this.nativeDeleteCandidateTimer = window.setTimeout(
-      () => this.clearNativeDeleteCandidate(),
-      NATIVE_DELETE_CANDIDATE_TIMEOUT_MS,
-    );
-  }
-
-  private isNativeDeleteCompletionRoute(): boolean {
-    try {
-      const url = new URL(window.location.href);
-      return (
-        /^\/(?:u\/\d+\/)?app\/?$/.test(url.pathname) && url.searchParams.get('pageId') === 'none'
-      );
-    } catch {
-      return false;
-    }
-  }
-
-  private captureNativeDeleteScope(): NativeDeleteScope {
-    return {
-      storageKey: this.activeStorageKey,
-      routeUserId: this.getNativeDeleteRouteUserId(),
-    };
-  }
-
-  private isNativeDeleteScopeCurrent(scope: NativeDeleteScope): boolean {
-    return (
-      scope.storageKey === this.activeStorageKey &&
-      scope.routeUserId === this.getNativeDeleteRouteUserId()
-    );
-  }
-
-  /** Bare `/app` routes and `/u/0/app` both address Gemini's default account. */
-  private getNativeDeleteRouteUserId(): string | null {
-    const routeUserId = extractRouteUserIdFromPath(window.location.pathname);
-    if (routeUserId !== null) return routeUserId;
-    return /^\/app(?:\/|$)/.test(window.location.pathname) ? '0' : null;
-  }
-
-  private clearNativeDeleteCandidate(): void {
-    if (this.nativeDeleteCandidateTimer !== null) {
-      window.clearTimeout(this.nativeDeleteCandidateTimer);
-      this.nativeDeleteCandidateTimer = null;
-    }
-    this.nativeDeleteCandidateId = null;
-    this.nativeDeleteCandidateScope = null;
-    this.nativeDeleteCandidateWasCurrent = false;
-  }
-
-  // After a conversation ⋮ menu we injected into closes, mat-menu restores DOM
-  // focus to the trigger (Angular default), leaving the row highlighted via
-  // :focus-within. Drop that focus — but ONLY for plain pointer dismissals, so
-  // we never disturb keyboard navigation, the rename/delete flows, our
-  // move-to-folder dialog, or any confirm dialog that takes focus.
-  private releaseTriggerFocusAfterPointerClose(): void {
-    if (this.lastInputModality !== 'pointer') return;
-    window.setTimeout(() => {
-      if (this.isDestroyed) return;
-      // Skip if another overlay/dialog grabbed the stage (delete confirm, our
-      // move-to-folder dialog, any CDK dialog) — those manage their own focus.
-      if (
-        document.querySelector(
-          '.cdk-overlay-backdrop, .mat-mdc-dialog-container, .gv-folder-dialog-overlay',
-        )
-      ) {
-        return;
-      }
-      const active = document.activeElement as HTMLElement | null;
-      if (active && active.matches?.(CONVERSATION_MENU_TRIGGER_SELECTOR)) {
-        active.blur();
-      }
-    }, 0);
-  }
-
-  private parseMenuTriggerPanelIds(trigger: HTMLElement): string[] {
-    const raw = `${trigger.getAttribute('aria-controls') || ''} ${
-      trigger.getAttribute('aria-owns') || ''
-    }`;
-    return raw
-      .split(/\s+/)
-      .map((id) => id.trim())
-      .filter(Boolean);
-  }
-
-  private teardownMoveMenuTriggerListener(): void {
-    if (this.moveMenuTriggerHandler) {
-      document.removeEventListener('click', this.moveMenuTriggerHandler, true);
-      document.removeEventListener('pointerdown', this.moveMenuTriggerHandler, true);
-      this.moveMenuTriggerHandler = null;
-    }
-    if (this.moveMenuKeydownHandler) {
-      document.removeEventListener('keydown', this.moveMenuKeydownHandler, true);
-      this.moveMenuKeydownHandler = null;
-    }
-    this.clearNativeDeleteCandidate();
-  }
-
-  private extractNativeConversationId(conversationEl: HTMLElement): string | null {
-    // Support both /app/<hexId> and /gem/<gemId>/<hexId>
-    const scope =
-      (conversationEl.closest('[data-test-id="conversation"]') as HTMLElement) || conversationEl;
-
-    // Get all conversation links
-    const links = scope.querySelectorAll('a[href*="/app/"], a[href*="/gem/"]');
-
-    if (links.length === 0) {
-      this.debugWarn('extractId: no conversation link found under scope');
-      // Fallback to jslog parsing on the conversation element tree
-      const hex = this.extractHexIdFromJslog(scope);
-      if (hex) return hex;
-      return null;
-    }
-
-    // If there are multiple links, try to find the most specific one
-    let link: Element;
-    if (links.length > 1) {
-      this.debugWarn(
-        `extractId: found ${links.length} links, attempting to select the most appropriate one`,
-      );
-
-      // Strategy 1: Find the link with the smallest bounding box (most likely the actual conversation item)
-      let minArea = Infinity;
-      let bestLink = links[0];
-
-      for (const l of Array.from(links)) {
-        const rect = l.getBoundingClientRect();
-        const area = rect.width * rect.height;
-        if (area > 0 && area < minArea) {
-          minArea = area;
-          bestLink = l;
-        }
-      }
-
-      // If all links have the same size, fall back to the first one
-      link = minArea < Infinity ? bestLink : links[0];
-      this.debug('extractId: selected link with area', minArea);
-    } else {
-      link = links[0];
-    }
-
-    const href = link.getAttribute('href') || '';
-    this.debug('extractId: found link href', href);
-
-    // Try /app/<hexId>
-    let match = href.match(/\/app\/([^/?#]+)/);
-    if (match && match[1]) {
-      this.debug('extractId: extracted from /app/', match[1]);
-      return match[1];
-    }
-    // Try /gem/<gemId>/<hexId>
-    match = href.match(/\/gem\/[^/]+\/([^/?#]+)/);
-    if (match && match[1]) {
-      this.debug('extractId: extracted from /gem/', match[1]);
-      return match[1];
-    }
-    this.debugWarn('extractId: failed to extract id from href');
-    return null;
-  }
-
-  private extractNativeConversationTitle(conversationEl: HTMLElement): string | null {
-    const scope =
-      (conversationEl.closest('[data-test-id="conversation"]') as HTMLElement) || conversationEl;
-    // 1) Known title selectors
-    const titleEl = scope.querySelector(
-      '.title-text, .gds-label-l, .conversation-title-text, [data-test-id="conversation-title"], h3',
-    );
-    let title = titleEl?.textContent?.trim() || null;
-    if (title && !this.isGemLabel(title)) {
-      this.debug('extractTitle(selectors):', title);
-      return title;
-    }
-
-    // 2) Link attributes
-    const link = scope.querySelector(
-      'a[href*="/app/"], a[href*="/gem/"]',
-    ) as HTMLAnchorElement | null;
-    const aria = link?.getAttribute('aria-label')?.trim();
-    if (aria && !this.isGemLabel(aria)) {
-      this.debug('extractTitle(link aria-label):', aria);
-      return aria;
-    }
-    const linkTitle = link?.getAttribute('title')?.trim();
-    if (linkTitle && !this.isGemLabel(linkTitle)) {
-      this.debug('extractTitle(link title attr):', linkTitle);
-      return linkTitle;
-    }
-
-    // 3) Parse visible text from link (ignore icons and gem labels)
-    const fromLinkText = this.extractTitleFromLinkText(link || undefined);
-    if (fromLinkText) {
-      this.debug('extractTitle(link text):', fromLinkText);
-      return fromLinkText;
-    }
-
-    // 4) Fallbacks on common labels
-    title = this.extractFallbackTitle(scope);
-    if (title && !this.isGemLabel(title)) {
-      this.debug('extractTitle(fallback):', title);
-      return title;
-    }
-
-    this.debug('extractTitle: null');
-    return null;
-  }
-
-  /**
-   * Build a conversationId → native title lookup table with ONE sidebar scan.
-   *
-   * Mirrors the per-row matching semantics of `syncConversationTitleFromNative`
-   * (`jslog.includes(id)` and `link.href.includes(id)`): every `c_<hex>` id a
-   * row's jslog mentions and the id extracted from the row's link href are all
-   * registered, in both prefixed (`c_<hex>`) and bare (`<hex>`) forms, so
-   * callers can look up either id shape. First title-bearing row wins — same
-   * as the old first-match-in-DOM-order behavior.
-   */
-  private buildNativeConversationTitleMap(): Map<string, string> {
-    const map = new Map<string, string>();
-    try {
-      const conversations = document.querySelectorAll('[data-test-id="conversation"]');
-      for (const convEl of Array.from(conversations)) {
-        const element = convEl as HTMLElement;
-        const title = this.extractNativeConversationTitle(element);
-        if (!title) continue;
-
-        const register = (rawId: string | null | undefined): void => {
-          const hex = this.normalizeConversationId(rawId);
-          if (!hex) return;
-          if (!map.has(hex)) map.set(hex, title);
-          const prefixed = `c_${hex}`;
-          if (!map.has(prefixed)) map.set(prefixed, title);
-        };
-
-        const jslog = element.getAttribute('jslog');
-        if (jslog) {
-          for (const match of jslog.matchAll(/c_([a-f0-9]{8,})/gi)) {
-            register(match[1]);
-          }
-        }
-
-        const link = element.querySelector(
-          'a[href*="/app/"], a[href*="/gem/"]',
-        ) as HTMLAnchorElement | null;
-        if (link) {
-          register(this.extractConversationIdFromHref(link.href));
-        }
-      }
-    } catch (e) {
-      this.debug('Error building native title map:', e);
-    }
-    return map;
-  }
-
-  private lookupNativeConversationTitle(conversationId: string): string | null {
-    const map = this.nativeTitleLookup;
-    if (!map) return null;
-
-    const direct = map.get(conversationId);
-    if (direct) return direct;
-
-    const normalized = this.normalizeConversationId(conversationId);
-    if (normalized) {
-      const byHex = map.get(normalized);
-      if (byHex) return byHex;
-    }
-    return null;
-  }
-
-  private syncConversationTitleFromNative(conversationId: string): string | null {
-    try {
-      // Try to find the conversation in the native sidebar by its ID
-      const conversations = document.querySelectorAll('[data-test-id="conversation"]');
-      for (const convEl of Array.from(conversations)) {
-        // Check if this conversation matches the ID
-        const jslog = convEl.getAttribute('jslog');
-        if (jslog && jslog.includes(conversationId)) {
-          // Found the matching conversation, extract its current title
-          const currentTitle = this.extractNativeConversationTitle(convEl as HTMLElement);
-          if (currentTitle) {
-            this.debug('Synced title from native:', currentTitle);
-            return currentTitle;
-          }
-        }
-
-        // Also check by href
-        const link = convEl.querySelector(
-          'a[href*="/app/"], a[href*="/gem/"]',
-        ) as HTMLAnchorElement | null;
-        if (link && link.href.includes(conversationId)) {
-          const currentTitle = this.extractNativeConversationTitle(convEl as HTMLElement);
-          if (currentTitle) {
-            this.debug('Synced title from native (by href):', currentTitle);
-            return currentTitle;
-          }
-        }
-      }
-    } catch (e) {
-      this.debug('Error syncing title from native:', e);
-    }
-    return null;
-  }
-
   private applyConversationTitleUpdate(conversationId: string, newTitle: string): boolean {
     const title = newTitle.trim();
     if (!title) return false;
@@ -7160,14 +5633,13 @@ export class FolderManager {
     this.nativeTitleSyncInProgress = true;
     try {
       let updated = false;
-      const conversations = this.getNativeConversationElements();
+      const conversations = getNativeConversationElements(this.sidebarContainer);
 
       for (const convEl of Array.from(conversations)) {
         const element = convEl as HTMLElement;
         const conversationId =
-          this.extractNativeConversationId(element) ||
-          this.extractConversationIdFromElement(element);
-        const title = this.extractNativeConversationTitle(element);
+          extractNativeConversationId(element) || extractConversationIdFromElement(element);
+        const title = extractNativeConversationTitle(element);
         if (!conversationId || !title) continue;
 
         updated = this.applyConversationTitleUpdate(conversationId, title) || updated;
@@ -7188,184 +5660,6 @@ export class FolderManager {
     void this.saveData();
     // Re-render folders to show updated title
     this.renderAllFolders();
-  }
-
-  /**
-   * Schedule a delayed check after an explicit native Delete action. DOM
-   * disappearance alone never calls this method because the sidebar virtualizes
-   * rows during normal scrolling.
-   */
-  private scheduleConversationRemovalCheck(
-    conversationId: string,
-    checksRemaining: number = NATIVE_DELETE_SETTLE_CHECK_LIMIT,
-  ): void {
-    const normalizedId = this.normalizeConversationId(conversationId);
-    if (!normalizedId || this.isDestroyed) return;
-    const deletionScope =
-      this.pendingNativeDeletionScopes.get(normalizedId) ?? this.captureNativeDeleteScope();
-    this.pendingNativeDeletionScopes.set(normalizedId, deletionScope);
-
-    // Cancel any existing timer for this conversation
-    const existingTimer = this.pendingRemovals.get(normalizedId);
-    if (existingTimer) {
-      clearTimeout(existingTimer);
-      this.debug(`Cancelled previous removal timer for ${normalizedId}`);
-    }
-
-    // Schedule a new check after delay
-    const timerId = window.setTimeout(() => {
-      this.confirmConversationRemoval(normalizedId, checksRemaining, deletionScope);
-    }, this.removalCheckDelay);
-
-    this.pendingRemovals.set(normalizedId, timerId);
-    this.debug(`Scheduled removal check for ${normalizedId} (delay: ${this.removalCheckDelay}ms)`);
-  }
-
-  /**
-   * Check if conversation still exists in DOM
-   * Returns true if conversation found, false if definitely deleted
-   * In case of errors, conservatively returns true to avoid false deletions
-   */
-  private isConversationInDOM(conversationId: string, ignoreHiddenRows = false): boolean {
-    if (!this.sidebarContainer) {
-      this.debugWarn('Sidebar container not available for DOM check');
-      return true; // Conservative: assume conversation exists if we can't check
-    }
-
-    try {
-      const matchingRows = new Set<HTMLElement>();
-      this.sidebarContainer
-        .querySelectorAll<HTMLElement>(
-          `[data-test-id="conversation"][jslog*="c_${conversationId}"]`,
-        )
-        .forEach((row) => matchingRows.add(row));
-      this.sidebarContainer
-        .querySelectorAll<HTMLAnchorElement>(
-          `[data-test-id="conversation"] a[href*="${conversationId}"]`,
-        )
-        .forEach((link) => {
-          const row = link.closest('[data-test-id="conversation"]');
-          if (row instanceof HTMLElement) matchingRows.add(row);
-        });
-
-      const existingRow = Array.from(matchingRows).find(
-        (row) => !ignoreHiddenRows || this.isRenderedNativeConversationRow(row),
-      );
-      if (existingRow) {
-        this.debug(`Found conversation ${conversationId} in DOM`);
-        return true;
-      }
-
-      if (matchingRows.size > 0) {
-        this.debug(`Ignored hidden stale native row for conversation ${conversationId}`);
-      }
-
-      // Not found in DOM
-      this.debug(`Conversation ${conversationId} not found in DOM`);
-      return false;
-    } catch (error) {
-      this.debugWarn(`DOM check failed for ${conversationId}:`, error);
-      // Conservative approach: if we can't check, assume it still exists
-      // This prevents accidental deletion during DOM reconstruction
-      return true;
-    }
-  }
-
-  private isRenderedNativeConversationRow(row: HTMLElement): boolean {
-    // A collapsed/temporarily hidden sidebar is not evidence that Gemini
-    // removed the conversation. Only the row's own state can identify a
-    // stale virtualized template; ancestor visibility belongs to sidebar UI
-    // lifecycle and must be treated conservatively.
-    if (row.hidden || row.getAttribute('aria-hidden') === 'true') return false;
-
-    const style = window.getComputedStyle(row);
-    return !(
-      style.display === 'none' ||
-      style.visibility === 'hidden' ||
-      style.visibility === 'collapse' ||
-      style.contentVisibility === 'hidden'
-    );
-  }
-
-  /**
-   * Get the conversation ID from current URL
-   */
-  private getCurrentConversationId(): string | null {
-    const url = window.location.href;
-    const appMatch = url.match(/\/app\/([^/?#]+)/);
-    const gemMatch = url.match(/\/gem\/[^/]+\/([^/?#]+)/);
-    return appMatch?.[1] || gemMatch?.[1] || null;
-  }
-
-  /**
-   * Confirm an explicit native deletion after the UI has settled. The current
-   * URL / visible-row checks keep the folder entry if Gemini rejected or
-   * cancelled the operation.
-   */
-  private confirmConversationRemoval(
-    conversationId: string,
-    checksRemaining: number,
-    deletionScope: NativeDeleteScope,
-  ): void {
-    // Remove from pending list
-    this.pendingRemovals.delete(conversationId);
-    if (this.isDestroyed) return;
-    if (!this.isNativeDeleteScopeCurrent(deletionScope)) {
-      this.currentNativeDeletionChecks.delete(conversationId);
-      this.pendingNativeDeletionScopes.delete(conversationId);
-      this.debug(`Discarded deletion check after account scope changed: ${conversationId}`);
-      return;
-    }
-
-    this.debug(`\n═══ Confirming removal for conversation ${conversationId} ═══`);
-    this.debug(`  Delay elapsed: ${this.removalCheckDelay}ms`);
-
-    // Check 1: Is this the currently active conversation?
-    const currentConvId = this.getCurrentConversationId();
-    const currentUrl = window.location.href;
-
-    if (this.normalizeConversationId(currentConvId) === conversationId) {
-      this.debug(`  ✓ SKIPPED: Currently active conversation`);
-      this.debug(`    Current URL: ${currentUrl}`);
-      this.debug(`    Matched ID: ${currentConvId}`);
-      this.debug(`════════════════════════════════════════════════\n`);
-      this.retryConversationRemovalCheck(conversationId, checksRemaining);
-      return;
-    }
-
-    // Check 2: Is conversation still visibly present in Gemini's native list?
-    // The lr26 sidebar can retain hidden virtualized rows after a successful
-    // current-chat deletion. Ignore those only when the explicit delete flow
-    // was armed for the current route and Gemini reached its completion page.
-    const ignoreHiddenRows =
-      this.currentNativeDeletionChecks.has(conversationId) && this.isNativeDeleteCompletionRoute();
-    if (this.isConversationInDOM(conversationId, ignoreHiddenRows)) {
-      this.debug(`  ✓ SKIPPED: Conversation still exists in DOM`);
-      this.debug(`    Likely a UI refresh, not a deletion`);
-      this.debug(`════════════════════════════════════════════════\n`);
-      this.retryConversationRemovalCheck(conversationId, checksRemaining);
-      return;
-    }
-
-    // Conversation is truly deleted - remove from folders
-    this.debug(`  ✗ CONFIRMED DELETION: Removing from all folders`);
-    this.debug(`    Reason: Not in current URL and not found in DOM`);
-    this.debug(`    Current URL: ${currentUrl}`);
-    this.debug(`════════════════════════════════════════════════\n`);
-
-    this.removeConversationFromAllFolders(conversationId);
-    this.currentNativeDeletionChecks.delete(conversationId);
-    this.pendingNativeDeletionScopes.delete(conversationId);
-  }
-
-  private retryConversationRemovalCheck(conversationId: string, checksRemaining: number): void {
-    if (checksRemaining <= 1) {
-      this.debug(`Removal check timed out for ${conversationId}; preserving folder entry`);
-      this.currentNativeDeletionChecks.delete(conversationId);
-      this.pendingNativeDeletionScopes.delete(conversationId);
-      return;
-    }
-    this.scheduleConversationRemovalCheck(conversationId, checksRemaining - 1);
   }
 
   private removeConversationFromAllFolders(conversationId: string): void {
@@ -7392,165 +5686,6 @@ export class FolderManager {
       // Re-render folders to reflect the removal
       this.renderAllFolders();
     }
-  }
-
-  private extractHexIdFromJslog(scope: HTMLElement): string | null {
-    try {
-      const tryParse = (val: string | null | undefined): string | null => {
-        if (!val) return null;
-        // Typical pattern inside jslog: c_<hex>
-        const m = val.match(/c_([a-f0-9]{8,})/i);
-        return m?.[1] || null;
-      };
-
-      // Check on scope itself
-      const fromSelf = tryParse(scope.getAttribute('jslog'));
-      if (fromSelf) {
-        this.debug('extractId(jslog self):', fromSelf);
-        return fromSelf;
-      }
-
-      // Search descendants with jslog
-      const nodes = scope.querySelectorAll('[jslog]');
-      for (const n of Array.from(nodes)) {
-        const found = tryParse(n.getAttribute('jslog'));
-        if (found) {
-          this.debug('extractId(jslog descendant):', found);
-          return found;
-        }
-      }
-    } catch (e) {
-      this.debugWarn('extractHexIdFromJslog error:', e);
-    }
-    this.debugWarn('extractId(jslog): not found');
-    return null;
-  }
-
-  private buildConversationUrlFromId(hexId: string): string {
-    // Mirror extractConversationData's account-scope semantics: preserve the
-    // current /u/<index>/ segment for multi-account users so jslog-fallback
-    // URLs don't open in the wrong account. Under hard account isolation the
-    // /u/<index> segment is intentionally NOT persisted (navigation rebuilds
-    // it from the live page context).
-    let accountPrefix = '';
-    try {
-      if (!this.accountIsolationEnabled) {
-        const userMatch = window.location.pathname.match(/\/u\/(\d+)\//);
-        if (userMatch) {
-          accountPrefix = `/u/${userMatch[1]}`;
-        }
-      }
-    } catch (e) {
-      this.debug('Failed to extract account prefix:', e);
-    }
-
-    try {
-      const path = window.location.pathname;
-      const gemMatch = path.match(/\/gem\/([^/]+)/);
-      if (gemMatch && gemMatch[1]) {
-        const gemId = gemMatch[1];
-        return `https://gemini.google.com${accountPrefix}/gem/${gemId}/${hexId}`;
-      }
-    } catch (e) {
-      this.debug('Failed to extract gem URL:', e);
-    }
-    return `https://gemini.google.com${accountPrefix}/app/${hexId}`;
-  }
-
-  private extractFallbackTitle(conversationEl: HTMLElement): string | null {
-    try {
-      const scope =
-        (conversationEl.closest('[data-test-id="conversation"]') as HTMLElement) || conversationEl;
-      // Prefer explicit attributes if present
-      const aria = scope.getAttribute('aria-label');
-      if (aria && aria.trim()) {
-        this.debug('fallbackTitle(aria-label):', aria.trim());
-        return aria.trim();
-      }
-      const titleAttr = scope.getAttribute('title');
-      if (titleAttr && titleAttr.trim()) {
-        this.debug('fallbackTitle(title attr):', titleAttr.trim());
-        return titleAttr.trim();
-      }
-      // Try a common inner label
-      const label = scope.querySelector('.gds-body-m, .gds-label-m, .subtitle');
-      const labelText = label?.textContent?.trim();
-      if (labelText && !this.isGemLabel(labelText)) {
-        this.debug('fallbackTitle(label-ish):', labelText);
-        return labelText;
-      }
-      // Fall back to trimmed text content (first line, clipped)
-      const raw = scope.textContent?.trim() || '';
-      if (raw) {
-        const firstLine =
-          raw
-            .split('\n')
-            .map((s) => s.trim())
-            .filter(Boolean)[0] || raw;
-        const clipped = firstLine.slice(0, 80);
-        this.debug('fallbackTitle(textContent):', clipped);
-        return clipped;
-      }
-    } catch (e) {
-      this.debugWarn('extractFallbackTitle error:', e);
-    }
-    return null;
-  }
-
-  private isGemLabel(text: string): boolean {
-    const t = (text || '').trim();
-    if (!t) return false;
-    const simple = t.toLowerCase();
-    // Generic labels we want to ignore
-    if (simple === 'gem' || simple === 'gems') return true;
-    // Known Gem names (English)
-    for (const g of GEM_CONFIG) {
-      if (simple === g.name.toLowerCase()) return true;
-    }
-    return false;
-  }
-
-  private extractTitleFromLinkText(link?: HTMLAnchorElement | null): string | null {
-    if (!link) return null;
-    // Get visible textual lines from the link
-    const text = (link.innerText || '').trim();
-    if (!text) return null;
-    const parts = text
-      .split('\n')
-      .map((s) => s.trim())
-      .filter(Boolean)
-      .filter((s) => !this.isGemLabel(s))
-      .filter((s) => s.length >= 2);
-    this.debug('extractTitleFromLinkText parts:', parts);
-    if (parts.length === 0) return null;
-    // Heuristic: pick the longest part
-    const best = parts.reduce((a, b) => (b.length > a.length ? b : a), parts[0]);
-    return best || null;
-  }
-
-  private extractNativeConversationUrl(conversationEl: HTMLElement): string | null {
-    const scope =
-      (conversationEl.closest('[data-test-id="conversation"]') as HTMLElement) || conversationEl;
-    const link = scope.querySelector('a[href*="/app/"], a[href*="/gem/"]');
-    if (!link) {
-      this.debugWarn('extractUrl: no conversation link found under scope');
-      // Fallback: construct from extracted id (via jslog) if possible
-      const hex = this.extractHexIdFromJslog(scope);
-      if (hex) {
-        const fullFromJslog = this.buildConversationUrlFromId(hex);
-        this.debug('extractUrl(jslog fallback):', fullFromJslog);
-        return fullFromJslog;
-      }
-      return null;
-    }
-    const href = link.getAttribute('href');
-    if (!href) {
-      this.debugWarn('extractUrl: link has no href');
-      return null;
-    }
-    const full = href.startsWith('http') ? href : `https://gemini.google.com${href}`;
-    this.debug('extractUrl:', full);
-    return full;
   }
 
   private refresh(): void {
@@ -7593,26 +5728,14 @@ export class FolderManager {
     }
   }
 
-  private getCurrentHexIdFromLocation(): string | null {
-    try {
-      const path = window.location.pathname || '';
-      // Match /app/<hex> or /gem/<gemId>/<hex>
-      const m = path.match(/\/(?:app|gem\/[^/]+)\/([a-f0-9]+)/i);
-      return m ? m[1] : null;
-    } catch (e) {
-      this.debug('Failed to get current hex ID from location:', e);
-      return null;
-    }
-  }
-
   private getFolderConversationInstanceKey(folderId: string, conversationId: string): string {
     return `${folderId}:${conversationId}`;
   }
 
   private highlightActiveConversationInFolders(): void {
     if (!this.containerElement) return;
-    const hex = this.getCurrentHexIdFromLocation();
-    const currentId = this.normalizeConversationId(hex);
+    const hex = getCurrentHexIdFromLocation();
+    const currentId = normalizeConversationId(hex);
     const rows = Array.from(
       this.containerElement.querySelectorAll<HTMLElement>('.gv-folder-conversation'),
     );
@@ -7622,7 +5745,7 @@ export class FolderManager {
 
     const matches = rows.filter((row) => {
       const link = row.querySelector<HTMLAnchorElement>('a.gv-folder-conversation-link[href]');
-      return this.resolveConversationRouteId(link?.href, row.dataset.conversationId) === currentId;
+      return resolveConversationRouteId(link?.href, row.dataset.conversationId) === currentId;
     });
     const activeRow =
       matches.find(
@@ -8133,7 +6256,7 @@ export class FolderManager {
     this.pendingStorageEchoes = 0;
     this.pendingTitleUpdates.clear();
     this.nativeTitleLookup = null;
-    this.clearNativeTitleSyncTimer();
+    this.nativeSidebarObserver.clearTitleSync();
     this.clearFolderNavigationConfirmation();
     this.clearActiveFolderInput();
     this.headerMenus.close();
@@ -8283,7 +6406,7 @@ export class FolderManager {
 
         this.activitySendIntentHandler = (event) => {
           if (!this.isConversationSendIntent(event)) return;
-          const conversationId = this.getCurrentConversationId();
+          const conversationId = getCurrentConversationId();
           if (!conversationId || !this.isConversationInFolders(conversationId)) return;
 
           const sentAt = Date.now();
@@ -8344,7 +6467,7 @@ export class FolderManager {
   }
 
   private getKnownConversationLastTurnAt(conversationId: string, url?: string): number | undefined {
-    const nativeConversationId = this.normalizeConversationId(conversationId);
+    const nativeConversationId = normalizeConversationId(conversationId);
     if (!nativeConversationId) return undefined;
 
     const serverTimestamp =
@@ -8381,7 +6504,7 @@ export class FolderManager {
   private applyHistoryActivityTimestamps(cids: string[]): void {
     const latestByConversationId = new Map<string, number>();
     cids.forEach((cid) => {
-      const nativeConversationId = this.normalizeConversationId(cid);
+      const nativeConversationId = normalizeConversationId(cid);
       if (!nativeConversationId) return;
       const latest = historyTimestampStore.getLatestTurnTimestamp(nativeConversationId);
       if (latest) latestByConversationId.set(nativeConversationId, latest);
@@ -8391,7 +6514,7 @@ export class FolderManager {
     let changed = false;
     Object.values(this.data.folderContents).forEach((conversations) => {
       conversations.forEach((conversation) => {
-        const nativeConversationId = this.normalizeConversationId(conversation.conversationId);
+        const nativeConversationId = normalizeConversationId(conversation.conversationId);
         const latest = nativeConversationId
           ? latestByConversationId.get(nativeConversationId)
           : undefined;
@@ -8857,10 +6980,7 @@ export class FolderManager {
                 this.multiSelectHostElement.remove();
                 this.multiSelectHostElement = null;
               }
-              if (this.conversationObserver) {
-                this.conversationObserver.disconnect();
-                this.conversationObserver = null;
-              }
+              this.nativeSidebarObserver.disconnect();
               if (this.sideNavObserver) {
                 this.sideNavObserver.disconnect();
                 this.sideNavObserver = null;
@@ -9045,7 +7165,7 @@ export class FolderManager {
   }
 
   private applyHideArchivedSetting(): void {
-    const conversations = this.getNativeConversationElements();
+    const conversations = getNativeConversationElements(this.sidebarContainer);
     conversations.forEach((conv) => {
       this.applyHideArchivedToConversation(conv as HTMLElement);
     });
@@ -9067,7 +7187,7 @@ export class FolderManager {
       return;
     }
 
-    const convId = this.extractConversationId(conv);
+    const convId = extractConversationId(conv);
     const isArchived = this.isConversationInFolders(convId);
 
     this.setNativeConversationArchivedState(conv, isArchived);
@@ -9093,7 +7213,9 @@ export class FolderManager {
       return this.legacyActionsProbe.present;
     }
     const present =
-      this.getNativeConversationRoot().querySelector('.conversation-actions-container') !== null;
+      getNativeConversationRoot(this.sidebarContainer).querySelector(
+        '.conversation-actions-container',
+      ) !== null;
     this.legacyActionsProbe = { present, at: now };
     return present;
   }
@@ -9153,16 +7275,6 @@ export class FolderManager {
     return `folder_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   }
 
-  private hashString(str: string): string {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      const char = str.charCodeAt(i);
-      hash = (hash << 5) - hash + char;
-      hash = hash & hash;
-    }
-    return Math.abs(hash).toString(36);
-  }
-
   private navigateToConversationById(folderId: string, conversationId: string): void {
     // Look up the latest conversation data from storage
     const conv = this.data.folderContents[folderId]?.find(
@@ -9188,14 +7300,13 @@ export class FolderManager {
   }
 
   private isSameConversation(targetId: string, conversation: ConversationReference): boolean {
-    const normalizedTarget = this.normalizeConversationId(targetId);
+    const normalizedTarget = normalizeConversationId(targetId);
     if (!normalizedTarget) return false;
 
-    if (this.normalizeConversationId(conversation.conversationId) === normalizedTarget) return true;
+    if (normalizeConversationId(conversation.conversationId) === normalizedTarget) return true;
 
     return (
-      this.resolveConversationRouteId(conversation.url, conversation.conversationId) ===
-      normalizedTarget
+      resolveConversationRouteId(conversation.url, conversation.conversationId) === normalizedTarget
     );
   }
 
@@ -9223,170 +7334,6 @@ export class FolderManager {
     // the next natural render. Debounced: rapid navigation shouldn't run the
     // full save pipeline per click.
     this.scheduleSaveData();
-  }
-
-  private normalizeConversationId(value: string | null | undefined): string | null {
-    const normalized = String(value || '')
-      .trim()
-      .replace(/^c_/i, '');
-    return normalized || null;
-  }
-
-  private resolveConversationRouteId(
-    href: string | null | undefined,
-    fallbackId: string | null | undefined,
-  ): string | null {
-    return this.extractConversationIdFromHref(href) ?? this.normalizeConversationId(fallbackId);
-  }
-
-  private extractConversationIdFromHref(href: string | null | undefined): string | null {
-    if (!href) return null;
-
-    try {
-      const parsed = new URL(href, window.location.origin);
-      const appMatch = parsed.pathname.match(/\/app\/([^/?#]+)/);
-      if (appMatch?.[1]) {
-        return this.normalizeConversationId(appMatch[1]);
-      }
-
-      const gemMatch = parsed.pathname.match(/\/gem\/[^/]+\/([^/?#]+)/);
-      if (gemMatch?.[1]) {
-        return this.normalizeConversationId(gemMatch[1]);
-      }
-    } catch (error) {
-      this.debug('Failed to extract conversation id from href:', error);
-    }
-
-    return null;
-  }
-
-  /**
-   * Extract conversation info from the current page URL and top-bar title.
-   * Used exclusively for the top-right conversation header menu (not sidebar).
-   *
-   * Returns null ONLY when the URL does not contain a valid conversation ID,
-   * in which case injection is skipped entirely.
-   * Title always has a fallback — never returns null for title.
-   */
-  private extractConversationInfoFromPage(): { id: string; title: string; url: string } | null {
-    // --- Robust URL parsing ---
-    let path: string;
-    try {
-      path = window.location.pathname;
-    } catch {
-      this.debugWarn('extractConversationInfoFromPage: failed to read location.pathname');
-      return null;
-    }
-
-    // Support multi-user prefix /u/<n>/, /app/<hexId>, and /gem/<gemId>/<hexId>
-    const hexMatch = path.match(/\/(?:app|gem\/[^/?#]+)\/([a-f0-9]{8,})/i);
-    if (!hexMatch?.[1]) {
-      this.debug('extractConversationInfoFromPage: no valid conversation ID in URL');
-      return null;
-    }
-    const id = hexMatch[1];
-    const url = window.location.href;
-
-    // --- Defensive title extraction ---
-    // Gemini generates titles asynchronously; the DOM element may not be ready yet.
-    // Try multiple selectors, then fallback to document.title, then to a default string.
-    const titleSelectors = [
-      '.conversation-title-container [data-test-id="conversation-title"]',
-      'top-bar-actions [data-test-id="conversation-title"]',
-      '.top-bar-actions [data-test-id="conversation-title"]',
-      '.conversation-title-container .conversation-title.gds-title-m',
-      'top-bar-actions .conversation-title.gds-title-m',
-    ];
-
-    // Placeholder strings Gemini shows before the chat is auto-titled.
-    // Must cover every locale Gemini supports — the DOM text is localized
-    // even though the brand name "Gemini" is not.
-    const DISALLOWED_TITLES = new Set([
-      '',
-      'Gemini',
-      'Google Gemini',
-      'New chat', // en
-      '新对话', // zh-CN
-      '新對話', // zh-TW
-      '新しいチャット', // ja
-      '새 채팅', // ko
-      'Nuevo chat', // es
-      'Nouveau chat', // fr
-      'Novo chat', // pt
-      'Новый чат', // ru
-      'محادثة جديدة', // ar
-    ]);
-
-    let title: string | null = null;
-    for (const sel of titleSelectors) {
-      try {
-        const el = document.querySelector(sel);
-        const text = el?.textContent?.trim();
-        if (text && !DISALLOWED_TITLES.has(text)) {
-          title = text;
-          break;
-        }
-      } catch {
-        // Continue to next selector
-      }
-    }
-
-    // Fallback 1: document.title (Gemini sets "Title - Gemini" format)
-    if (!title) {
-      try {
-        const docTitle = document.title?.trim();
-        if (docTitle) {
-          const cleaned = docTitle.replace(/\s*[-–—]\s*Gemini\s*$/i, '').trim();
-          if (cleaned && !DISALLOWED_TITLES.has(cleaned)) {
-            title = cleaned;
-          }
-        }
-      } catch {
-        // Continue to default
-      }
-    }
-
-    // Fallback 2: safe default — never return empty/null title
-    if (!title) {
-      title = 'Untitled';
-    }
-
-    this.debug('extractConversationInfoFromPage:', { id, title, url });
-    return { id, title, url };
-  }
-
-  private findNativeConversationLinkById(conversationId: string): HTMLAnchorElement | null {
-    const normalizedId = this.normalizeConversationId(conversationId);
-    if (!normalizedId) return null;
-
-    const byJslog = document.querySelector(
-      `[data-test-id="conversation"][jslog*="c_${normalizedId}"] a[href]`,
-    ) as HTMLAnchorElement | null;
-    if (byJslog && this.extractConversationIdFromHref(byJslog.href) === normalizedId) {
-      return byJslog;
-    }
-
-    const links = Array.from(
-      document.querySelectorAll<HTMLAnchorElement>(
-        '[data-test-id="conversation"] a[href], a[data-test-id="conversation"][href]',
-      ),
-    );
-
-    for (const link of links) {
-      if (this.extractConversationIdFromHref(link.href) === normalizedId) {
-        return link;
-      }
-    }
-
-    return null;
-  }
-
-  private triggerNativeConversationClick(target: HTMLElement): void {
-    const options = { bubbles: true, cancelable: true };
-    target.dispatchEvent(new MouseEvent('pointerdown', options));
-    target.dispatchEvent(new MouseEvent('mousedown', options));
-    target.dispatchEvent(new MouseEvent('mouseup', options));
-    target.dispatchEvent(new MouseEvent('click', options));
   }
 
   private navigateWithSpaRoute(url: string): boolean {
@@ -9419,11 +7366,8 @@ export class FolderManager {
     // This mimics how Gemini's original conversation links work
     try {
       const targetUrl = new URL(url);
-      const hexId = this.resolveConversationRouteId(
-        targetUrl.toString(),
-        conversation?.conversationId,
-      );
-      const currentConversationId = this.getCurrentConversationId();
+      const hexId = resolveConversationRouteId(targetUrl.toString(), conversation?.conversationId);
+      const currentConversationId = getCurrentConversationId();
 
       let effectivePath: string | null = null;
       let effectiveUrl: string | null = null;
@@ -9452,7 +7396,7 @@ export class FolderManager {
         // After navigation, sync title and check for gem updates
         setTimeout(() => {
           if (conversation && hexId) {
-            const syncedTitle = this.syncConversationTitleFromNative(hexId);
+            const syncedTitle = syncConversationTitleFromNative(hexId);
             if (syncedTitle && syncedTitle !== conversation.title) {
               this.updateConversationTitle(hexId, syncedTitle);
               this.debug('Updated conversation title after navigation:', syncedTitle);
@@ -9481,19 +7425,19 @@ export class FolderManager {
         return;
       }
 
-      const sidebarLink = hexId ? this.findNativeConversationLinkById(hexId) : null;
+      const sidebarLink = hexId ? findNativeConversationLinkById(hexId) : null;
       if (!sidebarLink) {
         this.debug('Sidebar link not found, falling back to SPA route navigation');
         spaNavigate();
         return;
       }
 
-      this.triggerNativeConversationClick(sidebarLink);
+      triggerNativeConversationClick(sidebarLink);
       this.debug('Triggered native sidebar link click');
 
       this.folderNavigationConfirmTimer = window.setTimeout(() => {
         this.folderNavigationConfirmTimer = null;
-        if (!hexId || this.getCurrentConversationId() === hexId) {
+        if (!hexId || getCurrentConversationId() === hexId) {
           finishNavigation();
           return;
         }
@@ -9592,7 +7536,7 @@ export class FolderManager {
       setTimeout(() => {
         void this.reloadScopedDataOnAccountRouteChange();
         this.highlightActiveConversationInFolders();
-        const currentConversationId = this.getCurrentConversationId();
+        const currentConversationId = getCurrentConversationId();
         if (currentConversationId) {
           this.markConversationAsRecentlyOpened(currentConversationId);
         }
@@ -9793,7 +7737,11 @@ export class FolderManager {
       // Handle request to collect all conversations and folder structure for AI organization
       if (msg.type === 'gv.folders.getStructureForAI') {
         this.debug('Received AI structure request');
-        this.collectAllSidebarConversations()
+        collectAllSidebarConversations(() => ({
+          sidebar: this.sidebarContainer,
+          accountIsolationEnabled: this.accountIsolationEnabled,
+          isDestroyed: this.isDestroyed,
+        }))
           .then((sidebarConversations) => {
             sendResponse({ ok: true, sidebarConversations, folderData: this.data });
           })
@@ -9816,71 +7764,6 @@ export class FolderManager {
     // cast: `true` keeps the channel open for handled messages, `undefined`
     // closes it for unknown ones.
     browser.runtime.onMessage.addListener(listener as Runtime.OnMessageListenerCallback);
-  }
-
-  /**
-   * A conversation row is "populated" once Gemini fills in its link. The lr26
-   * sidebar virtualizes rows: `[data-test-id="conversation"]` elements exist as
-   * empty stubs (no link, no title) while collapsed or mid-render, and only gain
-   * an `<a href>` once actually rendered. We use the link as the populated signal.
-   */
-  private isPopulatedConversationEl(el: HTMLElement): boolean {
-    return !!el.querySelector('a[href*="/app/"], a[href*="/gem/"]');
-  }
-
-  /**
-   * Collect all conversation titles and URLs from the native sidebar DOM.
-   * Waits for the virtualized rows to populate before reading them — otherwise
-   * the list comes back empty and the AI-organize prompt has nothing to work
-   * with (see #725).
-   */
-  private async collectAllSidebarConversations(): Promise<
-    Array<{ id: string; title: string; url: string }>
-  > {
-    await this.waitForPopulatedSidebarConversations();
-    return this.collectPopulatedConversations();
-  }
-
-  /** Synchronous extraction over the currently-populated sidebar rows. */
-  private collectPopulatedConversations(): Array<{ id: string; title: string; url: string }> {
-    const results: Array<{ id: string; title: string; url: string }> = [];
-    const seen = new Set<string>();
-    const conversationEls = this.getNativeConversationElements();
-
-    for (const el of Array.from(conversationEls)) {
-      const htmlEl = el as HTMLElement;
-      if (!this.isPopulatedConversationEl(htmlEl)) continue; // skip virtualized stub
-      const id = this.extractNativeConversationId(htmlEl);
-      const url = this.extractNativeConversationUrl(htmlEl);
-      if (!id || !url) continue;
-      if (seen.has(id)) continue; // collapsed rail can emit duplicate rows
-      seen.add(id);
-      const title = this.extractNativeConversationTitle(htmlEl) || 'Untitled';
-      results.push({ id, title, url });
-    }
-
-    return results;
-  }
-
-  /**
-   * Poll until at least one sidebar conversation row is populated, or timeout.
-   * Returns true if a populated row was found.
-   */
-  private async waitForPopulatedSidebarConversations(): Promise<boolean> {
-    const hasPopulated = () =>
-      Array.from(this.getNativeConversationElements()).some((el) =>
-        this.isPopulatedConversationEl(el as HTMLElement),
-      );
-
-    if (hasPopulated()) return true;
-
-    const deadline = Date.now() + AI_ORG_COLLECT_TIMEOUT_MS;
-    while (Date.now() < deadline) {
-      await this.delay(AI_ORG_COLLECT_POLL_MS);
-      if (this.isDestroyed) return false;
-      if (hasPopulated()) return true;
-    }
-    return false;
   }
 
   // Tooltip methods

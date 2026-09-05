@@ -13,7 +13,7 @@ type TestableManager = {
   data: FolderData;
   sidebarContainer: HTMLElement | null;
   hideArchivedConversations: boolean;
-  setupMutationObserver: () => void;
+  initializeFolderUI: () => Promise<void>;
   createConversationElement: (
     conv: ConversationReference,
     folderId: string,
@@ -21,7 +21,6 @@ type TestableManager = {
   ) => HTMLElement;
   openNativeRenameForFolderConversation: (conversation: ConversationReference) => Promise<boolean>;
   syncConversationTitlesFromNative: () => Promise<void>;
-  isVisibleElement: (el: HTMLElement) => boolean;
   saveData: () => Promise<boolean>;
   renderAllFolders: () => void;
 };
@@ -79,6 +78,7 @@ function createNativeConversationWithActions(
     menuContent.className = 'mat-mdc-menu-content';
     const renameButton = document.createElement('button');
     renameButton.setAttribute('data-test-id', 'rename-button');
+    Object.defineProperty(renameButton, 'offsetParent', { get: () => menuContent });
     renameButton.addEventListener('click', onRenameClick);
     menuContent.appendChild(renameButton);
     overlay.appendChild(menuContent);
@@ -112,6 +112,17 @@ describe('Gemini native conversation title sync', () => {
   it('syncs stored folder conversation titles from native sidebar mutations', async () => {
     const hexId = 'abc123def4567890';
     const titleEl = createNativeConversation(hexId, 'Old title');
+    const appRoot = document.createElement('div');
+    appRoot.id = 'app-root';
+    appRoot.className = 'side-nav-open';
+    const sidebar = document.createElement('div');
+    sidebar.setAttribute('data-test-id', 'overflow-container');
+    const recents = document.createElement('expandable-section');
+    recents.setAttribute('data-test-id', 'chats-expandable-section');
+    recents.appendChild(titleEl.closest('[data-test-id="conversation"]')!);
+    sidebar.appendChild(recents);
+    appRoot.appendChild(sidebar);
+    document.body.appendChild(appRoot);
     manager = new FolderManager();
     const internals = manager as unknown as TestableManager;
 
@@ -128,12 +139,12 @@ describe('Gemini native conversation title sync', () => {
         ],
       },
     };
-    internals.sidebarContainer = document.body;
+    internals.sidebarContainer = sidebar;
 
     const saveSpy = vi.spyOn(internals, 'saveData').mockResolvedValue(true);
     const renderSpy = vi.spyOn(internals, 'renderAllFolders').mockImplementation(() => {});
 
-    internals.setupMutationObserver();
+    await internals.initializeFolderUI();
 
     titleEl.textContent = 'Renamed title';
     await Promise.resolve();
@@ -202,7 +213,6 @@ describe('Gemini native conversation title sync', () => {
     };
     internals.sidebarContainer = document.body;
     internals.hideArchivedConversations = true;
-    internals.isVisibleElement = () => true;
     const saveSpy = vi.spyOn(internals, 'saveData').mockResolvedValue(true);
     const renderSpy = vi.spyOn(internals, 'renderAllFolders').mockImplementation(() => {});
 

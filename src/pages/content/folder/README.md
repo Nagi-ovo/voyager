@@ -15,22 +15,30 @@ The folder manager allows users to:
 
 ## Change the owner of the behavior
 
-| Responsibility                                                | Entry point                                                                                                                                                                                                                                  |
-| ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Persisted folder and conversation schema                      | [`core/types/folder.ts`](../../../core/types/folder.ts). Local [`types.ts`](types.ts) re-exports it and keeps the content drag payload.                                                                                                      |
-| Tree traversal, moves, removal, ordering and integrity repair | [`features/folder/model/folderData.ts`](../../../features/folder/model/folderData.ts). Functions take data explicitly and return the next data without mutating the input.                                                                   |
-| Account data, backup ownership and unload lifetime            | [`FolderDataSession.ts`](FolderDataSession.ts). Each asynchronous load/save belongs to the session in which it started.                                                                                                                      |
-| Gemini DOM, user commands and runtime coordination            | [`manager.ts`](manager.ts). The existing public entry points remain available while responsibilities move out incrementally.                                                                                                                 |
-| AI Studio host integration                                    | [`aistudio.ts`](aistudio.ts). Shares the persisted schema and account session, with its own navigation and storage path.                                                                                                                     |
-| Floating view                                                 | [`floatingPanel.ts`](floatingPanel.ts). Mount with data/callbacks; update normal changes, reset on account changes and destroy on teardown.                                                                                                  |
-| Header action menus and settings                              | [`headerMenus.ts`](headerMenus.ts). Owns the popover, settings controls, delayed listener and cleanup. The manager supplies action descriptions and the sort-change callback.                                                                |
-| Browser storage implementations                               | [`storage/FolderStorageAdapter.ts`](storage/FolderStorageAdapter.ts). Preserve Safari's durable storage and Chromium's mirror behavior.                                                                                                      |
-| JSON import/export                                            | [`FolderImportExportService.ts`](../../../features/folder/services/FolderImportExportService.ts). Shared keys live in the feature's [`constants.ts`](../../../features/folder/constants.ts); this service must not import a content manager. |
-| Gem metadata and startup                                      | [`gemConfig.ts`](gemConfig.ts), [`index.ts`](index.ts).                                                                                                                                                                                      |
+| Responsibility                                                | Entry point                                                                                                                                                                                                                                        |
+| ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Persisted folder and conversation schema                      | [`core/types/folder.ts`](../../../core/types/folder.ts). Local [`types.ts`](types.ts) re-exports it and keeps the content drag payload.                                                                                                            |
+| Tree traversal, moves, removal, ordering and integrity repair | [`features/folder/model/folderData.ts`](../../../features/folder/model/folderData.ts). Functions take data explicitly and return the next data without mutating the input.                                                                         |
+| Account data, backup ownership and unload lifetime            | [`FolderDataSession.ts`](FolderDataSession.ts). Each asynchronous load/save belongs to the session in which it started.                                                                                                                            |
+| Gemini DOM, user commands and runtime coordination            | [`manager.ts`](manager.ts). The existing public entry points remain available while responsibilities move out incrementally.                                                                                                                       |
+| AI Studio host integration                                    | [`aistudio.ts`](aistudio.ts). Shares the persisted schema and account session, with its own navigation and storage path.                                                                                                                           |
+| Floating view                                                 | [`floatingPanel.ts`](floatingPanel.ts). Mount with data/callbacks; update normal changes, reset on account changes and destroy on teardown.                                                                                                        |
+| Header action menus and settings                              | [`headerMenus.ts`](headerMenus.ts). Owns the popover, settings controls, delayed listener and cleanup. The manager supplies action descriptions and the sort-change callback.                                                                      |
+| Native conversation metadata and collection                   | [`nativeSidebarDom.ts`](nativeSidebarDom.ts). Reads IDs, titles, links and populated rows using explicit sidebar/account inputs. Collection reads live context again after each wait.                                                              |
+| Native sidebar mutation and enhancement work                  | [`NativeSidebarObserver.ts`](NativeSidebarObserver.ts). Owns the DOM observer, frame batch, idle queue and title debounce. Calls back to the manager for row enhancement and stored title updates.                                                 |
+| Native conversation menus and deletion tracking               | [`NativeConversationMenus.ts`](NativeConversationMenus.ts). Owns menu injection, pointer/keyboard tracking, confirmation candidates and settlement checks. Reports move requests and confirmed deletions; folder data changes stay in the manager. |
+| Browser storage implementations                               | [`storage/FolderStorageAdapter.ts`](storage/FolderStorageAdapter.ts). Preserve Safari's durable storage and Chromium's mirror behavior.                                                                                                            |
+| JSON import/export                                            | [`FolderImportExportService.ts`](../../../features/folder/services/FolderImportExportService.ts). Shared keys live in the feature's [`constants.ts`](../../../features/folder/constants.ts); this service must not import a content manager.       |
+| Gem metadata and startup                                      | [`gemConfig.ts`](gemConfig.ts), [`index.ts`](index.ts).                                                                                                                                                                                            |
 
 Test tree and ordering changes directly in the [model tests](../../../features/folder/model/__tests__/folderData.test.ts).
 Test menu controls and close/reopen behavior in [`headerMenus.test.ts`](headerMenus.test.ts).
-Keep header command wiring, storage-event and navigation assertions in the content integration tests.
+Test native reads, mutation scheduling and menu behavior beside their owners in
+[`nativeSidebarDom.test.ts`](nativeSidebarDom.test.ts),
+[`NativeSidebarObserver.test.ts`](NativeSidebarObserver.test.ts) and
+[`NativeConversationMenus.test.ts`](NativeConversationMenus.test.ts).
+Keep command wiring, account/remount transitions, storage effects and navigation assertions in the
+content integration tests.
 Do not pass a manager into an extracted module or add a manager wrapper solely to keep a private
 test interface alive.
 
@@ -41,10 +49,23 @@ Read the [state/identity](../../../../.github/docs/regressions/state-identity-sy
 changing those boundaries. For future extraction, move a complete responsibility together with its
 setup, cleanup and behavioral tests.
 
-The next substantial boundary is the native sidebar runtime: observer batching, enhancement queues
-and native deletion tracking must move with their setup, drain and cancellation paths. Conversation
-navigation and the import/cloud workflows remain in the manager; preserve their account-session
-checks when extracting them.
+Keep both native owners stable for the manager's lifetime. Start document menu tracking before
+waiting for Gemini's sidebar, including in floating mode. On sidebar-only reinitialization, call
+`NativeSidebarObserver.disconnect()` and `NativeConversationMenus.disconnectPanels()`; reconnect
+them when the sidebar returns. Queued enhancement work retains its existing lifetime and skips
+detached rows; pending deletion confirmations survive the remount. On disable or destroy, call both
+owners' `stop()` to remove observers/listeners and cancel queued work. Native rename and batch-delete
+actions retain their existing bounded polling; already-started action promises still settle.
+
+Account changes clear the title debounce; deletion candidates and settlement checks validate their
+captured storage key and route account against live context. Keep the actual folder mutation and
+save in the manager callback. Native and folder drag gestures share one selection state in the
+manager, so the observer only calls the existing row enhancer.
+
+The remaining large boundaries are folder rendering and interactions, sidebar positioning/recovery,
+conversation navigation and import/cloud workflows. Keep multi-select state shared between native
+and folder rows, distinguish explicit floating mode from temporary recovery, and preserve existing
+account-session checks when extracting these responsibilities.
 
 ## Adding Support for New Gems
 

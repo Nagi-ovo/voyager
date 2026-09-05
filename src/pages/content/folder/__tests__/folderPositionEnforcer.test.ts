@@ -62,8 +62,6 @@ type TestableManager = {
   initializeFolderUI: () => Promise<void>;
   waitForSidebar: () => Promise<boolean>;
   ensureDomRecoveryWatchers: () => void;
-  setupConversationClickTracking: () => void;
-  setupNativeConversationMenuObserver: () => void;
   teardownDomRecoveryWatchers: () => void;
   runCleanupTasks: () => void;
   folderRecoveryTimer: number | null;
@@ -590,26 +588,35 @@ describe('folder position enforcer (above Recents)', () => {
     expect(removeSpy).toHaveBeenCalledWith('resize', armedHandler);
   });
 
-  it('arms recovery before the initial sidebar wait can time out', async () => {
+  it('injects native menu actions while initial sidebar discovery is pending and after it times out', async () => {
+    vi.useFakeTimers();
     manager = new FolderManager();
     const typed = manager as unknown as TestableManager;
+    let finishSidebarWait!: (found: boolean) => void;
+    vi.spyOn(typed, 'waitForSidebar').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishSidebarWait = resolve;
+        }),
+    );
+    const initialization = typed.initializeFolderUI();
+    const menu = document.createElement('gem-menu');
+    menu.innerHTML = '<gem-menu-item data-test-id="rename-button">Rename</gem-menu-item>';
+    const nextMenu = menu.cloneNode(true) as HTMLElement;
+    document.body.appendChild(menu);
+    await vi.advanceTimersByTimeAsync(100);
 
-    const ensureRecoverySpy = vi
-      .spyOn(typed, 'ensureDomRecoveryWatchers')
-      .mockImplementation(() => {});
-    const clickTrackingSpy = vi
-      .spyOn(typed, 'setupConversationClickTracking')
-      .mockImplementation(() => {});
-    const menuObserverSpy = vi
-      .spyOn(typed, 'setupNativeConversationMenuObserver')
-      .mockImplementation(() => {});
-    vi.spyOn(typed, 'waitForSidebar').mockResolvedValue(false);
+    expect(document.querySelector('[data-test-id="overflow-container"]')).toBeNull();
+    expect(menu.querySelector('.gv-move-to-folder-btn')).not.toBeNull();
 
-    await typed.initializeFolderUI();
+    finishSidebarWait(false);
+    await initialization;
+    menu.remove();
+    document.body.appendChild(nextMenu);
+    await vi.advanceTimersByTimeAsync(100);
 
-    expect(ensureRecoverySpy).toHaveBeenCalledTimes(1);
-    expect(clickTrackingSpy).toHaveBeenCalledTimes(1);
-    expect(menuObserverSpy).toHaveBeenCalledTimes(1);
+    expect(document.querySelector('.gv-folder-container')).toBeNull();
+    expect(nextMenu.querySelector('.gv-move-to-folder-btn')).not.toBeNull();
   });
 
   // Regression: recovery-driven reinit can call `createFolderUI` while an older
