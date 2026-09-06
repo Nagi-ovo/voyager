@@ -467,8 +467,31 @@ describe('platformBadge', () => {
   );
 
   it('prefers the plugin-declared theme.brand over the site default', () => {
+    // Existing platforms retain their own fallback colour.
     const themed = { ...formulaCopy, theme: { brand: '#123456' } };
     expect(platformBadge(themed, 'chatgpt')?.color).toBe('#123456');
+  });
+
+  it.each([
+    'https://notclaude.ai/*',
+    'https://claude.ai.example.org/*',
+    'https://notchatgpt.com/*',
+    'https://chat.openai.com.example.org/*',
+    'https://api.openai.com/*',
+    'https://example.org/claude.ai/*',
+  ])('does not infer an official chat platform from %s', (pattern) => {
+    expect(platformBadge({ ...formulaCopy, matches: [pattern] })).toBeNull();
+  });
+
+  it.each([
+    ['https://claude.ai/*', '#d97757'],
+    ['https://chatgpt.com/*', '#0ea5e9'],
+    ['https://chat.openai.com/*', '#0ea5e9'],
+    ['*://chatgpt.com/*', '#0ea5e9'],
+    ['http://chat.deepseek.com/*', '#4d6bfe'],
+    ['*://chat.deepseek.com/*', '#4d6bfe'],
+  ])('recognizes the exact chat host in %s', (pattern, color) => {
+    expect(platformBadge({ ...formulaCopy, matches: [pattern] })?.color).toBe(color);
   });
 
   it('falls back to the first matched host when the current site is unknown', () => {
