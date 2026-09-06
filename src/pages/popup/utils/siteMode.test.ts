@@ -8,6 +8,7 @@ describe('isPluginPopupSite', () => {
     expect(isPluginPopupSite('https://chat.openai.com/c/abc', [])).toBe(true);
     expect(isPluginPopupSite('https://claude.ai/chat/abc', [])).toBe(true);
     expect(isPluginPopupSite('https://grok.com/', [])).toBe(true);
+    expect(isPluginPopupSite('https://chat.deepseek.com/a/chat/s/abc', [])).toBe(true);
   });
 
   it('keeps native sites on the full popup even if manifests target them', () => {
