@@ -1,0 +1,17 @@
+/* voyager.deepseek-reading-width - one centered, adjustable reading column. */
+.gv-plugin-deepseek-readable {
+  --message-list-max-width: var(--gv-plugin-reading-width, 712px) !important;
+}
+
+.gv-plugin-deepseek-readable .ds-virtual-list-items,
+.gv-plugin-deepseek-readable .ds-virtual-list-visible-items,
+.gv-plugin-deepseek-readable .ds-message {
+  width: min(var(--gv-plugin-reading-width, 712px), calc(100vw - 40px)) !important;
+  max-width: var(--gv-plugin-reading-width, 712px) !important;
+}
+
+.gv-plugin-deepseek-readable .ds-virtual-list-visible-items,
+.gv-plugin-deepseek-readable .ds-message {
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
