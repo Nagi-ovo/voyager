@@ -23,7 +23,7 @@ import type { PluginManifest, PluginSettingValue, SettingField } from '@/feature
 import { Card, CardContent, CardTitle } from '../../../components/ui/card';
 import { Switch } from '../../../components/ui/switch';
 import { useLanguage } from '../../../contexts/LanguageContext';
-import { IconChatGPT, IconClaude } from './WebsiteLogos';
+import { IconChatGPT, IconClaude, IconDeepSeek } from './WebsiteLogos';
 
 type EnabledMap = Record<string, boolean>;
 type SettingsMap = Record<string, Record<string, PluginSettingValue>>;
@@ -52,6 +52,7 @@ async function requestPluginContentScriptSync(): Promise<boolean> {
 const SITE_BADGES: Record<string, { Icon: typeof IconClaude; color: string }> = {
   claude: { Icon: IconClaude, color: '#d97757' },
   chatgpt: { Icon: IconChatGPT, color: '#0ea5e9' },
+  deepseek: { Icon: IconDeepSeek, color: '#4d6bfe' },
 };
 
 /**
@@ -75,6 +76,8 @@ export function platformBadge(
     return { icon: <IconClaude />, color: brand ?? SITE_BADGES.claude.color };
   if (host.includes('chatgpt.com') || host.includes('openai.com'))
     return { icon: <IconChatGPT />, color: brand ?? SITE_BADGES.chatgpt.color };
+  if (plugin.matches.some((pattern) => pattern.startsWith('https://chat.deepseek.com/')))
+    return { icon: <IconDeepSeek />, color: brand ?? SITE_BADGES.deepseek.color };
   return null;
 }
 
