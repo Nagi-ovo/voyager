@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PluginManifest } from '@/features/plugins/types';
 
 import { PluginManager, platformBadge } from '../PluginManager';
+import { IconDeepSeek } from '../WebsiteLogos';
 
 // The slider-debounce behaviour under test lives in PluginManager; the storage
 // layer is mocked so we can assert exactly how often (and with what value) the
@@ -433,6 +434,37 @@ describe('platformBadge', () => {
     expect(platformBadge(formulaCopy, 'chatgpt')?.color).toBe('#0ea5e9');
     expect(platformBadge(formulaCopy, 'claude')?.color).toBe('#d97757');
   });
+
+  it('uses the bundled DeepSeek icon and accent for the active platform', () => {
+    const plugin = {
+      ...formulaCopy,
+      matches: [...formulaCopy.matches, 'https://chat.deepseek.com/*'],
+    };
+    const badge = platformBadge(plugin, 'deepseek');
+    expect(badge?.color).toBe('#4d6bfe');
+    expect(React.isValidElement(badge?.icon) && badge.icon.type).toBe(IconDeepSeek);
+  });
+
+  it('recognizes a DeepSeek-only plugin before a site adapter is available', () => {
+    const badge = platformBadge({ ...formulaCopy, matches: ['https://chat.deepseek.com/*'] });
+    expect(badge?.color).toBe('#4d6bfe');
+    expect(React.isValidElement(badge?.icon) && badge.icon.type).toBe(IconDeepSeek);
+  });
+
+  it('preserves a DeepSeek plugin custom accent', () => {
+    const plugin = {
+      ...formulaCopy,
+      matches: ['https://chat.deepseek.com/*'],
+      theme: { brand: '#123456' },
+    };
+    expect(platformBadge(plugin)?.color).toBe('#123456');
+    expect(platformBadge(plugin, 'deepseek')?.color).toBe('#123456');
+  });
+
+  it.each(['https://chat.deepseek.com.example.org/*', 'https://example.org/chat.deepseek.com/*'])(
+    'does not mislabel unrelated matches %s as DeepSeek',
+    (pattern) => expect(platformBadge({ ...formulaCopy, matches: [pattern] })).toBeNull(),
+  );
 
   it('prefers the plugin-declared theme.brand over the site default', () => {
     const themed = { ...formulaCopy, theme: { brand: '#123456' } };
