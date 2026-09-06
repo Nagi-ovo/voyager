@@ -147,10 +147,10 @@ describe('BundledCatalogPluginSource', () => {
 
     expect(pluginsToOriginPatterns(manifests)).toEqual([
       'https://*.frame.claudeusercontent.com/*',
+      'https://chat.deepseek.com/*',
       'https://chat.openai.com/*',
       'https://chatgpt.com/*',
       'https://claude.ai/*',
-      'https://chat.deepseek.com/*',
     ]);
   });
 });

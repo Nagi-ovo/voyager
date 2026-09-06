@@ -22,6 +22,11 @@
       "name": "chatgpt-reading-width",
       "source": "plugins/chatgpt-reading-width/plugin.json",
       "official": true
+    },
+    {
+      "name": "deepseek-reading-width",
+      "source": "plugins/deepseek-reading-width/plugin.json",
+      "official": true
     }
   ]
 }
