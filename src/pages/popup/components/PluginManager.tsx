@@ -84,7 +84,7 @@ export function platformBadge(
 
 /** Strip a redundant "Claude · " / "ChatGPT · " platform prefix (the logo shows it). */
 function displayName(name: string): string {
-  return name.replace(/^(Claude|ChatGPT|Gemini|AI Studio)\s*[·:|]\s*/i, '');
+  return name.replace(/^(Claude|ChatGPT|Gemini|AI Studio|DeepSeek)\s*[·:|]\s*/i, '');
 }
 
 /**
