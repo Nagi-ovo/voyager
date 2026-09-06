@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { deepseekAdapter } from './adapters/deepseek';
 import { NATIVE_SITE_IDS, SiteRegistry, resolvePluginPlatformId } from './registry';
 
 describe('SiteRegistry.resolveByUrl', () => {
@@ -45,5 +46,24 @@ describe('resolvePluginPlatformId', () => {
   it('returns null for sites Voyager ships no adapter for', () => {
     expect(resolvePluginPlatformId('https://example.com/')).toBeNull();
     expect(resolvePluginPlatformId('https://deepseek.com/')).toBeNull();
+  });
+});
+
+describe('deepseekAdapter', () => {
+  it('exposes selectors and capabilities for the observed DeepSeek layout', () => {
+    expect(deepseekAdapter.matches).toEqual(['https://chat.deepseek.com/*']);
+    expect(deepseekAdapter.selectors.userTurn).toBe(
+      '.ds-message:not(:has(.ds-assistant-message-main-content))',
+    );
+    expect(deepseekAdapter.selectors.assistantTurn).toBe(
+      '.ds-message:has(.ds-assistant-message-main-content)',
+    );
+    expect(deepseekAdapter.selectors.composer).toContain('textarea[placeholder*="DeepSeek"]');
+    expect(deepseekAdapter.theme).toEqual({
+      hostSelector: 'body',
+      lightSelector: 'body.light',
+      darkSelector: 'body.dark',
+    });
+    expect([...deepseekAdapter.capabilities]).toEqual(['chat', 'sidebar', 'composer', 'darkMode']);
   });
 });
