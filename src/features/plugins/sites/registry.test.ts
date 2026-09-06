@@ -14,6 +14,7 @@ describe('SiteRegistry.resolveByUrl', () => {
     expect(
       registry.resolveByUrl('https://artifact-id.frame.claudeusercontent.com/_f/version/')?.id,
     ).toBe('claude');
+    expect(registry.resolveByUrl('https://chat.deepseek.com/a/chat/s/abc')?.id).toBe('deepseek');
   });
 
   it('returns null for sites with no adapter', () => {
@@ -29,6 +30,8 @@ describe('resolvePluginPlatformId', () => {
     expect(
       resolvePluginPlatformId('https://artifact-id.frame.claudeusercontent.com/_f/version/'),
     ).toBe('claude');
+    expect(resolvePluginPlatformId('https://grok.com/')).toBe('grok');
+    expect(resolvePluginPlatformId('https://chat.deepseek.com/a/chat/s/abc')).toBe('deepseek');
   });
 
   it('returns null for native Voyager sites (full feature set runs there)', () => {
