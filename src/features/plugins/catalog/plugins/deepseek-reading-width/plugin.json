@@ -98,11 +98,6 @@
         "op": "setStyle",
         "target": "body",
         "styles": { "--gv-plugin-reading-width": "{{width}}px" }
-      },
-      {
-        "op": "setStyle",
-        "target": "body",
-        "styles": { "--message-list-max-width": "{{width}}px" }
       }
     ]
   }

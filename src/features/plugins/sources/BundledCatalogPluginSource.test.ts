@@ -67,7 +67,7 @@ describe('BundledCatalogPluginSource', () => {
     expect(centeredTurnRule).toBeGreaterThan(footerOverride);
   });
 
-  it('supports DeepSeek reading width through its native message-list variable', async () => {
+  it('supports a scoped DeepSeek reading width setting', async () => {
     const manifests = await new BundledCatalogPluginSource().list();
     const deepseekWidth = manifests.find(
       (plugin) => plugin.id === 'voyager.deepseek-reading-width',
@@ -88,10 +88,10 @@ describe('BundledCatalogPluginSource', () => {
     expect(deepseekWidth?.contributes.domOps).toContainEqual({
       op: 'setStyle',
       target: { kind: 'css', selector: 'body' },
-      styles: { '--message-list-max-width': '{{width}}px' },
+      styles: { '--gv-plugin-reading-width': '{{width}}px' },
     });
     expect(css).toContain('.gv-plugin-deepseek-readable');
-    expect(css).toContain('--message-list-max-width: var(--gv-plugin-reading-width, 712px)');
+    expect(css).toContain('var(--gv-plugin-reading-width, 712px)');
     expect(css).toContain('.ds-virtual-list');
   });
 

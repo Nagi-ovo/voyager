@@ -14,9 +14,14 @@ settings:
 
 # DeepSeek - Comfortable Reading Width
 
-Gives DeepSeek one centered, adjustable reading column. The plugin follows
-DeepSeek's native --message-list-max-width variable and keeps the virtual
-message-list containers within the configured width.
+Gives DeepSeek one centered, adjustable reading column (600-1600 px, default
+712 px). The column shrinks to the available chat area with 20 px side gutters.
+It scopes horizontal sizing to the printable virtual list containing messages,
+replacing its native calculated horizontal padding while preserving vertical
+padding, transforms and virtualization. Other lists and the composer stay native.
+
+Disable the plugin to restore the native layout. Settings and enable state use
+Voyager's existing plugin storage and optional host-permission flow.
 
 This is a declarative plugin: pure CSS and a typed setting interpreted by
 Voyager's bundled plugin engine. It does not execute remote JavaScript or load
