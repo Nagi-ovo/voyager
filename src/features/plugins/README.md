@@ -2,7 +2,7 @@
 
 A self-contained subsystem that lets Voyager run **plugins** — units that inject
 styles / DOM changes into AI chat sites (Gemini, AI Studio, ChatGPT, Claude,
-…). Voyager's own features can migrate onto this over time; third parties
+DeepSeek, …). Voyager's own features can migrate onto this over time; third parties
 can ship their own plugins against the same contract.
 
 ## Two design constraints that shaped everything
@@ -106,9 +106,9 @@ prefixed (content-script rule).
 
 ## What is NOT done yet (next milestones)
 
-- **Full setting UI coverage.** The schema accepts boolean/string/color/select,
-  but the popup currently renders the number/range control used by the official
-  width plugins.
+- **Full setting UI coverage.** The schema accepts boolean/string/color/select;
+  the popup currently renders boolean switches and number/range controls, while
+  string, color and select controls remain future work.
 - **Scripted runtime** via gated `chrome.userScripts`.
 - **Account + Stripe entitlement**.
 
