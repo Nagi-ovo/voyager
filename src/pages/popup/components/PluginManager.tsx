@@ -9,6 +9,7 @@ import {
 } from '@/core/utils/browser';
 import { PLUGIN_CONTENT_SCRIPT_SYNC_MESSAGE } from '@/features/plugins/runtime/messages';
 import { pluginToOriginPatternsForActiveUrl } from '@/features/plugins/runtime/siteRegistration';
+import { matchesAnyPattern } from '@/features/plugins/sites/matchPattern';
 import { SiteRegistry } from '@/features/plugins/sites/registry';
 import {
   loadCollapsedPlugins,
@@ -65,8 +66,10 @@ const SITE_BADGES: Record<string, { Icon: typeof IconClaude; color: string }> = 
 export function platformBadge(
   plugin: PluginManifest,
   currentSiteId?: string,
+  activeUrl?: string,
 ): { icon: ReactNode; color: string } | null {
   const brand = plugin.theme?.brand;
+  if (activeUrl && !matchesAnyPattern(activeUrl, plugin.matches)) return null;
   const current = currentSiteId ? SITE_BADGES[currentSiteId] : undefined;
   if (current) return { icon: <current.Icon />, color: brand ?? current.color };
   const hosts = plugin.matches.flatMap((pattern) => {
@@ -483,7 +486,7 @@ export function PluginManager({
           const isOpen = !collapsed.has(plugin.id);
           const hosts = siteHostsFromMatches(plugin.matches);
           const settingsSchema = plugin.contributes.settings;
-          const badge = platformBadge(plugin, currentSiteId);
+          const badge = platformBadge(plugin, currentSiteId, activeUrl);
           const localizedName = pickLocalized(plugin, 'name', language);
           const needsSiteAccess = enabled && missingPermissionIds.has(plugin.id);
           return (
