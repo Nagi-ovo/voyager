@@ -14,6 +14,7 @@ describe('BundledCatalogPluginSource', () => {
       'voyager.claude-cjk-render-fix',
       'voyager.claude-reading-width',
       'voyager.chatgpt-reading-width',
+      'voyager.deepseek-reading-width',
     ]);
 
     for (const manifest of manifests) {
@@ -31,6 +32,7 @@ describe('BundledCatalogPluginSource', () => {
       '../catalog/plugins/claude-cjk-render-fix/style.css',
       '../catalog/plugins/claude-reading-width/style.css',
       '../catalog/plugins/chatgpt-reading-width/style.css',
+      '../catalog/plugins/deepseek-reading-width/style.css',
     ]) {
       expect(readFileSync(new URL(file, import.meta.url), 'utf8').length).toBeGreaterThan(0);
     }
@@ -63,6 +65,34 @@ describe('BundledCatalogPluginSource', () => {
     expect(regularWidthRule).toBeGreaterThanOrEqual(0);
     expect(footerOverride).toBeGreaterThan(regularWidthRule);
     expect(centeredTurnRule).toBeGreaterThan(footerOverride);
+  });
+
+  it('supports DeepSeek reading width through its native message-list variable', async () => {
+    const manifests = await new BundledCatalogPluginSource().list();
+    const deepseekWidth = manifests.find(
+      (plugin) => plugin.id === 'voyager.deepseek-reading-width',
+    );
+    const file = '../catalog/plugins/deepseek-reading-width/style.css';
+    const css = readFileSync(new URL(file, import.meta.url), 'utf8');
+
+    expect(deepseekWidth?.matches).toEqual(['https://chat.deepseek.com/*']);
+    expect(deepseekWidth?.contributes.settings?.width).toEqual({
+      type: 'number',
+      label: 'Reading width (px)',
+      minLabel: 'Narrower',
+      maxLabel: 'Wider',
+      default: 712,
+      min: 600,
+      max: 1600,
+    });
+    expect(deepseekWidth?.contributes.domOps).toContainEqual({
+      op: 'setStyle',
+      target: { kind: 'css', selector: 'body' },
+      styles: { '--message-list-max-width': '{{width}}px' },
+    });
+    expect(css).toContain('.gv-plugin-deepseek-readable');
+    expect(css).toContain('--message-list-max-width: var(--gv-plugin-reading-width, 712px)');
+    expect(css).toContain('.ds-virtual-list');
   });
 
   it('widens Claude document artifacts inside their cross-origin frame', async () => {
@@ -120,6 +150,7 @@ describe('BundledCatalogPluginSource', () => {
       'https://chat.openai.com/*',
       'https://chatgpt.com/*',
       'https://claude.ai/*',
+      'https://chat.deepseek.com/*',
     ]);
   });
 });
