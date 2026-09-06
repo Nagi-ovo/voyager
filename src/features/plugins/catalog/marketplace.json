@@ -6,7 +6,7 @@
     "name": "voyager-official",
     "url": "https://github.com/Nagi-ovo/voyager"
   },
-  "description": "Bundled official plugin catalog for Voyager — declarative plugins that enhance AI chat sites (Claude, ChatGPT, …).",
+  "description": "Bundled official plugin catalog for Voyager — declarative plugins that enhance AI chat sites (Claude, ChatGPT, DeepSeek, …).",
   "plugins": [
     {
       "name": "claude-cjk-render-fix",
