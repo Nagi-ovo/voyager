@@ -540,3 +540,17 @@ describe('platformBadge', () => {
     expect(platformBadge(formulaCopy, undefined)?.color).toBe('#d97757');
   });
 });
+
+describe('PluginManager platform name display', () => {
+  it('removes the DeepSeek prefix when the platform badge is shown', async () => {
+    const plugin: PluginManifest = {
+      ...widthPlugin,
+      name: 'DeepSeek · Comfortable Reading Width',
+      matches: ['https://chat.deepseek.com/*'],
+    };
+    await render(plugin);
+    const header = container.querySelector<HTMLButtonElement>('button[aria-expanded]');
+    expect(header?.textContent).toContain('Comfortable Reading Width');
+    expect(header?.textContent).not.toContain('DeepSeek ·');
+  });
+});
