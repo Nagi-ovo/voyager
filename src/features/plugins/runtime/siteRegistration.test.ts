@@ -47,6 +47,7 @@ describe('pluginsToOriginPatterns', () => {
 
 describe('pluginToOriginPatternsForActiveUrl', () => {
   const chatgptPlugin = mk(['https://chatgpt.com/*', 'https://chat.openai.com/*']);
+  const deepseekPlugin = mk(['https://chat.deepseek.com/*', 'https://chat.deepseek.com/a/chat/*']);
   const claudeArtifactPlugin = mk([
     'https://claude.ai/*',
     'https://*.frame.claudeusercontent.com/*',
@@ -74,6 +75,21 @@ describe('pluginToOriginPatternsForActiveUrl', () => {
         'https://claude.ai/code/artifact/example',
       ),
     ).toEqual(['https://*.frame.claudeusercontent.com/*', 'https://claude.ai/*']);
+  });
+
+  it('requests only the DeepSeek chat origin from a DeepSeek page', () => {
+    expect(
+      pluginToOriginPatternsForActiveUrl(
+        deepseekPlugin,
+        'https://chat.deepseek.com/a/chat/s/current',
+      ),
+    ).toEqual(['https://chat.deepseek.com/*']);
+  });
+
+  it('does not expand DeepSeek permission scope for an unrelated active page', () => {
+    expect(pluginToOriginPatternsForActiveUrl(deepseekPlugin, 'https://example.com/')).toEqual([
+      'https://chat.deepseek.com/*',
+    ]);
   });
 });
 
