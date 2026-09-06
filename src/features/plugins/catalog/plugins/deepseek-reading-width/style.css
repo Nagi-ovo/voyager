@@ -1,0 +1,11 @@
+/* Keep native virtual-list transforms and vertical sizing intact.
+ * Only the chat list is widened; side lists and the composer stay native. */
+.gv-plugin-deepseek-readable .ds-virtual-list--printable > .ds-virtual-list-items:has(.ds-message) {
+  box-sizing: border-box !important;
+  width: min(var(--gv-plugin-reading-width, 712px), calc(100% - 40px)) !important;
+  max-width: calc(100% - 40px) !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}

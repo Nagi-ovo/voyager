@@ -1,0 +1,104 @@
+{
+  "id": "voyager.deepseek-reading-width",
+  "name": "DeepSeek · Comfortable Reading Width",
+  "version": "1.0.0",
+  "description": "Widen DeepSeek's conversation to one centered, adjustable reading column.",
+  "i18n": {
+    "zh": {
+      "name": "DeepSeek · 舒适阅读宽度",
+      "description": "将 DeepSeek 对话拓宽为居中、可调节的阅读列。",
+      "settings": { "width": { "label": "阅读宽度（px）", "minLabel": "更窄", "maxLabel": "更宽" } }
+    },
+    "zh_TW": {
+      "name": "DeepSeek · 舒適閱讀寬度",
+      "description": "將 DeepSeek 對話拓寬為置中、可調整的閱讀欄。",
+      "settings": { "width": { "label": "閱讀寬度（px）", "minLabel": "更窄", "maxLabel": "更寬" } }
+    },
+    "ja": {
+      "name": "DeepSeek · 快適な読書幅",
+      "description": "DeepSeek の会話を中央寄せの調整可能な 1 カラムに広げます。",
+      "settings": { "width": { "label": "読書幅（px）", "minLabel": "狭く", "maxLabel": "広く" } }
+    },
+    "ko": {
+      "name": "DeepSeek · 편안한 읽기 너비",
+      "description": "DeepSeek 대화를 가운데 정렬된 조절 가능한 읽기 열로 넓힙니다.",
+      "settings": { "width": { "label": "읽기 너비(px)", "minLabel": "좁게", "maxLabel": "넓게" } }
+    },
+    "fr": {
+      "name": "DeepSeek · Largeur de lecture confortable",
+      "description": "Élargit la conversation DeepSeek dans une colonne de lecture centrée et réglable.",
+      "settings": {
+        "width": {
+          "label": "Largeur de lecture (px)",
+          "minLabel": "Plus étroit",
+          "maxLabel": "Plus large"
+        }
+      }
+    },
+    "es": {
+      "name": "DeepSeek · Ancho de lectura cómodo",
+      "description": "Amplía la conversación de DeepSeek en una columna de lectura centrada y ajustable.",
+      "settings": {
+        "width": {
+          "label": "Ancho de lectura (px)",
+          "minLabel": "Más estrecho",
+          "maxLabel": "Más ancho"
+        }
+      }
+    },
+    "pt": {
+      "name": "DeepSeek · Largura de leitura confortável",
+      "description": "Amplia a conversa do DeepSeek para uma coluna de leitura centralizada e ajustável.",
+      "settings": {
+        "width": {
+          "label": "Largura de leitura (px)",
+          "minLabel": "Mais estreito",
+          "maxLabel": "Mais largo"
+        }
+      }
+    },
+    "ru": {
+      "name": "DeepSeek · Удобная ширина чтения",
+      "description": "Расширяет диалог DeepSeek до центрированной настраиваемой колонки для чтения.",
+      "settings": {
+        "width": { "label": "Ширина чтения (px)", "minLabel": "Уже", "maxLabel": "Шире" }
+      }
+    },
+    "ar": {
+      "name": "DeepSeek · عرض قراءة مريح",
+      "description": "يوسّع محادثة DeepSeek إلى عمود قراءة مركزي قابل للتعديل.",
+      "settings": {
+        "width": { "label": "عرض القراءة (px)", "minLabel": "أضيق", "maxLabel": "أوسع" }
+      }
+    }
+  },
+  "author": "voyager-official",
+  "category": "readability",
+  "license": "MIT",
+  "homepage": "https://github.com/Nagi-ovo/voyager/tree/main/src/features/plugins/catalog/plugins/deepseek-reading-width",
+  "engine": ">=1.2.0",
+  "tier": "declarative",
+  "matches": ["https://chat.deepseek.com/*"],
+  "contributes": {
+    "settings": {
+      "width": {
+        "type": "number",
+        "label": "Reading width (px)",
+        "minLabel": "Narrower",
+        "maxLabel": "Wider",
+        "default": 712,
+        "min": 600,
+        "max": 1600
+      }
+    },
+    "styles": [{ "file": "style.css" }],
+    "domOps": [
+      { "op": "addClass", "target": "body", "className": "gv-plugin-deepseek-readable" },
+      {
+        "op": "setStyle",
+        "target": "body",
+        "styles": { "--gv-plugin-reading-width": "{{width}}px" }
+      }
+    ]
+  }
+}
