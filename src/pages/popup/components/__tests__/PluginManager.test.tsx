@@ -486,6 +486,15 @@ describe('platformBadge', () => {
     expect(React.isValidElement(badge?.icon) && badge.icon.type).toBe(IconDeepSeek);
   });
 
+  it('does not use the active DeepSeek badge for a plugin that excludes DeepSeek', () => {
+    const badge = platformBadge(
+      { ...formulaCopy, matches: ['https://claude.ai/*'] },
+      'deepseek',
+      'https://chat.deepseek.com/a/chat/s/current',
+    );
+    expect(badge).toBeNull();
+  });
+
   it('recognizes a DeepSeek-only plugin before a site adapter is available', () => {
     const badge = platformBadge({ ...formulaCopy, matches: ['https://chat.deepseek.com/*'] });
     expect(badge?.color).toBe('#4d6bfe');
