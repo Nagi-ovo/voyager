@@ -496,6 +496,7 @@ export function PluginManager({
                     onClick={() => toggleCollapsed(plugin.id)}
                     className="group flex w-full items-start gap-1.5 text-left"
                     aria-expanded={isOpen}
+                    aria-label={localizedName}
                   >
                     <svg
                       width="11"
@@ -563,7 +564,7 @@ export function PluginManager({
                       companion-frame grant must not disable settings that still affect the
                       already-authorized parent page. */}
                   {enabled && settingsSchema && (
-                    <div className="mt-2 space-y-2.5">
+                    <div className="mt-2 space-y-2.5" role="group" aria-label={localizedName}>
                       {Object.entries(settingsSchema).map(([key, field]) => {
                         const rawValue = settingsMap[plugin.id]?.[key] ?? field.default;
                         const settingText = pickLocalizedSetting(plugin, key, field, language);
