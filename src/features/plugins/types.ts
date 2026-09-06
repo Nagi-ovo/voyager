@@ -19,7 +19,14 @@
 // Sites
 // ---------------------------------------------------------------------------
 
-export const KNOWN_SITE_IDS = ['gemini', 'aistudio', 'chatgpt', 'claude', 'grok'] as const;
+export const KNOWN_SITE_IDS = [
+  'gemini',
+  'aistudio',
+  'chatgpt',
+  'claude',
+  'grok',
+  'deepseek',
+] as const;
 export type KnownSiteId = (typeof KNOWN_SITE_IDS)[number];
 
 /**
