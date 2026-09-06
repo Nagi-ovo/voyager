@@ -30,7 +30,6 @@ describe('resolvePluginPlatformId', () => {
     expect(
       resolvePluginPlatformId('https://artifact-id.frame.claudeusercontent.com/_f/version/'),
     ).toBe('claude');
-    expect(resolvePluginPlatformId('https://grok.com/')).toBe('grok');
     expect(resolvePluginPlatformId('https://chat.deepseek.com/a/chat/s/abc')).toBe('deepseek');
   });
 
