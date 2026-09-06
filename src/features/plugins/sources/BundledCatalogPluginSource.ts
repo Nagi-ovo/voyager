@@ -7,6 +7,8 @@ import claudeCjkRenderFixManifest from '../catalog/plugins/claude-cjk-render-fix
 import claudeCjkRenderFixStyle from '../catalog/plugins/claude-cjk-render-fix/style.css?raw';
 import claudeReadingWidthManifest from '../catalog/plugins/claude-reading-width/plugin.json?raw';
 import claudeReadingWidthStyle from '../catalog/plugins/claude-reading-width/style.css?raw';
+import deepseekReadingWidthManifest from '../catalog/plugins/deepseek-reading-width/plugin.json?raw';
+import deepseekReadingWidthStyle from '../catalog/plugins/deepseek-reading-width/style.css?raw';
 import { validateManifest } from '../manifest/validate';
 import type { PluginManifest, PluginSource } from '../types';
 import { resolveStyleFileContributions } from './styleFiles';
@@ -38,6 +40,10 @@ const BUNDLED_PLUGIN_FILES: Readonly<Record<string, BundledPluginFiles>> = {
   'plugins/chatgpt-reading-width/plugin.json': {
     manifestJson: chatgptReadingWidthManifest,
     styles: { 'style.css': chatgptReadingWidthStyle },
+  },
+  'plugins/deepseek-reading-width/plugin.json': {
+    manifestJson: deepseekReadingWidthManifest,
+    styles: { 'style.css': deepseekReadingWidthStyle },
   },
 };
 
