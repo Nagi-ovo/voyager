@@ -245,6 +245,47 @@ describe('PluginManager boolean setting', () => {
   });
 });
 
+describe('PluginManager accessible plugin identity', () => {
+  it('keeps the complete localized platform name on collapsed headers', async () => {
+    mockLanguage.current = 'zh';
+    const plugin: PluginManifest = {
+      ...widthPlugin,
+      name: 'Claude · Reading width',
+      i18n: { zh: { name: 'Claude · 阅读宽度' } },
+    };
+    await render(plugin);
+    const header = container.querySelector<HTMLButtonElement>('button[aria-expanded]');
+    expect(header?.getAttribute('aria-label')).toBe('Claude · 阅读宽度');
+    expect(header?.getAttribute('aria-expanded')).toBe('true');
+    act(() => header?.click());
+    expect(header?.getAttribute('aria-expanded')).toBe('false');
+    expect(header?.getAttribute('aria-label')).toBe('Claude · 阅读宽度');
+  });
+
+  it('groups identically named controls under their owning plugins', async () => {
+    const second: PluginManifest = {
+      ...widthPlugin,
+      id: 'voyager.second-width',
+      name: 'ChatGPT · Width',
+      matches: ['https://chatgpt.com/*'],
+    };
+    pluginState.current[second.id] = { enabled: true, installedAt: 0 };
+    await act(async () => {
+      root.render(React.createElement(PluginManager, { manifests: [widthPlugin, second] }));
+    });
+    const groups = Array.from(container.querySelectorAll('[role="group"]'));
+    expect(groups.map((group) => group.getAttribute('aria-label'))).toEqual([
+      'Test · Width',
+      'ChatGPT · Width',
+    ]);
+    for (const group of groups) {
+      expect(group.querySelector('input[type="range"]')?.getAttribute('aria-label')).toBe(
+        'Reading width (px)',
+      );
+    }
+  });
+});
+
 describe('PluginManager host permission flow', () => {
   beforeEach(() => {
     pluginState.current = { [PLUGIN_ID]: { enabled: false, installedAt: 0 } };
