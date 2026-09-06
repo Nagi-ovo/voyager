@@ -12,6 +12,31 @@ This keeps plugins easier to review and maintain. If you want to contribute a pl
 4. Put styles in `style.css` in the same plugin directory, then reference it from `contributes.styles`.
 5. Test locally and include test pages, screenshots, or a short recording in the PR. Maintainers will decide whether it is ready for the official catalog.
 
+## Adding a new platform
+
+Adding a new chat website has two separate layers:
+
+1. The **site adapter** teaches Voyager how to recognize the website and find
+   its user turns, assistant turns, composer, sidebar, and theme markers.
+2. A **plugin** solves one user-facing problem on that website, such as reading
+   width or a rendering fix.
+
+For a new platform such as DeepSeek, keep the adapter work focused on the
+platform contract. Put the adapter, registry entry, required selector tests,
+and the minimum documentation needed to explain the support in one complete
+change. Do not add a new adapter for every plugin.
+
+After the adapter is accepted, follow-up plugins can be submitted as separate
+focused changes. If several changes depend on one another, a stacked PR chain
+is useful: each later branch is based on the previous branch, and each PR
+shows only its own incremental feature. The chain should still follow the same
+scope rule: one clear user goal per PR, with its required tests and cleanup.
+
+Site support does not require a model API integration. Do not add static
+content scripts or required host permissions for a new platform; use the
+existing optional-permission and dynamic-registration flow for plugin-only
+sites.
+
 ## Plugin scope
 
 Plugins should be scoped by the user problem they solve, not mechanically split by platform.
