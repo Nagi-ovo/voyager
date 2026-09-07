@@ -313,6 +313,7 @@ export class PluginHost {
       }
       this.frozen.set(next.id, { mounted, pendingVersion: next.version });
     }
+    // oxlint-disable-next-line unicorn/no-useless-spread -- snapshot: the loop body mutates the collection
     for (const id of [...this.frozen.keys()]) {
       if (!manifests.some((manifest) => manifest.id === id)) this.frozen.delete(id);
     }

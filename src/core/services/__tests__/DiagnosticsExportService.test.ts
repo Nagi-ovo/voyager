@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { PLUGIN_ENGINE_VERSION } from '@/features/plugins/constants';
+
 import {
   VOYAGER_DIAGNOSTICS_FILENAME,
   type VoyagerDiagnosticsPayload,
@@ -22,7 +24,7 @@ function fixturePayload(): VoyagerDiagnosticsPayload {
       os: 'macos',
       activeSite: 'claude',
     },
-    pluginEngine: { version: '1.2.0' },
+    pluginEngine: { version: PLUGIN_ENGINE_VERSION },
     plugins: { availableCount: 0, items: [], redactedCount: 0 },
     privacy: { redactedPluginSettingCount: 0, omittedData: [] },
   };
@@ -73,7 +75,7 @@ describe('DiagnosticsExportService', () => {
         os: 'macos',
         activeSite: 'claude',
       },
-      pluginEngine: { version: '1.2.0' },
+      pluginEngine: { version: PLUGIN_ENGINE_VERSION },
       plugins: {
         availableCount: 2,
         items: [
