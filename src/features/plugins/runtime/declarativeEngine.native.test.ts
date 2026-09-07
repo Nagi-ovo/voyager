@@ -84,6 +84,24 @@ describe('DeclarativeEngine native ops', () => {
     expect(first.isDisposed).toBe(true);
     engine.unmount(plugin.id);
   });
+
+  it('a second settings update during a pending restart activates once, with the latest settings', async () => {
+    const { getPrimitive } = await import('../verbs/registry');
+    const activate = vi.spyOn(getPrimitive('formulaCopy')!, 'activate');
+    const engine = new DeclarativeEngine({ doc: document, adapter });
+    const plugin = manifest('x.formula', [{ op: 'native', handler: 'formulaCopy', params: {} }]);
+    engine.mount(plugin, { a: 1 });
+    expect(activate).toHaveBeenCalledTimes(1);
+
+    engine.updateSettings(plugin.id, { a: 2 });
+    engine.updateSettings(plugin.id, { a: 3 });
+    await vi.waitFor(() => expect(activate).toHaveBeenCalledTimes(2));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(activate).toHaveBeenCalledTimes(2);
+    expect(activate.mock.calls[1][2].settings).toEqual({ a: 3 });
+    engine.unmount(plugin.id);
+    activate.mockRestore();
+  });
 });
 
 describe('DeclarativeEngine health signal (plan D12)', () => {

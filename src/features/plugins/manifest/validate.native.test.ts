@@ -113,6 +113,13 @@ describe('validateManifest: native ops, requires, format, changelog (plan §5)',
     expect(result.data.changelog).toBe('Supports the new virtual list');
     expect(result.data.i18n?.zh).toEqual({ changelog: '支持新版虚拟列表' });
     expect(result.data.i18n?.ja).toEqual({ name: '名前' });
+    // A whitespace-only localized changelog is dropped rather than hiding the top-level one.
+    const blank = validateManifest({
+      ...BASE,
+      changelog: 'Supports the new virtual list',
+      i18n: { zh: { changelog: '   ' } },
+    });
+    expect(blank.success && blank.data.i18n?.zh).toBeUndefined();
     expect(issuesOf({ ...BASE, changelog: '' })).toHaveLength(1);
     expect(issuesOf({ ...BASE, changelog: 'x'.repeat(501) })).toHaveLength(1);
   });

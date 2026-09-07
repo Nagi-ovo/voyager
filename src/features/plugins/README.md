@@ -149,7 +149,7 @@ Classes must be `gv-` prefixed (content-script rule).
 
 ## Primitives (`verbs/`) and the `native` op
 
-Some behaviour cannot be expressed as CSS and four reversible DOM edits.
+Some behaviour cannot be expressed as CSS or as the reversible DOM operations.
 A **primitive** is that behaviour, written once as first-party TypeScript inside
 the extension and given a name a manifest can call:
 

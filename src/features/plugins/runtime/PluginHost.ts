@@ -324,6 +324,16 @@ export class PluginHost {
       this.adapter = adapter;
       this.engine = this.createEngine(adapter);
     } else {
+      // A plugin the refreshed catalog no longer lists (an authoritative
+      // delisting is the kill switch) leaves the page now: reconcile() only
+      // walks the new list, so it would otherwise run until teardown.
+      const listed = new Set(manifests.map((manifest) => manifest.id));
+      for (const id of previous.keys()) {
+        if (!listed.has(id) && engine.isActive(id)) {
+          engine.unmount(id);
+          this.pushedSettings.delete(id);
+        }
+      }
       for (const manifest of manifests) {
         if (this.frozen.has(manifest.id)) continue;
         if (engine.isActive(manifest.id)) {

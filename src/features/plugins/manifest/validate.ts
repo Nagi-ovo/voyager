@@ -135,7 +135,8 @@ function normalizeI18n(raw: unknown): Readonly<Record<string, PluginLocalization
       changelog?: string;
       settings?: Readonly<Record<string, LocalizedSettingField>>;
     } = {};
-    if (isString(value.changelog) && value.changelog.length <= MAX_CHANGELOG_LENGTH) {
+    // A blank localized changelog would hide the top-level one in the popup.
+    if (nonEmptyString(value.changelog) && value.changelog.length <= MAX_CHANGELOG_LENGTH) {
       entry.changelog = value.changelog;
     }
     if (isString(value.name) && value.name.length <= MAX_I18N_FIELD_LENGTH) {

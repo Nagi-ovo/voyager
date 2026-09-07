@@ -239,13 +239,18 @@ export class DeclarativeEngine {
     }
   }
 
-  /** Dispose the primitives' scope, then re-activate under the new settings (serialized). */
+  /**
+   * Dispose the primitives' scope, then re-activate under the new settings
+   * (serialized). Always chain: while a restart is still disposing there is no
+   * scope to take, but the newer settings must still get their activation once
+   * the queue drains — otherwise the stale restart bails on them and the plugin
+   * ends up with no primitives at all.
+   */
   private restartPrimitives(entry: ActivePlugin, settings: PluginSettings): void {
     const previous = entry.primitiveScope;
-    if (!previous) return;
     entry.primitiveScope = undefined;
     entry.primitiveRestart = (entry.primitiveRestart ?? Promise.resolve()).then(async () => {
-      await previous.dispose();
+      if (previous) await previous.dispose();
       if (this.active.get(entry.manifest.id) !== entry) return;
       if (entry.settings !== settings) return;
       this.activatePrimitives(entry, settings);

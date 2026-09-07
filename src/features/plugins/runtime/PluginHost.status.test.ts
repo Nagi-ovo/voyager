@@ -216,4 +216,45 @@ describe('PluginHost status machine (plan §4.2)', () => {
     expect(host.getStatuses()[0].pendingVersion).toBeUndefined();
     host.stop();
   });
+
+  it('unmounts plugins the refreshed catalog no longer lists, frozen primitives included', async () => {
+    mockState({
+      'x.css': { enabled: true, installedAt: 1 },
+      'x.formula': { enabled: true, installedAt: 1 },
+    });
+    const css = manifest('x.css', {
+      contributes: {
+        domOps: [{ op: 'addClass', target: { kind: 'css', selector: 'body' }, className: 'v1' }],
+      },
+    });
+    const formula = manifest('x.formula', {
+      contributes: { domOps: [{ op: 'native', handler: 'formulaCopy', params: {} }] },
+    });
+    const listed = { current: [css, formula] };
+    const host = new PluginHost({
+      url: URL,
+      sources: [remoteSource(listed)],
+      doc: document,
+      requestCatalogRefresh: () => {},
+      isTopFrame: true,
+    });
+    await host.start();
+    expect(document.body.classList.contains('v1')).toBe(true);
+    const scope = vi.mocked(activateFormulaCopy).mock.calls[0][0];
+
+    // A primitive update first freezes the plugin on its mounted version...
+    listed.current = [css, { ...formula, version: '1.1.0' }];
+    fireCatalogChange();
+    await flush();
+    expect(host.getStatuses().find((s) => s.id === 'x.formula')?.pendingVersion).toBe('1.1.0');
+
+    // ...and delisting both (the kill switch) unmounts them right away.
+    listed.current = [];
+    fireCatalogChange();
+    await flush();
+    expect(document.body.classList.contains('v1')).toBe(false);
+    expect(scope.isDisposed).toBe(true);
+    expect(host.getStatuses()).toEqual([]);
+    host.stop();
+  });
 });
