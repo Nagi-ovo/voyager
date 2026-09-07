@@ -4,7 +4,12 @@ import { PLUGIN_ENGINE_VERSION } from '../constants';
 import { HostCatalogSource } from '../remote/HostCatalogSource';
 import { engineSatisfied } from '../semver';
 import { matchesAnyPattern } from '../sites/matchPattern';
-import type { PluginManifest, PluginSource, PluginSourceContext } from '../types';
+import type {
+  PluginManifest,
+  PluginSource,
+  PluginSourceContext,
+  PluginSourceListing,
+} from '../types';
 import { BuiltinPluginSource } from './BuiltinPluginSource';
 import { BundledCatalogPluginSource } from './BundledCatalogPluginSource';
 
@@ -108,6 +113,18 @@ export function mergePluginRecords(input: MergePluginRecordsInput): SourcedPlugi
   return merged;
 }
 
+async function listingFromSource(
+  source: PluginSource,
+  context: PluginSourceContext | undefined,
+): Promise<PluginSourceListing> {
+  try {
+    return await source.listWithAuthority!(context);
+  } catch (error) {
+    logger.warn('Plugin source failed to list', { source: source.id, error: String(error) });
+    return { manifests: [], authoritative: false };
+  }
+}
+
 async function listFromSource(
   source: PluginSource,
   context: PluginSourceContext | undefined,
@@ -130,6 +147,14 @@ export async function listPluginManifestsWithSources(
   let remoteAuthoritative = false;
 
   for (const source of sources) {
+    if (source.kind === 'remote' && source.listWithAuthority) {
+      // Manifests and authority from the same read: two reads could straddle
+      // a background write and report "authoritative" with a stale empty list.
+      const listing = await listingFromSource(source, context);
+      remote.push(...listing.manifests.map((manifest) => ({ manifest, sourceId: source.id })));
+      remoteAuthoritative ||= listing.authoritative;
+      continue;
+    }
     const records = (await listFromSource(source, context)).map((manifest) => ({
       manifest,
       sourceId: source.id,

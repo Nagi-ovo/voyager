@@ -147,6 +147,17 @@ describe('subscribeHostCatalog', () => {
     expect(callback).toHaveBeenCalledTimes(3);
   });
 
+  it('also reports bookkeeping-only writes when asked to (popup "last checked")', () => {
+    const callback = vi.fn();
+    subscribeHostCatalog(HOST, callback, { includeBookkeeping: true });
+    const listener = registeredListener();
+    listener(
+      { [KEY]: { oldValue: entry(), newValue: entry({ lastAttemptAt: 99, failureCount: 1 }) } },
+      'local',
+    );
+    expect(callback).toHaveBeenCalledTimes(1);
+  });
+
   it('ignores other hosts, other areas and the legacy whole-catalog key', () => {
     const callback = vi.fn();
     subscribeHostCatalog(HOST, callback);

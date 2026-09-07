@@ -273,6 +273,18 @@ export interface PluginSource {
    * the remote no longer lists is dropped (kill switch).
    */
   isAuthoritative?(context?: PluginSourceContext): Promise<boolean>;
+  /**
+   * Remote sources only: manifests and authority from ONE cache read, so a
+   * catalog written between two separate reads can never yield "authoritative
+   * but empty" and drop bundled plugins by mistake. Preferred by the merger
+   * when present.
+   */
+  listWithAuthority?(context?: PluginSourceContext): Promise<PluginSourceListing>;
+}
+
+export interface PluginSourceListing {
+  readonly manifests: readonly PluginManifest[];
+  readonly authoritative: boolean;
 }
 
 /** Decides whether a plugin may run (always `free` now; account/Stripe later). */

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import type { PluginManifest, PluginSource, PluginSourceContext, PluginSourceKind } from '../types';
 import {
@@ -109,6 +109,30 @@ describe('default plugin sources', () => {
     expect(seen).toEqual([{ host: 'example.com' }]);
     // Remote authoritative for example.com and silent about voyager.a → dropped.
     expect(result).toEqual([]);
+  });
+});
+
+describe('listPluginManifestsWithSources with an atomic remote listing', () => {
+  it('takes manifests and authority from listWithAuthority, never from two separate reads', async () => {
+    const list = vi.fn(async () => []);
+    const isAuthoritative = vi.fn(async () => true);
+    const atomic: PluginSource = {
+      id: 'host-catalog',
+      kind: 'remote',
+      list,
+      isAuthoritative,
+      async listWithAuthority() {
+        return { manifests: [], authoritative: false };
+      },
+    };
+    const result = await listPluginManifestsWithSources(
+      [new StaticSource('bundled-catalog', [manifest('voyager.a')], 'bundled'), atomic],
+      { host: 'example.com', url: 'https://example.com/' },
+    );
+    // The split reads would have said "authoritative + empty" and dropped voyager.a.
+    expect(result.map((record) => record.manifest.id)).toEqual(['voyager.a']);
+    expect(list).not.toHaveBeenCalled();
+    expect(isAuthoritative).not.toHaveBeenCalled();
   });
 });
 

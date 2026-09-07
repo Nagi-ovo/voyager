@@ -6,7 +6,9 @@ import {
   catalogHostFromUrl,
   checkIntervalMs,
   decideHostCatalogRefresh,
+  hasEnabledPluginForHost,
   hasEnabledPluginForUrl,
+  patternTargetsHost,
   hostCatalogBackoffMs,
   hostCatalogFileUrl,
   isEligibleCatalogHost,
@@ -211,5 +213,32 @@ describe('hasEnabledPluginForUrl', () => {
     expect(hasEnabledPluginForUrl(manifests, everythingOn, 'https://gemini.google.com/app')).toBe(
       false,
     );
+  });
+});
+
+describe('hasEnabledPluginForHost (background side of D4)', () => {
+  it('matches on the host part of a pattern, so a path-scoped plugin still qualifies', () => {
+    const scoped = [manifest('voyager.deepseek-chat', ['https://chat.deepseek.com/chat/*'])];
+    const on = { 'voyager.deepseek-chat': { enabled: true, installedAt: 1 } };
+    // The bare origin never matches a path-scoped pattern...
+    expect(hasEnabledPluginForUrl(scoped, on, 'https://chat.deepseek.com/')).toBe(false);
+    // ...but the host is what the refresh request carries.
+    expect(hasEnabledPluginForHost(scoped, on, 'chat.deepseek.com')).toBe(true);
+    expect(hasEnabledPluginForHost(scoped, {}, 'chat.deepseek.com')).toBe(false);
+    expect(hasEnabledPluginForHost(scoped, on, 'claude.ai')).toBe(false);
+  });
+
+  it('understands the subdomain wildcard and rejects unrelated hosts', () => {
+    expect(
+      patternTargetsHost(
+        'https://*.frame.claudeusercontent.com/*',
+        'abc.frame.claudeusercontent.com',
+      ),
+    ).toBe(true);
+    expect(patternTargetsHost('https://*.example.com/*', 'example.com')).toBe(true);
+    expect(patternTargetsHost('https://*.example.com/*', 'notexample.com')).toBe(false);
+    expect(patternTargetsHost('*://claude.ai/*', 'CLAUDE.AI')).toBe(true);
+    expect(patternTargetsHost('<all_urls>', 'anything.test')).toBe(true);
+    expect(patternTargetsHost('garbage', 'claude.ai')).toBe(false);
   });
 });

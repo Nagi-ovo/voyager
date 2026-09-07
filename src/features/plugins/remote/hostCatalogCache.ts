@@ -146,14 +146,31 @@ export function hostCatalogSignature(raw: unknown): string {
  * different plugin set, a status flip, or a rewrite by a new extension
  * version). Bookkeeping-only writes are ignored.
  */
-export function subscribeHostCatalog(host: string, callback: () => void): () => void {
+export interface SubscribeHostCatalogOptions {
+  /**
+   * Also fire for attempt bookkeeping (lastAttemptAt / failureCount) writes.
+   * The host runtime wants content changes only; the popup's "last checked"
+   * line needs every write.
+   */
+  readonly includeBookkeeping?: boolean;
+}
+
+export function subscribeHostCatalog(
+  host: string,
+  callback: () => void,
+  options: SubscribeHostCatalogOptions = {},
+): () => void {
   const onChanged = (globalThis as { chrome?: typeof chrome }).chrome?.storage?.onChanged;
   if (!onChanged) return () => {};
   const key = hostCatalogStorageKey(host);
   const listener = (changes: Record<string, chrome.storage.StorageChange>, area: string): void => {
     if (area !== 'local' || !changes[key]) return;
     const change = changes[key];
-    if (hostCatalogSignature(change.oldValue) !== hostCatalogSignature(change.newValue)) callback();
+    if (
+      options.includeBookkeeping ||
+      hostCatalogSignature(change.oldValue) !== hostCatalogSignature(change.newValue)
+    )
+      callback();
   };
   onChanged.addListener(listener);
   return () => {

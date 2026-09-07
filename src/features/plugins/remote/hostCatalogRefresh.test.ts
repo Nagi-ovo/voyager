@@ -238,6 +238,50 @@ describe('HostCatalogRefresher', () => {
     expect(saved[0].extensionVersion).toBe('1.8.3');
   });
 
+  it('aborts a request that never settles, records the failed attempt and frees the host', async () => {
+    vi.useFakeTimers();
+    try {
+      const saved: HostCatalogCacheEntry[] = [];
+      let aborted = false;
+      const fetchImpl = vi.fn(
+        (_url: string, init: { signal: AbortSignal }) =>
+          new Promise(() => {
+            init.signal.addEventListener('abort', () => {
+              aborted = true;
+            });
+          }),
+      );
+      const refresher = new HostCatalogRefresher({
+        baseUrl: 'https://voyager.nagi.fun/catalog',
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+        now: () => 10 * HOUR,
+        extensionVersion: '1.8.3',
+        enabled: true,
+        loadSettings: async () => ({ onlineUpdatesEnabled: true, checkInterval: '6h' }),
+        loadEntry: async () => null,
+        saveEntry: async (next) => {
+          saved.push(next);
+        },
+        isHostEligible: async () => true,
+        timeoutMs: 1000,
+      });
+
+      const first = refresher.refresh(HOST);
+      await vi.advanceTimersByTimeAsync(1001);
+      const result = await first;
+      expect(aborted).toBe(true);
+      expect(result).toMatchObject({ ok: true, status: 'failed', reason: 'timeout after 1000ms' });
+      expect(saved.at(-1)).toMatchObject({ status: 'unknown', failureCount: 1 });
+
+      // The host is no longer pinned in flight: a forced retry starts a new request.
+      void refresher.refresh(HOST, { force: true });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('collapses concurrent requests for one host into a single fetch', async () => {
     const { refresher, fetchImpl } = harness({});
     const results = await Promise.all([

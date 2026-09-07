@@ -31,11 +31,28 @@ function readRemoteFlag(): string | undefined {
   }
 }
 
-/** Catalog base URL without a trailing slash. Only https overrides are honoured. */
+/**
+ * An override is honoured only as a plain https origin + path: credentials, a
+ * query string or a fragment would end up in front of the appended
+ * `hosts/<host>.json` and the request would no longer target the per-host file.
+ */
+function parseCatalogBaseUrlOverride(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash) {
+      return undefined;
+    }
+    return `${url.origin}${url.pathname}`;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Catalog base URL without a trailing slash. Only clean https overrides are honoured. */
 export function resolvePluginCatalogBaseUrl(): string {
-  const raw = readCatalogUrlOverride()?.trim();
-  const base = raw && /^https:\/\/[^\s/]+/i.test(raw) ? raw : DEFAULT_PLUGIN_CATALOG_BASE_URL;
-  return base.replace(/\/+$/, '');
+  const base = parseCatalogBaseUrlOverride(readCatalogUrlOverride()?.trim());
+  return (base ?? DEFAULT_PLUGIN_CATALOG_BASE_URL).replace(/\/+$/, '');
 }
 
 /** False only for a build compiled with `VOYAGER_PLUGIN_CATALOG_REMOTE=off`. */

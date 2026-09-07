@@ -34,7 +34,7 @@ import {
 import { validateHostCatalogFile } from './hostCatalogFile';
 import {
   decideHostCatalogRefresh,
-  hasEnabledPluginForUrl,
+  hasEnabledPluginForHost,
   hostCatalogFileUrl,
   isEligibleCatalogHost,
 } from './hostCatalogPolicy';
@@ -72,6 +72,8 @@ export interface HostCatalogRefresherOptions {
   readonly loadEntry?: (host: string) => Promise<HostCatalogCacheEntry | null>;
   readonly saveEntry?: (entry: HostCatalogCacheEntry) => Promise<void>;
   readonly isHostEligible?: (host: string, entry: HostCatalogCacheEntry | null) => Promise<boolean>;
+  /** Bound on one fetch including body parsing; defaults to 15 s. */
+  readonly timeoutMs?: number;
 }
 
 /**
@@ -84,8 +86,11 @@ export async function defaultIsHostEligible(
 ): Promise<boolean> {
   const [snapshot, state] = await Promise.all([listPluginManifests(), loadPluginState()]);
   const manifests = entry?.status === 'ok' ? [...snapshot, ...entry.manifests] : snapshot;
-  return hasEnabledPluginForUrl(manifests, state, `https://${host}/`);
+  return hasEnabledPluginForHost(manifests, state, host);
 }
+
+/** A request that neither settles nor aborts would pin its host in `inFlight` forever. */
+export const DEFAULT_HOST_CATALOG_TIMEOUT_MS = 15_000;
 
 export class HostCatalogRefresher {
   private readonly baseUrl: string;
@@ -101,6 +106,7 @@ export class HostCatalogRefresher {
     entry: HostCatalogCacheEntry | null,
   ) => Promise<boolean>;
   private readonly inFlight = new Map<string, Promise<HostCatalogRefreshResult>>();
+  private readonly timeoutMs: number;
 
   constructor(options: HostCatalogRefresherOptions = {}) {
     this.baseUrl = options.baseUrl ?? resolvePluginCatalogBaseUrl();
@@ -112,6 +118,7 @@ export class HostCatalogRefresher {
     this.loadEntry = options.loadEntry ?? loadHostCatalogCache;
     this.saveEntry = options.saveEntry ?? saveHostCatalogCache;
     this.isHostEligible = options.isHostEligible ?? defaultIsHostEligible;
+    this.timeoutMs = options.timeoutMs ?? DEFAULT_HOST_CATALOG_TIMEOUT_MS;
   }
 
   /** Single flight per host: concurrent callers share one network pass. */
@@ -149,47 +156,16 @@ export class HostCatalogRefresher {
     }
 
     const now = this.now();
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        controller.abort();
+        reject(new Error(`timeout after ${this.timeoutMs}ms`));
+      }, this.timeoutMs);
+    });
     try {
-      const response = await this.fetchImpl(hostCatalogFileUrl(this.baseUrl, host), {
-        cache: 'no-cache',
-        credentials: 'omit',
-        redirect: 'follow',
-      });
-      if (response.status === 404) {
-        await this.saveEntry({
-          host,
-          status: 'missing',
-          manifests: [],
-          fetchedAt: now,
-          lastAttemptAt: now,
-          failureCount: 0,
-          extensionVersion: this.extensionVersion,
-        });
-        return { ok: true, status: 'missing', checkedAt: now };
-      }
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-      const validation = validateHostCatalogFile(await response.json(), host);
-      if (!validation) throw new Error('Unrecognized host catalog file');
-      if (validation.issues.length > 0) {
-        logger.warn('Host catalog: skipped invalid plugin entries', {
-          host,
-          issues: validation.issues,
-        });
-      }
-      const next: HostCatalogCacheEntry = {
-        host,
-        status: 'ok',
-        manifests: validation.manifests,
-        fetchedAt: now,
-        lastAttemptAt: now,
-        failureCount: 0,
-        extensionVersion: this.extensionVersion,
-        ...(validation.generatedAt ? { generatedAt: validation.generatedAt } : {}),
-      };
-      const changed = hostCatalogSignature(entry) !== hostCatalogSignature(next);
-      await this.saveEntry(next);
-      return { ok: true, status: changed ? 'updated' : 'unchanged', checkedAt: now };
+      return await Promise.race([this.fetchAndStore(host, entry, now, controller.signal), timeout]);
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       logger.warn('Host catalog refresh failed', { host, error: reason });
@@ -205,7 +181,59 @@ export class HostCatalogRefresher {
         ...(entry?.generatedAt ? { generatedAt: entry.generatedAt } : {}),
       });
       return { ok: true, status: 'failed', reason, checkedAt: now };
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
     }
+  }
+
+  /** The network half of a pass; `signal` lets the timeout abort the request. */
+  private async fetchAndStore(
+    host: string,
+    entry: HostCatalogCacheEntry | null,
+    now: number,
+    signal: AbortSignal,
+  ): Promise<HostCatalogRefreshResult> {
+    const response = await this.fetchImpl(hostCatalogFileUrl(this.baseUrl, host), {
+      cache: 'no-cache',
+      credentials: 'omit',
+      redirect: 'follow',
+      signal,
+    });
+    if (response.status === 404) {
+      await this.saveEntry({
+        host,
+        status: 'missing',
+        manifests: [],
+        fetchedAt: now,
+        lastAttemptAt: now,
+        failureCount: 0,
+        extensionVersion: this.extensionVersion,
+      });
+      return { ok: true, status: 'missing', checkedAt: now };
+    }
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+    const validation = validateHostCatalogFile(await response.json(), host);
+    if (!validation) throw new Error('Unrecognized host catalog file');
+    if (validation.issues.length > 0) {
+      logger.warn('Host catalog: skipped invalid plugin entries', {
+        host,
+        issues: validation.issues,
+      });
+    }
+    const next: HostCatalogCacheEntry = {
+      host,
+      status: 'ok',
+      manifests: validation.manifests,
+      fetchedAt: now,
+      lastAttemptAt: now,
+      failureCount: 0,
+      extensionVersion: this.extensionVersion,
+      ...(validation.generatedAt ? { generatedAt: validation.generatedAt } : {}),
+    };
+    const changed = hostCatalogSignature(entry) !== hostCatalogSignature(next);
+    await this.saveEntry(next);
+    return { ok: true, status: changed ? 'updated' : 'unchanged', checkedAt: now };
   }
 }
 

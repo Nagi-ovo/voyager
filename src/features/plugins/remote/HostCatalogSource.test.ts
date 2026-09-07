@@ -78,4 +78,22 @@ describe('HostCatalogSource', () => {
       expect(await source.isAuthoritative(context)).toBe(false);
     }
   });
+
+  it('answers manifests and authority from one cache read so a mid-listing write cannot split them', async () => {
+    // First read sees an unfetched host, the second a fresh catalog: two
+    // separate reads would report "no manifests" yet "authoritative".
+    const loadEntry = vi
+      .fn<() => Promise<HostCatalogCacheEntry | null>>()
+      .mockResolvedValueOnce(entry({ status: 'unknown', manifests: [] }))
+      .mockResolvedValueOnce(entry());
+    const source = new HostCatalogSource({ extensionVersion: '1.8.3', loadEntry, enabled: true });
+
+    const listing = await source.listWithAuthority({ host: 'chat.deepseek.com' });
+    expect(loadEntry).toHaveBeenCalledTimes(1);
+    expect(listing).toEqual({ manifests: [], authoritative: false });
+
+    const next = await source.listWithAuthority({ host: 'chat.deepseek.com' });
+    expect(next.authoritative).toBe(true);
+    expect(next.manifests.map((m) => m.id)).toEqual(['voyager.remote']);
+  });
 });

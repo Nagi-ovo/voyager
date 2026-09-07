@@ -98,6 +98,44 @@ export function hasEnabledPluginForUrl(
   );
 }
 
+/** Host part of a match pattern (`https://*.example.com/*` → `*.example.com`), if any. */
+function matchPatternHost(pattern: string): string | null {
+  if (pattern === '<all_urls>') return '*';
+  const match = /^(?:https?|\*):\/\/([^/]+)/i.exec(pattern);
+  return match ? match[1].toLowerCase() : null;
+}
+
+/** True when `host` is one the pattern can apply to (exact, `*`, or `*.` subdomain wildcard). */
+export function patternTargetsHost(pattern: string, host: string): boolean {
+  const patternHost = matchPatternHost(pattern);
+  if (!patternHost) return false;
+  const wanted = host.toLowerCase();
+  if (patternHost === '*' || patternHost === wanted) return true;
+  if (patternHost.startsWith('*.')) {
+    const suffix = patternHost.slice(2);
+    return wanted === suffix || wanted.endsWith(`.${suffix}`);
+  }
+  return false;
+}
+
+/**
+ * Background side of the D4 trigger: the request only names a host, so a
+ * plugin qualifies when any of its patterns can apply to that host — a
+ * path-scoped match such as `https://chat.deepseek.com/chat/*` must count,
+ * although it would never match the bare `https://host/`.
+ */
+export function hasEnabledPluginForHost(
+  manifests: readonly PluginManifest[],
+  state: PluginStateMap,
+  host: string,
+): boolean {
+  return manifests.some(
+    (manifest) =>
+      state[manifest.id]?.enabled === true &&
+      manifest.matches.some((pattern) => patternTargetsHost(pattern, host)),
+  );
+}
+
 /** A cached catalog may replace the bundled snapshot only when this holds (D6). */
 export function isHostCatalogEntryUsable(
   entry: HostCatalogCacheEntry | null | undefined,

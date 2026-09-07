@@ -48,6 +48,7 @@ beforeEach(() => {
 afterEach(() => {
   (chrome.storage.local.get as unknown as Mock).mockReset?.();
   (chrome.storage.onChanged.addListener as unknown as Mock).mockClear?.();
+  (chrome.storage.onChanged.removeListener as unknown as Mock).mockClear?.();
   resetNativeHandlersForTests();
 });
 
@@ -228,9 +229,11 @@ describe('PluginHost', () => {
     expect(document.body.classList.contains('gv-plugin-active')).toBe(false);
     // The stale gen-1 start must NOT resume past its awaits and install a
     // second set of subscriptions over gen-3's (zombie listeners + clobbered
-    // unsubscribe handles). Exactly one start's worth remains: state+catalog.
-    const listenerCalls = (chrome.storage.onChanged.addListener as unknown as Mock).mock.calls;
-    expect(listenerCalls.length).toBe(2);
+    // unsubscribe handles). Exactly one start's worth stays ACTIVE:
+    // state+catalog. (Gen 1 subscribed before it blocked; stop() removed those.)
+    const added = (chrome.storage.onChanged.addListener as unknown as Mock).mock.calls.length;
+    const removed = (chrome.storage.onChanged.removeListener as unknown as Mock).mock.calls.length;
+    expect(added - removed).toBe(2);
     host.stop();
   });
 });
@@ -351,6 +354,63 @@ describe('PluginHost remote catalog', () => {
     }
     await flush();
     expect(list).toHaveBeenCalledTimes(2);
+    host.stop();
+  });
+
+  it('applies a catalog written while the initial listing is in flight, and keeps it current', async () => {
+    mockState({
+      'voyager.test': { enabled: true, installedAt: 1 },
+      'voyager.late': { enabled: true, installedAt: 1 },
+    });
+    const late: PluginManifest = {
+      ...manifest(['https://claude.ai/*'], 'voyager.late'),
+      contributes: {
+        domOps: [
+          {
+            op: 'addClass',
+            target: { kind: 'css', selector: 'body' },
+            className: 'gv-plugin-late',
+          },
+        ],
+      },
+    };
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const list = vi.fn(async () => {
+      if (list.mock.calls.length === 1) {
+        await gate;
+        return [manifest(['https://claude.ai/*'])];
+      }
+      return [manifest(['https://claude.ai/*']), late];
+    });
+    const host = new PluginHost({
+      url: 'https://claude.ai/chat/1',
+      sources: [{ id: 'spy', list }],
+      doc: document,
+      requestCatalogRefresh: () => {},
+      isTopFrame: true,
+    });
+    const started = host.start();
+    await flush();
+    // The background finishes a refresh for claude.ai before the first read returns.
+    fireCatalogChange(catalogEntry([]), catalogEntry(['voyager.late']));
+    release();
+    await started;
+    await flush();
+
+    expect(list).toHaveBeenCalledTimes(2);
+    expect(document.body.classList.contains('gv-plugin-late')).toBe(true);
+
+    // The fresher listing is the one the host keeps: disabling the late plugin unmounts it.
+    fireStateChange({
+      'voyager.test': { enabled: true, installedAt: 1 },
+      'voyager.late': { enabled: false, installedAt: 1 },
+    });
+    await flush();
+    expect(document.body.classList.contains('gv-plugin-late')).toBe(false);
+    document.body.classList.remove('gv-plugin-late');
     host.stop();
   });
 });

@@ -15,7 +15,12 @@
  */
 import { EXTENSION_VERSION } from '@/core/utils/version';
 
-import type { PluginManifest, PluginSource, PluginSourceContext } from '../types';
+import type {
+  PluginManifest,
+  PluginSource,
+  PluginSourceContext,
+  PluginSourceListing,
+} from '../types';
 import { isRemotePluginCatalogEnabledAtBuild } from './config';
 import { type HostCatalogCacheEntry, loadHostCatalogCache } from './hostCatalogCache';
 import { isEligibleCatalogHost, isHostCatalogEntryUsable } from './hostCatalogPolicy';
@@ -50,6 +55,14 @@ export class HostCatalogSource implements PluginSource {
 
   async isAuthoritative(context?: PluginSourceContext): Promise<boolean> {
     return (await this.usableEntry(context)) !== null;
+  }
+
+  /** One cache read answers both questions; see `PluginSource.listWithAuthority`. */
+  async listWithAuthority(context?: PluginSourceContext): Promise<PluginSourceListing> {
+    const entry = await this.usableEntry(context);
+    return entry
+      ? { manifests: entry.manifests, authoritative: true }
+      : { manifests: [], authoritative: false };
   }
 
   private async usableEntry(context?: PluginSourceContext): Promise<HostCatalogCacheEntry | null> {

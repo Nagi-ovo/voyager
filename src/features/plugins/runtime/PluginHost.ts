@@ -135,14 +135,14 @@ export class PluginHost {
     try {
       this.adapter = this.registry.resolveByUrl(this.url);
       this.engine = new DeclarativeEngine({ doc: this.doc, adapter: this.adapter });
-      this.manifests = await this.loadManifests();
-      const state = await loadPluginState();
-      if (this.generation !== gen) return;
-      this.state = state;
-      await this.enqueue(() => this.reconcile(gen));
-      if (this.generation !== gen) return;
+      // Subscribe BEFORE the initial reads: a state or catalog write that lands
+      // while they are in flight must still reach this instance. Both
+      // callbacks only enqueue on the serialized chain, so nothing runs ahead
+      // of the initial reconcile below.
+      let stateFromListener: PluginStateMap | null = null;
       this.unsubscribeState = subscribePluginState((next) => {
         if (this.generation !== gen) return;
+        stateFromListener = next;
         this.state = next;
         void this.enqueue(() => this.reconcile(gen));
       });
@@ -155,6 +155,18 @@ export class PluginHost {
           () => void this.enqueue(() => this.reloadCatalog(gen)),
         );
       }
+      // The initial read runs ON the chain, so a catalog reload the listener
+      // queued meanwhile runs after it and its fresher listing wins.
+      await this.enqueue(async () => {
+        const manifests = await this.loadManifests();
+        const state = await loadPluginState();
+        if (this.generation !== gen) return;
+        this.manifests = manifests;
+        // A listener revision that arrived mid-read is newer than what we read.
+        this.state = stateFromListener ?? state;
+        await this.reconcile(gen);
+      });
+      if (this.generation !== gen) return;
       logger.info('PluginHost started', {
         site: this.adapter?.id ?? 'unknown',
         manifests: this.manifests.length,

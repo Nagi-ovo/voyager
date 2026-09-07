@@ -370,7 +370,9 @@ export function PluginManager({
       });
     };
     read();
-    const unsubscribe = subscribeHostCatalog(catalogHost, read);
+    // Bookkeeping-only writes (an automatic attempt that found nothing new)
+    // still move "last checked", so this view listens to every write.
+    const unsubscribe = subscribeHostCatalog(catalogHost, read, { includeBookkeeping: true });
     return () => {
       active = false;
       unsubscribe();
