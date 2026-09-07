@@ -37,6 +37,15 @@ content scripts or required host permissions for a new platform; use the
 existing optional-permission and dynamic-registration flow for plugin-only
 sites.
 
+The optional-permission and dynamic-registration path is browser-version
+dependent. Chrome and Edge support the flow used by the extension. Firefox
+requires version 128 or newer for optional host permissions, and Safari
+requires version 16.4 or newer for dynamic content-script registration. On
+older supported browser versions, the popup may correctly refuse to enable a
+plugin for a custom site because the required APIs cannot provide a persistent
+grant; do not work around this by adding a broad static host permission without
+maintainer approval.
+
 ## Plugin scope
 
 Plugins should be scoped by the user problem they solve, not mechanically split by platform.
