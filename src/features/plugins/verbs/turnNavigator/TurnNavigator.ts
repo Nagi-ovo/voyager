@@ -517,11 +517,23 @@ export class TurnNavigator {
     // drift so re-measured content does not skew the comparison.
     const anchors = matchedKnownIndex.filter((index) => index >= 0);
     const insertBefore = new Map<number, Marker[]>();
-    const file = (block: Marker[], lo: number, hi: number, drift: number): void => {
+    // A known turn between two anchors is assumed to have drifted like the
+    // anchor nearer to it; anchors on different sides of a re-measured region
+    // can carry very different drifts.
+    const driftAt = (index: number, prev: number | undefined, next: number | undefined): number => {
+      const prevDrift = prev === undefined ? undefined : anchorDrift.get(prev);
+      const nextDrift = next === undefined ? undefined : anchorDrift.get(next);
+      if (prevDrift === undefined) return nextDrift ?? 0;
+      if (nextDrift === undefined) return prevDrift;
+      return index - prev! <= next! - index ? prevDrift : nextDrift;
+    };
+    const file = (block: Marker[], prev: number | undefined, next: number | undefined): void => {
       if (!block.length) return;
+      const lo = prev === undefined ? 0 : prev + 1;
+      const hi = next ?? known.length;
       let at = hi;
       for (let index = lo; index < hi; index++) {
-        if (known[index].center + drift > block[0].center) {
+        if (known[index].center + driftAt(index, prev, next) > block[0].center) {
           at = index;
           break;
         }
@@ -530,13 +542,10 @@ export class TurnNavigator {
       if (bucket) bucket.push(...block);
       else insertBefore.set(at, block);
     };
-    file(beforeFirstAnchor, 0, anchors[0], anchorDrift.get(anchors[0]) ?? 0);
+    file(beforeFirstAnchor, undefined, anchors[0]);
     anchors.forEach((anchor, rank) => {
       const block = afterKnownIndex.get(anchor);
-      if (!block) return;
-      const next = anchors[rank + 1];
-      const drift = anchorDrift.get(next ?? anchor) ?? anchorDrift.get(anchor) ?? 0;
-      file(block, anchor + 1, next ?? known.length, drift);
+      if (block) file(block, anchor, anchors[rank + 1]);
     });
 
     const result: Marker[] = [];

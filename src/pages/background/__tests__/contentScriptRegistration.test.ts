@@ -47,17 +47,18 @@ describe('unregisterRegisteredContentScripts', () => {
     expect(scripting.unregisterContentScripts).not.toHaveBeenCalled();
   });
 
-  it('falls back to the whole batch when the registry cannot be listed', async () => {
+  it('unregisters one id at a time when the registry cannot be listed, so an absent id blocks nothing', async () => {
     const { scripting, registered } = fakeRegistry(['gv-plugin-content-script']);
     (scripting.getRegisteredContentScripts as ReturnType<typeof vi.fn>).mockRejectedValue(
       new Error('boom'),
     );
-    vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     await expect(
-      unregisterRegisteredContentScripts(scripting, ['gv-plugin-content-script']),
+      unregisterRegisteredContentScripts(scripting, [
+        'gv-plugin-content-script',
+        'gv-plugin-embedded-content-script',
+      ]),
     ).resolves.toEqual(['gv-plugin-content-script']);
     expect(registered.size).toBe(0);
-    vi.restoreAllMocks();
   });
 });

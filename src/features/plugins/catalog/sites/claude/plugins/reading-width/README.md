@@ -46,4 +46,6 @@ Voyager's bundled engine. No executable code.
 Claude now caps the turn column twice: `max-w-3xl` on the column and
 `max-w-[50.5rem]` (808px, the column plus its 20px side padding) on the wrapper
 above it. The plugin widens both; the wrapper rule matches structurally (the
-parent of the `max-w-3xl` column) so it survives the next class rename.
+parent of the `max-w-3xl` column), so a rename of the wrapper's own class does
+not break it. Both rules still key on `max-w-3xl`: if Claude renames that,
+the column is clamped again and the selector needs a follow-up.

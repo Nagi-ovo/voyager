@@ -31,8 +31,18 @@ export async function unregisterRegisteredContentScripts(
       .map((script) => script.id)
       .filter((id) => wanted.has(id));
   } catch {
-    // Listing failed: try the whole batch, which at worst rejects as before.
-    registered = [...ids];
+    // Listing failed: unregister one id at a time, so an absent id can only
+    // fail its own call instead of the whole batch.
+    const removed: string[] = [];
+    for (const id of ids) {
+      try {
+        await scripting.unregisterContentScripts({ ids: [id] });
+        removed.push(id);
+      } catch {
+        // Not registered.
+      }
+    }
+    return removed;
   }
   if (!registered.length) return [];
   try {

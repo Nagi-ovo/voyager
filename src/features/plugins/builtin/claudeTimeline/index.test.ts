@@ -558,6 +558,33 @@ describe('Claude timeline', () => {
     ]);
   });
 
+  it('places a new turn by the drift of its nearer anchor when the two anchors drifted differently', async () => {
+    const rect = (top: number) => vi.fn(() => ({ top, bottom: top + 40, height: 40 }) as DOMRect);
+    const a = addTurn('turn a');
+    const b = addTurn('turn b');
+    const c = addTurn('turn c');
+    const d = addTurn('turn d');
+    a.getBoundingClientRect = rect(1000);
+    b.getBoundingClientRect = rect(2000);
+    c.getBoundingClientRect = rect(3000);
+    d.getBoundingClientRect = rect(4000);
+    startClaudeTimeline();
+    await flush();
+
+    // b and c unmount; a stays where it was, d is re-measured 2000px lower, and
+    // a new turn x mounts between them at 2600. Under a's drift (0) x sits
+    // after b; only under d's drift would it land before b.
+    b.remove();
+    c.remove();
+    const x = createTurn('turn x');
+    x.getBoundingClientRect = rect(2600);
+    document.body.insertBefore(x, d);
+    d.getBoundingClientRect = rect(6000);
+    await settleRefresh();
+
+    expect(dotLabels()).toEqual(['turn a', 'turn b', 'turn x', 'turn c', 'turn d']);
+  });
+
   it('files a bottom window behind the known opening turns when the first turn stays mounted', async () => {
     const rect = (top: number) => vi.fn(() => ({ top, bottom: top + 40, height: 40 }) as DOMRect);
     const first = addTurn('first prompt');
