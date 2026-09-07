@@ -7,7 +7,7 @@
     "userTurn": ".ds-message:has(.ds-collapsible-text):not(:has(.ds-assistant-message-main-content, .ds-think-content))",
     "assistantTurn": ".ds-message:has(.ds-assistant-message-main-content, .ds-think-content)",
     "thinkingBlock": ".ds-think-content",
-    "composer": "textarea.ds-scroll-area[placeholder*=\"DeepSeek\" i]"
+    "composer": "textarea.ds-scroll-area"
   },
   "theme": {
     "hostSelector": "body",
