@@ -341,17 +341,17 @@ html.dark .timeline-dot:not(.active):not(.starred)::after,
   transform: translate(-50%, -50%) scale(1.15);
 }
 
-.gemini-timeline-bar[data-gv-claude-timeline='true'] .timeline-dot:hover::after {
+.gemini-timeline-bar[data-gv-turn-navigator] .timeline-dot:hover::after {
   transform: translate(-50%, -50%);
 }
 
-#claude-timeline-tooltip {
+#gv-turn-navigator-tooltip {
   display: block;
   max-height: none;
   overflow: visible;
 }
 
-#claude-timeline-tooltip .claude-timeline-tooltip-text {
+#gv-turn-navigator-tooltip .gv-turn-navigator-tooltip-text {
   display: -webkit-box;
   max-height: calc(3 * var(--timeline-tooltip-lh));
   overflow: hidden;

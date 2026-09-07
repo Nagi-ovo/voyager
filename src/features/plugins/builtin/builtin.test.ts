@@ -18,9 +18,10 @@ describe('BUILTIN_PLUGINS', () => {
       'https://chatgpt.com/*',
       'https://chat.openai.com/*',
     ]);
-    // No declarative contributions — its behaviour comes from a native handler.
+    // Its behaviour is the formulaCopy primitive, invoked through a native op.
     expect(fc?.contributes.styles ?? []).toEqual([]);
-    expect(fc?.contributes.domOps ?? []).toEqual([]);
+    expect(fc?.contributes.domOps).toEqual([{ op: 'native', handler: 'formulaCopy', params: {} }]);
+    expect(fc?.requires).toEqual({ handlers: ['formulaCopy'] });
     expect(fc?.i18n?.zh?.name).toBe('公式复制');
     expect(fc?.i18n?.ja?.description).toContain('LaTeX');
   });
@@ -34,7 +35,8 @@ describe('BUILTIN_PLUGINS', () => {
       'https://chat.openai.com/*',
     ]);
     expect(vim?.contributes.styles ?? []).toEqual([]);
-    expect(vim?.contributes.domOps ?? []).toEqual([]);
+    expect(vim?.contributes.domOps).toEqual([{ op: 'native', handler: 'vimInput', params: {} }]);
+    expect(vim?.requires).toEqual({ handlers: ['vimInput'], semantic: ['composer'] });
     expect(vim?.i18n?.zh?.name).toBe('Vim 输入');
   });
 
@@ -65,7 +67,16 @@ describe('BUILTIN_PLUGINS', () => {
     expect(timeline).toBeDefined();
     expect(timeline?.matches).toEqual(['https://claude.ai/*']);
     expect(timeline?.contributes.styles ?? []).toEqual([]);
-    expect(timeline?.contributes.domOps ?? []).toEqual([]);
+    // Its behaviour is the turnNavigator primitive; Claude keeps the guide
+    // closed while an artifact frame is open.
+    expect(timeline?.contributes.domOps).toEqual([
+      {
+        op: 'native',
+        handler: 'turnNavigator',
+        params: { yieldWhen: 'iframe[src*="claudeusercontent.com"]' },
+      },
+    ]);
+    expect(timeline?.requires).toEqual({ handlers: ['turnNavigator'], semantic: ['userTurn'] });
     expect(timeline?.contributes.settings?.compactView).toEqual({
       type: 'boolean',
       label: 'Use compact timeline',

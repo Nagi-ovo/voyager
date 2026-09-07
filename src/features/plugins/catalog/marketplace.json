@@ -32,6 +32,11 @@
       "name": "deepseek-formula-copy",
       "source": "sites/deepseek/plugins/formula-copy/plugin.json",
       "official": true
+    },
+    {
+      "name": "deepseek-timeline",
+      "source": "sites/deepseek/plugins/timeline/plugin.json",
+      "official": true
     }
   ]
 }

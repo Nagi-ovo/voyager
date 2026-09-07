@@ -8,10 +8,14 @@
  */
 import { PRIMITIVE_CONTRACTS } from './contracts';
 import { formulaCopyPrimitive } from './formulaCopy';
+import { turnNavigatorPrimitive } from './turnNavigator';
 import type { Primitive } from './types';
+import { vimInputPrimitive } from './vimInput';
 
 const PRIMITIVES: ReadonlyMap<string, Primitive<never>> = new Map<string, Primitive<never>>([
   [formulaCopyPrimitive.contract.name, formulaCopyPrimitive as Primitive<never>],
+  [vimInputPrimitive.contract.name, vimInputPrimitive as Primitive<never>],
+  [turnNavigatorPrimitive.contract.name, turnNavigatorPrimitive as Primitive<never>],
 ]);
 
 export function getPrimitive(name: string): Primitive<never> | undefined {

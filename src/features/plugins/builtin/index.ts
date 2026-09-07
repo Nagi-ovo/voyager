@@ -1,16 +1,18 @@
-import type { PluginManifest } from '../types';
+import { type PluginManifest, hasNativeOps } from '../types';
 
 /**
  * Built-in (bundled-in-the-extension) plugins — first-party data, NOT from the
  * remote marketplace.
  *
- * Use this only for genuinely first-party features that need JS and so can't be
- * expressed as remote declarative data — a "native function plugin": the
- * manifest declares no styles/domOps, and the content script binds the actual
- * behaviour by calling `registerNativeHandler(<same id>, { start, stop })` (see
- * runtime/nativeHandlers). The engine runs that handler in lockstep with the
- * plugin's mount/unmount, so the feature is visible + toggleable in the plugin
- * list and scoped by `matches`, while the code stays first-party.
+ * Two kinds live here. A manifest with a `native` op invokes a first-party
+ * primitive by name (formula copy, Vim input, the timeline; see verbs/) and
+ * needs nothing else. A "native function plugin" (export, temporary-chat
+ * handoff) declares no contributions and the content script binds its
+ * behaviour with `registerNativeHandler(<same id>, { start, stop })` (see
+ * runtime/nativeHandlers). Either way the engine runs the code in lockstep
+ * with the plugin's mount/unmount, so the feature is visible + toggleable in
+ * the plugin list and scoped by `matches`, while the code stays first-party.
+ * Builtin ids are never overridden by the remote catalog (plan D20).
  *
  * Like every plugin, builtin plugins ship DISABLED by default — the user turns
  * them on in the popup.
@@ -69,10 +71,11 @@ export const BUILTIN_PLUGINS: readonly PluginManifest[] = [
     author: 'voyager-official',
     category: 'productivity',
     license: 'GPL-3.0-or-later',
-    engine: '>=1.1.0',
+    engine: '>=1.4.0',
     tier: 'declarative',
     matches: ['https://claude.ai/*', 'https://chatgpt.com/*', 'https://chat.openai.com/*'],
-    contributes: {},
+    requires: { handlers: ['formulaCopy'] },
+    contributes: { domOps: [{ op: 'native', handler: 'formulaCopy', params: {} }] },
   },
   {
     id: 'voyager.input-vim',
@@ -123,10 +126,11 @@ export const BUILTIN_PLUGINS: readonly PluginManifest[] = [
     author: 'voyager-official',
     category: 'productivity',
     license: 'GPL-3.0-or-later',
-    engine: '>=1.1.0',
+    engine: '>=1.4.0',
     tier: 'declarative',
     matches: ['https://claude.ai/*', 'https://chatgpt.com/*', 'https://chat.openai.com/*'],
-    contributes: {},
+    requires: { handlers: ['vimInput'], semantic: ['composer'] },
+    contributes: { domOps: [{ op: 'native', handler: 'vimInput', params: {} }] },
   },
   {
     id: 'voyager.claude-timeline',
@@ -186,9 +190,10 @@ export const BUILTIN_PLUGINS: readonly PluginManifest[] = [
     author: 'voyager-official',
     category: 'productivity',
     license: 'GPL-3.0-or-later',
-    engine: '>=1.1.0',
+    engine: '>=1.4.0',
     tier: 'declarative',
     matches: ['https://claude.ai/*'],
+    requires: { handlers: ['turnNavigator'], semantic: ['userTurn'] },
     contributes: {
       settings: {
         compactView: {
@@ -197,6 +202,14 @@ export const BUILTIN_PLUGINS: readonly PluginManifest[] = [
           default: false,
         },
       },
+      domOps: [
+        {
+          op: 'native',
+          handler: 'turnNavigator',
+          // Never open the onboarding guide over an active artifact frame.
+          params: { yieldWhen: 'iframe[src*="claudeusercontent.com"]' },
+        },
+      ],
     },
   },
   {
@@ -308,10 +321,15 @@ export const BUILTIN_PLUGINS: readonly PluginManifest[] = [
 ];
 
 /**
- * Every BUILTIN_PLUGINS entry is a native-function plugin and MUST have a
+ * Builtin plugins come in two shapes. Those whose behaviour is a primitive
+ * (`native` op: formula copy, Vim input, the timeline) need no binding — the
+ * engine resolves the primitive by name. The rest (export, temporary-chat
+ * handoff) still run first-party code bound to their plugin id and MUST have a
  * `registerNativeHandler(<id>, …)` call in the content script (and vice
  * versa). `verifyNativeHandlerBindings(NATIVE_BUILTIN_PLUGIN_IDS)` enforces
  * both directions after registration — adding a plugin to one side without
  * the other surfaces as a logged error instead of a dead toggle.
  */
-export const NATIVE_BUILTIN_PLUGIN_IDS: readonly string[] = BUILTIN_PLUGINS.map((p) => p.id);
+export const NATIVE_BUILTIN_PLUGIN_IDS: readonly string[] = BUILTIN_PLUGINS.filter(
+  (plugin) => !hasNativeOps(plugin),
+).map((p) => p.id);

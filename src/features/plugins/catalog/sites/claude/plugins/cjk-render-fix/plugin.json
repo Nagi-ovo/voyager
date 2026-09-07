@@ -1,4 +1,5 @@
 {
+  "$schema": "https://voyager.nagi.fun/plugin.schema.json",
   "id": "voyager.claude-cjk-render-fix",
   "name": "Claude · CJK Render Fix",
   "version": "1.1.0",

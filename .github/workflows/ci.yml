@@ -154,6 +154,25 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run test
 
+  # ── Plugin catalog check ──────────────────────────────────────────────
+  # The contributor-facing gate: every bundled plugin still passes the same
+  # rules `bun run plugin:check` reports locally, so a catalog PR fails here
+  # rather than at publish time, where the message never reaches the author.
+  plugin-check:
+    name: Plugin check
+    needs: changes
+    if: needs.changes.outputs.app == 'true' || needs.changes.outputs.core == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: '1.3.12'
+      - run: bun install --frozen-lockfile
+      - run: bun run plugin:check
+
   # ── Native Swift Tests + Xcode Build ─────────────────────────────────
   # app-only (src/public) changes skip this: the Safari web bundle is already
   # packaging-verified by the Build (safari) matrix job on ubuntu; this job's
@@ -282,7 +301,8 @@ jobs:
   ci-summary:
     name: CI Summary
     if: always()
-    needs: [changes, format, lint, typecheck, test, native-test, build, docs-build, i18n]
+    needs:
+      [changes, format, lint, typecheck, test, plugin-check, native-test, build, docs-build, i18n]
     runs-on: ubuntu-latest
     steps:
       - name: Verify job results

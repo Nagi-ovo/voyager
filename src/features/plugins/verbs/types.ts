@@ -28,8 +28,20 @@ export interface PrimitiveContext {
   setTargetCounter(count: () => number): void;
 }
 
+/**
+ * What an activation hands back. A primitive that can absorb a settings
+ * change in place (the timeline keeps its grow-only markers) returns
+ * `updateSettings`; otherwise the engine restarts the primitive under the
+ * new settings.
+ */
+export interface PrimitiveHandle {
+  updateSettings?(settings: PluginSettings): void;
+}
+
+export type PrimitiveActivation = void | PrimitiveHandle | Promise<void | PrimitiveHandle>;
+
 export interface Primitive<P = Readonly<Record<string, unknown>>> {
   readonly contract: PrimitiveContract;
   validateParams(raw: unknown): Result<P, ManifestIssue[]>;
-  activate(scope: PluginScope, params: P, context: PrimitiveContext): void | Promise<void>;
+  activate(scope: PluginScope, params: P, context: PrimitiveContext): PrimitiveActivation;
 }

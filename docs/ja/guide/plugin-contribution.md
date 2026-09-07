@@ -80,8 +80,11 @@ src/features/plugins/catalog/
 
 ## 最小例
 
+空のディレクトリから始める必要はありません。`bun run plugin:new <id-segment> --site <site>` を実行すると `catalog/sites/<site>/plugins/<id-segment>/` が作られ、`plugin.json`、`style.css`、`README.md` が入り、`marketplace.json` にも対応するエントリが追記されます。生成されるのは出発点であって承認ではありません。埋めていくマニフェストはこの形です。
+
 ```json
 {
+  "$schema": "https://voyager.nagi.fun/plugin.schema.json",
   "id": "your-name.example-plugin",
   "name": "Example Plugin",
   "version": "1.0.0",
@@ -104,6 +107,8 @@ src/features/plugins/catalog/
   }
 }
 ```
+
+`$schema` の行は任意で、エディタのためだけのものです。マニフェストの JSON Schema を指すので、書きながら検証と補完が効きます。`site.json` 用は `https://voyager.nagi.fun/site.schema.json` にあります。
 
 `style.css` は通常の CSS として書けますが、プラグインのスタイルは自分の `gv-plugin-*` クラス配下に閉じることを推奨します。
 
@@ -178,6 +183,8 @@ JavaScript の実行、リクエストの遮断、Voyager 内部データの読�
 その場合はまず Issue を開いて要件を説明してください。本当に内蔵能力が必要な場合は、Formula Copy のような builtin/native プラグインとして Voyager 本体に実装することを検討します。
 
 ## PR 前チェック
+
+`bun run plugin:check <プラグインディレクトリ>` を実行し、その出力を PR に貼ってください。マニフェストと CSS、`matches` がサイトの範囲を超えていないか、プリミティブ、意味的セレクタキー、10 言語の翻訳、README まで、問題を一度にすべて報告します。CI も同じチェックをすべての内蔵プラグインに対して実行します。
 
 - プラグインはデフォルトで無効で、ユーザーが自分で有効化する。
 - ほぼ同じ既存プラグインがないか確認した。ある場合は既存プラグインの改善を優先した。

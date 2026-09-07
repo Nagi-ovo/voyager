@@ -80,8 +80,11 @@ src/features/plugins/catalog/
 
 ## 最小範例
 
+不用從空目錄開始：`bun run plugin:new <id-segment> --site <site>` 會產生 `catalog/sites/<site>/plugins/<id-segment>/`，裡面有 `plugin.json`、`style.css` 和 `README.md`，並順手往 `marketplace.json` 追加對應條目。它產生的只是起點，不代表已經通過審核；你要填的清單長這樣：
+
 ```json
 {
+  "$schema": "https://voyager.nagi.fun/plugin.schema.json",
   "id": "your-name.example-plugin",
   "name": "Example Plugin",
   "version": "1.0.0",
@@ -104,6 +107,8 @@ src/features/plugins/catalog/
   }
 }
 ```
+
+`$schema` 這行是可選的，只服務於編輯器：它指向清單的 JSON Schema，讓編輯器邊寫邊驗證和補完。`site.json` 也有自己的一份，位址是 `https://voyager.nagi.fun/site.schema.json`。
 
 `style.css` 可以像普通 CSS 一樣撰寫，但建議所有外掛樣式都掛在自己的 `gv-plugin-*` 類別下面：
 
@@ -178,6 +183,8 @@ src/features/plugins/catalog/
 這類功能請先開 Issue 說明需求。確實需要內建能力時，我們會考慮把它做成 Voyager 主倉庫裡的 builtin/native 外掛，例如 Formula Copy。
 
 ## PR 前檢查
+
+先跑 `bun run plugin:check <外掛目錄>`，並把輸出貼進 PR。它會一次列出所有問題：清單和 CSS、`matches` 是否越出網站範圍、原語、語義鍵、十種語言的翻譯，以及 README；CI 也會對每個內建外掛跑同一套檢查。
 
 - 外掛預設關閉，使用者需要自己啟用。
 - 已檢查沒有功能幾乎相同的現有外掛；如果有，優先改進現有外掛。

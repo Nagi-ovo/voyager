@@ -149,6 +149,12 @@ Classes must be `gv-` prefixed (content-script rule).
 
 ## Primitives (`verbs/`) and the `native` op
 
+Shipped primitives (`verbs/contracts.ts`): `formulaCopy` (since 1.3.0), `vimInput` (since 1.4.0,
+`composer` param, defaults to the adapter's `composer` selector) and `turnNavigator` (since 1.4.0,
+`turn` / `conversationIdPattern` / `scrollContainer` / `yieldWhen` / `position`, all optional and
+defaulting to the adapter). The formula-copy, Vim and Claude-timeline builtins are now manifests
+that invoke these primitives; the timeline engine lives in `verbs/turnNavigator/TurnNavigator.ts`.
+
 Some behaviour cannot be expressed as CSS or as the reversible DOM operations.
 A **primitive** is that behaviour, written once as first-party TypeScript inside
 the extension and given a name a manifest can call:

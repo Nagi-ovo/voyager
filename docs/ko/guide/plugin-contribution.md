@@ -80,8 +80,11 @@ src/features/plugins/catalog/
 
 ## 최소 예시
 
+빈 디렉터리부터 시작하지 마세요. `bun run plugin:new <id-segment> --site <site>`를 실행하면 `catalog/sites/<site>/plugins/<id-segment>/`가 만들어져 `plugin.json`, `style.css`, `README.md`가 들어가고 `marketplace.json`에도 해당 항목이 추가됩니다. 생성된 결과는 출발점일 뿐 승인이 아닙니다. 채워 넣을 매니페스트는 다음과 같은 모양입니다.
+
 ```json
 {
+  "$schema": "https://voyager.nagi.fun/plugin.schema.json",
   "id": "your-name.example-plugin",
   "name": "Example Plugin",
   "version": "1.0.0",
@@ -104,6 +107,8 @@ src/features/plugins/catalog/
   }
 }
 ```
+
+`$schema` 줄은 선택 사항이며 편집기를 위한 것입니다. 매니페스트의 JSON Schema를 가리키므로 작성하는 동안 검증과 자동 완성이 됩니다. `site.json`용은 `https://voyager.nagi.fun/site.schema.json`에 있습니다.
 
 `style.css`는 일반 CSS처럼 작성할 수 있지만, 플러그인 스타일은 자신의 `gv-plugin-*` 클래스 아래에 두는 것을 권장합니다.
 
@@ -178,6 +183,8 @@ JavaScript 실행, 요청 가로채기, Voyager 내부 데이터 읽기/쓰기, 
 이런 기능은 먼저 Issue를 열어 요구사항을 설명하세요. 내장 기능이 꼭 필요하다면 Formula Copy처럼 Voyager 메인 저장소의 builtin/native 플러그인으로 구현하는 것을 검토할 수 있습니다.
 
 ## PR 전 확인
+
+`bun run plugin:check <플러그인 디렉터리>`를 실행하고 그 출력을 PR에 붙여 넣으세요. 매니페스트와 CSS, `matches`가 사이트 범위를 벗어나는지, 프리미티브, 의미 선택자 키, 10개 언어 번역, README까지 모든 문제를 한 번에 알려 줍니다. CI도 모든 내장 플러그인에 같은 검사를 실행합니다.
 
 - 플러그인은 기본적으로 꺼져 있고 사용자가 직접 켭니다.
 - 거의 동일한 기존 플러그인이 없는지 확인했습니다. 있다면 기존 플러그인 개선을 우선했습니다.

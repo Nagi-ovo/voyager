@@ -40,6 +40,7 @@ import type {
   SiteAdapter,
 } from '../types';
 import { getPrimitive } from '../verbs/registry';
+import type { PrimitiveHandle } from '../verbs/types';
 import { HealthMonitor } from './healthMonitor';
 import { type NativeHandler, getNativeHandler } from './nativeHandlers';
 import { PluginScope } from './pluginScope';
@@ -61,6 +62,10 @@ interface ActivePlugin {
   primitiveRestart?: Promise<void>;
   /** Target counters registered by primitives (health signal, plan D12). */
   targetCounters: Array<() => number>;
+  /** Handles of successfully activated primitives (settings updates in place). */
+  primitiveHandles: PrimitiveHandle[];
+  /** Number of native ops that activated (handles may still be arriving). */
+  primitiveActivations: number;
 }
 
 /** DOM ops that address page elements (everything but `native`). */
@@ -161,7 +166,14 @@ export class DeclarativeEngine {
   mount(manifest: PluginManifest, settings: PluginSettings = {}): void {
     if (this.active.has(manifest.id)) return;
     this.ensureBaseStyle();
-    const entry: ActivePlugin = { manifest, styleEl: null, settings, targetCounters: [] };
+    const entry: ActivePlugin = {
+      manifest,
+      styleEl: null,
+      settings,
+      targetCounters: [],
+      primitiveHandles: [],
+      primitiveActivations: 0,
+    };
     entry.nativeHandler = getNativeHandler(manifest.id);
     this.active.set(manifest.id, entry);
     this.injectStyles(entry);
@@ -194,6 +206,8 @@ export class DeclarativeEngine {
     const scope = new PluginScope();
     entry.primitiveScope = scope;
     entry.targetCounters = [];
+    entry.primitiveHandles = [];
+    entry.primitiveActivations = 0;
     const context = {
       doc: this.doc,
       adapter: this.adapter,
@@ -220,14 +234,20 @@ export class DeclarativeEngine {
       }
       try {
         const result = primitive.activate(scope, params.data, context);
+        entry.primitiveActivations += 1;
+        const adopt = (handle: void | PrimitiveHandle): void => {
+          if (handle && entry.primitiveScope === scope) entry.primitiveHandles.push(handle);
+        };
         if (result instanceof Promise) {
-          result.catch((error) => {
+          result.then(adopt).catch((error) => {
             logger.error('Primitive activation failed', {
               id: entry.manifest.id,
               handler: op.handler,
               error: String(error),
             });
           });
+        } else {
+          adopt(result);
         }
       } catch (error) {
         logger.error('Primitive activation failed', {
@@ -307,8 +327,22 @@ export class DeclarativeEngine {
       // expensive state opt out by implementing updateSettings.
       this.restartScope(entry, settings);
     }
-    // Primitives read settings through their context at activation; restart
-    // them under the new values (same safety argument as above).
+    // Primitives read settings through their context at activation. Those
+    // that can absorb the change in place do so; otherwise restart them under
+    // the new values (same safety argument as above).
+    this.updatePrimitiveSettings(entry, settings);
+  }
+
+  private updatePrimitiveSettings(entry: ActivePlugin, settings: PluginSettings): void {
+    if (!entry.primitiveScope) return;
+    const handles = entry.primitiveHandles;
+    const allInPlace =
+      handles.length === entry.primitiveActivations &&
+      handles.every((handle) => typeof handle.updateSettings === 'function');
+    if (allInPlace && handles.length > 0) {
+      for (const handle of handles) handle.updateSettings?.(settings);
+      return;
+    }
     this.restartPrimitives(entry, settings);
   }
 

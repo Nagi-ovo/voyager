@@ -1,4 +1,5 @@
 {
+  "$schema": "https://voyager.nagi.fun/plugin.schema.json",
   "id": "voyager.deepseek-formula-copy",
   "name": "DeepSeek · Formula Copy",
   "version": "1.0.0",

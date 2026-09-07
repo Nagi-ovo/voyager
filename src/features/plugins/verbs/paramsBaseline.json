@@ -4,6 +4,40 @@
     "formulaCopy": {
       "sinceEngine": "1.3.0",
       "params": {}
+    },
+    "vimInput": {
+      "sinceEngine": "1.4.0",
+      "params": {
+        "composer": {
+          "type": "selector",
+          "required": false
+        }
+      }
+    },
+    "turnNavigator": {
+      "sinceEngine": "1.4.0",
+      "params": {
+        "turn": {
+          "type": "selector",
+          "required": false
+        },
+        "conversationIdPattern": {
+          "type": "string",
+          "required": false
+        },
+        "scrollContainer": {
+          "type": "selector",
+          "required": false
+        },
+        "yieldWhen": {
+          "type": "selector",
+          "required": false
+        },
+        "position": {
+          "type": "string",
+          "required": false
+        }
+      }
     }
   }
 }

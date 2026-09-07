@@ -1,4 +1,5 @@
 {
+  "$schema": "https://voyager.nagi.fun/plugin.schema.json",
   "id": "voyager.claude-reading-width",
   "name": "Claude · Comfortable Reading Width",
   "version": "1.4.0",

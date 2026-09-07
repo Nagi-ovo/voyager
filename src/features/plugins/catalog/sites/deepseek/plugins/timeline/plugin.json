@@ -1,0 +1,127 @@
+{
+  "$schema": "https://voyager.nagi.fun/plugin.schema.json",
+  "id": "voyager.deepseek-timeline",
+  "name": "DeepSeek · Timeline",
+  "version": "1.0.0",
+  "description": "Adds a compact conversation timeline to DeepSeek with starred messages and search.",
+  "changelog": "First release: the timeline rail on DeepSeek through the turnNavigator primitive.",
+  "i18n": {
+    "zh": {
+      "name": "DeepSeek · 时间线",
+      "description": "为 DeepSeek 添加紧凑的对话时间线，支持星标消息和搜索。",
+      "changelog": "首个版本：通过 turnNavigator 原语在 DeepSeek 上提供时间线。",
+      "settings": {
+        "compactView": {
+          "label": "使用紧凑索引"
+        }
+      }
+    },
+    "zh_TW": {
+      "name": "DeepSeek · 時間線",
+      "description": "為 DeepSeek 加入緊湊的對話時間線，支援星標訊息與搜尋。",
+      "changelog": "首個版本：透過 turnNavigator 原語在 DeepSeek 上提供時間線。",
+      "settings": {
+        "compactView": {
+          "label": "使用精簡索引"
+        }
+      }
+    },
+    "ja": {
+      "name": "DeepSeek · タイムライン",
+      "description": "DeepSeek にコンパクトな会話タイムラインを追加し、スター付きメッセージと検索に対応します。",
+      "changelog": "初版：turnNavigator プリミティブで DeepSeek にタイムラインを提供します。",
+      "settings": {
+        "compactView": {
+          "label": "コンパクト表示を使う"
+        }
+      }
+    },
+    "ko": {
+      "name": "DeepSeek · 타임라인",
+      "description": "DeepSeek에 별표 메시지와 검색을 지원하는 간단한 대화 타임라인을 추가합니다.",
+      "changelog": "첫 릴리스: turnNavigator 프리미티브로 DeepSeek 타임라인을 제공합니다.",
+      "settings": {
+        "compactView": {
+          "label": "컴팩트 타임라인 사용"
+        }
+      }
+    },
+    "fr": {
+      "name": "DeepSeek · Timeline",
+      "description": "Ajoute une timeline compacte à DeepSeek avec messages favoris et recherche.",
+      "changelog": "Première version : la timeline sur DeepSeek via la primitive turnNavigator.",
+      "settings": {
+        "compactView": {
+          "label": "Utiliser la chronologie compacte"
+        }
+      }
+    },
+    "es": {
+      "name": "DeepSeek · Línea de tiempo",
+      "description": "Añade a DeepSeek una línea de tiempo compacta con mensajes destacados y búsqueda.",
+      "changelog": "Primera versión: la línea de tiempo en DeepSeek mediante la primitiva turnNavigator.",
+      "settings": {
+        "compactView": {
+          "label": "Usar cronología compacta"
+        }
+      }
+    },
+    "pt": {
+      "name": "DeepSeek · Linha do tempo",
+      "description": "Adiciona ao DeepSeek uma linha do tempo compacta com mensagens favoritas e busca.",
+      "changelog": "Primeira versão: a linha do tempo no DeepSeek pela primitiva turnNavigator.",
+      "settings": {
+        "compactView": {
+          "label": "Usar linha do tempo compacta"
+        }
+      }
+    },
+    "ru": {
+      "name": "DeepSeek · Таймлайн",
+      "description": "Добавляет в DeepSeek компактную шкалу диалога со звёздами и поиском.",
+      "changelog": "Первая версия: шкала диалога в DeepSeek через примитив turnNavigator.",
+      "settings": {
+        "compactView": {
+          "label": "Использовать компактную шкалу"
+        }
+      }
+    },
+    "ar": {
+      "name": "DeepSeek · المخطط الزمني",
+      "description": "يضيف إلى DeepSeek مخططًا زمنيًا موجزًا مع الرسائل المميزة والبحث.",
+      "changelog": "الإصدار الأول: المخطط الزمني في DeepSeek عبر الأساسية turnNavigator.",
+      "settings": {
+        "compactView": {
+          "label": "استخدام المخطط الزمني المضغوط"
+        }
+      }
+    }
+  },
+  "author": "voyager-official",
+  "category": "productivity",
+  "license": "GPL-3.0-or-later",
+  "homepage": "https://github.com/Nagi-ovo/voyager/tree/main/src/features/plugins/catalog/sites/deepseek/plugins/timeline",
+  "engine": ">=1.4.0",
+  "tier": "declarative",
+  "matches": ["https://chat.deepseek.com/*"],
+  "requires": {
+    "handlers": ["turnNavigator"],
+    "semantic": ["userTurn"]
+  },
+  "contributes": {
+    "settings": {
+      "compactView": {
+        "type": "boolean",
+        "label": "Use compact timeline",
+        "default": false
+      }
+    },
+    "domOps": [
+      {
+        "op": "native",
+        "handler": "turnNavigator",
+        "params": {}
+      }
+    ]
+  }
+}

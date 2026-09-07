@@ -45,6 +45,56 @@ export const PRIMITIVE_CONTRACTS: readonly PrimitiveContract[] = [
     description:
       'Click an inline or block formula to copy its LaTeX; hover shows it is clickable. Reads KaTeX / MathJax markup on the page.',
   },
+  {
+    name: 'vimInput',
+    sinceEngine: '1.4.0',
+    semantic: ['composer'],
+    params: {
+      composer: {
+        type: 'selector',
+        required: false,
+        description:
+          "Prompt input to attach Vim modal editing to; defaults to the site adapter's composer.",
+      },
+    },
+    description: 'Vim-style modal editing and cursor navigation in the prompt composer.',
+  },
+  {
+    name: 'turnNavigator',
+    sinceEngine: '1.4.0',
+    semantic: ['userTurn'],
+    params: {
+      turn: {
+        type: 'selector',
+        required: false,
+        description: "User-turn elements to index; defaults to the site adapter's userTurn.",
+      },
+      conversationIdPattern: {
+        type: 'string',
+        required: false,
+        description:
+          "Path regular expression whose first group is the conversation id; defaults to the site adapter's conversationIdPattern.",
+      },
+      scrollContainer: {
+        type: 'selector',
+        required: false,
+        description: 'Element that scrolls the conversation; auto-detected when absent.',
+      },
+      yieldWhen: {
+        type: 'selector',
+        required: false,
+        description:
+          'While this matches (an open side panel, an artifact frame), the onboarding guide stays closed.',
+      },
+      position: {
+        type: 'string',
+        required: false,
+        description: 'Rail side: "right" (default) or "left".',
+      },
+    },
+    description:
+      'A compact conversation timeline with starred messages and search, built on the same code as the Claude timeline.',
+  },
 ];
 
 export function getPrimitiveContract(name: string): PrimitiveContract | undefined {

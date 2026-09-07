@@ -412,9 +412,9 @@ describe('Claude timeline', () => {
     dot.dispatchEvent(new PointerEvent('pointerenter', { bubbles: true }));
     vi.advanceTimersByTime(150);
 
-    const tooltip = document.querySelector<HTMLElement>('#claude-timeline-tooltip')!;
+    const tooltip = document.querySelector<HTMLElement>('#gv-turn-navigator-tooltip')!;
     expect(tooltip.textContent).toBe('hover preview text');
-    expect(tooltip.querySelector('.claude-timeline-tooltip-text')?.textContent).toBe(
+    expect(tooltip.querySelector('.gv-turn-navigator-tooltip-text')?.textContent).toBe(
       'hover preview text',
     );
     expect(tooltip.classList.contains('visible')).toBe(true);
@@ -644,14 +644,14 @@ describe('Claude timeline', () => {
     queryAll.mockRestore();
   });
 
-  it('rolls back data-gv-claude-turn-id stamps on stop', async () => {
+  it('rolls back data-gv-turn-id stamps on stop', async () => {
     addTurn('first prompt');
     startClaudeTimeline();
     await flush();
-    expect(document.querySelectorAll('[data-gv-claude-turn-id]').length).toBeGreaterThan(0);
+    expect(document.querySelectorAll('[data-gv-turn-id]').length).toBeGreaterThan(0);
 
     await stopClaudeTimeline();
-    expect(document.querySelectorAll('[data-gv-claude-turn-id]').length).toBe(0);
+    expect(document.querySelectorAll('[data-gv-turn-id]').length).toBe(0);
   });
 
   it('removes UI on stop', async () => {
@@ -663,6 +663,6 @@ describe('Claude timeline', () => {
     await stopClaudeTimeline();
     expect(document.querySelector('.gemini-timeline-bar')).toBeNull();
     expect(document.querySelector('.timeline-preview-toggle')).toBeNull();
-    expect(document.querySelector('#claude-timeline-tooltip')).toBeNull();
+    expect(document.querySelector('#gv-turn-navigator-tooltip')).toBeNull();
   });
 });

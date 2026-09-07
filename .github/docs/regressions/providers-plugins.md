@@ -19,6 +19,30 @@ or prompt commands.
   `src/features/plugins/remote/hostCatalogPolicy.test.ts`,
   `src/features/plugins/remote/hostCatalogRefresh.test.ts` (`ineligible` case).
 
+## Turn-navigator conversation ids are namespaced by site
+
+- **Trap:** The Claude timeline stored starred messages under `claude:conv:<id>` with the prefix
+  hard-coded. Reusing that engine on DeepSeek with the prefix left as-is (or dropped) would file
+  DeepSeek stars under Claude ids, and two sites whose route ids collide would corrupt each
+  other's stars. The Gemini timeline has the same rule (`gemini:conv:<id>`).
+- **Rule:** `TurnNavigator` builds ids from `TurnNavigatorConfig.siteId` plus the site's
+  `conversationIdPattern`; the `turnNavigator` primitive takes both from the site adapter. Claude's
+  config reproduces the historical `claude:conv:<id>` exactly, so existing stars keep resolving.
+- **Guard:** `src/features/plugins/verbs/turnNavigator.test.ts` (`namespaces conversation ids`),
+  `src/features/plugins/builtin/claudeTimeline/index.test.ts` (`builds Claude-scoped conversation
+and turn ids`).
+
+## A builtin with a `native` op must not also be bound as a native handler
+
+- **Trap:** `verifyNativeHandlerBindings` used to require one handler per builtin id. After the
+  formula-copy, Vim and timeline builtins switched to `native` ops, keeping their id bindings would
+  run the feature twice (once through the primitive, once through the handler) and a missing
+  binding would log a wiring error for a plugin that needs none.
+- **Rule:** `NATIVE_BUILTIN_PLUGIN_IDS` lists only builtins without native ops; a manifest gets
+  either a `native` op or a handler binding, never both.
+- **Guard:** `src/features/plugins/builtin/builtin.test.ts` (native-op expectations) and the
+  binding verification in `src/pages/content/pluginNativeRegistration.ts` at startup.
+
 ## A primitive-backed plugin keeps its mounted version until the page reloads
 
 - **Trap:** A catalog refresh remounts declarative plugins live, which is right for CSS and DOM

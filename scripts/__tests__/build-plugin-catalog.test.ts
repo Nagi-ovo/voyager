@@ -226,7 +226,9 @@ describe('build-plugin-catalog', () => {
       string,
       unknown
     >[];
-    expect(plugins.length).toBe(2);
+    // The exact count is the catalog's business, not this test's: it grows
+    // whenever a plugin is added under sites/deepseek/.
+    expect(plugins.length).toBeGreaterThanOrEqual(2);
 
     const formulaCopy = plugins.find((plugin) => plugin.id === 'voyager.deepseek-formula-copy');
     if (!formulaCopy) throw new Error('the formula-copy plugin was not published');

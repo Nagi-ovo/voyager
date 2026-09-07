@@ -289,3 +289,13 @@ Claude、ChatGPT 的现有 builtin 清单改写为使用原语的 JSON，随本�
 - 更新时机（D7）：目录变化时含 native op 的已挂载插件冻结在当前版本并报告 `pendingVersion`，整页加载后切换；声明式插件立即重挂载。
 - 角标与 changelog（D11）：`gvPluginSeenVersions`（local，不备份）记录已展示版本，popup 显示"已更新"角标与一行 changelog。
 - 实机验证待办：Chrome DevTools MCP 会话仍不可用，DeepSeek 公式复制、状态文案、健康标黄需人工检查。
+
+### P4（分支 `feat/plugin-primitives-p4`，基于 P3，2026-09-07）
+
+- 原语 `vimInput`（`composer` 参数，缺省读适配器 `composer`；`vimMode.ts` 新增可配置的输入框选择器，先于写死的列表匹配）与 `turnNavigator`（`turn` / `conversationIdPattern` / `scrollContainer` / `yieldWhen` / `position`，缺省读适配器；引擎版本升到 1.4.0）。
+- `builtin/claudeTimeline` 的实现整体抽到 `verbs/turnNavigator/TurnNavigator.ts`，按 `TurnNavigatorConfig` 参数化：会话 id 为 `<siteId>:conv:<id>`（Claude 与历史格式完全一致），DOM 钩子改为通用名（`data-gv-turn-id`、`data-gv-turn-navigator`、`#gv-turn-navigator-tooltip`），coachmark id 各站共用且沿用 Claude 的旧 id 以免重复展示。Claude 的 27 个时间线测试原样通过。
+- 原语可返回 `updateSettings` 句柄，引擎优先原地更新（时间线的紧凑切换不再重挂载）；否则重启。
+- builtin 清单 `voyager.formula-copy` / `voyager.input-vim` / `voyager.claude-timeline` 改为 `native` op + `requires`，仍在 builtin 来源（D20 保护 id、无需迁移用户开关）；导出与临时对话交接保留 id 绑定，`NATIVE_BUILTIN_PLUGIN_IDS` 只含它们。
+- 新目录插件 `sites/deepseek/plugins/timeline`（`turnNavigator`，参数全部来自适配器），需在 DeepSeek 虚拟列表上实机验证（#996）。
+- 工具链：`bun run plugin:check`（清单、CSS、D18、原语与引擎下限、语义键、10 语种、README）进 CI；`docs/public/plugin.schema.json` / `site.schema.json` 手写并以测试与 guard 对齐；`.agents/skills/create-voyager-plugin/SKILL.md`；`bun run plugin:new <id> --site <site>` 脚手架。
+- 待办：实机验证（DeepSeek 时间线与公式复制、Claude 时间线回归、ChatGPT Vim）；Chrome DevTools MCP 会话仍不可用。

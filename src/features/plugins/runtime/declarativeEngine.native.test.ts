@@ -151,3 +151,26 @@ describe('DeclarativeEngine health signal (plan D12)', () => {
     engine.unmount(plugin.id);
   });
 });
+
+describe('DeclarativeEngine primitive handles', () => {
+  it('applies a settings change in place when every primitive returns updateSettings', async () => {
+    const updateSettings = vi.fn();
+    const { getPrimitive } = await import('../verbs/registry');
+    const turnNavigator = getPrimitive('turnNavigator')!;
+    const activateSpy = vi
+      .spyOn(turnNavigator, 'activate')
+      .mockImplementation(() => ({ updateSettings }));
+
+    const engine = new DeclarativeEngine({ doc: document, adapter });
+    const plugin = manifest('x.nav', [{ op: 'native', handler: 'turnNavigator', params: {} }]);
+    engine.mount(plugin, { compactView: false });
+    expect(activateSpy).toHaveBeenCalledTimes(1);
+
+    engine.updateSettings(plugin.id, { compactView: true });
+    await vi.waitFor(() => expect(updateSettings).toHaveBeenCalledWith({ compactView: true }));
+    // In place: no dispose + re-activate cycle.
+    expect(activateSpy).toHaveBeenCalledTimes(1);
+    engine.unmount(plugin.id);
+    activateSpy.mockRestore();
+  });
+});

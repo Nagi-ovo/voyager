@@ -40,6 +40,7 @@ describe('bundled catalog discovery', () => {
       'sites/claude/plugins/reading-width/plugin.json',
       'sites/deepseek/plugins/formula-copy/plugin.json',
       'sites/deepseek/plugins/reading-width/plugin.json',
+      'sites/deepseek/plugins/timeline/plugin.json',
     ]);
     for (const entry of entries) {
       // A primitive-only plugin ships no CSS; every CSS file found is real content.

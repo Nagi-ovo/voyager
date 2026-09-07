@@ -1,4 +1,5 @@
 {
+  "$schema": "https://voyager.nagi.fun/plugin.schema.json",
   "id": "voyager.deepseek-reading-width",
   "name": "DeepSeek · Comfortable Reading Width",
   "version": "1.0.0",

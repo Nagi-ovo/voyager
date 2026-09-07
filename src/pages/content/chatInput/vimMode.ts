@@ -76,6 +76,34 @@ interface FindVimInputOptions {
 interface StartInputVimModeOptions {
   /** PluginHost owns enable/disable state on third-party platforms. */
   forceEnabled?: boolean;
+  /**
+   * Site-specific composer selector (the `vimInput` primitive passes the
+   * adapter's `composer` semantic selector or a plugin param). Tried before the
+   * generic chat-input list so a platform Voyager has no hard-coded selector
+   * for still gets Vim on the right element.
+   */
+  composerSelector?: string;
+}
+
+let configuredComposerSelector: string | null = null;
+
+/** The configured composer when it resolves, else the generic chat-input lookup. */
+function locateChatInput(options: { requireVisible?: boolean } = {}): HTMLElement | null {
+  const requireVisible = options.requireVisible ?? true;
+  if (configuredComposerSelector) {
+    try {
+      let fallback: HTMLElement | null = null;
+      for (const element of Array.from(document.querySelectorAll(configuredComposerSelector))) {
+        if (!(element instanceof HTMLElement)) continue;
+        if (!fallback) fallback = element;
+        if (element.getBoundingClientRect().height > 0) return element;
+      }
+      if (fallback && !requireVisible) return fallback;
+    } catch {
+      // Invalid selector from a site file: fall back to the generic lookup.
+    }
+  }
+  return findChatInput(options);
 }
 
 type IntlWithSegmenter = typeof Intl & {
@@ -970,7 +998,7 @@ function findVimInputFromTarget(element: HTMLElement | null): HTMLElement | null
 
   if (isEditPromptInput(editable)) return editable;
 
-  const input = findChatInput({ requireVisible: false });
+  const input = locateChatInput({ requireVisible: false });
   return input && (editable === input || input.contains(editable)) ? input : null;
 }
 
@@ -988,11 +1016,11 @@ function findVimInput(options: FindVimInputOptions = {}): HTMLElement | null {
   const editInput = findEditPromptInput(true);
   if (editInput) return editInput;
 
-  const chatInput = findChatInput();
+  const chatInput = locateChatInput();
   if (chatInput) return chatInput;
 
   if (requireVisible) return null;
-  return findEditPromptInput(false) ?? findChatInput({ requireVisible: false });
+  return findEditPromptInput(false) ?? locateChatInput({ requireVisible: false });
 }
 
 function getSendButtonTarget(element: HTMLElement | null): HTMLElement | null {
@@ -2731,6 +2759,7 @@ function setupStorageListener(): void {
 }
 
 function cleanup(): void {
+  configuredComposerSelector = null;
   isEnabled = false;
   deactivateListener();
   clearUndoStack();
@@ -2757,6 +2786,7 @@ function cleanup(): void {
 export async function startInputVimMode(
   options: StartInputVimModeOptions = {},
 ): Promise<() => void> {
+  configuredComposerSelector = options.composerSelector?.trim() || null;
   if (options.forceEnabled) {
     isEnabled = true;
   } else {

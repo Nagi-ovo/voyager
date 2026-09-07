@@ -80,8 +80,11 @@ src/features/plugins/catalog/
 
 ## 最小示例
 
+不用从空目录开始：`bun run plugin:new <id-segment> --site <site>` 会生成 `catalog/sites/<site>/plugins/<id-segment>/`，里面有 `plugin.json`、`style.css` 和 `README.md`，并顺手往 `marketplace.json` 追加对应条目。它生成的只是起点，不代表已经通过审核；你要填的清单长这样：
+
 ```json
 {
+  "$schema": "https://voyager.nagi.fun/plugin.schema.json",
   "id": "your-name.example-plugin",
   "name": "Example Plugin",
   "version": "1.0.0",
@@ -104,6 +107,8 @@ src/features/plugins/catalog/
   }
 }
 ```
+
+`$schema` 这行是可选的，只服务于编辑器：它指向清单的 JSON Schema，让编辑器边写边校验和补全。`site.json` 也有自己的一份，地址是 `https://voyager.nagi.fun/site.schema.json`。
 
 `style.css` 可以像普通 CSS 一样写，但建议所有插件样式都挂在自己的 `gv-plugin-*` 类下面：
 
@@ -178,6 +183,8 @@ src/features/plugins/catalog/
 这类功能请先开 Issue 说明需求。确实需要内置能力时，我们会考虑把它做成 Voyager 主仓库里的 builtin/native 插件，例如 Formula Copy。
 
 ## PR 前检查
+
+先跑 `bun run plugin:check <插件目录>`，并把输出贴进 PR。它会一次列出所有问题：清单和 CSS、`matches` 是否越出站点范围、原语、语义键、十种语言的翻译，以及 README；CI 也会对每个内置插件跑同一套检查。
 
 - 插件默认关闭，用户需要自己启用。
 - 已检查没有功能几乎相同的现有插件；如果有，优先改进现有插件。

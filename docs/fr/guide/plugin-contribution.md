@@ -80,8 +80,11 @@ Cela garde le marketplace lisible et aide les utilisateurs à choisir.
 
 ## Exemple minimal
 
+Ne partez pas d'un répertoire vide : `bun run plugin:new <id-segment> --site <site>` crée `catalog/sites/<site>/plugins/<id-segment>/` avec un `plugin.json`, un `style.css` et un `README.md`, et ajoute l'entrée correspondante à `marketplace.json`. Ce qu'il génère est un point de départ, pas une validation ; le manifest que vous complétez a cette forme :
+
 ```json
 {
+  "$schema": "https://voyager.nagi.fun/plugin.schema.json",
   "id": "your-name.example-plugin",
   "name": "Example Plugin",
   "version": "1.0.0",
@@ -104,6 +107,8 @@ Cela garde le marketplace lisible et aide les utilisateurs à choisir.
   }
 }
 ```
+
+La ligne `$schema` est facultative et ne sert qu'à votre éditeur : elle pointe vers le JSON Schema du manifest, qui le valide et le complète pendant la saisie. `site.json` a le sien à l'adresse `https://voyager.nagi.fun/site.schema.json`.
 
 `style.css` peut être écrit comme du CSS normal, mais les styles du plugin doivent rester sous votre propre classe `gv-plugin-*` :
 
@@ -178,6 +183,8 @@ Si une fonctionnalité doit exécuter du JavaScript, intercepter des requêtes, 
 Ouvrez d'abord une Issue pour expliquer le besoin. Si une capacité intégrée est vraiment nécessaire, nous pourrons envisager une implémentation dans le dépôt Voyager comme plugin builtin/native, par exemple Formula Copy.
 
 ## Avant d'ouvrir une PR
+
+Lancez `bun run plugin:check <répertoire du plugin>` et collez sa sortie dans la PR. Il signale tous les problèmes d'un coup : le manifest et le CSS, un `matches` qui déborde du site, les primitives, les clés sémantiques, les dix langues et le README ; la CI exécute la même vérification sur tous les plugins fournis.
 
 - Le plugin est désactivé par défaut et l'utilisateur l'active lui-même.
 - Vous avez vérifié qu'il n'existe pas de plugin presque identique ; sinon, améliorez d'abord l'existant.

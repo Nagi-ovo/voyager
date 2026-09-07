@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://voyager.nagi.fun/site.schema.json",
+  "title": "Voyager site adapter",
+  "description": "A site adapter as data (site.json). One of these sits at catalog/sites/<site>/site.json and its `id` must equal that directory name. Hand-written to mirror validateSiteAdapterData in src/features/plugins/sites/siteAdapterData.ts, which is the authority; unknown keys are ignored rather than rejected, exactly as the validator ignores them. The same shape is embedded in a published per-host catalog file, where it may override the bundled adapter.",
+  "type": "object",
+  "required": ["id", "label", "matches", "theme"],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "This schema's URL, so editors validate the file as you type."
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{0,39}$",
+      "description": "Stable adapter id; must equal the `sites/<dir>` directory name.",
+      "examples": ["claude", "chatgpt", "deepseek"]
+    },
+    "label": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 60,
+      "description": "Human-readable site name shown in the popup."
+    },
+    "matches": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 20,
+      "items": {
+        "type": "string",
+        "maxLength": 500,
+        "pattern": "^(?:https?|\\*)://(?:\\*\\.)?[A-Za-z0-9.-]+/.*$",
+        "description": "A match pattern with a concrete or `*.` host. The validator matches the scheme case-insensitively; write it lowercase."
+      },
+      "description": "Every URL this site covers. A plugin filed under this site may not target anything outside these patterns (plan D18).",
+      "examples": [["https://claude.ai/*", "https://*.frame.claudeusercontent.com/*"]]
+    },
+    "selectors": {
+      "type": "object",
+      "description": "Semantic key → site-specific CSS selector. Plugins and primitives reference the KEY, never the selector, so a site redesign is a one-file fix here. The vocabulary only ever grows; a key outside it is rejected so nobody invents one silently.",
+      "propertyNames": {
+        "enum": [
+          "userTurn",
+          "assistantTurn",
+          "thinkingBlock",
+          "codeBlock",
+          "composer",
+          "sidebar",
+          "sidePanel",
+          "headerActions",
+          "scrollContainer"
+        ]
+      },
+      "additionalProperties": { "type": "string", "minLength": 1, "maxLength": 2000 }
+    },
+    "theme": {
+      "type": "object",
+      "description": "How to tell the site's light mode from its dark mode, so Voyager's own UI can follow it.",
+      "required": ["hostSelector", "lightSelector", "darkSelector"],
+      "properties": {
+        "hostSelector": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000,
+          "description": "Element that carries the theme class (e.g. `:root`, `body`)."
+        },
+        "lightSelector": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000,
+          "description": "Selector present when the site is in light mode."
+        },
+        "darkSelector": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000,
+          "description": "Selector present when the site is in dark mode."
+        }
+      }
+    },
+    "brandColor": {
+      "type": "string",
+      "pattern": "^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+      "description": "Optional accent (strict hex — it is concatenated into a CSS `color-mix(...)`) for Voyager's own UI on this site. A matching plugin's `theme.brand` overrides it; omit to keep Voyager's native green.",
+      "examples": ["#d97757"]
+    },
+    "capabilities": {
+      "type": "array",
+      "description": "Coarse flags describing what the site exposes, so a contribution the site cannot support is skipped.",
+      "items": { "type": "string", "enum": ["chat", "sidebar", "composer", "darkMode"] }
+    },
+    "conversationIdPattern": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "format": "regex",
+      "description": "Regular expression over `location.pathname` whose first capture group is the conversation id. Not a selector. Omit for sites without per-conversation routes.",
+      "examples": ["^/chat/([^/?#]+)"]
+    }
+  }
+}

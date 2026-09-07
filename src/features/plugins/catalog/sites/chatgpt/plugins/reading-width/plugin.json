@@ -1,4 +1,5 @@
 {
+  "$schema": "https://voyager.nagi.fun/plugin.schema.json",
   "id": "voyager.chatgpt-reading-width",
   "name": "ChatGPT · Comfortable Reading Width",
   "version": "1.2.2",

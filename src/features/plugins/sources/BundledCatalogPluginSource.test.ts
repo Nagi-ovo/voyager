@@ -17,6 +17,7 @@ describe('BundledCatalogPluginSource', () => {
       'voyager.claude-reading-width',
       'voyager.deepseek-formula-copy',
       'voyager.deepseek-reading-width',
+      'voyager.deepseek-timeline',
     ]);
 
     for (const manifest of manifests) {

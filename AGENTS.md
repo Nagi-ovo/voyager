@@ -21,6 +21,7 @@ Read matching rules before editing; do not assume the client auto-loaded `.claud
 | Non-trivial feature, fix or refactor                                     | Search [.github/docs/REGRESSION_NOTES.md](.github/docs/REGRESSION_NOTES.md), then read matching topics                      |
 | Contribution or release                                                  | [.github/CONTRIBUTING.md](.github/CONTRIBUTING.md); matching workflows in [.agents/skills/](.agents/skills/)                |
 | Content-script or injected-CSS behavior that tests cannot settle         | [.agents/skills/verify-in-browser/SKILL.md](.agents/skills/verify-in-browser/SKILL.md)                                      |
+| `src/features/plugins/catalog/**`, `verbs/**` or `sites/**`              | [.agents/skills/create-voyager-plugin/SKILL.md](.agents/skills/create-voyager-plugin/SKILL.md)                              |
 
 Use `package.json`, build configs, manifests and CI to verify command names and current wiring. Keep `CLAUDE.md` as a pointer here.
 

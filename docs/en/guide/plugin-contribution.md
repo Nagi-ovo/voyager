@@ -147,8 +147,11 @@ This keeps the marketplace clean and helps users choose.
 
 ## Minimal example
 
+Start from the scaffold instead of an empty directory: `bun run plugin:new <id-segment> --site <site>` creates `catalog/sites/<site>/plugins/<id-segment>/` with a `plugin.json`, a `style.css` and a `README.md`, and appends the `marketplace.json` entry for you. What it writes is a starting point, not an approval; the manifest you fill in has this shape:
+
 ```json
 {
+  "$schema": "https://voyager.nagi.fun/plugin.schema.json",
   "id": "your-name.example-plugin",
   "name": "Example Plugin",
   "version": "1.0.0",
@@ -171,6 +174,8 @@ This keeps the marketplace clean and helps users choose.
   }
 }
 ```
+
+The `$schema` line is optional and only for your editor: it points at the manifest JSON Schema so the file is validated and completed as you type. A `site.json` has its own at `https://voyager.nagi.fun/site.schema.json`.
 
 `style.css` can use normal CSS, but plugin styles should be scoped under your own `gv-plugin-*` class:
 
@@ -255,6 +260,8 @@ If a feature must execute JavaScript, intercept network requests, read or write 
 Open an Issue first and describe the need. If it truly requires built-in capability, we may consider implementing it in the Voyager repository as a builtin/native plugin, like Formula Copy.
 
 ## Before opening a PR
+
+Run `bun run plugin:check <plugin dir>` and paste its output in the PR. It reports every problem at once, from the manifest and CSS to site containment, primitives, semantic keys, the ten locales and the README, and CI runs the same check over every bundled plugin.
 
 - The plugin is disabled by default and users enable it themselves.
 - You checked that there is no nearly identical plugin; if there is, improve the existing plugin first.

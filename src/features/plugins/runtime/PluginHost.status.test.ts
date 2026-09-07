@@ -103,7 +103,7 @@ describe('PluginHost status machine (plan §4.2)', () => {
       current: [
         manifest('x.engine', { engine: '>=9.0.0' }),
         manifest('x.handler', {
-          contributes: { domOps: [{ op: 'native', handler: 'turnNavigator', params: {} }] },
+          contributes: { domOps: [{ op: 'native', handler: 'noSuchPrimitive', params: {} }] },
         }),
         manifest('x.semantic', {
           contributes: {
@@ -132,7 +132,7 @@ describe('PluginHost status machine (plan §4.2)', () => {
     expect(byId['x.engine']).toMatchObject({ kind: 'needs-engine', requiredEngine: '>=9.0.0' });
     expect(byId['x.handler']).toMatchObject({
       kind: 'needs-handler',
-      missingHandlers: ['turnNavigator'],
+      missingHandlers: ['noSuchPrimitive'],
     });
     expect(byId['x.semantic']).toMatchObject({
       kind: 'needs-semantic',

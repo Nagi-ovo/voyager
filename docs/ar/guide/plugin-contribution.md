@@ -82,8 +82,11 @@ src/features/plugins/catalog/
 
 ## مثال بسيط
 
+لا تبدأ من مجلد فارغ: الأمر `bun run plugin:new <id-segment> --site <site>` ينشئ `catalog/sites/<site>/plugins/<id-segment>/` ويضع فيه `plugin.json` و`style.css` و`README.md`، ثم يضيف المدخل المقابل إلى `marketplace.json`. ما ينتجه نقطة بداية وليس موافقة؛ والملف الذي تُكمله يأخذ هذا الشكل:
+
 ```json
 {
+  "$schema": "https://voyager.nagi.fun/plugin.schema.json",
   "id": "your-name.example-plugin",
   "name": "Example Plugin",
   "version": "1.0.0",
@@ -106,6 +109,8 @@ src/features/plugins/catalog/
   }
 }
 ```
+
+سطر `$schema` اختياري وهو لمحرّرك فقط: يشير إلى مخطط JSON الخاص بالملف، فيتحقق المحرّر منه ويكمله أثناء الكتابة. ولملف `site.json` مخطط خاص به على `https://voyager.nagi.fun/site.schema.json`.
 
 يمكن كتابة `style.css` كأي CSS عادي، لكن يُفضّل أن تبقى كل أنماط الإضافة تحت فئة خاصة بك تبدأ بـ `gv-plugin-*`:
 
@@ -180,6 +185,8 @@ src/features/plugins/catalog/
 افتح Issue أولًا واشرح الحاجة. إذا كانت تحتاج فعلًا إلى قدرة مدمجة، فقد ندرس تنفيذها داخل مستودع Voyager كإضافة builtin/native، مثل Formula Copy.
 
 ## قبل فتح PR
+
+شغّل `bun run plugin:check <مجلد الإضافة>` وألصق مخرجاته في الـ PR. يعرض كل المشكلات دفعة واحدة: الملف وملفات CSS، وبقاء `matches` داخل نطاق الموقع، والأساسيات، والمفاتيح الدلالية، وترجمات اللغات العشر، وملف README؛ وتشغّل CI الفحص نفسه على كل إضافة مدمجة.
 
 - الإضافة معطلة افتراضيًا، والمستخدم يفعّلها بنفسه.
 - تأكدت من عدم وجود إضافة شبه مطابقة؛ إن وجدت، حسّن الإضافة الموجودة أولًا.

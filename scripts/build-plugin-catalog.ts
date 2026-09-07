@@ -24,9 +24,11 @@
  * of that, the primitive checks from plan §5 / §8 run here: a plugin may only
  * name primitives this build ships, its `engine` range may not admit a build
  * older than those primitives, and every semantic key it relies on must be
- * defined by its own site. Any violation aborts the build: the snapshot we ship
- * is expected to be clean, and a broken host file would be silently discarded by
- * every client.
+ * defined by its own site. Those rules live in `scripts/lib/pluginChecks.ts` so
+ * that `bun run plugin:check` enforces exactly the same ones before a
+ * contribution ever reaches this script. Any violation aborts the build: the
+ * snapshot we ship is expected to be clean, and a broken host file would be
+ * silently discarded by every client.
  *
  * Output is deterministic — sites, hosts and plugin ids are sorted — so a re-run
  * with the same `generatedAt` produces byte-identical files.
@@ -37,27 +39,23 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import type { ManifestIssue } from '../src/features/plugins/manifest/validate';
 import { validateManifest } from '../src/features/plugins/manifest/validate';
 import {
   HOST_CATALOG_FORMAT,
   validateHostCatalogFile,
 } from '../src/features/plugins/remote/hostCatalogFile';
-import {
-  requiredHandlers,
-  requiredSemanticKeys,
-} from '../src/features/plugins/runtime/pluginStatus';
-import { engineSatisfied, parseSemver } from '../src/features/plugins/semver';
-import { matchesAnyPattern, patternWithinAny } from '../src/features/plugins/sites/matchPattern';
+import { matchesAnyPattern } from '../src/features/plugins/sites/matchPattern';
 import type { SiteAdapterData } from '../src/features/plugins/sites/siteAdapterData';
-import {
-  siteAdapterToData,
-  validateSiteAdapterData,
-} from '../src/features/plugins/sites/siteAdapterData';
+import { siteAdapterToData } from '../src/features/plugins/sites/siteAdapterData';
 import { resolveStyleFileContributions } from '../src/features/plugins/sources/styleFiles';
 import type { PluginManifest, SiteAdapter } from '../src/features/plugins/types';
-import type { PrimitiveContract } from '../src/features/plugins/verbs/contracts';
-import { getPrimitiveContract } from '../src/features/plugins/verbs/contracts';
+import {
+  checkManifestAgainstSite,
+  compareStrings,
+  formatIssues,
+  listSubdirectories,
+  loadSiteAdapter,
+} from './lib/pluginChecks';
 
 /** One published `hosts/<host>.json`. Consumed by `validateHostCatalogFile`. */
 export interface HostCatalogFile {
@@ -101,134 +99,12 @@ interface CatalogSite {
   readonly plugins: readonly PluginManifest[];
 }
 
-function compareStrings(a: string, b: string): number {
-  if (a === b) return 0;
-  return a < b ? -1 : 1;
-}
-
-function formatIssues(issues: readonly ManifestIssue[]): string {
-  return issues.map((issue) => `  - ${issue.path}: ${issue.message}`).join('\n');
-}
-
-/** Directory names directly under `dir`, sorted; empty when `dir` is absent. */
-function listSubdirectories(dir: string): readonly string[] {
-  if (!existsSync(dir)) return [];
-  return readdirSync(dir, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => entry.name)
-    .sort(compareStrings);
-}
-
-/**
- * Plan D18: a plugin may only target URLs its own site adapter covers. Without
- * this a plugin filed under `sites/claude/` could quietly ship to chatgpt.com,
- * where its semantic selectors mean nothing.
- */
-function assertMatchesStayInSite(
-  manifest: PluginManifest,
-  site: { readonly dir: string; readonly adapter: SiteAdapter },
-  manifestPath: string,
-): void {
-  for (const pattern of manifest.matches) {
-    if (patternWithinAny(pattern, site.adapter.matches)) continue;
-    throw new Error(
-      `${manifest.id} (${manifestPath}): match pattern "${pattern}" is not covered by site "${site.dir}" (${site.adapter.matches.join(', ')})`,
-    );
-  }
-}
-
-/**
- * The lowest engine version a range admits, or null when it admits every
- * version (`*`, empty) or cannot be parsed. Ranges are `*`, an exact `x.y.z`,
- * or `>=x.y.z` — see `semver.ts`.
- */
-function engineRangeMinimum(range: string): string | null {
-  const trimmed = range.trim();
-  if (trimmed === '' || trimmed === '*') return null;
-  const minimum = parseSemver(trimmed.startsWith('>=') ? trimmed.slice(2) : trimmed);
-  if (!minimum) return null;
-  return `${minimum.major}.${minimum.minor}.${minimum.patch}`;
-}
-
-/** The later of two versions; used to name the primitive that sets the floor. */
-function laterVersion(a: string, b: string): string {
-  return engineSatisfied(`>=${b}`, a) ? a : b;
-}
-
-/**
- * Plan §5 / §8: a plugin may only invoke primitives this build ships, and its
- * `engine` range must exclude every build that predates them. Getting the range
- * right is what makes an old Voyager report `needs-engine` ("update Voyager")
- * instead of `needs-handler`, which is meant to mean a configuration mistake.
- */
-function assertPrimitivesAreShippable(manifest: PluginManifest, manifestPath: string): void {
-  const contracts: PrimitiveContract[] = [];
-  for (const handler of requiredHandlers(manifest)) {
-    const contract = getPrimitiveContract(handler);
-    if (!contract) {
-      throw new Error(
-        `${manifest.id} (${manifestPath}): unknown primitive handler "${handler}" — no contract in verbs/contracts.ts`,
-      );
-    }
-    contracts.push(contract);
-  }
-  if (contracts.length === 0) return;
-
-  const floor = contracts.reduce(
-    (highest, contract) => laterVersion(highest, contract.sinceEngine),
-    contracts[0].sinceEngine,
-  );
-  const minimum = engineRangeMinimum(manifest.engine);
-  if (minimum === null) {
-    throw new Error(
-      `${manifest.id} (${manifestPath}): engine "${manifest.engine}" admits any build, but the plugin uses primitives that need at least ${floor} — set engine to ">=${floor}"`,
-    );
-  }
-  if (!engineSatisfied(`>=${floor}`, minimum)) {
-    const source = contracts.find((contract) => contract.sinceEngine === floor);
-    throw new Error(
-      `${manifest.id} (${manifestPath}): engine "${manifest.engine}" admits builds older than ${floor}, the sinceEngine of primitive "${source?.name ?? floor}" — set engine to ">=${floor}"`,
-    );
-  }
-}
-
-/**
- * Plan §5 / §8: every semantic key the plugin relies on — declared, targeted by
- * a `semantic` op, or read by one of its primitives — must be defined by the
- * site it ships under. Publishing without the key would only produce a
- * `needs-semantic` plugin on every client.
- */
-function assertSemanticKeysExist(
-  manifest: PluginManifest,
-  site: { readonly dir: string; readonly adapter: SiteAdapter },
-  manifestPath: string,
-): void {
-  const selectors = site.adapter.selectors;
-  const missing = requiredSemanticKeys(manifest).filter((key) => !selectors[key]);
-  if (missing.length === 0) return;
-  throw new Error(
-    `${manifest.id} (${manifestPath}): semantic key(s) ${missing.map((key) => `"${key}"`).join(', ')} are not defined by site "${site.dir}" (has ${Object.keys(selectors).sort(compareStrings).join(', ')})`,
-  );
-}
-
 /** Read and validate `sites/<siteDir>/site.json`. Throws on anything unusable. */
 function readSiteAdapter(catalogDir: string, siteDir: string): SiteAdapter {
   const sitePath = join(catalogDir, 'sites', siteDir, 'site.json');
-  const relPath = relative(catalogDir, sitePath);
-  if (!existsSync(sitePath)) {
-    throw new Error(`${relPath}: every directory under sites/ needs a site.json`);
-  }
-
-  const result = validateSiteAdapterData(JSON.parse(readFileSync(sitePath, 'utf8')) as unknown);
-  if (!result.success) {
-    throw new Error(`${relPath}: invalid site.json\n${formatIssues(result.error)}`);
-  }
-  if (result.data.id !== siteDir) {
-    throw new Error(
-      `${relPath}: id "${result.data.id}" must equal its directory name "${siteDir}"`,
-    );
-  }
-  return result.data;
+  const load = loadSiteAdapter(sitePath, siteDir, relative(catalogDir, sitePath));
+  if (!load.adapter) throw new Error(load.issues.join('\n'));
+  return load.adapter;
 }
 
 /**
@@ -256,9 +132,8 @@ async function readSitePlugins(
     if (!result.success) {
       throw new Error(`${relPath}: invalid plugin manifest\n${formatIssues(result.error)}`);
     }
-    assertMatchesStayInSite(result.data, site, relPath);
-    assertPrimitivesAreShippable(result.data, relPath);
-    assertSemanticKeysExist(result.data, site, relPath);
+    const siteIssues = checkManifestAgainstSite(result.data, site, relPath);
+    if (siteIssues.length > 0) throw new Error(siteIssues.join('\n'));
     manifests.push(result.data);
   }
 
