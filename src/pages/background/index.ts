@@ -98,6 +98,7 @@ import type { StarredMessage, StarredMessagesData } from '@/pages/content/timeli
 import { getTranslation } from '@/utils/i18n';
 import type { TranslationKey } from '@/utils/translations';
 
+import { unregisterRegisteredContentScripts } from './contentScriptRegistration';
 import { resolveOptionalHighlightSetting } from './highlightOptionalSetting';
 import {
   isAllowedSyncContentSender,
@@ -1121,17 +1122,11 @@ async function doSyncPluginContentScripts(): Promise<void> {
   const origins = await getEnabledPluginOrigins();
   const grantedMatches = await filterGrantedOrigins(origins);
 
-  try {
-    await chrome.scripting.unregisterContentScripts({
-      ids: [
-        PLUGIN_CONTENT_SCRIPT_ID,
-        PLUGIN_EMBEDDED_CONTENT_SCRIPT_ID,
-        CLAUDE_USAGE_MAIN_SCRIPT_ID,
-      ],
-    });
-  } catch {
-    // No-op if the script was not registered.
-  }
+  await unregisterRegisteredContentScripts(chrome.scripting, [
+    PLUGIN_CONTENT_SCRIPT_ID,
+    PLUGIN_EMBEDDED_CONTENT_SCRIPT_ID,
+    CLAUDE_USAGE_MAIN_SCRIPT_ID,
+  ]);
 
   if (!grantedMatches.length) return;
 

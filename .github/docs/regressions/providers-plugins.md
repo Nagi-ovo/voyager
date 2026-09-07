@@ -277,3 +277,17 @@ while an active plugin has domOps`).
 - **Guard:** `src/features/plugins/sites/safeRegex.test.ts`,
   `src/features/plugins/verbs/turnNavigator.test.ts`
   (`validates selectors, the id pattern and the rail side`).
+
+## Plugin content-script registration must unregister only registered ids
+
+- **Trap:** The plugin sync batched the plugin, embedded-frame and Claude-usage script ids into
+  one `unregisterContentScripts` call. Chrome rejects the whole call when any id is unknown, and
+  the following `registerContentScripts` then failed on the duplicate id, so the registration
+  froze on the first result of a session: enabling DeepSeek plugins after ChatGPT/Claude were
+  already registered changed nothing until the extension restarted, and the popup showed the
+  toggles on with no site injected.
+- **Rule:** Before unregistering, list the registered scripts and unregister only the ids that
+  exist (`src/pages/background/contentScriptRegistration.ts`). Never batch a possibly-absent
+  companion id into an unregister call.
+- **Guard:** `src/pages/background/__tests__/contentScriptRegistration.test.ts`
+  (`drops only the ids that exist so a never-registered companion cannot block the batch`).
