@@ -144,8 +144,101 @@ setting.
 to use the site adapter's stable selector for one of the nine semantic keys in
 `sites/semanticKeys.ts`; a `site.json` may not invent a key outside that
 vocabulary. Supported ops: `addClass`,
-`setAttribute`, `setStyle`, `hide`. All are reversible. Classes must be `gv-`
-prefixed (content-script rule).
+`setAttribute`, `setStyle`, `hide`, plus `native` (below). All are reversible.
+Classes must be `gv-` prefixed (content-script rule).
+
+## Primitives (`verbs/`) and the `native` op
+
+Some behaviour cannot be expressed as CSS and four reversible DOM edits.
+A **primitive** is that behaviour, written once as first-party TypeScript inside
+the extension and given a name a manifest can call:
+
+```jsonc
+{
+  "engine": ">=1.3.0",
+  "requires": { "handlers": ["formulaCopy"] },
+  "contributes": {
+    "domOps": [{ "op": "native", "handler": "formulaCopy", "params": {} }],
+  },
+}
+```
+
+The manifest picks a primitive and configures it. It never supplies logic: no
+conditions, no ordering, no code. `params` is configuration, checked by that
+primitive's own hand-written guard before the primitive sees it (plan C1, D17).
+That is what keeps a remote manifest data rather than remotely-hosted code, and
+it is why `native` is safe on the same channel as CSS.
+
+Three files divide the work:
+
+- **`verbs/contracts.ts`** — data only: every primitive's `name`, `sinceEngine`,
+  the semantic keys it reads from the adapter, and its parameter spec. It
+  imports no DOM and no implementation, so `scripts/build-plugin-catalog.ts`
+  can read it under Bun.
+- **`verbs/registry.ts`** — the implementations, keyed by name.
+  `verifyPrimitiveRegistry()` asserts the two lists match, so a contract can
+  never describe a primitive that does not exist and vice versa.
+- **`verbs/<name>.ts`** — one primitive: its `contract`, a `validateParams`
+  guard, and `activate(scope, params, context)`. Every side effect is registered
+  on the `PluginScope`, so unmount pays them all back, and the primitive reports
+  how many elements it acts on through `context.setTargetCounter`.
+
+`sinceEngine` is the `PLUGIN_ENGINE_VERSION` that first shipped the primitive.
+A manifest that uses a primitive must set an `engine` range whose **minimum** is
+at least that version, and `bun run catalog:build` fails the build otherwise
+(plan §5, §8). This ordering is the point: an older Voyager then reports
+`needs-engine` ("update Voyager") instead of `needs-handler`, which is left
+meaning a genuine configuration mistake. `catalog:build` also rejects a handler
+with no contract, and a semantic key the plugin's own site does not define.
+
+`requires` states the same needs declaratively:
+
+- `requires.handlers` lists the primitives the plugin invokes. Every `native` op
+  is implied, so listing it is documentation, not duplication.
+- `requires.semantic` lists semantic keys the plugin depends on beyond the ones
+  its ops target. A primitive's own `semantic` keys come from its contract.
+
+`runtime/pluginStatus.ts` derives both sets (`requiredHandlers`,
+`requiredSemanticKeys`) and turns them into a status, which `PluginHost` reports
+for every plugin that targets the page instead of quietly filtering it:
+
+| Kind             | Meaning                               | Popup                                  |
+| ---------------- | ------------------------------------- | -------------------------------------- |
+| `needs-engine`   | `engine` range above this build       | toggle disabled, "needs Voyager ≥ x.y" |
+| `needs-handler`  | a primitive this build does not ship  | toggle disabled, "update Voyager"      |
+| `needs-semantic` | the site adapter lacks a key it needs | toggle disabled, names the site        |
+| `ready`          | compatible, not mounted yet           | normal toggle                          |
+| `mounted`        | enabled and running on this page      | normal toggle                          |
+| `no-effect`      | mounted but found nothing (D12)       | toggle stays on, yellow warning        |
+
+`needs-permission` is not in this list: the popup owns the permission flow, and
+a content script that is running already has its permission.
+
+**Health signal (D12).** `runtime/healthMonitor.ts` answers "is this plugin
+doing anything here?". It waits for the engine's `childList` observer to go
+quiet, then flags a plugin only when the adapter's `userTurn` selector matches
+more than zero elements **and** the plugin's own target count is zero. An empty
+conversation is never flagged, a slow page is never flagged early (quiet
+detection drives the timing; the deadline is only a ceiling), and a target
+appearing later clears the flag. Pure-CSS plugins have no countable targets and
+are never tracked.
+
+**Update timing (D7).** A CSS or `domOps` update remounts immediately. A
+primitive-backed plugin does not: the primitive may hold UI state, so the page
+keeps the mounted version, the status carries `pendingVersion`, and the popup
+says the update applies after a reload. A SPA `pushState` is not a reload; only
+a full page load switches versions.
+
+**Evolution (D9).** A published parameter never changes type and never becomes
+required. Parameters may only be **added**, and only as **optional**. Anything
+breaking ships under a new primitive name, so `handler` never needs a version
+suffix. A committed baseline in `verbs/paramsBaseline.json` holds the contract
+tests to this.
+
+`formulaCopy` is the first primitive, and
+`catalog/sites/deepseek/plugins/formula-copy/` is the first plugin built on one.
+The native builtin `voyager.formula-copy` is unaffected and stays as it is until
+P4 rewrites the Claude and ChatGPT builtins as primitive-backed JSON.
 
 ## Boundaries
 

@@ -415,6 +415,11 @@ export const NON_SETTINGS_BACKUP_POLICIES = {
     disposition: 'device-local',
     reason: 'Collapsed plugin cards are a per-device popup layout choice.',
   },
+  [StorageKeys.PLUGIN_SEEN_VERSIONS]: {
+    storage: 'local',
+    disposition: 'device-local',
+    reason: 'Which plugin versions this device has already shown is popup badge state.',
+  },
   [StorageKeys.WATERMARK_NATIVE_NOTICE_SHOWN]: {
     storage: 'local',
     disposition: 'device-local',

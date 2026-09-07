@@ -10,6 +10,7 @@ import { logger } from '@/core/services/LoggerService';
 import { isExtensionContextInvalidatedError } from '@/core/utils/extensionContext';
 
 import { PluginHost } from './runtime/PluginHost';
+import { PLUGIN_STATUS_MESSAGE } from './runtime/messages';
 
 export { PluginHost } from './runtime/PluginHost';
 export type { PluginHostOptions } from './runtime/PluginHost';
@@ -18,6 +19,9 @@ export { SiteRegistry, DEFAULT_ADAPTERS } from './sites/registry';
 export { matchesUrl, matchesAnyPattern } from './sites/matchPattern';
 export { validateManifest } from './manifest/validate';
 export type { ManifestIssue } from './manifest/validate';
+export type { PluginStatus, PluginStatusKind } from './runtime/pluginStatus';
+export { PRIMITIVE_CONTRACTS, getPrimitiveContract } from './verbs/contracts';
+export type { PrimitiveContract } from './verbs/contracts';
 export { loadPluginState, setPluginEnabled, subscribePluginState } from './storage/pluginState';
 export { HostCatalogSource, HOST_CATALOG_SOURCE_ID } from './remote/HostCatalogSource';
 export {
@@ -63,12 +67,23 @@ const dumpScopeLedgers = (): void => {
   logger.info('Plugin scope ledgers', host?.getScopeLedgers() ?? {});
 };
 
+/** Popup asks the page for plugin statuses (plan §4.2); answered synchronously. */
+const onStatusRequest = (
+  message: unknown,
+  _sender: chrome.runtime.MessageSender,
+  sendResponse: (response: unknown) => void,
+): void => {
+  if ((message as { type?: string } | null)?.type !== PLUGIN_STATUS_MESSAGE) return;
+  sendResponse({ ok: true, statuses: host?.getStatuses() ?? [] });
+};
+
 export function startPluginHost(): () => void {
   if (host) return () => {};
   try {
     host = new PluginHost();
     void host.start();
     document.addEventListener(PLUGIN_SCOPES_DEBUG_EVENT, dumpScopeLedgers);
+    chrome.runtime?.onMessage?.addListener(onStatusRequest);
   } catch (error) {
     if (!isExtensionContextInvalidatedError(error)) {
       logger.error('startPluginHost failed', { error: String(error) });
@@ -76,6 +91,11 @@ export function startPluginHost(): () => void {
   }
   return () => {
     document.removeEventListener(PLUGIN_SCOPES_DEBUG_EVENT, dumpScopeLedgers);
+    try {
+      chrome.runtime?.onMessage?.removeListener(onStatusRequest);
+    } catch {
+      // context may be gone
+    }
     host?.stop();
     host = null;
   };

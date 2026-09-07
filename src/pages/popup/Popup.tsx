@@ -46,7 +46,11 @@ import {
   loadSiteOverrideForHost,
   resolveSiteAdapterForUrl,
 } from '@/features/plugins/remote/siteOverride';
-import { PLUGIN_CATALOG_REFRESH_MESSAGE } from '@/features/plugins/runtime/messages';
+import {
+  PLUGIN_CATALOG_REFRESH_MESSAGE,
+  PLUGIN_STATUS_MESSAGE,
+} from '@/features/plugins/runtime/messages';
+import type { PluginStatus } from '@/features/plugins/runtime/pluginStatus';
 import { matchesAnyPattern } from '@/features/plugins/sites/matchPattern';
 import { SiteRegistry } from '@/features/plugins/sites/registry';
 import {
@@ -1114,6 +1118,10 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
   // Site adapter published for the active host through the remote catalog, if
   // any; it replaces the bundled adapter's label and brand colour.
   const [pluginSiteOverride, setPluginSiteOverride] = useState<SiteAdapter | null>(null);
+  // Statuses computed by the active tab's PluginHost (plan §4.2); empty when
+  // the tab has no content script, in which case the card infers locally.
+  const [pluginStatuses, setPluginStatuses] = useState<readonly PluginStatus[]>([]);
+  const [activeTabId, setActiveTabId] = useState<number | null>(null);
   const [pluginState, setPluginState] = useState<PluginStateMap>({});
   const [pluginStateLoaded, setPluginStateLoaded] = useState(false);
   // Per-site custom accent overrides: Record<siteId, hex>.
@@ -1341,6 +1349,7 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
       tab ??= (await browser.tabs.query({ active: true, currentWindow: true }))[0] ?? null;
       const url = tab?.url || '';
       setActiveUrl(url);
+      setActiveTabId(typeof tab?.id === 'number' ? tab.id : null);
       setActiveAccountPlatform(detectAccountPlatformFromUrl(url));
     } catch {
       // Keep the default empty URL when the tab cannot be inspected.
@@ -1352,6 +1361,31 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
   useEffect(() => {
     void refreshActiveTabContext();
   }, [refreshActiveTabContext]);
+
+  // Ask the active tab's PluginHost for plugin statuses (needs-engine,
+  // needs-handler, mounted, no-effect, pending version …). The health verdict
+  // arrives once the page has been quiet for a while, so poll once more
+  // shortly after opening. A tab without a content script simply answers
+  // nothing and the card falls back to local inference.
+  const refreshPluginStatuses = useCallback(async () => {
+    if (activeTabId === null) return;
+    try {
+      const response = (await browser.tabs.sendMessage(activeTabId, {
+        type: PLUGIN_STATUS_MESSAGE,
+      })) as { ok?: boolean; statuses?: readonly PluginStatus[] } | undefined;
+      if (response?.ok && Array.isArray(response.statuses)) {
+        setPluginStatuses(response.statuses);
+      }
+    } catch {
+      // No content script in this tab (not a plugin site, or not injected yet).
+    }
+  }, [activeTabId]);
+
+  useEffect(() => {
+    void refreshPluginStatuses();
+    const later = setTimeout(() => void refreshPluginStatuses(), 2500);
+    return () => clearTimeout(later);
+  }, [refreshPluginStatuses, pluginManifests, pluginState]);
 
   // Load plugin manifests: builtin + bundled snapshot + the cached remote
   // catalog for the active tab's host. Waits for the tab context so the remote
@@ -2940,6 +2974,7 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
               sourceIds={pluginSourceIds}
               blockedUpdates={pluginBlockedUpdates}
               catalogHost={pluginCatalogHost}
+              statuses={pluginStatuses}
             />
           </div>
         )}

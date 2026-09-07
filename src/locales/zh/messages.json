@@ -2637,6 +2637,34 @@
     "message": "此网站暂无在线目录。",
     "description": "Shown when the online catalog has no entry for the current site"
   },
+  "pluginNeedsNewerVoyager": {
+    "message": "需要 Voyager 插件引擎 {engine}",
+    "description": "Note on a plugin this build cannot run because its engine range is newer; {engine} is the required engine range"
+  },
+  "pluginNeedsVoyagerUpdate": {
+    "message": "需要更新版本的 Voyager 才能运行",
+    "description": "Note on a plugin that uses a capability this build of Voyager does not ship"
+  },
+  "pluginNeedsSiteAdapterUpdate": {
+    "message": "需要更新后的 {site} 适配器",
+    "description": "Note on a plugin whose site adapter lacks something it relies on; {site} is the current site name"
+  },
+  "pluginNoEffectOnPage": {
+    "message": "在此页面上没有找到可处理的内容",
+    "description": "Note on an enabled plugin that found no matching elements on this page"
+  },
+  "pluginUpdateAfterReload": {
+    "message": "更新 {version} 将在重新加载页面后生效",
+    "description": "Note that a newer plugin version takes effect on the next page load; {version} is the pending version"
+  },
+  "pluginChangelogLabel": {
+    "message": "更新内容：",
+    "description": "Prefix for the plugin's one-line changelog in the popup"
+  },
+  "pluginUpdatedBadge": {
+    "message": "已更新",
+    "description": "Chip next to a plugin whose version changed since it was last shown"
+  },
   "usageCoachmarkTitle": {
     "message": "新功能：用量额度",
     "description": "Coachmark title introducing the usage pill"

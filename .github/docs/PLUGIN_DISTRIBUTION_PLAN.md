@@ -277,3 +277,15 @@ Claude、ChatGPT 的现有 builtin 清单改写为使用原语的 JSON，随本�
 - Prompt Manager 路径统一（§7）：插件平台与自定义站点同走 `createCustomSiteCoverageReconciler`，只有 host 在自定义站点列表里才挂载，并跟随 popup 开关实时增删；popup 站点名改读适配器 `label`，手写映射删除。
 - 通用参数化测试 `sources/bundledPluginsLifecycle.test.ts` 遍历所有目录插件：mount → updateSettings → unmount 还原宿主；`vitest.config.ts` 对目录 CSS 开启真实读取（此前 vitest 会把 CSS 导入替换成空字符串）。
 - `.github/CODEOWNERS` 按站点目录分配；构建脚本改读 `sites/*/site.json`（Bun 不支持 `import.meta.glob`，不能 import 注册表）并强制 D18 子集校验。
+
+### P3（分支 `feat/plugin-native-op-p3`，基于 P2，2026-09-07）
+
+- `native` op：`{ op: 'native', handler, params }`，`handler` 必须匹配原语名，`params` 只接受有界的纯 JSON 配置（深度、键数、字符串长度有上限，拒绝原型键）。引擎按名字在 `verbs/registry.ts` 白名单里找原语，用该原语的手写 guard 校验参数后在独立 `PluginScope` 下激活；设置变更时整体重启；卸载时随作用域释放。
+- 原语契约与实现分离：`verbs/contracts.ts` 只有数据（name、sinceEngine、semantic、params），Bun 下的构建脚本可以 import；`verbs/registry.ts` 绑定实现。`verbs/paramsBaseline.json` 记录已发布契约，`contracts.test.ts` 强制 D9（参数只增、只可选，sinceEngine 不变）。
+- 首个原语 `formulaCopy`：原样复用 `src/features/formulaCopy`，上报公式目标数；`voyager.formula-copy` builtin 保持到 P4。新增目录插件 `sites/deepseek/plugins/formula-copy`（`engine >=1.3.0`，`requires.handlers: ['formulaCopy']`），需要在 DeepSeek 实机验证（#994）。
+- 清单契约：`requires.handlers` / `requires.semantic`、`format`（必须为 1）、`changelog`（含 i18n 变体）。引擎版本升到 1.3.0。
+- 状态机 `runtime/pluginStatus.ts`：needs-engine / needs-handler / needs-semantic / ready / mounted / no-effect；`requiredHandlers` 取 `requires.handlers` ∪ native op；`requiredSemanticKeys` 取 `requires.semantic` ∪ 语义 target ∪ 原语契约。PluginHost 不再静默过滤，`getStatuses()` 经内容脚本消息 `gv.plugins.status` 供 popup 读取，popup 保留权限判断与本地回退。
+- 健康信号 `runtime/healthMonitor.ts`：复用引擎的 MutationObserver，静默 1.5 s 评估、10 s 兜底；`userTurn` 命中且目标为 0 才标黄；目标出现即清；纯 CSS 豁免。
+- 更新时机（D7）：目录变化时含 native op 的已挂载插件冻结在当前版本并报告 `pendingVersion`，整页加载后切换；声明式插件立即重挂载。
+- 角标与 changelog（D11）：`gvPluginSeenVersions`（local，不备份）记录已展示版本，popup 显示"已更新"角标与一行 changelog。
+- 实机验证待办：Chrome DevTools MCP 会话仍不可用，DeepSeek 公式复制、状态文案、健康标黄需人工检查。

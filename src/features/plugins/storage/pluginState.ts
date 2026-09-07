@@ -203,6 +203,53 @@ export async function setPluginCollapsed(id: string, collapsed: boolean): Promis
   }
 }
 
+const SEEN_VERSIONS_KEY = StorageKeys.PLUGIN_SEEN_VERSIONS;
+
+/** Plugin id → last version the popup showed on this device (plan D11 badge). */
+export async function loadSeenPluginVersions(): Promise<Readonly<Record<string, string>>> {
+  const local = localArea();
+  if (!local) return {};
+  try {
+    const result = await local.get({ [SEEN_VERSIONS_KEY]: {} });
+    const raw = result?.[SEEN_VERSIONS_KEY];
+    if (!isRecord(raw)) return {};
+    const seen: Record<string, string> = {};
+    for (const [id, version] of Object.entries(raw)) {
+      if (isSafeRecordKey(id) && typeof version === 'string') seen[id] = version;
+    }
+    return seen;
+  } catch (error) {
+    if (!isExtensionContextInvalidatedError(error)) {
+      logger.warn('loadSeenPluginVersions failed', { error: String(error) });
+    }
+    return {};
+  }
+}
+
+/** Record the versions the popup just showed, merged over what was seen before. */
+export async function markPluginVersionsSeen(
+  versions: Readonly<Record<string, string>>,
+): Promise<void> {
+  const local = localArea();
+  if (!local) return;
+  try {
+    const current = await loadSeenPluginVersions();
+    const next: Record<string, string> = { ...current };
+    let changed = false;
+    for (const [id, version] of Object.entries(versions)) {
+      if (!isSafeRecordKey(id) || typeof version !== 'string') continue;
+      if (next[id] === version) continue;
+      next[id] = version;
+      changed = true;
+    }
+    if (changed) await local.set({ [SEEN_VERSIONS_KEY]: next });
+  } catch (error) {
+    if (!isExtensionContextInvalidatedError(error)) {
+      logger.warn('markPluginVersionsSeen failed', { error: String(error) });
+    }
+  }
+}
+
 /** Subscribe to plugin-state changes (e.g. user toggles a plugin in the store UI). */
 export function subscribePluginState(callback: (state: PluginStateMap) => void): () => void {
   const g = globalThis as { chrome?: typeof chrome };

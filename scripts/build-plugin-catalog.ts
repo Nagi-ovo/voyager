@@ -20,9 +20,13 @@
  *
  * Every `site.json` passes `validateSiteAdapterData`, every `plugin.json` passes
  * `validateManifest` with its `contributes.styles[].file` inlined as `css`, and
- * a plugin may not target a URL its own site does not cover (plan D18). Any
- * violation aborts the build: the snapshot we ship is expected to be clean, and
- * a broken host file would be silently discarded by every client.
+ * a plugin may not target a URL its own site does not cover (plan D18). On top
+ * of that, the primitive checks from plan §5 / §8 run here: a plugin may only
+ * name primitives this build ships, its `engine` range may not admit a build
+ * older than those primitives, and every semantic key it relies on must be
+ * defined by its own site. Any violation aborts the build: the snapshot we ship
+ * is expected to be clean, and a broken host file would be silently discarded by
+ * every client.
  *
  * Output is deterministic — sites, hosts and plugin ids are sorted — so a re-run
  * with the same `generatedAt` produces byte-identical files.
@@ -39,6 +43,11 @@ import {
   HOST_CATALOG_FORMAT,
   validateHostCatalogFile,
 } from '../src/features/plugins/remote/hostCatalogFile';
+import {
+  requiredHandlers,
+  requiredSemanticKeys,
+} from '../src/features/plugins/runtime/pluginStatus';
+import { engineSatisfied, parseSemver } from '../src/features/plugins/semver';
 import { matchesAnyPattern, patternWithinAny } from '../src/features/plugins/sites/matchPattern';
 import type { SiteAdapterData } from '../src/features/plugins/sites/siteAdapterData';
 import {
@@ -47,6 +56,8 @@ import {
 } from '../src/features/plugins/sites/siteAdapterData';
 import { resolveStyleFileContributions } from '../src/features/plugins/sources/styleFiles';
 import type { PluginManifest, SiteAdapter } from '../src/features/plugins/types';
+import type { PrimitiveContract } from '../src/features/plugins/verbs/contracts';
+import { getPrimitiveContract } from '../src/features/plugins/verbs/contracts';
 
 /** One published `hosts/<host>.json`. Consumed by `validateHostCatalogFile`. */
 export interface HostCatalogFile {
@@ -126,6 +137,80 @@ function assertMatchesStayInSite(
   }
 }
 
+/**
+ * The lowest engine version a range admits, or null when it admits every
+ * version (`*`, empty) or cannot be parsed. Ranges are `*`, an exact `x.y.z`,
+ * or `>=x.y.z` — see `semver.ts`.
+ */
+function engineRangeMinimum(range: string): string | null {
+  const trimmed = range.trim();
+  if (trimmed === '' || trimmed === '*') return null;
+  const minimum = parseSemver(trimmed.startsWith('>=') ? trimmed.slice(2) : trimmed);
+  if (!minimum) return null;
+  return `${minimum.major}.${minimum.minor}.${minimum.patch}`;
+}
+
+/** The later of two versions; used to name the primitive that sets the floor. */
+function laterVersion(a: string, b: string): string {
+  return engineSatisfied(`>=${b}`, a) ? a : b;
+}
+
+/**
+ * Plan §5 / §8: a plugin may only invoke primitives this build ships, and its
+ * `engine` range must exclude every build that predates them. Getting the range
+ * right is what makes an old Voyager report `needs-engine` ("update Voyager")
+ * instead of `needs-handler`, which is meant to mean a configuration mistake.
+ */
+function assertPrimitivesAreShippable(manifest: PluginManifest, manifestPath: string): void {
+  const contracts: PrimitiveContract[] = [];
+  for (const handler of requiredHandlers(manifest)) {
+    const contract = getPrimitiveContract(handler);
+    if (!contract) {
+      throw new Error(
+        `${manifest.id} (${manifestPath}): unknown primitive handler "${handler}" — no contract in verbs/contracts.ts`,
+      );
+    }
+    contracts.push(contract);
+  }
+  if (contracts.length === 0) return;
+
+  const floor = contracts.reduce(
+    (highest, contract) => laterVersion(highest, contract.sinceEngine),
+    contracts[0].sinceEngine,
+  );
+  const minimum = engineRangeMinimum(manifest.engine);
+  if (minimum === null) {
+    throw new Error(
+      `${manifest.id} (${manifestPath}): engine "${manifest.engine}" admits any build, but the plugin uses primitives that need at least ${floor} — set engine to ">=${floor}"`,
+    );
+  }
+  if (!engineSatisfied(`>=${floor}`, minimum)) {
+    const source = contracts.find((contract) => contract.sinceEngine === floor);
+    throw new Error(
+      `${manifest.id} (${manifestPath}): engine "${manifest.engine}" admits builds older than ${floor}, the sinceEngine of primitive "${source?.name ?? floor}" — set engine to ">=${floor}"`,
+    );
+  }
+}
+
+/**
+ * Plan §5 / §8: every semantic key the plugin relies on — declared, targeted by
+ * a `semantic` op, or read by one of its primitives — must be defined by the
+ * site it ships under. Publishing without the key would only produce a
+ * `needs-semantic` plugin on every client.
+ */
+function assertSemanticKeysExist(
+  manifest: PluginManifest,
+  site: { readonly dir: string; readonly adapter: SiteAdapter },
+  manifestPath: string,
+): void {
+  const selectors = site.adapter.selectors;
+  const missing = requiredSemanticKeys(manifest).filter((key) => !selectors[key]);
+  if (missing.length === 0) return;
+  throw new Error(
+    `${manifest.id} (${manifestPath}): semantic key(s) ${missing.map((key) => `"${key}"`).join(', ')} are not defined by site "${site.dir}" (has ${Object.keys(selectors).sort(compareStrings).join(', ')})`,
+  );
+}
+
 /** Read and validate `sites/<siteDir>/site.json`. Throws on anything unusable. */
 function readSiteAdapter(catalogDir: string, siteDir: string): SiteAdapter {
   const sitePath = join(catalogDir, 'sites', siteDir, 'site.json');
@@ -172,6 +257,8 @@ async function readSitePlugins(
       throw new Error(`${relPath}: invalid plugin manifest\n${formatIssues(result.error)}`);
     }
     assertMatchesStayInSite(result.data, site, relPath);
+    assertPrimitivesAreShippable(result.data, relPath);
+    assertSemanticKeysExist(result.data, site, relPath);
     manifests.push(result.data);
   }
 

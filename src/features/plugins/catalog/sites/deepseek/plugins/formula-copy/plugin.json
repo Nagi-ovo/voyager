@@ -1,0 +1,73 @@
+{
+  "id": "voyager.deepseek-formula-copy",
+  "name": "DeepSeek · Formula Copy",
+  "version": "1.0.0",
+  "description": "Click an inline or block formula to copy its LaTeX; hover shows it's clickable.",
+  "changelog": "First release: formula copy for DeepSeek through the formulaCopy primitive.",
+  "i18n": {
+    "zh": {
+      "name": "DeepSeek · 公式复制",
+      "description": "点击行内或块级公式即可复制 LaTeX；悬停时会提示可点击。",
+      "changelog": "首个版本：通过 formulaCopy 原语为 DeepSeek 提供公式复制。"
+    },
+    "zh_TW": {
+      "name": "DeepSeek · 公式複製",
+      "description": "點擊行內或區塊公式即可複製 LaTeX；滑鼠懸停時會提示可點擊。",
+      "changelog": "首個版本：透過 formulaCopy 原語為 DeepSeek 提供公式複製。"
+    },
+    "ja": {
+      "name": "DeepSeek · 数式コピー",
+      "description": "インラインまたはブロック数式をクリックして LaTeX をコピーできます。ホバーするとクリック可能であることが分かります。",
+      "changelog": "初版：formulaCopy プリミティブで DeepSeek の数式コピーを提供します。"
+    },
+    "ko": {
+      "name": "DeepSeek · 수식 복사",
+      "description": "인라인 또는 블록 수식을 클릭해 LaTeX를 복사합니다. 마우스를 올리면 클릭 가능함을 표시합니다.",
+      "changelog": "첫 릴리스: formulaCopy 프리미티브로 DeepSeek 수식 복사를 제공합니다."
+    },
+    "fr": {
+      "name": "DeepSeek · Copie de formules",
+      "description": "Cliquez sur une formule en ligne ou en bloc pour copier son LaTeX ; le survol indique qu'elle est cliquable.",
+      "changelog": "Première version : copie de formules sur DeepSeek via la primitive formulaCopy."
+    },
+    "es": {
+      "name": "DeepSeek · Copia de fórmulas",
+      "description": "Haz clic en una fórmula en línea o en bloque para copiar su LaTeX; al pasar el cursor se muestra que se puede hacer clic.",
+      "changelog": "Primera versión: copia de fórmulas en DeepSeek mediante la primitiva formulaCopy."
+    },
+    "pt": {
+      "name": "DeepSeek · Cópia de fórmulas",
+      "description": "Clique em uma fórmula inline ou em bloco para copiar o LaTeX; ao passar o cursor, ela indica que pode ser clicada.",
+      "changelog": "Primeira versão: cópia de fórmulas no DeepSeek pela primitiva formulaCopy."
+    },
+    "ru": {
+      "name": "DeepSeek · Копирование формул",
+      "description": "Нажмите на строчную или блочную формулу, чтобы скопировать её LaTeX; при наведении видно, что её можно нажать.",
+      "changelog": "Первая версия: копирование формул в DeepSeek через примитив formulaCopy."
+    },
+    "ar": {
+      "name": "DeepSeek · نسخ الصيغ",
+      "description": "انقر على صيغة مضمنة أو كتلية لنسخ LaTeX الخاص بها؛ ويظهر عند التحويم أنها قابلة للنقر.",
+      "changelog": "الإصدار الأول: نسخ الصيغ في DeepSeek عبر الأساسية formulaCopy."
+    }
+  },
+  "author": "voyager-official",
+  "category": "productivity",
+  "license": "GPL-3.0-or-later",
+  "homepage": "https://github.com/Nagi-ovo/voyager/tree/main/src/features/plugins/catalog/sites/deepseek/plugins/formula-copy",
+  "engine": ">=1.3.0",
+  "tier": "declarative",
+  "matches": ["https://chat.deepseek.com/*"],
+  "requires": {
+    "handlers": ["formulaCopy"]
+  },
+  "contributes": {
+    "domOps": [
+      {
+        "op": "native",
+        "handler": "formulaCopy",
+        "params": {}
+      }
+    ]
+  }
+}

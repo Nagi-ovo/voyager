@@ -2637,6 +2637,34 @@
     "message": "Todavía no hay catálogo en línea para este sitio.",
     "description": "Shown when the online catalog has no entry for the current site"
   },
+  "pluginNeedsNewerVoyager": {
+    "message": "Necesita el motor de complementos {engine} de Voyager",
+    "description": "Note on a plugin this build cannot run because its engine range is newer; {engine} is the required engine range"
+  },
+  "pluginNeedsVoyagerUpdate": {
+    "message": "Necesita una versión más reciente de Voyager para funcionar",
+    "description": "Note on a plugin that uses a capability this build of Voyager does not ship"
+  },
+  "pluginNeedsSiteAdapterUpdate": {
+    "message": "Necesita un adaptador de {site} actualizado",
+    "description": "Note on a plugin whose site adapter lacks something it relies on; {site} is the current site name"
+  },
+  "pluginNoEffectOnPage": {
+    "message": "No encontró nada sobre lo que actuar en esta página",
+    "description": "Note on an enabled plugin that found no matching elements on this page"
+  },
+  "pluginUpdateAfterReload": {
+    "message": "La actualización {version} se aplicará cuando recargues la página",
+    "description": "Note that a newer plugin version takes effect on the next page load; {version} is the pending version"
+  },
+  "pluginChangelogLabel": {
+    "message": "Novedades:",
+    "description": "Prefix for the plugin's one-line changelog in the popup"
+  },
+  "pluginUpdatedBadge": {
+    "message": "Actualizado",
+    "description": "Chip next to a plugin whose version changed since it was last shown"
+  },
   "usageCoachmarkTitle": {
     "message": "Nuevo: límites de uso",
     "description": "Coachmark title introducing the usage pill"

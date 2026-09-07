@@ -336,6 +336,10 @@ export const StorageKeys = {
   // Plugin cards the user has collapsed in the popup list (string[] of plugin
   // ids). Local (not sync) — it's a per-device UI preference, not user data.
   PLUGIN_UI_COLLAPSED: 'gvPluginUiCollapsed',
+  // Last plugin version the popup showed per plugin id (Record<id, version>,
+  // chrome.storage.local). Drives the "updated" badge after a catalog change
+  // (plan D11); per-device UI state, never backed up.
+  PLUGIN_SEEN_VERSIONS: 'gvPluginSeenVersions',
   // Per-site custom accent colour overrides (chrome.storage.sync, backed up).
   // Shape: Record<siteId, string> keyed by SiteAdapter id ('gemini' | 'claude'
   // | 'chatgpt' | 'aistudio' | ...). A site WITH an entry uses that

@@ -33,11 +33,14 @@ import {
 } from '../constants';
 import type {
   DomOperation,
+  NativeOperation,
   PluginManifest,
   PluginSettings,
   SelectorRef,
   SiteAdapter,
 } from '../types';
+import { getPrimitive } from '../verbs/registry';
+import { HealthMonitor } from './healthMonitor';
 import { type NativeHandler, getNativeHandler } from './nativeHandlers';
 import { PluginScope } from './pluginScope';
 
@@ -52,6 +55,25 @@ interface ActivePlugin {
   scope?: PluginScope;
   /** Serializes settings-driven scope restarts (dispose → re-activate). */
   scopeRestart?: Promise<void>;
+  /** Side-effect ledger shared by the plugin's `native` op primitives. */
+  primitiveScope?: PluginScope;
+  /** Serializes settings-driven primitive restarts. */
+  primitiveRestart?: Promise<void>;
+  /** Target counters registered by primitives (health signal, plan D12). */
+  targetCounters: Array<() => number>;
+}
+
+/** DOM ops that address page elements (everything but `native`). */
+type TargetedOperation = Exclude<DomOperation, NativeOperation>;
+
+function isTargetedOp(op: DomOperation): op is TargetedOperation {
+  return op.op !== 'native';
+}
+
+function nativeOps(manifest: PluginManifest): NativeOperation[] {
+  return (manifest.contributes.domOps ?? []).filter(
+    (op): op is NativeOperation => op.op === 'native',
+  );
 }
 
 /**
@@ -70,12 +92,18 @@ export interface DeclarativeEngineOptions {
   readonly doc?: Document;
   /** Adapter used to resolve `semantic` selector refs. May be null (unknown site). */
   readonly adapter?: SiteAdapter | null;
+  /** Health verdict changes (plan D12): `noEffect` true = flagged, false = cleared. */
+  readonly onHealthChange?: (id: string, noEffect: boolean) => void;
+  /** Test hook: DOM silence before a health verdict. */
+  readonly healthQuietMs?: number;
+  readonly healthMaxWaitMs?: number;
 }
 
 export class DeclarativeEngine {
   private readonly doc: Document;
   private readonly adapter: SiteAdapter | null;
   private readonly active = new Map<string, ActivePlugin>();
+  private readonly health: HealthMonitor;
 
   // Engine-level, ref-counted ledgers shared across plugins (see class doc).
   /** element → className → set of plugin ids that requested the class. */
@@ -91,6 +119,12 @@ export class DeclarativeEngine {
   constructor(options: DeclarativeEngineOptions = {}) {
     this.doc = options.doc ?? document;
     this.adapter = options.adapter ?? null;
+    this.health = new HealthMonitor({
+      countUserTurns: () => this.countUserTurns(),
+      onChange: options.onHealthChange,
+      quietMs: options.healthQuietMs,
+      maxWaitMs: options.healthMaxWaitMs,
+    });
   }
 
   get activeCount(): number {
@@ -110,10 +144,24 @@ export class DeclarativeEngine {
     return this.active.has(id);
   }
 
+  /**
+   * Health verdict for a mounted plugin (plan D12): `true` = flagged as having
+   * no effect on this page, `false` = healthy, `undefined` = not tracked or
+   * no verdict yet. Pure-CSS plugins are never tracked.
+   */
+  getHealth(id: string): boolean | undefined {
+    return this.health.get(id);
+  }
+
+  /** Force a health evaluation now (tests and debugging). */
+  evaluateHealthNow(): void {
+    this.health.evaluateNow();
+  }
+
   mount(manifest: PluginManifest, settings: PluginSettings = {}): void {
     if (this.active.has(manifest.id)) return;
     this.ensureBaseStyle();
-    const entry: ActivePlugin = { manifest, styleEl: null, settings };
+    const entry: ActivePlugin = { manifest, styleEl: null, settings, targetCounters: [] };
     entry.nativeHandler = getNativeHandler(manifest.id);
     this.active.set(manifest.id, entry);
     this.injectStyles(entry);
@@ -127,8 +175,113 @@ export class DeclarativeEngine {
     } else {
       entry.nativeHandler?.start?.(settings);
     }
+    // `native` ops invoke first-party primitives by name with validated params.
+    this.activatePrimitives(entry, settings);
+    this.trackHealth(entry);
     this.syncObserver();
     logger.info('Plugin mounted', { id: manifest.id });
+  }
+
+  /**
+   * Run every `native` op of the plugin under one shared scope. An unknown
+   * handler or invalid params are skipped with a warning; the status machine
+   * has normally already reported them as needs-handler, so this is defence
+   * in depth, never a crash.
+   */
+  private activatePrimitives(entry: ActivePlugin, settings: PluginSettings): void {
+    const ops = nativeOps(entry.manifest);
+    if (ops.length === 0) return;
+    const scope = new PluginScope();
+    entry.primitiveScope = scope;
+    entry.targetCounters = [];
+    const context = {
+      doc: this.doc,
+      adapter: this.adapter,
+      pluginId: entry.manifest.id,
+      settings,
+      setTargetCounter: (count: () => number) => {
+        entry.targetCounters.push(count);
+      },
+    };
+    for (const op of ops) {
+      const primitive = getPrimitive(op.handler);
+      if (!primitive) {
+        logger.warn('Unknown primitive', { id: entry.manifest.id, handler: op.handler });
+        continue;
+      }
+      const params = primitive.validateParams(op.params);
+      if (!params.success) {
+        logger.warn('Invalid primitive params', {
+          id: entry.manifest.id,
+          handler: op.handler,
+          issues: params.error,
+        });
+        continue;
+      }
+      try {
+        const result = primitive.activate(scope, params.data, context);
+        if (result instanceof Promise) {
+          result.catch((error) => {
+            logger.error('Primitive activation failed', {
+              id: entry.manifest.id,
+              handler: op.handler,
+              error: String(error),
+            });
+          });
+        }
+      } catch (error) {
+        logger.error('Primitive activation failed', {
+          id: entry.manifest.id,
+          handler: op.handler,
+          error: String(error),
+        });
+      }
+    }
+  }
+
+  /** Dispose the primitives' scope, then re-activate under the new settings (serialized). */
+  private restartPrimitives(entry: ActivePlugin, settings: PluginSettings): void {
+    const previous = entry.primitiveScope;
+    if (!previous) return;
+    entry.primitiveScope = undefined;
+    entry.primitiveRestart = (entry.primitiveRestart ?? Promise.resolve()).then(async () => {
+      await previous.dispose();
+      if (this.active.get(entry.manifest.id) !== entry) return;
+      if (entry.settings !== settings) return;
+      this.activatePrimitives(entry, settings);
+    });
+  }
+
+  /** Plugins that address the page (DOM ops or primitives) get a health verdict. */
+  private trackHealth(entry: ActivePlugin): void {
+    const ops = entry.manifest.contributes.domOps ?? [];
+    if (ops.length === 0) return;
+    this.health.track(entry.manifest.id, () => this.countTargets(entry));
+  }
+
+  private countTargets(entry: ActivePlugin): number {
+    let total = 0;
+    for (const op of entry.manifest.contributes.domOps ?? []) {
+      if (isTargetedOp(op)) total += this.queryAll(op.target).length;
+    }
+    for (const count of entry.targetCounters) {
+      try {
+        total += count();
+      } catch {
+        // A throwing counter reports nothing.
+      }
+    }
+    return total;
+  }
+
+  private countUserTurns(): number {
+    const selector = this.adapter?.selectors.userTurn;
+    if (!selector) return 0;
+    try {
+      return this.doc.querySelectorAll(selector).length;
+    } catch {
+      return 0;
+    }
   }
 
   /** Live-update a mounted plugin's setting values (re-renders CSS + templated DOM ops). */
@@ -149,6 +302,9 @@ export class DeclarativeEngine {
       // expensive state opt out by implementing updateSettings.
       this.restartScope(entry, settings);
     }
+    // Primitives read settings through their context at activation; restart
+    // them under the new values (same safety argument as above).
+    this.restartPrimitives(entry, settings);
   }
 
   /** Create a fresh scope for a scope-based handler and run its activation.
@@ -198,8 +354,11 @@ export class DeclarativeEngine {
     // effect can double-run or leak, and a remount gets a fresh scope.
     if (entry.scope) void entry.scope.dispose();
     else entry.nativeHandler?.stop?.();
+    if (entry.primitiveScope) void entry.primitiveScope.dispose();
+    entry.primitiveScope = undefined;
     entry.styleEl?.remove();
     this.releasePlugin(id);
+    this.health.forget(id);
 
     this.active.delete(id);
     this.syncObserver();
@@ -210,6 +369,7 @@ export class DeclarativeEngine {
     // oxlint-disable-next-line unicorn/no-useless-spread -- snapshot: the loop body mutates the collection
     for (const id of [...this.active.keys()]) this.unmount(id);
     this.doc.getElementById(PLUGIN_BASE_STYLE_ID)?.remove();
+    this.health.dispose();
   }
 
   /** Re-apply all active plugins' dom ops immediately (exposed for tests + the
@@ -326,6 +486,7 @@ export class DeclarativeEngine {
   }
 
   private applyOp(entry: ActivePlugin, op: DomOperation): void {
+    if (!isTargetedOp(op)) return; // primitives run through activatePrimitives
     const id = entry.manifest.id;
     for (const el of this.queryAll(op.target)) {
       switch (op.op) {
@@ -417,17 +578,18 @@ export class DeclarativeEngine {
     }
   }
 
-  /** Observe only while some active plugin actually has domOps — pure-CSS
-   *  plugins get their behaviour from the stylesheet alone, and paying a
-   *  MutationObserver callback per DOM change for them is wasted work. */
+  /** Observe only while some active plugin actually has domOps or awaits a
+   *  health verdict — pure-CSS plugins get their behaviour from the
+   *  stylesheet alone, and paying a MutationObserver callback per DOM change
+   *  for them is wasted work. */
   private syncObserver(): void {
-    if (this.hasActiveDomOps()) this.ensureObserver();
+    if (this.hasActiveDomOps() || this.health.hasTracked()) this.ensureObserver();
     else this.disconnectObserver();
   }
 
   private hasActiveDomOps(): boolean {
     for (const entry of this.active.values()) {
-      if (entry.manifest.contributes.domOps?.length) return true;
+      if (entry.manifest.contributes.domOps?.some(isTargetedOp)) return true;
     }
     return false;
   }
@@ -436,7 +598,10 @@ export class DeclarativeEngine {
     if (this.observer) return;
     const target = this.doc.body ?? this.doc.documentElement;
     if (!target) return;
-    this.observer = new MutationObserver(() => this.scheduleReapply());
+    this.observer = new MutationObserver(() => {
+      this.health.noteMutation();
+      if (this.hasActiveDomOps()) this.scheduleReapply();
+    });
     this.observer.observe(target, { childList: true, subtree: true });
   }
 

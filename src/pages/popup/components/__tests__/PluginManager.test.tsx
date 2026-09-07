@@ -5,6 +5,7 @@ import { type Mock, afterEach, beforeEach, describe, expect, it, vi } from 'vite
 
 import enMessages from '@locales/en/messages.json';
 
+import type { PluginStatus } from '@/features/plugins/runtime/pluginStatus';
 import type { PluginManifest } from '@/features/plugins/types';
 
 import { PluginManager, type PluginManagerProps, platformBadge } from '../PluginManager';
@@ -72,14 +73,21 @@ vi.mock('@/features/plugins/runtime/siteRegistration', () => ({
   pluginToOriginPatternsForActiveUrl: permissionOrigins,
 }));
 
-vi.mock('@/features/plugins/storage/pluginState', () => ({
-  setPluginSetting,
-  setPluginEnabled,
-  setPluginCollapsed: vi.fn().mockResolvedValue(undefined),
-  loadCollapsedPlugins: vi.fn().mockResolvedValue([]),
-  loadPluginState: vi.fn().mockImplementation(async () => pluginState.current),
-  subscribePluginState: vi.fn().mockReturnValue(() => {}),
-}));
+// The seen-version helpers are deliberately NOT mocked: the "Updated" badge is
+// only meaningful if it round-trips through the real chrome.storage.local key,
+// so the tests assert that write directly.
+vi.mock('@/features/plugins/storage/pluginState', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/features/plugins/storage/pluginState')>();
+  return {
+    ...actual,
+    setPluginSetting,
+    setPluginEnabled,
+    setPluginCollapsed: vi.fn().mockResolvedValue(undefined),
+    loadCollapsedPlugins: vi.fn().mockResolvedValue([]),
+    loadPluginState: vi.fn().mockImplementation(async () => pluginState.current),
+    subscribePluginState: vi.fn().mockReturnValue(() => {}),
+  };
+});
 
 const widthPlugin: PluginManifest = {
   id: PLUGIN_ID,
@@ -185,6 +193,7 @@ beforeEach(() => {
   (chrome.storage.sync.get as unknown as Mock).mockReset().mockResolvedValue({});
   (chrome.storage.sync.set as unknown as Mock).mockReset().mockResolvedValue(undefined);
   (chrome.storage.local.get as unknown as Mock).mockReset().mockResolvedValue({});
+  (chrome.storage.local.set as unknown as Mock).mockReset().mockResolvedValue(undefined);
   (chrome.storage.onChanged.addListener as unknown as Mock).mockReset();
   (chrome.storage.onChanged.removeListener as unknown as Mock).mockReset();
   pluginState.current = { [PLUGIN_ID]: { enabled: true, installedAt: 0 } };
@@ -764,5 +773,206 @@ describe('PluginManager online catalog controls', () => {
     await renderManager({ catalogHost: CATALOG_HOST, refreshing: false });
 
     expect(container.textContent).toContain(new Date(lastAttemptAt).toLocaleString());
+  });
+});
+
+describe('PluginManager plugin status', () => {
+  const READY: PluginStatus = { id: PLUGIN_ID, version: widthPlugin.version, kind: 'ready' };
+
+  function pluginToggle(): HTMLInputElement {
+    const input = container.querySelector<HTMLInputElement>('input[aria-label="Test · Width"]');
+    if (!input) throw new Error('Expected the plugin toggle');
+    return input;
+  }
+
+  beforeEach(() => {
+    mockMessages.current = {
+      pluginNeedsNewerVoyager: enMessages.pluginNeedsNewerVoyager.message,
+      pluginNeedsVoyagerUpdate: enMessages.pluginNeedsVoyagerUpdate.message,
+      pluginNeedsSiteAdapterUpdate: enMessages.pluginNeedsSiteAdapterUpdate.message,
+      pluginNoEffectOnPage: enMessages.pluginNoEffectOnPage.message,
+      pluginUpdateAfterReload: enMessages.pluginUpdateAfterReload.message,
+    };
+  });
+
+  it('names the engine range and blocks the toggle for needs-engine', async () => {
+    await renderManager({
+      statuses: [{ ...READY, kind: 'needs-engine', requiredEngine: '>=2.0.0' }],
+    });
+
+    expect(container.textContent).toContain('Needs Voyager plugin engine >=2.0.0');
+    expect(container.textContent).not.toContain('{engine}');
+    expect(pluginToggle().disabled).toBe(true);
+  });
+
+  it('falls back to the manifest engine range when the status omits it', async () => {
+    await renderManager({ statuses: [{ ...READY, kind: 'needs-engine' }] });
+
+    expect(container.textContent).toContain('Needs Voyager plugin engine >=1.0.0');
+  });
+
+  it('asks for a newer Voyager without a version for needs-handler', async () => {
+    await renderManager({
+      statuses: [{ ...READY, kind: 'needs-handler', missingHandlers: ['formula-copy'] }],
+    });
+
+    expect(container.textContent).toContain('Needs a newer Voyager to run');
+    expect(pluginToggle().disabled).toBe(true);
+  });
+
+  it('names the active site for needs-semantic and blocks the toggle', async () => {
+    await renderManager({
+      activeUrl: 'https://claude.ai/chat/current',
+      statuses: [{ ...READY, kind: 'needs-semantic', missingSemantic: ['message'] }],
+    });
+
+    expect(container.textContent).toContain('Needs an updated Claude adapter');
+    expect(container.textContent).not.toContain('{site}');
+    expect(pluginToggle().disabled).toBe(true);
+  });
+
+  it('falls back to the host when no site adapter names the active URL', async () => {
+    await renderManager({
+      activeUrl: 'https://unknown.example.org/chat',
+      statuses: [{ ...READY, kind: 'needs-semantic', missingSemantic: ['message'] }],
+    });
+
+    expect(container.textContent).toContain('Needs an updated unknown.example.org adapter');
+  });
+
+  it('warns about a no-effect plugin while leaving the toggle usable', async () => {
+    await renderManager({ statuses: [{ ...READY, kind: 'no-effect' }] });
+
+    expect(container.textContent).toContain('Found nothing to act on in this page');
+    expect(pluginToggle().disabled).toBe(false);
+  });
+
+  it('says a pending update applies after a reload, naming the version', async () => {
+    await renderManager({
+      statuses: [{ ...READY, kind: 'mounted', pendingVersion: '2.1.0' }],
+    });
+
+    expect(container.textContent).toContain('Update 2.1.0 applies after you reload the page');
+    expect(container.textContent).not.toContain('{version}');
+    expect(pluginToggle().disabled).toBe(false);
+  });
+
+  it('keeps the plain toggle for a mounted plugin and for one the tab never reported', async () => {
+    await renderManager({ statuses: [{ ...READY, kind: 'mounted' }] });
+    expect(pluginToggle().disabled).toBe(false);
+    expect(container.textContent).not.toContain('Needs');
+
+    await renderManager({ statuses: [] });
+    expect(pluginToggle().disabled).toBe(false);
+    expect(container.textContent).not.toContain('Needs');
+    expect(container.textContent).not.toContain('Found nothing to act on');
+  });
+
+  it('ignores a status reported for a different plugin', async () => {
+    await renderManager({
+      statuses: [{ id: 'voyager.other', version: '1.0.0', kind: 'needs-handler' }],
+    });
+
+    expect(pluginToggle().disabled).toBe(false);
+    expect(container.textContent).not.toContain('Needs a newer Voyager to run');
+  });
+});
+
+describe('PluginManager changelog line', () => {
+  const changelogPlugin: PluginManifest = {
+    ...widthPlugin,
+    changelog: 'Wider maximum width.',
+    i18n: {
+      ...widthPlugin.i18n,
+      zh: { ...widthPlugin.i18n?.zh, changelog: '最大宽度更大了。' },
+    },
+  };
+
+  beforeEach(() => {
+    mockMessages.current = { pluginChangelogLabel: enMessages.pluginChangelogLabel.message };
+  });
+
+  it('shows the changelog for the current language', async () => {
+    mockLanguage.current = 'zh';
+    await renderManager({ manifests: [changelogPlugin] });
+
+    expect(container.textContent).toContain("What's new:");
+    expect(container.textContent).toContain('最大宽度更大了。');
+    expect(container.textContent).not.toContain('Wider maximum width.');
+  });
+
+  it('falls back to the manifest changelog for an untranslated language', async () => {
+    mockLanguage.current = 'fr';
+    await renderManager({ manifests: [changelogPlugin] });
+
+    expect(container.textContent).toContain('Wider maximum width.');
+  });
+
+  it('says nothing when the plugin ships no changelog', async () => {
+    await renderManager();
+
+    expect(container.textContent).not.toContain("What's new:");
+  });
+});
+
+describe('PluginManager updated badge', () => {
+  const SEEN_KEY = 'gvPluginSeenVersions';
+
+  function seenVersions(versions: Record<string, string>): void {
+    (chrome.storage.local.get as unknown as Mock).mockResolvedValue({ [SEEN_KEY]: versions });
+  }
+
+  function updatesDot(): Element | null {
+    return container.querySelector('[data-testid="plugin-updates-dot"]');
+  }
+
+  beforeEach(() => {
+    mockMessages.current = { pluginUpdatedBadge: enMessages.pluginUpdatedBadge.message };
+  });
+
+  it('marks a plugin whose version changed since it was last shown', async () => {
+    seenVersions({ [PLUGIN_ID]: '0.9.0' });
+    await renderManager();
+
+    expect(container.textContent).toContain('Updated');
+    expect(updatesDot()).not.toBeNull();
+  });
+
+  it('does not mark a plugin the popup is seeing for the first time', async () => {
+    await renderManager();
+
+    expect(container.textContent).not.toContain('Updated');
+    expect(updatesDot()).toBeNull();
+  });
+
+  it('does not mark a plugin still at the version last shown', async () => {
+    seenVersions({ [PLUGIN_ID]: widthPlugin.version });
+    await renderManager();
+
+    expect(container.textContent).not.toContain('Updated');
+    expect(updatesDot()).toBeNull();
+    expect(chrome.storage.local.set).not.toHaveBeenCalled();
+  });
+
+  it('records the listed plugin versions as seen', async () => {
+    seenVersions({ [PLUGIN_ID]: '0.9.0' });
+    const second: PluginManifest = { ...widthPlugin, id: 'voyager.second', version: '3.2.1' };
+    await renderManager({ manifests: [widthPlugin, second] });
+
+    expect(chrome.storage.local.set).toHaveBeenCalledWith({
+      [SEEN_KEY]: { [PLUGIN_ID]: widthPlugin.version, [second.id]: '3.2.1' },
+    });
+  });
+
+  it('keeps the chip on screen for the rest of the session after marking it seen', async () => {
+    seenVersions({ [PLUGIN_ID]: '0.9.0' });
+    await renderManager();
+    expect(container.textContent).toContain('Updated');
+
+    // A re-render with the same manifests (e.g. a refresh finishing) must not
+    // clear the chip just because the version has now been recorded.
+    await renderManager({ refreshing: false });
+
+    expect(container.textContent).toContain('Updated');
   });
 });

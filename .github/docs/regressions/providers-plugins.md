@@ -19,6 +19,33 @@ or prompt commands.
   `src/features/plugins/remote/hostCatalogPolicy.test.ts`,
   `src/features/plugins/remote/hostCatalogRefresh.test.ts` (`ineligible` case).
 
+## A primitive-backed plugin keeps its mounted version until the page reloads
+
+- **Trap:** A catalog refresh remounts declarative plugins live, which is right for CSS and DOM
+  ops. Doing the same for a plugin whose `native` op runs first-party code (formula copy, later
+  the timeline) would tear down and restart JS with user-visible state mid-session, and a
+  half-disposed scope racing a new activation is exactly the class of bug PluginScope exists to
+  prevent.
+- **Rule:** `PluginHost.reloadCatalog` pins a mounted plugin that has (or gains) a `native` op
+  when its version or contributions change, reports `pendingVersion` in its status, and applies
+  the new manifest only on the next full page load; declarative plugins remount immediately.
+- **Guard:** `src/features/plugins/runtime/PluginHost.status.test.ts` (`keeps a primitive-backed
+plugin on its mounted version`, `remounts a declarative plugin immediately`).
+
+## The health signal must not report on an empty page or from a second observer
+
+- **Trap:** "This plugin found nothing to act on" is only meaningful once the conversation has
+  rendered. Evaluating on a fixed timer flags every plugin on a slow network, and evaluating on an
+  empty conversation flags every plugin on a new chat. A second MutationObserver for the signal
+  also broke the engine's invariant of observing only while a plugin has DOM ops.
+- **Rule:** The engine's single observer feeds `HealthMonitor.noteMutation`; a verdict waits for a
+  quiet period (the deadline only caps the first wait), requires `userTurn` matches > 0, counts
+  targets from DOM ops plus primitive counters, and pure-CSS plugins are never tracked.
+- **Guard:** `src/features/plugins/runtime/healthMonitor.test.ts`,
+  `src/features/plugins/runtime/declarativeEngine.native.test.ts` (health cases),
+  `src/features/plugins/runtime/declarativeEngine.test.ts` (`installs a MutationObserver only
+while an active plugin has domOps`).
+
 ## Catalog CSS must be read for real under Vitest
 
 - **Trap:** Vitest replaces every CSS import with an empty module unless the file matches

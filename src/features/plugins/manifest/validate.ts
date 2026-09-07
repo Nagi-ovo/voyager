@@ -9,13 +9,14 @@
  */
 import type { Result } from '@/core/types/common';
 
-import { MAX_DOM_OPS, MAX_STYLE_LENGTH } from '../constants';
+import { MAX_DOM_OPS, MAX_STYLE_LENGTH, PLUGIN_MANIFEST_FORMAT } from '../constants';
 import type {
   DomOperation,
   LocalizedSettingField,
   PluginContributions,
   PluginLocalization,
   PluginManifest,
+  PluginRequirements,
   PluginTheme,
   PluginTier,
   SelectorRef,
@@ -23,6 +24,7 @@ import type {
   SettingsSchema,
   StyleContribution,
 } from '../types';
+import { PRIMITIVE_NAME_PATTERN } from '../verbs/contracts';
 
 const SETTING_TYPES = ['boolean', 'number', 'string', 'color', 'select'] as const;
 
@@ -32,7 +34,13 @@ export interface ManifestIssue {
 }
 
 const TIERS = ['declarative', 'scripted'] as const;
-const OP_KINDS = ['addClass', 'setAttribute', 'setStyle', 'hide'] as const;
+const OP_KINDS = ['addClass', 'setAttribute', 'setStyle', 'hide', 'native'] as const;
+/** Bounds on `native` op params (UNTRUSTED configuration, never instructions). */
+const MAX_PARAMS_DEPTH = 4;
+const MAX_PARAMS_KEYS = 50;
+const MAX_PARAM_STRING_LENGTH = 2_000;
+const MAX_REQUIRES_ENTRIES = 50;
+const MAX_CHANGELOG_LENGTH = 500;
 const REQUIRED_STRINGS = [
   'id',
   'name',
@@ -124,8 +132,12 @@ function normalizeI18n(raw: unknown): Readonly<Record<string, PluginLocalization
     const entry: {
       name?: string;
       description?: string;
+      changelog?: string;
       settings?: Readonly<Record<string, LocalizedSettingField>>;
     } = {};
+    if (isString(value.changelog) && value.changelog.length <= MAX_CHANGELOG_LENGTH) {
+      entry.changelog = value.changelog;
+    }
     if (isString(value.name) && value.name.length <= MAX_I18N_FIELD_LENGTH) {
       entry.name = value.name;
     }
@@ -134,7 +146,12 @@ function normalizeI18n(raw: unknown): Readonly<Record<string, PluginLocalization
     }
     const settings = normalizeLocalizedSettings(value.settings);
     if (settings) entry.settings = settings;
-    if (entry.name !== undefined || entry.description !== undefined || entry.settings !== undefined)
+    if (
+      entry.name !== undefined ||
+      entry.description !== undefined ||
+      entry.changelog !== undefined ||
+      entry.settings !== undefined
+    )
       out[locale] = entry;
   }
   return Object.keys(out).length > 0 ? out : undefined;
@@ -212,11 +229,62 @@ function normalizeSelector(
   return null;
 }
 
+/**
+ * `native` op params are plain JSON configuration: primitives, arrays and
+ * objects of those, bounded in depth, count and string length. Anything else
+ * (functions cannot arrive through JSON, but prototype keys and oversized
+ * blobs can) is rejected.
+ */
+function isPlainParamValue(value: unknown, depth: number): boolean {
+  if (depth > MAX_PARAMS_DEPTH) return false;
+  if (value === null || typeof value === 'boolean' || typeof value === 'number') {
+    return typeof value !== 'number' || Number.isFinite(value);
+  }
+  if (typeof value === 'string') return value.length <= MAX_PARAM_STRING_LENGTH;
+  if (Array.isArray(value)) {
+    return (
+      value.length <= MAX_PARAMS_KEYS && value.every((item) => isPlainParamValue(item, depth + 1))
+    );
+  }
+  if (isRecord(value)) {
+    const entries = Object.entries(value);
+    return (
+      entries.length <= MAX_PARAMS_KEYS &&
+      entries.every(
+        ([key, item]) =>
+          key !== '__proto__' &&
+          key !== 'constructor' &&
+          key !== 'prototype' &&
+          isPlainParamValue(item, depth + 1),
+      )
+    );
+  }
+  return false;
+}
+
+function normalizeNativeOp(
+  raw: Record<string, unknown>,
+  path: string,
+  issues: ManifestIssue[],
+): DomOperation | null {
+  if (!isString(raw.handler) || !PRIMITIVE_NAME_PATTERN.test(raw.handler)) {
+    issues.push({ path: `${path}.handler`, message: 'must be a primitive name (camelCase)' });
+    return null;
+  }
+  const params = raw.params === undefined ? {} : raw.params;
+  if (!isRecord(params) || !isPlainParamValue(params, 0)) {
+    issues.push({ path: `${path}.params`, message: 'must be a plain JSON object of bounded size' });
+    return null;
+  }
+  return { op: 'native', handler: raw.handler, params };
+}
+
 function normalizeOp(raw: unknown, path: string, issues: ManifestIssue[]): DomOperation | null {
   if (!isRecord(raw) || !isString(raw.op) || !(OP_KINDS as readonly string[]).includes(raw.op)) {
     issues.push({ path: `${path}.op`, message: `must be one of ${OP_KINDS.join(', ')}` });
     return null;
   }
+  if (raw.op === 'native') return normalizeNativeOp(raw, path, issues);
   const target = normalizeSelector(raw.target, `${path}.target`, issues);
   if (!target) return null;
 
@@ -388,11 +456,62 @@ function normalizeContributions(raw: unknown, issues: ManifestIssue[]): PluginCo
   return result;
 }
 
+function normalizeStringList(
+  raw: unknown,
+  path: string,
+  issues: ManifestIssue[],
+): readonly string[] | undefined {
+  if (raw === undefined) return undefined;
+  if (
+    !Array.isArray(raw) ||
+    raw.length > MAX_REQUIRES_ENTRIES ||
+    !raw.every((entry) => nonEmptyString(entry) && entry.length <= 100)
+  ) {
+    issues.push({ path, message: 'must be an array of short non-empty strings' });
+    return undefined;
+  }
+  return Array.from(new Set(raw as string[]));
+}
+
+function normalizeRequires(raw: unknown, issues: ManifestIssue[]): PluginRequirements | undefined {
+  if (raw === undefined) return undefined;
+  if (!isRecord(raw)) {
+    issues.push({ path: 'requires', message: 'must be an object' });
+    return undefined;
+  }
+  const handlers = normalizeStringList(raw.handlers, 'requires.handlers', issues);
+  const semantic = normalizeStringList(raw.semantic, 'requires.semantic', issues);
+  if (handlers?.some((name) => !PRIMITIVE_NAME_PATTERN.test(name))) {
+    issues.push({ path: 'requires.handlers', message: 'entries must be primitive names' });
+  }
+  if (!handlers && !semantic) return undefined;
+  return { ...(handlers ? { handlers } : {}), ...(semantic ? { semantic } : {}) };
+}
+
 export function validateManifest(input: unknown): Result<PluginManifest, ManifestIssue[]> {
   if (!isRecord(input)) {
     return { success: false, error: [{ path: '', message: 'manifest must be an object' }] };
   }
   const issues: ManifestIssue[] = [];
+
+  if (input.format !== undefined && input.format !== PLUGIN_MANIFEST_FORMAT) {
+    issues.push({
+      path: 'format',
+      message: `unsupported manifest format (expected ${PLUGIN_MANIFEST_FORMAT})`,
+    });
+  }
+  const requires = normalizeRequires(input.requires, issues);
+  let changelog: string | undefined;
+  if (input.changelog !== undefined) {
+    if (nonEmptyString(input.changelog) && input.changelog.length <= MAX_CHANGELOG_LENGTH) {
+      changelog = input.changelog;
+    } else {
+      issues.push({
+        path: 'changelog',
+        message: `must be a non-empty string up to ${MAX_CHANGELOG_LENGTH} chars`,
+      });
+    }
+  }
 
   for (const key of REQUIRED_STRINGS) {
     if (!nonEmptyString(input[key]))
@@ -438,6 +557,9 @@ export function validateManifest(input: unknown): Result<PluginManifest, Manifes
     matches: (input.matches as string[]).slice(),
     contributes,
     ...(theme ? { theme } : {}),
+    ...(typeof input.format === 'number' ? { format: input.format } : {}),
+    ...(requires ? { requires } : {}),
+    ...(changelog ? { changelog } : {}),
     ...(i18n ? { i18n } : {}),
   };
   return { success: true, data: manifest };

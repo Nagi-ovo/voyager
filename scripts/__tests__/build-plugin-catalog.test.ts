@@ -49,11 +49,19 @@ function writeJson(path: string, value: unknown): void {
   writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
 }
 
+interface FixtureOverrides {
+  readonly matches?: readonly string[];
+  /** Merged into the plugin manifest, so one knob per rule under test. */
+  readonly manifest?: Record<string, unknown>;
+  /** Merged into the site adapter's semantic selectors. */
+  readonly selectors?: Record<string, string>;
+}
+
 /**
  * A minimal catalog with one site and one plugin, so a rule can be exercised
- * without touching the shipped snapshot. `pluginMatches` is the knob under test.
+ * without touching the shipped snapshot.
  */
-function makeFixtureCatalog(pluginMatches: readonly string[]): string {
+function makeFixtureCatalog(overrides: FixtureOverrides = {}): string {
   const catalogDir = join(makeTempDir(), 'catalog');
   const siteDir = join(catalogDir, 'sites', 'demo');
   const pluginDir = join(siteDir, 'plugins', 'widen');
@@ -62,7 +70,7 @@ function makeFixtureCatalog(pluginMatches: readonly string[]): string {
     id: 'demo',
     label: 'Demo',
     matches: ['https://demo.example/*'],
-    selectors: { composer: 'textarea' },
+    selectors: { composer: 'textarea', ...overrides.selectors },
     theme: { hostSelector: 'html', lightSelector: 'html.light', darkSelector: 'html.dark' },
     capabilities: ['chat'],
     conversationIdPattern: '^/c/([^/?#]+)',
@@ -77,8 +85,9 @@ function makeFixtureCatalog(pluginMatches: readonly string[]): string {
     license: 'MIT',
     engine: '>=1.2.0',
     tier: 'declarative',
-    matches: pluginMatches,
+    matches: overrides.matches ?? ['https://demo.example/*'],
     contributes: { styles: [{ file: 'style.css' }] },
+    ...overrides.manifest,
   });
   mkdirSync(pluginDir, { recursive: true });
   writeFileSync(join(pluginDir, 'style.css'), 'body { color: red; }\n', 'utf8');
@@ -140,16 +149,18 @@ describe('build-plugin-catalog', () => {
     for (const host of Object.keys(EXPECTED_SITES)) {
       const plugins = readHostFile(outDir, host).plugins as readonly Record<string, unknown>[];
       expect(plugins.length).toBeGreaterThan(0);
+      let styleCount = 0;
       for (const plugin of plugins) {
         const contributes = plugin.contributes as { styles?: Record<string, unknown>[] };
-        const styles = contributes.styles ?? [];
-        expect(styles.length).toBeGreaterThan(0);
-        for (const style of styles) {
+        // A primitive-backed plugin may contribute no CSS at all.
+        for (const style of contributes.styles ?? []) {
+          styleCount += 1;
           expect(typeof style.css).toBe('string');
           expect(String(style.css).length).toBeGreaterThan(0);
           expect(style).not.toHaveProperty('file');
         }
       }
+      expect(styleCount, `${host} published no inlined style at all`).toBeGreaterThan(0);
     }
   });
 
@@ -185,7 +196,7 @@ describe('build-plugin-catalog', () => {
 
   it('publishes a fixture plugin that stays inside its site', async () => {
     const outDir = makeTempDir();
-    const catalogDir = makeFixtureCatalog(['https://demo.example/*']);
+    const catalogDir = makeFixtureCatalog();
 
     const written = await build(outDir, catalogDir);
 
@@ -197,15 +208,154 @@ describe('build-plugin-catalog', () => {
 
   it('fails the build when a plugin targets a host its site does not cover', async () => {
     const outDir = makeTempDir();
-    const catalogDir = makeFixtureCatalog([
-      'https://demo.example/*',
-      'https://elsewhere.example/*',
-    ]);
+    const catalogDir = makeFixtureCatalog({
+      matches: ['https://demo.example/*', 'https://elsewhere.example/*'],
+    });
 
     await expect(build(outDir, catalogDir)).rejects.toThrow(
       /demo\.widen.*https:\/\/elsewhere\.example\/\*.*not covered by site "demo"/s,
     );
     expect(existsSync(join(outDir, 'hosts', 'demo.example.json'))).toBe(false);
+  });
+
+  it('publishes the DeepSeek formula-copy plugin with its requires and native op', async () => {
+    const outDir = makeTempDir();
+    await build(outDir);
+
+    const plugins = readHostFile(outDir, 'chat.deepseek.com').plugins as readonly Record<
+      string,
+      unknown
+    >[];
+    expect(plugins.length).toBe(2);
+
+    const formulaCopy = plugins.find((plugin) => plugin.id === 'voyager.deepseek-formula-copy');
+    if (!formulaCopy) throw new Error('the formula-copy plugin was not published');
+    expect(formulaCopy.requires).toEqual({ handlers: ['formulaCopy'] });
+    expect(typeof formulaCopy.changelog).toBe('string');
+    const contributes = formulaCopy.contributes as { domOps?: readonly Record<string, unknown>[] };
+    expect(contributes.domOps).toEqual([{ op: 'native', handler: 'formulaCopy', params: {} }]);
+    // The engine floor is what makes an old build say "update Voyager" instead
+    // of reporting a missing handler (plan §5).
+    expect(formulaCopy.engine).toBe('>=1.3.0');
+  });
+
+  it('fails the build when a plugin names a primitive this build does not ship', async () => {
+    const outDir = makeTempDir();
+    const catalogDir = makeFixtureCatalog({
+      manifest: {
+        engine: '>=1.3.0',
+        requires: { handlers: ['teleport'] },
+        contributes: { styles: [{ file: 'style.css' }] },
+      },
+    });
+
+    await expect(build(outDir, catalogDir)).rejects.toThrow(
+      /demo\.widen.*unknown primitive handler "teleport"/s,
+    );
+    expect(existsSync(join(outDir, 'hosts', 'demo.example.json'))).toBe(false);
+  });
+
+  it('fails the build when the engine range admits a build older than a primitive', async () => {
+    const outDir = makeTempDir();
+    const catalogDir = makeFixtureCatalog({
+      manifest: {
+        engine: '>=1.2.0',
+        contributes: {
+          styles: [{ file: 'style.css' }],
+          domOps: [{ op: 'native', handler: 'formulaCopy', params: {} }],
+        },
+      },
+    });
+
+    await expect(build(outDir, catalogDir)).rejects.toThrow(
+      /demo\.widen.*engine ">=1\.2\.0" admits builds older than 1\.3\.0.*"formulaCopy"/s,
+    );
+    expect(existsSync(join(outDir, 'hosts', 'demo.example.json'))).toBe(false);
+  });
+
+  it('fails the build when an open engine range is paired with a primitive', async () => {
+    const outDir = makeTempDir();
+    const catalogDir = makeFixtureCatalog({
+      manifest: {
+        engine: '*',
+        contributes: {
+          styles: [{ file: 'style.css' }],
+          domOps: [{ op: 'native', handler: 'formulaCopy', params: {} }],
+        },
+      },
+    });
+
+    await expect(build(outDir, catalogDir)).rejects.toThrow(
+      /demo\.widen.*engine "\*" admits any build.*at least 1\.3\.0/s,
+    );
+  });
+
+  it('accepts a primitive whose sinceEngine the engine range clears', async () => {
+    const outDir = makeTempDir();
+    const catalogDir = makeFixtureCatalog({
+      manifest: {
+        engine: '>=1.3.0',
+        requires: { handlers: ['formulaCopy'] },
+        contributes: {
+          styles: [{ file: 'style.css' }],
+          domOps: [{ op: 'native', handler: 'formulaCopy', params: {} }],
+        },
+      },
+    });
+
+    await build(outDir, catalogDir);
+
+    const plugins = readHostFile(outDir, 'demo.example').plugins as readonly Record<
+      string,
+      unknown
+    >[];
+    expect(plugins.map((plugin) => plugin.id)).toEqual(['demo.widen']);
+  });
+
+  it('fails the build when a plugin needs a semantic key its site does not define', async () => {
+    const outDir = makeTempDir();
+    const catalogDir = makeFixtureCatalog({
+      manifest: {
+        contributes: {
+          styles: [{ file: 'style.css' }],
+          domOps: [
+            {
+              op: 'addClass',
+              target: { kind: 'semantic', key: 'scrollContainer' },
+              className: 'gv-plugin-demo',
+            },
+          ],
+        },
+      },
+    });
+
+    await expect(build(outDir, catalogDir)).rejects.toThrow(
+      /demo\.widen.*"scrollContainer".*not defined by site "demo"/s,
+    );
+    expect(existsSync(join(outDir, 'hosts', 'demo.example.json'))).toBe(false);
+  });
+
+  it('accepts a semantic target once its site declares the key', async () => {
+    const outDir = makeTempDir();
+    const catalogDir = makeFixtureCatalog({
+      selectors: { scrollContainer: 'main' },
+      manifest: {
+        contributes: {
+          styles: [{ file: 'style.css' }],
+          domOps: [
+            {
+              op: 'addClass',
+              target: { kind: 'semantic', key: 'scrollContainer' },
+              className: 'gv-plugin-demo',
+            },
+          ],
+        },
+      },
+    });
+
+    await build(outDir, catalogDir);
+
+    expect(existsSync(join(outDir, 'hosts', 'demo.example.json'))).toBe(true);
   });
 
   it('parses --out and --now, and rejects unknown flags', () => {

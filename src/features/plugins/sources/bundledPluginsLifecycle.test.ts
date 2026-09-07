@@ -86,7 +86,9 @@ describe('bundled plugin lifecycle (parametric)', async () => {
         expect(styleEl).not.toBeNull();
         expect(styleEl?.textContent?.length ?? 0).toBeGreaterThan(0);
       }
-      if (manifest.contributes.domOps?.length) {
+      // Only ops that address page elements change the host markup; a
+      // primitive-only plugin (`native` op) runs code instead.
+      if (manifest.contributes.domOps?.some((op) => op.op !== 'native')) {
         expect(document.body.outerHTML).not.toBe(before.body);
       }
 
@@ -103,6 +105,7 @@ describe('bundled plugin lifecycle (parametric)', async () => {
     it(`${manifest.id}: every semantic target resolves on its site adapter`, () => {
       const adapter = adapterFor(manifest);
       for (const op of manifest.contributes.domOps ?? []) {
+        if (op.op === 'native') continue;
         if (op.target.kind === 'semantic') {
           expect(adapter.selectors[op.target.key], `${manifest.id}: ${op.target.key}`).toBeTruthy();
         }

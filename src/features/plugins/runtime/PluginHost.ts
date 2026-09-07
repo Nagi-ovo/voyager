@@ -23,7 +23,6 @@ import { logger } from '@/core/services/LoggerService';
 import { isExtensionContextInvalidatedError } from '@/core/utils/extensionContext';
 
 import { isScriptedTierSupported } from '../capabilities';
-import { PLUGIN_ENGINE_VERSION } from '../constants';
 import { LocalEntitlementProvider } from '../entitlement/LocalEntitlementProvider';
 import { subscribeHostCatalog } from '../remote/hostCatalogCache';
 import { catalogHostFromUrl, hasEnabledPluginForUrl } from '../remote/hostCatalogPolicy';
@@ -32,22 +31,24 @@ import {
   resolveSiteAdapterForUrl,
   resolveSiteOverride,
 } from '../remote/siteOverride';
-import { engineSatisfied } from '../semver';
 import { matchesAnyPattern } from '../sites/matchPattern';
 import { SiteRegistry } from '../sites/registry';
 import { createDefaultPluginSources, listPluginManifests } from '../sources/defaultSources';
 import { type PluginStateMap, loadPluginState, subscribePluginState } from '../storage/pluginState';
-import type {
-  EntitlementProvider,
-  PluginManifest,
-  PluginSettingValue,
-  PluginSettings,
-  PluginSource,
-  PluginSourceContext,
-  SiteAdapter,
+import {
+  type EntitlementProvider,
+  type PluginManifest,
+  type PluginSettingValue,
+  type PluginSettings,
+  type PluginSource,
+  type PluginSourceContext,
+  type SiteAdapter,
+  hasNativeOps,
 } from '../types';
+import { hasPrimitive } from '../verbs/registry';
 import { DeclarativeEngine } from './declarativeEngine';
 import { PLUGIN_CATALOG_REFRESH_MESSAGE } from './messages';
+import { type PluginStatus, findIncompatibility } from './pluginStatus';
 
 export interface PluginHostOptions {
   readonly url?: string;
@@ -96,6 +97,12 @@ export class PluginHost {
   private adapter: SiteAdapter | null = null;
   private engine: DeclarativeEngine | null = null;
   private manifests: readonly PluginManifest[] = [];
+  /**
+   * Plugins whose newer manifest arrived while this page keeps the mounted
+   * version (plan D7): primitive-backed contributions switch only on the next
+   * full page load, so the mounted manifest is pinned here until then.
+   */
+  private readonly frozen = new Map<string, { mounted: PluginManifest; pendingVersion: string }>();
   private state: PluginStateMap = {};
   private unsubscribeState: (() => void) | null = null;
   private unsubscribeCatalog: (() => void) | null = null;
@@ -163,7 +170,7 @@ export class PluginHost {
       const adapter = await this.resolveAdapter();
       if (this.generation !== gen) return;
       this.adapter = adapter;
-      this.engine = new DeclarativeEngine({ doc: this.doc, adapter: this.adapter });
+      this.engine = this.createEngine(adapter);
       engineReady = true;
       // Subscribe BEFORE the initial reads: a state write that lands while
       // they are in flight must still reach this instance. The callback only
@@ -211,6 +218,52 @@ export class PluginHost {
     this.unsubscribeCatalog = null;
     this.engine?.unmountAll();
     this.pushedSettings.clear();
+    this.frozen.clear();
+  }
+
+  /**
+   * Status of every plugin that targets this page (plan §4.2). Incompatible
+   * plugins are reported with their reason instead of being hidden; the
+   * popup renders these and adds its own permission check.
+   */
+  getStatuses(): readonly PluginStatus[] {
+    const engine = this.engine;
+    const statuses: PluginStatus[] = [];
+    for (const listed of this.manifests) {
+      if (!matchesAnyPattern(this.url, listed.matches)) continue;
+      const pinned = this.frozen.get(listed.id);
+      const manifest = pinned?.mounted ?? listed;
+      const incompatibility = findIncompatibility({
+        manifest,
+        adapter: this.adapter,
+        hasPrimitive,
+      });
+      const pending = pinned ? { pendingVersion: pinned.pendingVersion } : {};
+      if (incompatibility) {
+        statuses.push({ ...incompatibility, ...pending });
+        continue;
+      }
+      const base = { id: manifest.id, version: manifest.version, ...pending };
+      if (engine?.isActive(manifest.id)) {
+        statuses.push({
+          ...base,
+          kind: engine.getHealth(manifest.id) === true ? 'no-effect' : 'mounted',
+        });
+      } else {
+        statuses.push({ ...base, kind: 'ready' });
+      }
+    }
+    return statuses;
+  }
+
+  private createEngine(adapter: SiteAdapter | null): DeclarativeEngine {
+    return new DeclarativeEngine({
+      doc: this.doc,
+      adapter,
+      onHealthChange: (id, noEffect) => {
+        logger.info('Plugin health changed', { id, noEffect });
+      },
+    });
   }
 
   /**
@@ -237,18 +290,46 @@ export class PluginHost {
    * Reload manifests from the (refreshed) catalog and re-mount so new CSS
    * applies. A changed site adapter (remote override arrived or was
    * withdrawn) rebuilds the engine so semantic selectors resolve against it.
+   *
+   * Plan D7: a mounted plugin whose contributions run first-party code (a
+   * `native` op) keeps the version it started with; its update is recorded
+   * as pending and applies on the next full page load. Declarative plugins
+   * remount immediately.
    */
   private async reloadCatalog(gen: number): Promise<void> {
     const engine = this.engine;
     if (!engine || this.generation !== gen) return;
     const [manifests, adapter] = await Promise.all([this.loadManifests(), this.resolveAdapter()]);
     if (this.generation !== gen) return;
+    const previous = new Map(this.manifests.map((manifest) => [manifest.id, manifest]));
+    const adapterChanged = !isSameSiteAdapter(adapter, this.adapter);
+    for (const next of manifests) {
+      const mounted = this.frozen.get(next.id)?.mounted ?? previous.get(next.id);
+      if (!mounted || !engine.isActive(next.id)) continue;
+      if (!hasNativeOps(mounted) && !hasNativeOps(next)) continue;
+      if (mounted.version === next.version && sameContributions(mounted, next)) {
+        this.frozen.delete(next.id);
+        continue;
+      }
+      this.frozen.set(next.id, { mounted, pendingVersion: next.version });
+    }
+    for (const id of [...this.frozen.keys()]) {
+      if (!manifests.some((manifest) => manifest.id === id)) this.frozen.delete(id);
+    }
     this.manifests = manifests;
-    engine.unmountAll();
-    this.pushedSettings.clear();
-    if (!isSameSiteAdapter(adapter, this.adapter)) {
+    if (adapterChanged) {
+      engine.unmountAll();
+      this.pushedSettings.clear();
       this.adapter = adapter;
-      this.engine = new DeclarativeEngine({ doc: this.doc, adapter });
+      this.engine = this.createEngine(adapter);
+    } else {
+      for (const manifest of manifests) {
+        if (this.frozen.has(manifest.id)) continue;
+        if (engine.isActive(manifest.id)) {
+          engine.unmount(manifest.id);
+          this.pushedSettings.delete(manifest.id);
+        }
+      }
     }
     await this.reconcile(gen);
   }
@@ -264,7 +345,7 @@ export class PluginHost {
     // chain). A revision that lands mid-pass gets its own queued pass.
     const engine = this.engine;
     const state = this.state;
-    const manifests = this.manifests;
+    const manifests = this.manifests.map((listed) => this.frozen.get(listed.id)?.mounted ?? listed);
     if (!engine) return;
     for (const manifest of manifests) {
       if (this.generation !== gen) return;
@@ -307,11 +388,18 @@ export class PluginHost {
   private async shouldActivate(manifest: PluginManifest, state: PluginStateMap): Promise<boolean> {
     if (!matchesAnyPattern(this.url, manifest.matches)) return false;
     if (!state[manifest.id]?.enabled) return false;
-    if (!engineSatisfied(manifest.engine, PLUGIN_ENGINE_VERSION)) {
-      logger.warn('Plugin skipped: engine range not satisfied', {
+    const incompatibility = findIncompatibility({
+      manifest,
+      adapter: this.adapter,
+      hasPrimitive,
+    });
+    if (incompatibility) {
+      logger.warn('Plugin skipped: incompatible with this build or site', {
         id: manifest.id,
-        requires: manifest.engine,
-        host: PLUGIN_ENGINE_VERSION,
+        status: incompatibility.kind,
+        requiredEngine: incompatibility.requiredEngine,
+        missingHandlers: incompatibility.missingHandlers,
+        missingSemantic: incompatibility.missingSemantic,
       });
       return false;
     }
@@ -340,4 +428,8 @@ export class PluginHost {
     if (!hasEnabledPluginForUrl(this.manifests, this.state, this.url)) return;
     this.requestCatalogRefresh(host);
   }
+}
+
+function sameContributions(a: PluginManifest, b: PluginManifest): boolean {
+  return JSON.stringify(a.contributes) === JSON.stringify(b.contributes);
 }

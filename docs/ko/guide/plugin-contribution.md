@@ -146,6 +146,31 @@ src/features/plugins/catalog/
 
 선언형 작업은 되돌릴 수 있고 반복 실행해도 안전해야 합니다. 한 번뿐인 페이지 상태에 의존하지 말고, DOM이 항상 그대로라고 가정하지 마세요.
 
+### 프리미티브
+
+CSS와 되돌릴 수 있는 DOM 수정만으로는 표현할 수 없는 동작도 있습니다. 프리미티브는 Voyager 안에 함께 배포되는 자체 코드이며, manifest는 `native` 작업으로 이름을 적어 호출할 수 있습니다.
+
+```json
+{
+  "engine": ">=1.3.0",
+  "requires": { "handlers": ["formulaCopy"] },
+  "contributes": {
+    "domOps": [{ "op": "native", "handler": "formulaCopy", "params": {} }]
+  }
+}
+```
+
+manifest는 프리미티브를 고르고 설정할 뿐 로직을 담지 않습니다. `params`는 실행 전에 해당 프리미티브가 직접 검증합니다.
+
+프리미티브를 쓰는 플러그인에는 두 가지 규칙이 있습니다.
+
+- `requires.handlers`에 그 프리미티브를 적어야 합니다.
+- `engine`은 그 프리미티브가 처음 들어간 엔진 버전 이상이어야 합니다. `formulaCopy`는 엔진 1.3.0에 들어갔으므로 이를 쓰는 플러그인은 `">=1.3.0"`으로 선언합니다. 범위가 더 낮으면 `bun run catalog:build`가 실패합니다. 예전 Voyager에서는 업데이트를 안내하는 대신 handler가 없다고 보고하기 때문입니다.
+
+프리미티브는 늘어나기만 합니다. 새 매개변수는 항상 선택이고, 호환성을 깨는 변경은 새 이름으로 나갑니다.
+
+동작이 바뀐 플러그인은 한 줄짜리 `changelog`도 넣을 수 있고, popup이 버전 옆에 보여줍니다. 번역은 `name`, `description`과 나란히 `i18n.<locale>.changelog`에 씁니다.
+
 ## 일반 플러그인에 적합하지 않은 경우
 
 JavaScript 실행, 요청 가로채기, Voyager 내부 데이터 읽기/쓰기, 복잡한 런타임 로직이 필요한 기능은 일반 선언형 플러그인에 적합하지 않습니다.

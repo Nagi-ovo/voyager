@@ -25,6 +25,7 @@ import {
   subscribePluginCatalogSettings,
 } from '@/features/plugins/remote/hostCatalogSettings';
 import { PLUGIN_CONTENT_SCRIPT_SYNC_MESSAGE } from '@/features/plugins/runtime/messages';
+import type { PluginStatus } from '@/features/plugins/runtime/pluginStatus';
 import { pluginToOriginPatternsForActiveUrl } from '@/features/plugins/runtime/siteRegistration';
 import { matchesAnyPattern } from '@/features/plugins/sites/matchPattern';
 import { SiteRegistry } from '@/features/plugins/sites/registry';
@@ -32,6 +33,8 @@ import type { BlockedPluginUpdate } from '@/features/plugins/sources/defaultSour
 import {
   loadCollapsedPlugins,
   loadPluginState,
+  loadSeenPluginVersions,
+  markPluginVersionsSeen,
   setPluginCollapsed,
   setPluginEnabled,
   setPluginSetting,
@@ -150,11 +153,17 @@ function localeCandidates(lang: string): string[] {
   return Array.from(new Set(candidates));
 }
 
+function pickLocalized(plugin: PluginManifest, field: 'name' | 'description', lang: string): string;
 function pickLocalized(
   plugin: PluginManifest,
-  field: 'name' | 'description',
+  field: 'changelog',
   lang: string,
-): string {
+): string | undefined;
+function pickLocalized(
+  plugin: PluginManifest,
+  field: 'name' | 'description' | 'changelog',
+  lang: string,
+): string | undefined {
   for (const locale of localeCandidates(lang)) {
     const value = plugin.i18n?.[locale]?.[field];
     if (value) return value;
@@ -240,6 +249,13 @@ export interface PluginManagerProps {
   readonly blockedUpdates?: Readonly<Record<string, BlockedPluginUpdate>>;
   /** Host whose remote catalog this popup reads; undefined on hosts that can never have one. */
   readonly catalogHost?: string;
+  /**
+   * Per-plugin status reported by the active tab's PluginHost (plan §4.2):
+   * needs-engine / needs-handler / needs-semantic disable the toggle with a
+   * reason, no-effect shows the health warning, pendingVersion says the update
+   * applies after a page reload. Empty when the tab reported nothing.
+   */
+  readonly statuses?: readonly PluginStatus[];
 }
 
 /**
@@ -255,18 +271,36 @@ export function PluginManager({
   sourceIds,
   blockedUpdates,
   catalogHost,
+  statuses,
 }: PluginManagerProps) {
   const { t, language } = useLanguage();
   // The site the popup is currently open on — the "active site" the badge needs
   // to pick the right logo for a multi-site plugin. Resolved via the shared
   // SiteRegistry (single source of truth for "which site is this URL").
-  const currentSiteId = useMemo(
-    () =>
-      activeUrl
-        ? (SiteRegistry.createDefault().resolveByUrl(activeUrl)?.id ?? undefined)
-        : undefined,
+  const currentSite = useMemo(
+    () => (activeUrl ? SiteRegistry.createDefault().resolveByUrl(activeUrl) : null),
     [activeUrl],
   );
+  const currentSiteId = currentSite?.id ?? undefined;
+  // Human name for the active site, used by the needs-semantic reason. The
+  // adapter's own label is the friendly one; without an adapter the bare host
+  // is still more informative than a blank.
+  const currentSiteLabel = useMemo(() => {
+    if (currentSite) return currentSite.label;
+    if (!activeUrl) return undefined;
+    try {
+      return new URL(activeUrl).hostname;
+    } catch {
+      return undefined;
+    }
+  }, [activeUrl, currentSite]);
+  // Status per plugin id. A plugin the tab said nothing about keeps today's
+  // behaviour (enabled toggle, no note).
+  const statusById = useMemo(() => {
+    const map = new Map<string, PluginStatus>();
+    for (const status of statuses ?? []) map.set(status.id, status);
+    return map;
+  }, [statuses]);
   const [enabledMap, setEnabledMap] = useState<EnabledMap>({});
   const [settingsMap, setSettingsMap] = useState<SettingsMap>({});
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -281,6 +315,13 @@ export function PluginManager({
   // timestamp still refreshes the status line: subscribeHostCatalog
   // deliberately stays quiet for bookkeeping-only writes.
   const wasRefreshing = useRef(false);
+  // "Updated" badges (plan D11). The seen-version snapshot is read once per
+  // popup session and never refreshed from storage afterwards, so the versions
+  // can be marked seen immediately while the chips stay on screen for as long
+  // as this popup is open.
+  const seenVersions = useRef<Readonly<Record<string, string>>>({});
+  const [seenVersionsLoaded, setSeenVersionsLoaded] = useState(false);
+  const [updatedIds, setUpdatedIds] = useState<ReadonlySet<string>>(() => new Set<string>());
 
   // Coalesced persistence for setting sliders (see handleSetting). Keyed by
   // `${pluginId}:${settingKey}` so independent sliders keep independent timers.
@@ -310,6 +351,41 @@ export function PluginManager({
       unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    void loadSeenPluginVersions().then((versions) => {
+      if (!active) return;
+      seenVersions.current = versions;
+      setSeenVersionsLoaded(true);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // Compare the listed manifests against the snapshot, then record what this
+  // popup showed. A plugin seen here for the FIRST time is new, not updated, so
+  // it gets no chip — only a version that differs from a recorded one does.
+  useEffect(() => {
+    if (!seenVersionsLoaded || manifests.length === 0) return;
+    const seen = seenVersions.current;
+    const changed = manifests
+      .filter((plugin) => {
+        const previous = seen[plugin.id];
+        return previous !== undefined && previous !== plugin.version;
+      })
+      .map((plugin) => plugin.id);
+    if (changed.length > 0) {
+      setUpdatedIds((previous) => {
+        if (changed.every((id) => previous.has(id))) return previous;
+        return new Set([...previous, ...changed]);
+      });
+    }
+    const versions: Record<string, string> = {};
+    for (const plugin of manifests) versions[plugin.id] = plugin.version;
+    void markPluginVersionsSeen(versions);
+  }, [manifests, seenVersionsLoaded]);
 
   // Plugin updates can add a narrowly-scoped companion origin after a user has
   // already enabled the plugin. Chrome cannot grant that new optional origin in
@@ -564,6 +640,8 @@ export function PluginManager({
     });
   }, []);
 
+  const hasUpdatedPlugins = manifests.some((plugin) => updatedIds.has(plugin.id));
+
   /**
    * One line describing the online catalog for this host: a 404 is a settled
    * answer ("this site has no catalog"), so it replaces the timestamp rather
@@ -581,7 +659,16 @@ export function PluginManager({
   return (
     <Card className="p-4 transition-all hover:shadow-md">
       <div className="mb-4 flex items-center justify-between">
-        <CardTitle>{t('pluginsTitle')}</CardTitle>
+        <div className="flex items-center gap-1.5">
+          <CardTitle>{t('pluginsTitle')}</CardTitle>
+          {hasUpdatedPlugins && (
+            <span
+              data-testid="plugin-updates-dot"
+              className="bg-primary inline-block h-1.5 w-1.5 rounded-full"
+              aria-hidden="true"
+            />
+          )}
+        </div>
         {onRefresh && (
           <button
             type="button"
@@ -630,6 +717,29 @@ export function PluginManager({
             ? `v${plugin.version} · ${t(sourceLabelKey)}`
             : `v${plugin.version}`;
           const blockedUpdate = blockedUpdates?.[plugin.id];
+          const changelog = pickLocalized(plugin, 'changelog', language);
+          const isUpdated = updatedIds.has(plugin.id);
+          const status = statusById.get(plugin.id);
+          // Only the three incompatibility kinds block the toggle; `no-effect`
+          // stays enabled because the plugin did run, it just found no targets.
+          const blockedReason = ((): string | null => {
+            switch (status?.kind) {
+              case 'needs-engine':
+                return t('pluginNeedsNewerVoyager').replace(
+                  '{engine}',
+                  status.requiredEngine ?? plugin.engine,
+                );
+              case 'needs-handler':
+                return t('pluginNeedsVoyagerUpdate');
+              case 'needs-semantic':
+                return t('pluginNeedsSiteAdapterUpdate').replace(
+                  '{site}',
+                  currentSiteLabel ?? hosts,
+                );
+              default:
+                return null;
+            }
+          })();
           return (
             <div key={plugin.id} className="border-border/60 rounded-lg border p-3">
               <div className="flex items-start justify-between gap-3">
@@ -668,6 +778,11 @@ export function PluginManager({
                     <span className="text-sm leading-snug font-medium break-words">
                       {displayName(localizedName)}
                     </span>
+                    {isUpdated && (
+                      <span className="bg-primary/10 text-primary mt-0.5 shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold tracking-wide uppercase">
+                        {t('pluginUpdatedBadge')}
+                      </span>
+                    )}
                   </button>
 
                   {isOpen && (
@@ -675,6 +790,15 @@ export function PluginManager({
                       <p className="text-muted-foreground mt-1 text-xs leading-snug">
                         {pickLocalized(plugin, 'description', language)}
                       </p>
+                      {changelog && (
+                        <p
+                          className="text-muted-foreground mt-1 truncate text-[11px] leading-snug"
+                          title={changelog}
+                        >
+                          <span className="font-medium">{t('pluginChangelogLabel')}</span>{' '}
+                          {changelog}
+                        </p>
+                      )}
                       <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
                         {hosts && <span className="text-muted-foreground">{hosts}</span>}
                         <span className="text-muted-foreground tabular-nums">{provenance}</span>
@@ -700,6 +824,24 @@ export function PluginManager({
                         </p>
                       )}
                     </>
+                  )}
+
+                  {/* Status notes stay visible while the card is collapsed —
+                      they explain a toggle the user cannot move. */}
+                  {blockedReason && (
+                    <p className="mt-1 text-[11px] leading-snug text-red-500/80">{blockedReason}</p>
+                  )}
+
+                  {status?.kind === 'no-effect' && (
+                    <p className="mt-1 text-[11px] leading-snug text-amber-600 dark:text-amber-400">
+                      {t('pluginNoEffectOnPage')}
+                    </p>
+                  )}
+
+                  {status?.pendingVersion && (
+                    <p className="text-muted-foreground mt-1 text-[11px] leading-snug">
+                      {t('pluginUpdateAfterReload').replace('{version}', status.pendingVersion)}
+                    </p>
                   )}
 
                   {needsSiteAccess && (
@@ -789,6 +931,7 @@ export function PluginManager({
                 </div>
                 <Switch
                   checked={enabled}
+                  disabled={blockedReason !== null}
                   onChange={(e) => {
                     void handleToggle(plugin, e.target.checked);
                   }}

@@ -2637,6 +2637,34 @@
     "message": "このサイトのオンラインカタログはまだありません。",
     "description": "Shown when the online catalog has no entry for the current site"
   },
+  "pluginNeedsNewerVoyager": {
+    "message": "Voyager プラグインエンジン {engine} が必要です",
+    "description": "Note on a plugin this build cannot run because its engine range is newer; {engine} is the required engine range"
+  },
+  "pluginNeedsVoyagerUpdate": {
+    "message": "実行するには新しいバージョンの Voyager が必要です",
+    "description": "Note on a plugin that uses a capability this build of Voyager does not ship"
+  },
+  "pluginNeedsSiteAdapterUpdate": {
+    "message": "更新された {site} アダプターが必要です",
+    "description": "Note on a plugin whose site adapter lacks something it relies on; {site} is the current site name"
+  },
+  "pluginNoEffectOnPage": {
+    "message": "このページには処理できる対象が見つかりませんでした",
+    "description": "Note on an enabled plugin that found no matching elements on this page"
+  },
+  "pluginUpdateAfterReload": {
+    "message": "更新 {version} はページを再読み込みすると適用されます",
+    "description": "Note that a newer plugin version takes effect on the next page load; {version} is the pending version"
+  },
+  "pluginChangelogLabel": {
+    "message": "更新内容:",
+    "description": "Prefix for the plugin's one-line changelog in the popup"
+  },
+  "pluginUpdatedBadge": {
+    "message": "更新あり",
+    "description": "Chip next to a plugin whose version changed since it was last shown"
+  },
   "usageCoachmarkTitle": {
     "message": "新機能：使用量の上限",
     "description": "Coachmark title introducing the usage pill"

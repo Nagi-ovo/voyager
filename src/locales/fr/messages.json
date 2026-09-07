@@ -2637,6 +2637,34 @@
     "message": "Aucun catalogue en ligne pour ce site pour l'instant.",
     "description": "Shown when the online catalog has no entry for the current site"
   },
+  "pluginNeedsNewerVoyager": {
+    "message": "Nécessite le moteur d'extensions Voyager {engine}",
+    "description": "Note on a plugin this build cannot run because its engine range is newer; {engine} is the required engine range"
+  },
+  "pluginNeedsVoyagerUpdate": {
+    "message": "Nécessite une version plus récente de Voyager pour fonctionner",
+    "description": "Note on a plugin that uses a capability this build of Voyager does not ship"
+  },
+  "pluginNeedsSiteAdapterUpdate": {
+    "message": "Nécessite un adaptateur {site} à jour",
+    "description": "Note on a plugin whose site adapter lacks something it relies on; {site} is the current site name"
+  },
+  "pluginNoEffectOnPage": {
+    "message": "N'a rien trouvé sur quoi agir dans cette page",
+    "description": "Note on an enabled plugin that found no matching elements on this page"
+  },
+  "pluginUpdateAfterReload": {
+    "message": "La mise à jour {version} sera appliquée après le rechargement de la page",
+    "description": "Note that a newer plugin version takes effect on the next page load; {version} is the pending version"
+  },
+  "pluginChangelogLabel": {
+    "message": "Nouveautés :",
+    "description": "Prefix for the plugin's one-line changelog in the popup"
+  },
+  "pluginUpdatedBadge": {
+    "message": "Mis à jour",
+    "description": "Chip next to a plugin whose version changed since it was last shown"
+  },
   "usageCoachmarkTitle": {
     "message": "Nouveau : limites d'utilisation",
     "description": "Coachmark title introducing the usage pill"

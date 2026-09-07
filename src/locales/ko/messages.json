@@ -2637,6 +2637,34 @@
     "message": "이 사이트의 온라인 카탈로그가 아직 없습니다.",
     "description": "Shown when the online catalog has no entry for the current site"
   },
+  "pluginNeedsNewerVoyager": {
+    "message": "Voyager 플러그인 엔진 {engine}이 필요합니다",
+    "description": "Note on a plugin this build cannot run because its engine range is newer; {engine} is the required engine range"
+  },
+  "pluginNeedsVoyagerUpdate": {
+    "message": "실행하려면 최신 버전의 Voyager가 필요합니다",
+    "description": "Note on a plugin that uses a capability this build of Voyager does not ship"
+  },
+  "pluginNeedsSiteAdapterUpdate": {
+    "message": "업데이트된 {site} 어댑터가 필요합니다",
+    "description": "Note on a plugin whose site adapter lacks something it relies on; {site} is the current site name"
+  },
+  "pluginNoEffectOnPage": {
+    "message": "이 페이지에서 처리할 대상을 찾지 못했습니다",
+    "description": "Note on an enabled plugin that found no matching elements on this page"
+  },
+  "pluginUpdateAfterReload": {
+    "message": "업데이트 {version}은 페이지를 새로고침하면 적용됩니다",
+    "description": "Note that a newer plugin version takes effect on the next page load; {version} is the pending version"
+  },
+  "pluginChangelogLabel": {
+    "message": "새로운 기능:",
+    "description": "Prefix for the plugin's one-line changelog in the popup"
+  },
+  "pluginUpdatedBadge": {
+    "message": "업데이트됨",
+    "description": "Chip next to a plugin whose version changed since it was last shown"
+  },
   "usageCoachmarkTitle": {
     "message": "신규: 사용량 한도",
     "description": "Coachmark title introducing the usage pill"

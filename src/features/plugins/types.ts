@@ -120,9 +120,26 @@ export type DomOperation =
       readonly target: SelectorRef;
       readonly styles: Readonly<Record<string, string>>;
     }
-  | { readonly op: 'hide'; readonly target: SelectorRef };
+  | { readonly op: 'hide'; readonly target: SelectorRef }
+  | NativeOperation;
+
+/**
+ * Invoke a first-party primitive by name with configuration (plan §5). The
+ * handler must exist in `verbs/registry.ts`; `params` are validated by that
+ * primitive's own guard. Configuration, never instructions (plan C1).
+ */
+export interface NativeOperation {
+  readonly op: 'native';
+  readonly handler: string;
+  readonly params: Readonly<Record<string, unknown>>;
+}
 
 export type DomOperationKind = DomOperation['op'];
+
+/** True for a plugin whose contributions run first-party JS (a `native` op). */
+export function hasNativeOps(manifest: Pick<PluginManifest, 'contributes'>): boolean {
+  return (manifest.contributes.domOps ?? []).some((op) => op.op === 'native');
+}
 
 /** Schema for a user-configurable plugin setting (rendered by the store UI later). */
 export interface SettingField {
@@ -199,7 +216,21 @@ export interface LocalizedSettingField {
 export interface PluginLocalization {
   readonly name?: string;
   readonly description?: string;
+  /** One line describing the latest version (plan D11). */
+  readonly changelog?: string;
   readonly settings?: Readonly<Record<string, LocalizedSettingField>>;
+}
+
+/**
+ * What a plugin needs from the host beyond the engine range (plan §5, D8).
+ * Checked by the status machine; a miss disables the plugin with a reason
+ * instead of hiding it.
+ */
+export interface PluginRequirements {
+  /** Primitive names the plugin invokes through `native` ops. */
+  readonly handlers?: readonly string[];
+  /** Semantic selector keys the plugin expects the site adapter to define. */
+  readonly semantic?: readonly string[];
 }
 
 export interface PluginManifest {
@@ -222,6 +253,11 @@ export interface PluginManifest {
   readonly contributes: PluginContributions;
   /** Optional brand accent for Voyager UI on the matched site(s). */
   readonly theme?: PluginTheme;
+  /** Manifest format major; absent means 1. Host files always carry it. */
+  readonly format?: number;
+  readonly requires?: PluginRequirements;
+  /** One line describing the latest version, shown in the popup (plan D11). */
+  readonly changelog?: string;
   /**
    * Optional localized metadata and setting labels, keyed by app language code
    * (`en`, `zh`, `zh_TW`, `ja`, …). Per-field fallback to the top-level English

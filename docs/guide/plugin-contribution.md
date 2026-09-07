@@ -146,6 +146,31 @@ src/features/plugins/catalog/
 
 声明式操作必须是可撤销、可重复执行的。不要依赖一次性的页面状态，也不要假设页面 DOM 永远不变。
 
+### 原语
+
+有些行为没法只用 CSS 和可撤销的 DOM 修改描述出来。原语是随 Voyager 一起打包的第一方代码，清单可以通过 `native` 操作按名字调用它：
+
+```json
+{
+  "engine": ">=1.3.0",
+  "requires": { "handlers": ["formulaCopy"] },
+  "contributes": {
+    "domOps": [{ "op": "native", "handler": "formulaCopy", "params": {} }]
+  }
+}
+```
+
+清单只负责挑一个原语并给它配置，不提供逻辑；`params` 会先由该原语校验，然后才会执行。
+
+用到原语的插件要遵守两条规则：
+
+- `requires.handlers` 里必须列出这个原语。
+- `engine` 至少要写到首次提供该原语的引擎版本。`formulaCopy` 从引擎 1.3.0 开始提供，所以用到它的插件写 `">=1.3.0"`。写低了 `bun run catalog:build` 会失败，因为旧版 Voyager 那时会报缺少 handler，而不是提示用户升级。
+
+原语只增不改：新参数一定是可选的，破坏性变更会换一个新名字。
+
+有行为变化的插件还可以写一行 `changelog`，popup 会把它显示在版本号旁边。翻译放在 `i18n.<locale>.changelog`，和 `name`、`description` 并列。
+
 ## 什么时候不适合做成普通插件
 
 如果功能必须执行 JavaScript、拦截请求、读写 Voyager 内部数据，或依赖复杂的运行时逻辑，它就不适合作为普通声明式插件提交。
