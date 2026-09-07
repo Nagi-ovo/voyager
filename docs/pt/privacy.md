@@ -37,7 +37,7 @@ A extensão solicita as permissões mínimas necessárias para funcionar:
 
 ## Serviços de Terceiros
 
-O Voyager não partilha nenhuns dados com serviços de terceiros, anunciantes ou fornecedores de análises.
+O Voyager não partilha intencionalmente nenhuns dados com serviços de terceiros, anunciantes ou fornecedores de análises. A única exceção são as ligações descritas acima que o próprio utilizador ativa ou desencadeia (sincronização com o Google Drive, atualizações do catálogo de plugins, etc.): o serviço ou o fornecedor de alojamento em causa pode tratar os metadados de ligação (endereço IP, User-Agent) de acordo com a sua própria política de privacidade.
 
 ## Alterações a Esta Política
 

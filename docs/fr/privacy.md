@@ -37,7 +37,7 @@ L'extension demande le minimum de permissions nécessaires pour fonctionner :
 
 ## Services Tiers
 
-Voyager ne partage aucune donnée avec des services tiers, des annonceurs ou des fournisseurs d'analyse.
+Voyager ne partage intentionnellement aucune donnée avec des services tiers, des annonceurs ou des fournisseurs d'analyse. Seule exception : les connexions décrites ci-dessus que vous activez ou déclenchez vous-même (synchronisation Google Drive, mises à jour du catalogue d'extensions, etc.), pour lesquelles le service ou l'hébergeur concerné peut traiter les métadonnées de connexion (adresse IP, User-Agent) selon sa propre politique de confidentialité.
 
 ## Modifications de cette Politique
 

@@ -37,7 +37,7 @@ Esta extensión solo solicita los permisos mínimos necesarios para funcionar:
 
 ## Servicios de Terceros
 
-Voyager no comparte datos con ningún servicio de terceros, anunciantes o proveedores de análisis.
+Voyager no comparte intencionadamente datos con ningún servicio de terceros, anunciantes o proveedores de análisis. La única excepción son las conexiones descritas arriba que usted mismo activa o inicia (sincronización con Google Drive, actualizaciones del catálogo de plugins, etc.): el servicio o proveedor de alojamiento correspondiente puede tratar los metadatos de conexión (dirección IP, User-Agent) conforme a su propia política de privacidad.
 
 ## Cambios en la Política
 
