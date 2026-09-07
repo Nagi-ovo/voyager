@@ -228,7 +228,8 @@ export interface PluginManifest {
 export type PluginSourceRef =
   | { readonly type: 'builtin' }
   | { readonly type: 'local' }
-  | { readonly type: 'marketplace'; readonly marketplaceId: string; readonly url?: string };
+  | { readonly type: 'marketplace'; readonly marketplaceId: string; readonly url?: string }
+  | { readonly type: 'host-catalog'; readonly host: string };
 
 /** Whether the user is allowed to run a plugin (paywall seam). */
 export type EntitlementState = 'free' | 'entitled' | 'trial' | 'locked';
@@ -244,10 +245,34 @@ export interface InstalledPlugin {
 // Provider seams (swap implementations to add a marketplace / paid store)
 // ---------------------------------------------------------------------------
 
-/** A place plugin manifests come from (builtin bundle now; git marketplace later). */
+/**
+ * Which tier a source belongs to. Drives the merge rules in
+ * `listPluginManifestsWithSources`: `builtin` ids are never overridden by a
+ * remote entry, `remote` entries win over `bundled` snapshots when compatible.
+ * A source without a kind is merged like a bundled snapshot.
+ */
+export type PluginSourceKind = 'builtin' | 'bundled' | 'remote';
+
+/**
+ * Where a listing happens. `host` selects the per-host remote catalog; `url`
+ * scopes the remote kill switch to plugins that actually target this page.
+ */
+export interface PluginSourceContext {
+  readonly host?: string;
+  readonly url?: string;
+}
+
+/** A place plugin manifests come from (builtin bundle, bundled snapshot, per-host remote catalog). */
 export interface PluginSource {
   readonly id: string;
-  list(): Promise<readonly PluginManifest[]>;
+  readonly kind?: PluginSourceKind;
+  list(context?: PluginSourceContext): Promise<readonly PluginManifest[]>;
+  /**
+   * Remote sources only: true when a valid catalog for `context.host` is cached
+   * and its plugin set is therefore the truth for that host — a snapshot plugin
+   * the remote no longer lists is dropped (kill switch).
+   */
+  isAuthoritative?(context?: PluginSourceContext): Promise<boolean>;
 }
 
 /** Decides whether a plugin may run (always `free` now; account/Stripe later). */

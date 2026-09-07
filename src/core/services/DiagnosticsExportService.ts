@@ -8,6 +8,7 @@ export const VOYAGER_DIAGNOSTICS_FILENAME = 'voyager-diagnostics.json';
 export type DiagnosticPluginSource =
   | 'builtin'
   | 'bundled-catalog'
+  | 'host-catalog'
   | 'local'
   | 'marketplace'
   | 'unknown';
@@ -84,6 +85,7 @@ export function diagnosticPluginSourceFromId(sourceId: string | undefined): Diag
   switch (sourceId) {
     case 'builtin':
     case 'bundled-catalog':
+    case 'host-catalog':
     case 'local':
     case 'marketplace':
       return sourceId;

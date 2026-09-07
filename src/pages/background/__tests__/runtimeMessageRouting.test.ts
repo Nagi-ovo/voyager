@@ -12,7 +12,10 @@ import {
   CHATGPT_HANDOFF_GET_TAB_ID_MESSAGE,
   CHATGPT_HANDOFF_SCHEDULE_EXPIRY_MESSAGE,
 } from '@/features/plugins/builtin/chatgptTemporaryHandoff/storage';
-import { PLUGIN_CONTENT_SCRIPT_SYNC_MESSAGE } from '@/features/plugins/runtime/messages';
+import {
+  PLUGIN_CATALOG_REFRESH_MESSAGE,
+  PLUGIN_CONTENT_SCRIPT_SYNC_MESSAGE,
+} from '@/features/plugins/runtime/messages';
 
 import {
   isAllowedSyncContentSender,
@@ -27,6 +30,7 @@ describe('background runtime message routing', () => {
     expect(isHandledBackgroundRuntimeMessage({ type: PLUGIN_CONTENT_SCRIPT_SYNC_MESSAGE })).toBe(
       true,
     );
+    expect(isHandledBackgroundRuntimeMessage({ type: PLUGIN_CATALOG_REFRESH_MESSAGE })).toBe(true);
     expect(
       isHandledBackgroundRuntimeMessage({ type: CHATGPT_HANDOFF_SCHEDULE_EXPIRY_MESSAGE }),
     ).toBe(true);
@@ -52,6 +56,20 @@ describe('background runtime message routing', () => {
 
     expect(repairBranch).toContain('await syncPluginContentScripts()');
     expect(repairBranch).toContain('sendResponse({ ok: true })');
+  });
+
+  it('routes remote plugin catalog checks through the single background refresher', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/pages/background/index.ts'), 'utf8');
+    const branch =
+      source.match(
+        /if \(message\?\.type === PLUGIN_CATALOG_REFRESH_MESSAGE\) \{[\s\S]*?\n {6}\}/,
+      )?.[0] ?? '';
+
+    expect(branch).toContain('parseHostCatalogRefreshPayload(message.payload)');
+    expect(branch).toContain(
+      'hostCatalogRefresher.refresh(request.host, { force: request.force })',
+    );
+    expect(source.match(/new HostCatalogRefresher\(/g)?.length).toBe(1);
   });
 
   it('uploads the complete prompt union even when duplicate names remain', () => {

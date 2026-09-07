@@ -45,6 +45,15 @@ export const baseBuildOptions: BuildOptions = {
 export default defineConfig({
   define: {
     'import.meta.env.VOYAGER_BUILD_TARGET': JSON.stringify(buildTarget),
+    // Remote plugin catalog channel (src/features/plugins/remote/config.ts).
+    // Override the origin for a preview deployment, or set
+    // VOYAGER_PLUGIN_CATALOG_REMOTE=off to ship a snapshot-only build.
+    'import.meta.env.VOYAGER_PLUGIN_CATALOG_URL': JSON.stringify(
+      process.env.VOYAGER_PLUGIN_CATALOG_URL ?? '',
+    ),
+    'import.meta.env.VOYAGER_PLUGIN_CATALOG_REMOTE': JSON.stringify(
+      process.env.VOYAGER_PLUGIN_CATALOG_REMOTE ?? 'on',
+    ),
   },
   resolve: {
     alias: {

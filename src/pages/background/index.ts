@@ -71,7 +71,14 @@ import {
 } from '@/features/plugins/builtin/chatgptTemporaryHandoff/background';
 import { CHATGPT_HANDOFF_GET_TAB_ID_MESSAGE } from '@/features/plugins/builtin/chatgptTemporaryHandoff/storage';
 import { computeNudgeDomains, normalizeIconResourcePath } from '@/features/plugins/promptNudge';
-import { PLUGIN_CONTENT_SCRIPT_SYNC_MESSAGE } from '@/features/plugins/runtime/messages';
+import {
+  HostCatalogRefresher,
+  parseHostCatalogRefreshPayload,
+} from '@/features/plugins/remote/hostCatalogRefresh';
+import {
+  PLUGIN_CATALOG_REFRESH_MESSAGE,
+  PLUGIN_CONTENT_SCRIPT_SYNC_MESSAGE,
+} from '@/features/plugins/runtime/messages';
 import {
   partitionPluginOriginPatterns,
   pluginsToOriginPatterns,
@@ -132,6 +139,9 @@ const responseCompleteNotificationTargets = new Map<
 >();
 let nativeOpenConversationPort: ReturnType<typeof browser.runtime.connectNative> | null = null;
 const remoteAnnouncementService = startRemoteAnnouncementBackgroundService();
+// Remote plugin catalog: the only network writer. Content scripts and the popup
+// only ever ask; this decides (interval, switch, backoff, single flight).
+const hostCatalogRefresher = new HostCatalogRefresher();
 startChatGptTemporaryHandoffBackgroundService();
 startStorageQuotaWarningBackgroundService();
 
@@ -1998,6 +2008,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (message?.type === PLUGIN_CONTENT_SCRIPT_SYNC_MESSAGE) {
         await syncPluginContentScripts();
         sendResponse({ ok: true });
+        return;
+      }
+
+      if (message?.type === PLUGIN_CATALOG_REFRESH_MESSAGE) {
+        const request = parseHostCatalogRefreshPayload(message.payload);
+        if (!request) {
+          sendResponse({ ok: false, error: 'invalid_payload' });
+          return;
+        }
+        sendResponse(await hostCatalogRefresher.refresh(request.host, { force: request.force }));
         return;
       }
 

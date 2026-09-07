@@ -3,6 +3,37 @@
 Read this file when changing ChatGPT or Claude adapters, plugin lifecycles, temporary chat handoff,
 or prompt commands.
 
+## Remote plugin catalog checks are triggered only by pages an enabled plugin targets
+
+- **Trap:** The plugin host starts on every injected page, including Gemini, AI Studio and
+  Claude's per-artifact `*.frame.claudeusercontent.com` iframes. A catalog check keyed on
+  `location.host` from every start would contact voyager.nagi.fun from Gemini (breaking the
+  zero-request promise) and would produce one 404 plus one storage key per random artifact
+  frame host.
+- **Rule:** Only the top frame asks the background for a check, only when
+  `hasEnabledPluginForUrl` is true for the page, and only for a plain hostname
+  (`isEligibleCatalogHost`); the background re-checks eligibility and the user's switch,
+  interval and backoff before any fetch. Manual checks from the popup bypass the interval, not
+  the host-shape rule.
+- **Guard:** `src/features/plugins/runtime/PluginHost.test.ts` (`PluginHost remote catalog`),
+  `src/features/plugins/remote/hostCatalogPolicy.test.ts`,
+  `src/features/plugins/remote/hostCatalogRefresh.test.ts` (`ineligible` case).
+
+## A missing or failed remote catalog must never unmount bundled plugins
+
+- **Trap:** The remote catalog is authoritative for a host (a bundled plugin it no longer lists is
+  dropped). Treating a 404, a network failure, or an entry written by another extension version as
+  "the remote says this plugin is gone" would silently disable every user's plugins the moment the
+  deploy, the CDN or the build lags behind the extension release.
+- **Rule:** Only a valid `format: 1` file for the same host, fetched by the running extension
+  version, is authoritative. 404 is cached as `missing`, failures keep the previous entry and only
+  bump the attempt bookkeeping, and both fall back to the bundled snapshot. Cache writes that do not
+  change the plugin set must not notify subscribers, or every failed attempt would remount CSS.
+- **Guard:** `src/features/plugins/sources/defaultSources.test.ts` (`mergePluginRecords`),
+  `src/features/plugins/remote/HostCatalogSource.test.ts`,
+  `src/features/plugins/remote/hostCatalogCache.test.ts` (`subscribeHostCatalog`),
+  `src/features/plugins/remote/hostCatalogRefresh.test.ts` (404 and failure cases).
+
 ## ChatGPT virtual shells must be repositioned after height reconciliation
 
 - **Trap:** Exporting a cold, long ChatGPT conversation could fail with

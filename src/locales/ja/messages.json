@@ -2550,7 +2550,7 @@
     "description": "Popup section title for the plugin list"
   },
   "pluginsDescription": {
-    "message": "他の AI サイトを強化するプラグインを有効化します。オンにするとそのサイトへのアクセス権限を要求します。",
+    "message": "他の AI サイトを強化するプラグインを有効化します。オンにするとそのサイトへのアクセス権限を要求します。有効なプラグインは voyager.nagi.fun で更新を確認します。",
     "description": "Popup subtitle explaining the plugin list"
   },
   "pluginViewSource": {
@@ -2578,8 +2578,64 @@
     "description": "Shown when no plugins are available"
   },
   "pluginsRefresh": {
-    "message": "プラグインを更新",
-    "description": "Tooltip for the refresh-marketplace-catalog button"
+    "message": "プラグインの更新を今すぐ確認",
+    "description": "Tooltip for the manual plugin-update check button"
+  },
+  "pluginSourceBuiltin": {
+    "message": "内蔵",
+    "description": "Source label for a plugin built into Voyager itself"
+  },
+  "pluginSourceBundled": {
+    "message": "同梱",
+    "description": "Source label for a plugin from the catalog snapshot shipped with this build"
+  },
+  "pluginSourceOnline": {
+    "message": "オンラインカタログ",
+    "description": "Source label for a plugin fetched from the online catalog for this site"
+  },
+  "pluginUpdateNeedsNewerVoyager": {
+    "message": "更新版 {version} には新しい Voyager が必要です。",
+    "description": "Note shown when a plugin update is held back because it needs a newer Voyager; {version} is the held-back version"
+  },
+  "pluginsOnlineUpdates": {
+    "message": "プラグインのオンライン更新",
+    "description": "Label for the switch that allows online plugin update checks for this site"
+  },
+  "pluginsOnlineUpdatesHint": {
+    "message": "このサイト向けのプラグイン更新を voyager.nagi.fun で確認します。送信するのはサイト名だけで、Cookie やページ内容は送りません。オフにすると、上の更新ボタンだけが通信します。",
+    "description": "Explains what the online plugin update check sends and when it runs"
+  },
+  "pluginsCheckInterval": {
+    "message": "確認する間隔",
+    "description": "Label for the automatic plugin update check frequency selector"
+  },
+  "pluginsIntervalHourly": {
+    "message": "1 時間",
+    "description": "Check for plugin updates once an hour"
+  },
+  "pluginsIntervalSixHours": {
+    "message": "6 時間",
+    "description": "Check for plugin updates every six hours"
+  },
+  "pluginsIntervalDaily": {
+    "message": "24 時間",
+    "description": "Check for plugin updates once a day"
+  },
+  "pluginsIntervalManual": {
+    "message": "手動のみ",
+    "description": "Never check automatically; only the manual button checks"
+  },
+  "pluginsLastChecked": {
+    "message": "最終確認: {time}",
+    "description": "Time of the last plugin update check; {time} is a localized date and time"
+  },
+  "pluginsNeverChecked": {
+    "message": "まだ確認していません",
+    "description": "Shown when no plugin update check has run yet"
+  },
+  "pluginsNoOnlineCatalog": {
+    "message": "このサイトのオンラインカタログはまだありません。",
+    "description": "Shown when the online catalog has no entry for the current site"
   },
   "usageCoachmarkTitle": {
     "message": "新機能：使用量の上限",

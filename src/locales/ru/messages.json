@@ -2550,7 +2550,7 @@
     "description": "Popup section title for the plugin list"
   },
   "pluginsDescription": {
-    "message": "Включайте плагины, улучшающие другие сайты ИИ. При включении запрашивается доступ к этому сайту.",
+    "message": "Включайте плагины, улучшающие другие сайты ИИ. При включении запрашивается доступ к этому сайту. Включённые плагины проверяют обновления на voyager.nagi.fun.",
     "description": "Popup subtitle explaining the plugin list"
   },
   "pluginViewSource": {
@@ -2578,8 +2578,64 @@
     "description": "Shown when no plugins are available"
   },
   "pluginsRefresh": {
-    "message": "Обновить плагины",
-    "description": "Tooltip for the refresh-marketplace-catalog button"
+    "message": "Проверить обновления плагинов сейчас",
+    "description": "Tooltip for the manual plugin-update check button"
+  },
+  "pluginSourceBuiltin": {
+    "message": "Встроенный",
+    "description": "Source label for a plugin built into Voyager itself"
+  },
+  "pluginSourceBundled": {
+    "message": "В комплекте",
+    "description": "Source label for a plugin from the catalog snapshot shipped with this build"
+  },
+  "pluginSourceOnline": {
+    "message": "Онлайн-каталог",
+    "description": "Source label for a plugin fetched from the online catalog for this site"
+  },
+  "pluginUpdateNeedsNewerVoyager": {
+    "message": "Для обновления {version} нужна более новая версия Voyager.",
+    "description": "Note shown when a plugin update is held back because it needs a newer Voyager; {version} is the held-back version"
+  },
+  "pluginsOnlineUpdates": {
+    "message": "Онлайн-обновления плагинов",
+    "description": "Label for the switch that allows online plugin update checks for this site"
+  },
+  "pluginsOnlineUpdatesHint": {
+    "message": "Проверяет обновления плагинов для этого сайта на voyager.nagi.fun — отправляется только имя сайта, без файлов cookie и содержимого страницы. Если выключить, подключается только кнопка обновления выше.",
+    "description": "Explains what the online plugin update check sends and when it runs"
+  },
+  "pluginsCheckInterval": {
+    "message": "Проверять каждые",
+    "description": "Label for the automatic plugin update check frequency selector"
+  },
+  "pluginsIntervalHourly": {
+    "message": "1 час",
+    "description": "Check for plugin updates once an hour"
+  },
+  "pluginsIntervalSixHours": {
+    "message": "6 часов",
+    "description": "Check for plugin updates every six hours"
+  },
+  "pluginsIntervalDaily": {
+    "message": "24 часа",
+    "description": "Check for plugin updates once a day"
+  },
+  "pluginsIntervalManual": {
+    "message": "Только вручную",
+    "description": "Never check automatically; only the manual button checks"
+  },
+  "pluginsLastChecked": {
+    "message": "Последняя проверка: {time}",
+    "description": "Time of the last plugin update check; {time} is a localized date and time"
+  },
+  "pluginsNeverChecked": {
+    "message": "Ещё не проверялось",
+    "description": "Shown when no plugin update check has run yet"
+  },
+  "pluginsNoOnlineCatalog": {
+    "message": "Для этого сайта пока нет онлайн-каталога.",
+    "description": "Shown when the online catalog has no entry for the current site"
   },
   "usageCoachmarkTitle": {
     "message": "Новое: лимиты использования",

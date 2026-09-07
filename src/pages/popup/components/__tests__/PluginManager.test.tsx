@@ -1,11 +1,13 @@
 import React, { act } from 'react';
 import { type Root, createRoot } from 'react-dom/client';
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { type Mock, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import enMessages from '@locales/en/messages.json';
 
 import type { PluginManifest } from '@/features/plugins/types';
 
-import { PluginManager, platformBadge } from '../PluginManager';
+import { PluginManager, type PluginManagerProps, platformBadge } from '../PluginManager';
 import { IconDeepSeek } from '../WebsiteLogos';
 
 // The slider-debounce behaviour under test lives in PluginManager; the storage
@@ -22,6 +24,7 @@ const {
   pluginState,
   PLUGIN_ID,
   mockLanguage,
+  mockMessages,
   supportsDynamicRegistration,
 } = vi.hoisted(() => ({
   setPluginEnabled: vi.fn().mockResolvedValue(undefined),
@@ -33,6 +36,9 @@ const {
   pluginState: { current: {} as Record<string, { enabled: boolean; installedAt: number }> },
   PLUGIN_ID: 'voyager.test-width',
   mockLanguage: { current: 'en' },
+  // Translations resolve to their key by default (so assertions stay readable);
+  // a test that exercises a placeholder loads the real English template here.
+  mockMessages: { current: {} as Record<string, string> },
   supportsDynamicRegistration: vi.fn(() => true),
 }));
 
@@ -52,7 +58,7 @@ vi.mock('@/contexts/LanguageContext', () => ({
   useLanguage: () => ({
     language: mockLanguage.current,
     setLanguage: vi.fn(),
-    t: (key: string) => key,
+    t: (key: string) => mockMessages.current[key] ?? key,
   }),
 }));
 
@@ -144,6 +150,15 @@ function nativeSetSliderValue(input: HTMLInputElement, value: number): void {
   input.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
+/** Let queued storage reads (plugin state, catalog settings, catalog cache) settle. */
+async function flushEffects(rounds = 4): Promise<void> {
+  for (let round = 0; round < rounds; round += 1) {
+    await act(async () => {
+      await Promise.resolve();
+    });
+  }
+}
+
 async function render(plugin: PluginManifest = widthPlugin): Promise<void> {
   await act(async () => {
     root.render(React.createElement(PluginManager, { manifests: [plugin] }));
@@ -155,10 +170,23 @@ async function render(plugin: PluginManifest = widthPlugin): Promise<void> {
   });
 }
 
+async function renderManager(props: Partial<PluginManagerProps> = {}): Promise<void> {
+  await act(async () => {
+    root.render(React.createElement(PluginManager, { manifests: [widthPlugin], ...props }));
+  });
+  await flushEffects();
+}
+
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   vi.useFakeTimers();
   mockLanguage.current = 'en';
+  mockMessages.current = {};
+  (chrome.storage.sync.get as unknown as Mock).mockReset().mockResolvedValue({});
+  (chrome.storage.sync.set as unknown as Mock).mockReset().mockResolvedValue(undefined);
+  (chrome.storage.local.get as unknown as Mock).mockReset().mockResolvedValue({});
+  (chrome.storage.onChanged.addListener as unknown as Mock).mockReset();
+  (chrome.storage.onChanged.removeListener as unknown as Mock).mockReset();
   pluginState.current = { [PLUGIN_ID]: { enabled: true, installedAt: 0 } };
   setPluginEnabled.mockClear();
   setPluginSetting.mockClear();
@@ -561,5 +589,180 @@ describe('PluginManager platform name display', () => {
     const header = container.querySelector<HTMLButtonElement>('button[aria-expanded]');
     expect(header?.textContent).toContain('Comfortable Reading Width');
     expect(header?.textContent).not.toContain('DeepSeek ·');
+  });
+});
+
+describe('PluginManager plugin provenance', () => {
+  it.each([
+    ['builtin', 'pluginSourceBuiltin'],
+    ['bundled-catalog', 'pluginSourceBundled'],
+    ['host-catalog', 'pluginSourceOnline'],
+  ])('shows the version and the %s source label', async (sourceId, labelKey) => {
+    await renderManager({ sourceIds: { [PLUGIN_ID]: sourceId } });
+
+    expect(container.textContent).toContain(`v${widthPlugin.version} · ${labelKey}`);
+  });
+
+  it('shows the version alone when the plugin has no known source', async () => {
+    await renderManager({ sourceIds: { [PLUGIN_ID]: 'some-future-source' } });
+
+    expect(container.textContent).toContain(`v${widthPlugin.version}`);
+    expect(container.textContent).not.toContain(`v${widthPlugin.version} ·`);
+  });
+
+  it('names the held-back version when an update needs a newer Voyager', async () => {
+    mockMessages.current = {
+      pluginUpdateNeedsNewerVoyager: enMessages.pluginUpdateNeedsNewerVoyager.message,
+    };
+    await renderManager({
+      blockedUpdates: { [PLUGIN_ID]: { version: '2.4.0', engine: '>=9.0.0' } },
+    });
+
+    expect(container.textContent).toContain('2.4.0');
+    expect(container.textContent).not.toContain('{version}');
+  });
+
+  it('says nothing about updates when none are held back', async () => {
+    mockMessages.current = {
+      pluginUpdateNeedsNewerVoyager: enMessages.pluginUpdateNeedsNewerVoyager.message,
+    };
+    await renderManager({ blockedUpdates: {} });
+
+    expect(container.textContent).not.toContain('needs a newer Voyager');
+  });
+});
+
+describe('PluginManager online catalog controls', () => {
+  const CATALOG_HOST = 'claude.ai';
+  const CACHE_KEY = `gvPluginHostCatalog:${CATALOG_HOST}`;
+
+  function cachedCatalog(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+    return {
+      host: CATALOG_HOST,
+      status: 'ok',
+      manifests: [],
+      fetchedAt: 0,
+      lastAttemptAt: 0,
+      failureCount: 0,
+      extensionVersion: '1.0.0',
+      ...overrides,
+    };
+  }
+
+  function onlineUpdatesToggle(): HTMLInputElement {
+    const input = container.querySelector<HTMLInputElement>(
+      'input[aria-label="pluginsOnlineUpdates"]',
+    );
+    if (!input) throw new Error('Expected the online-updates switch');
+    return input;
+  }
+
+  function chooseInterval(value: string): void {
+    const select = container.querySelector('select');
+    if (!select) throw new Error('Expected the check-interval select');
+    // Bypass React's value tracker so the synthetic onChange fires.
+    const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set;
+    setter?.call(select, value);
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  it('reflects the stored settings and hides the interval while updates are off', async () => {
+    (chrome.storage.sync.get as unknown as Mock).mockResolvedValue({
+      gvPluginOnlineUpdatesEnabled: false,
+      gvPluginCatalogCheckInterval: '24h',
+    });
+
+    await renderManager({ catalogHost: CATALOG_HOST });
+
+    expect(onlineUpdatesToggle().checked).toBe(false);
+    expect(container.querySelector('select')).toBeNull();
+  });
+
+  it('persists the online-updates switch', async () => {
+    await renderManager({ catalogHost: CATALOG_HOST });
+    const toggle = onlineUpdatesToggle();
+    expect(toggle.checked).toBe(true);
+
+    await act(async () => {
+      toggle.click();
+      await Promise.resolve();
+    });
+
+    expect(chrome.storage.sync.set).toHaveBeenCalledWith({ gvPluginOnlineUpdatesEnabled: false });
+    expect(onlineUpdatesToggle().checked).toBe(false);
+    expect(container.querySelector('select')).toBeNull();
+  });
+
+  it('persists the chosen check interval', async () => {
+    (chrome.storage.sync.get as unknown as Mock).mockResolvedValue({
+      gvPluginOnlineUpdatesEnabled: true,
+      gvPluginCatalogCheckInterval: '6h',
+    });
+    await renderManager({ catalogHost: CATALOG_HOST });
+
+    await act(async () => {
+      chooseInterval('1h');
+      await Promise.resolve();
+    });
+
+    expect(chrome.storage.sync.set).toHaveBeenCalledWith({ gvPluginCatalogCheckInterval: '1h' });
+    expect(container.querySelector<HTMLSelectElement>('select')?.value).toBe('1h');
+  });
+
+  it('omits the whole block on a host that can never have a catalog', async () => {
+    await renderManager({});
+
+    expect(container.querySelector('input[aria-label="pluginsOnlineUpdates"]')).toBeNull();
+    expect(container.querySelector('select')).toBeNull();
+    expect(container.textContent).not.toContain('pluginsOnlineUpdatesHint');
+    expect(container.textContent).not.toContain('pluginsNeverChecked');
+  });
+
+  it('reports that no check has run yet when nothing is cached', async () => {
+    await renderManager({ catalogHost: CATALOG_HOST });
+
+    expect(container.textContent).toContain('pluginsNeverChecked');
+  });
+
+  it('reports the localized time of the last attempt', async () => {
+    const lastAttemptAt = Date.UTC(2026, 1, 3, 4, 5, 6);
+    (chrome.storage.local.get as unknown as Mock).mockResolvedValue({
+      [CACHE_KEY]: cachedCatalog({ lastAttemptAt, fetchedAt: lastAttemptAt }),
+    });
+    mockMessages.current = { pluginsLastChecked: enMessages.pluginsLastChecked.message };
+
+    await renderManager({ catalogHost: CATALOG_HOST });
+
+    expect(container.textContent).toContain(new Date(lastAttemptAt).toLocaleString());
+    expect(container.textContent).not.toContain('{time}');
+    expect(container.textContent).not.toContain('pluginsNeverChecked');
+  });
+
+  it('says the site has no online catalog instead of dating a 404', async () => {
+    const lastAttemptAt = Date.UTC(2026, 1, 3, 4, 5, 6);
+    (chrome.storage.local.get as unknown as Mock).mockResolvedValue({
+      [CACHE_KEY]: cachedCatalog({ status: 'missing', lastAttemptAt, fetchedAt: lastAttemptAt }),
+    });
+    mockMessages.current = { pluginsLastChecked: enMessages.pluginsLastChecked.message };
+
+    await renderManager({ catalogHost: CATALOG_HOST });
+
+    expect(container.textContent).toContain('pluginsNoOnlineCatalog');
+    expect(container.textContent).not.toContain(new Date(lastAttemptAt).toLocaleString());
+  });
+
+  it('re-reads the cache once a manual check finishes', async () => {
+    await renderManager({ catalogHost: CATALOG_HOST, refreshing: true });
+    expect(container.textContent).toContain('pluginsNeverChecked');
+
+    const lastAttemptAt = Date.UTC(2026, 1, 3, 4, 5, 6);
+    (chrome.storage.local.get as unknown as Mock).mockResolvedValue({
+      [CACHE_KEY]: cachedCatalog({ lastAttemptAt, fetchedAt: lastAttemptAt }),
+    });
+    mockMessages.current = { pluginsLastChecked: enMessages.pluginsLastChecked.message };
+
+    await renderManager({ catalogHost: CATALOG_HOST, refreshing: false });
+
+    expect(container.textContent).toContain(new Date(lastAttemptAt).toLocaleString());
   });
 });

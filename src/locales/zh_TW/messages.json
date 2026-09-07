@@ -2550,7 +2550,7 @@
     "description": "Popup section title for the plugin list"
   },
   "pluginsDescription": {
-    "message": "啟用強化其他 AI 網站的外掛。開啟時會要求該網站的存取權限。",
+    "message": "啟用強化其他 AI 網站的外掛。開啟時會要求該網站的存取權限。已啟用的外掛會向 voyager.nagi.fun 檢查更新。",
     "description": "Popup subtitle explaining the plugin list"
   },
   "pluginViewSource": {
@@ -2578,8 +2578,64 @@
     "description": "Shown when no plugins are available"
   },
   "pluginsRefresh": {
-    "message": "重新整理外掛",
-    "description": "Tooltip for the refresh-marketplace-catalog button"
+    "message": "立即檢查外掛更新",
+    "description": "Tooltip for the manual plugin-update check button"
+  },
+  "pluginSourceBuiltin": {
+    "message": "內建",
+    "description": "Source label for a plugin built into Voyager itself"
+  },
+  "pluginSourceBundled": {
+    "message": "預裝",
+    "description": "Source label for a plugin from the catalog snapshot shipped with this build"
+  },
+  "pluginSourceOnline": {
+    "message": "線上目錄",
+    "description": "Source label for a plugin fetched from the online catalog for this site"
+  },
+  "pluginUpdateNeedsNewerVoyager": {
+    "message": "{version} 更新需要較新版本的 Voyager。",
+    "description": "Note shown when a plugin update is held back because it needs a newer Voyager; {version} is the held-back version"
+  },
+  "pluginsOnlineUpdates": {
+    "message": "外掛線上更新",
+    "description": "Label for the switch that allows online plugin update checks for this site"
+  },
+  "pluginsOnlineUpdatesHint": {
+    "message": "會向 voyager.nagi.fun 查詢此網站的外掛更新——只傳送網站名稱，不傳送 Cookie 或頁面內容。關閉後，只有上方的重新整理按鈕會連線。",
+    "description": "Explains what the online plugin update check sends and when it runs"
+  },
+  "pluginsCheckInterval": {
+    "message": "檢查頻率",
+    "description": "Label for the automatic plugin update check frequency selector"
+  },
+  "pluginsIntervalHourly": {
+    "message": "1 小時",
+    "description": "Check for plugin updates once an hour"
+  },
+  "pluginsIntervalSixHours": {
+    "message": "6 小時",
+    "description": "Check for plugin updates every six hours"
+  },
+  "pluginsIntervalDaily": {
+    "message": "24 小時",
+    "description": "Check for plugin updates once a day"
+  },
+  "pluginsIntervalManual": {
+    "message": "僅手動",
+    "description": "Never check automatically; only the manual button checks"
+  },
+  "pluginsLastChecked": {
+    "message": "上次檢查：{time}",
+    "description": "Time of the last plugin update check; {time} is a localized date and time"
+  },
+  "pluginsNeverChecked": {
+    "message": "尚未檢查",
+    "description": "Shown when no plugin update check has run yet"
+  },
+  "pluginsNoOnlineCatalog": {
+    "message": "此網站尚無線上目錄。",
+    "description": "Shown when the online catalog has no entry for the current site"
   },
   "usageCoachmarkTitle": {
     "message": "新功能：用量額度",

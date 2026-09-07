@@ -2550,7 +2550,7 @@
     "description": "Popup section title for the plugin list"
   },
   "pluginsDescription": {
-    "message": "Activez des extensions qui améliorent d'autres sites d'IA. En activer une demande l'autorisation pour ce site.",
+    "message": "Activez des extensions qui améliorent d'autres sites d'IA. En activer une demande l'autorisation pour ce site. Les extensions activées recherchent des mises à jour sur voyager.nagi.fun.",
     "description": "Popup subtitle explaining the plugin list"
   },
   "pluginViewSource": {
@@ -2578,8 +2578,64 @@
     "description": "Shown when no plugins are available"
   },
   "pluginsRefresh": {
-    "message": "Actualiser les extensions",
-    "description": "Tooltip for the refresh-marketplace-catalog button"
+    "message": "Rechercher les mises à jour d'extensions maintenant",
+    "description": "Tooltip for the manual plugin-update check button"
+  },
+  "pluginSourceBuiltin": {
+    "message": "Intégrée",
+    "description": "Source label for a plugin built into Voyager itself"
+  },
+  "pluginSourceBundled": {
+    "message": "Fournie",
+    "description": "Source label for a plugin from the catalog snapshot shipped with this build"
+  },
+  "pluginSourceOnline": {
+    "message": "Catalogue en ligne",
+    "description": "Source label for a plugin fetched from the online catalog for this site"
+  },
+  "pluginUpdateNeedsNewerVoyager": {
+    "message": "La mise à jour {version} nécessite une version plus récente de Voyager.",
+    "description": "Note shown when a plugin update is held back because it needs a newer Voyager; {version} is the held-back version"
+  },
+  "pluginsOnlineUpdates": {
+    "message": "Mises à jour en ligne des extensions",
+    "description": "Label for the switch that allows online plugin update checks for this site"
+  },
+  "pluginsOnlineUpdatesHint": {
+    "message": "Consulte voyager.nagi.fun pour les mises à jour d'extensions de ce site — seul le nom du site est envoyé, sans cookies ni contenu de page. Désactivé, seul le bouton d'actualisation ci-dessus se connecte.",
+    "description": "Explains what the online plugin update check sends and when it runs"
+  },
+  "pluginsCheckInterval": {
+    "message": "Fréquence de vérification",
+    "description": "Label for the automatic plugin update check frequency selector"
+  },
+  "pluginsIntervalHourly": {
+    "message": "1 heure",
+    "description": "Check for plugin updates once an hour"
+  },
+  "pluginsIntervalSixHours": {
+    "message": "6 heures",
+    "description": "Check for plugin updates every six hours"
+  },
+  "pluginsIntervalDaily": {
+    "message": "24 heures",
+    "description": "Check for plugin updates once a day"
+  },
+  "pluginsIntervalManual": {
+    "message": "Manuel uniquement",
+    "description": "Never check automatically; only the manual button checks"
+  },
+  "pluginsLastChecked": {
+    "message": "Dernière vérification : {time}",
+    "description": "Time of the last plugin update check; {time} is a localized date and time"
+  },
+  "pluginsNeverChecked": {
+    "message": "Pas encore vérifié",
+    "description": "Shown when no plugin update check has run yet"
+  },
+  "pluginsNoOnlineCatalog": {
+    "message": "Aucun catalogue en ligne pour ce site pour l'instant.",
+    "description": "Shown when the online catalog has no entry for the current site"
   },
   "usageCoachmarkTitle": {
     "message": "Nouveau : limites d'utilisation",

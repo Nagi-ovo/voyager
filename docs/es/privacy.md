@@ -1,6 +1,6 @@
 # Política de Privacidad
 
-Última actualización: 16 de marzo de 2026
+Última actualización: 7 de septiembre de 2026
 
 ## Introducción
 
@@ -20,6 +20,10 @@ No tenemos acceso a sus datos personales, historial de chat ni ninguna otra info
 ## Sincronización con Google Drive (Opcional)
 
 Si activa la sincronización con Google Drive, Chrome, Edge y Firefox usan la API de identidad del navegador; la aplicación directa de Safari usa Google Sign-In nativo y guarda las credenciales en el Llavero de macOS. Ambas rutas solicitan únicamente el scope limitado `drive.file` y transfieren los datos directamente entre su dispositivo y **su propio Google Drive**. Los tokens OAuth no se envían a ningún servidor de Voyager.
+
+## Actualizaciones en línea del catálogo de complementos (opcional)
+
+En un sitio donde haya activado al menos un complemento, Voyager puede solicitar por HTTPS el archivo de catálogo de ese sitio en `https://voyager.nagi.fun/catalog/hosts/<host del sitio>.json`, por ejemplo `https://voyager.nagi.fun/catalog/hosts/chat.deepseek.com.json`. La comprobación se realiza al abrir una página de ese tipo o al abrir la ventana de la extensión en ella, y solo si la última comprobación es más antigua que el intervalo que usted haya elegido (6 horas de forma predeterminada; 1 hora, 6 horas, 24 horas o solo manual). Las páginas de Gemini y AI Studio no tienen complementos, por lo que nunca generan una solicitud. La solicitud es un GET normal que no envía cookies, ni identificadores de cuenta o de la extensión, ni contenido de la página o de la conversación; como en cualquier solicitud web, el servidor ve la dirección IP que la origina y el user agent del navegador, además del nombre de host del sitio en la ruta de la URL. En los sitios con complementos, la ventana de la extensión ofrece un interruptor de «Actualizaciones en línea de complementos» y el selector de intervalo; ambos ajustes se guardan en el almacenamiento sincronizado del navegador y se incluyen en la copia de seguridad de la configuración. Con el interruptor desactivado, Voyager no se conecta a voyager.nagi.fun salvo que usted pulse «Buscar actualizaciones de complementos ahora». Si la solicitud falla o el sitio no tiene archivo de catálogo, se sigue usando la instantánea de complementos incluida en la extensión. Un catálogo descargado contiene únicamente CSS y JSON, que se validan y se depuran antes de usarse; nunca se descarga ni se ejecuta JavaScript.
 
 ## Permisos
 

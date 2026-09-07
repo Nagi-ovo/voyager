@@ -1,6 +1,6 @@
 # Privacy Policy
 
-Last updated: July 17, 2026
+Last updated: September 7, 2026
 
 ## Overview
 
@@ -23,7 +23,8 @@ This data is stored locally in `chrome.storage.local` or, for supported settings
 - **Google Drive sync (optional)**: selected backup data is transferred directly between the user's device and their own Google Drive. Chrome, Edge, and Firefox use the browser identity API; the direct Safari app uses native Google Sign-In and stores credentials in the macOS Keychain. Both paths request only the limited `drive.file` scope, and OAuth tokens are not sent to a Voyager server.
 - **iCloud sync on Safari (optional)**: selected backup data is transferred by the native Safari extension directly to the user's private CloudKit database in their iCloud account. Voyager does not receive the user's Apple ID or an iCloud authentication token, and the developer cannot access records in that private database.
 - **Exports and images**: when the user requests an export, Voyager may fetch images from their existing page-hosted sources and may request temporary access needed to capture generated interface content. The resulting file is created for the user; it is not uploaded to a Voyager server.
-- **Public project resources**: Voyager may request public release, announcement, documentation, or plugin-catalog resources. These requests do not include conversation or prompt content.
+- **Public project resources**: Voyager may request public release, announcement, or documentation resources. These requests do not include conversation or prompt content.
+- **Plugin catalog updates**: on a site where the user has enabled at least one plugin, Voyager may fetch an updated catalog file for that site over HTTPS from `https://voyager.nagi.fun/catalog/hosts/<site host>.json`, for example `https://voyager.nagi.fun/catalog/hosts/chat.deepseek.com.json`. The check runs when such a page is opened, or when the extension popup is opened on it, and only if the last check is older than the interval the user chose (6 hours by default; 1 hour, 6 hours, 24 hours, or manual only). Gemini and AI Studio pages have no plugins and never trigger a request. The request is a plain GET that carries no cookies, no account or extension identifier, and no page or conversation content; as with any web request, the server sees the requesting IP address and browser user agent, plus the site host name in the URL path. On plugin sites the popup provides a "Plugin online updates" switch and the check interval selector, both stored in browser sync storage and included in settings backup. With the switch off, Voyager does not contact voyager.nagi.fun unless the user presses "Check for plugin updates now". If the request fails or the site has no catalog file, the plugin snapshot bundled with the extension stays in use. A fetched catalog contains only CSS and JSON, which are validated and sanitized before use; no JavaScript is downloaded or executed. This check is separate from the announcement check, which has its own setting.
 
 Voyager does not sell user data or transfer it for advertising, creditworthiness, or purposes unrelated to the extension's user-facing features.
 

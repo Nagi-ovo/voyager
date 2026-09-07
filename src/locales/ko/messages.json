@@ -2550,7 +2550,7 @@
     "description": "Popup section title for the plugin list"
   },
   "pluginsDescription": {
-    "message": "다른 AI 사이트를 향상하는 플러그인을 활성화합니다. 켜면 해당 사이트 접근 권한을 요청합니다.",
+    "message": "다른 AI 사이트를 향상하는 플러그인을 활성화합니다. 켜면 해당 사이트 접근 권한을 요청합니다. 활성화된 플러그인은 voyager.nagi.fun에서 업데이트를 확인합니다.",
     "description": "Popup subtitle explaining the plugin list"
   },
   "pluginViewSource": {
@@ -2578,8 +2578,64 @@
     "description": "Shown when no plugins are available"
   },
   "pluginsRefresh": {
-    "message": "플러그인 새로고침",
-    "description": "Tooltip for the refresh-marketplace-catalog button"
+    "message": "지금 플러그인 업데이트 확인",
+    "description": "Tooltip for the manual plugin-update check button"
+  },
+  "pluginSourceBuiltin": {
+    "message": "내장",
+    "description": "Source label for a plugin built into Voyager itself"
+  },
+  "pluginSourceBundled": {
+    "message": "기본 포함",
+    "description": "Source label for a plugin from the catalog snapshot shipped with this build"
+  },
+  "pluginSourceOnline": {
+    "message": "온라인 카탈로그",
+    "description": "Source label for a plugin fetched from the online catalog for this site"
+  },
+  "pluginUpdateNeedsNewerVoyager": {
+    "message": "업데이트 {version}에는 더 새로운 Voyager가 필요합니다.",
+    "description": "Note shown when a plugin update is held back because it needs a newer Voyager; {version} is the held-back version"
+  },
+  "pluginsOnlineUpdates": {
+    "message": "플러그인 온라인 업데이트",
+    "description": "Label for the switch that allows online plugin update checks for this site"
+  },
+  "pluginsOnlineUpdatesHint": {
+    "message": "이 사이트의 플러그인 업데이트를 voyager.nagi.fun에서 확인합니다. 사이트 이름만 전송하며 쿠키나 페이지 내용은 보내지 않습니다. 끄면 위의 새로고침 버튼만 연결합니다.",
+    "description": "Explains what the online plugin update check sends and when it runs"
+  },
+  "pluginsCheckInterval": {
+    "message": "확인 주기",
+    "description": "Label for the automatic plugin update check frequency selector"
+  },
+  "pluginsIntervalHourly": {
+    "message": "1시간",
+    "description": "Check for plugin updates once an hour"
+  },
+  "pluginsIntervalSixHours": {
+    "message": "6시간",
+    "description": "Check for plugin updates every six hours"
+  },
+  "pluginsIntervalDaily": {
+    "message": "24시간",
+    "description": "Check for plugin updates once a day"
+  },
+  "pluginsIntervalManual": {
+    "message": "수동으로만",
+    "description": "Never check automatically; only the manual button checks"
+  },
+  "pluginsLastChecked": {
+    "message": "마지막 확인: {time}",
+    "description": "Time of the last plugin update check; {time} is a localized date and time"
+  },
+  "pluginsNeverChecked": {
+    "message": "아직 확인하지 않음",
+    "description": "Shown when no plugin update check has run yet"
+  },
+  "pluginsNoOnlineCatalog": {
+    "message": "이 사이트의 온라인 카탈로그가 아직 없습니다.",
+    "description": "Shown when the online catalog has no entry for the current site"
   },
   "usageCoachmarkTitle": {
     "message": "신규: 사용량 한도",

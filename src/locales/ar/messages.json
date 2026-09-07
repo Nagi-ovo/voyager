@@ -2550,7 +2550,7 @@
     "description": "Popup section title for the plugin list"
   },
   "pluginsDescription": {
-    "message": "فعّل الإضافات التي تحسّن مواقع الذكاء الاصطناعي الأخرى. تفعيل إضافة يطلب إذن الوصول إلى ذلك الموقع.",
+    "message": "فعّل الإضافات التي تحسّن مواقع الذكاء الاصطناعي الأخرى. تفعيل إضافة يطلب إذن الوصول إلى ذلك الموقع. تبحث الإضافات المفعّلة عن التحديثات في voyager.nagi.fun.",
     "description": "Popup subtitle explaining the plugin list"
   },
   "pluginViewSource": {
@@ -2578,8 +2578,64 @@
     "description": "Shown when no plugins are available"
   },
   "pluginsRefresh": {
-    "message": "تحديث الإضافات",
-    "description": "Tooltip for the refresh-marketplace-catalog button"
+    "message": "التحقق من تحديثات الإضافات الآن",
+    "description": "Tooltip for the manual plugin-update check button"
+  },
+  "pluginSourceBuiltin": {
+    "message": "مدمجة",
+    "description": "Source label for a plugin built into Voyager itself"
+  },
+  "pluginSourceBundled": {
+    "message": "مرفقة",
+    "description": "Source label for a plugin from the catalog snapshot shipped with this build"
+  },
+  "pluginSourceOnline": {
+    "message": "كتالوج عبر الإنترنت",
+    "description": "Source label for a plugin fetched from the online catalog for this site"
+  },
+  "pluginUpdateNeedsNewerVoyager": {
+    "message": "يتطلب التحديث {version} إصدارًا أحدث من Voyager.",
+    "description": "Note shown when a plugin update is held back because it needs a newer Voyager; {version} is the held-back version"
+  },
+  "pluginsOnlineUpdates": {
+    "message": "تحديثات الإضافات عبر الإنترنت",
+    "description": "Label for the switch that allows online plugin update checks for this site"
+  },
+  "pluginsOnlineUpdatesHint": {
+    "message": "يبحث في voyager.nagi.fun عن تحديثات الإضافات لهذا الموقع — يُرسَل اسم الموقع فقط، دون ملفات ارتباط أو محتوى الصفحة. عند الإيقاف، لا يتصل سوى زر التحديث أعلاه.",
+    "description": "Explains what the online plugin update check sends and when it runs"
+  },
+  "pluginsCheckInterval": {
+    "message": "التحقق كل",
+    "description": "Label for the automatic plugin update check frequency selector"
+  },
+  "pluginsIntervalHourly": {
+    "message": "ساعة واحدة",
+    "description": "Check for plugin updates once an hour"
+  },
+  "pluginsIntervalSixHours": {
+    "message": "6 ساعات",
+    "description": "Check for plugin updates every six hours"
+  },
+  "pluginsIntervalDaily": {
+    "message": "24 ساعة",
+    "description": "Check for plugin updates once a day"
+  },
+  "pluginsIntervalManual": {
+    "message": "يدويًا فقط",
+    "description": "Never check automatically; only the manual button checks"
+  },
+  "pluginsLastChecked": {
+    "message": "آخر تحقق: {time}",
+    "description": "Time of the last plugin update check; {time} is a localized date and time"
+  },
+  "pluginsNeverChecked": {
+    "message": "لم يتم التحقق بعد",
+    "description": "Shown when no plugin update check has run yet"
+  },
+  "pluginsNoOnlineCatalog": {
+    "message": "لا يوجد كتالوج عبر الإنترنت لهذا الموقع بعد.",
+    "description": "Shown when the online catalog has no entry for the current site"
   },
   "usageCoachmarkTitle": {
     "message": "جديد: حدود الاستخدام",

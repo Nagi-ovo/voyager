@@ -1,6 +1,6 @@
 # Politique de Confidentialité
 
-Dernière mise à jour : 16 mars 2026
+Dernière mise à jour : 7 septembre 2026
 
 ## Introduction
 
@@ -20,6 +20,10 @@ Nous n'avons accès à aucune de vos données personnelles, historiques de chat 
 ## Synchronisation Google Drive (Optionnelle)
 
 Si vous activez la synchronisation Google Drive, Chrome, Edge et Firefox utilisent l'API d'identité du navigateur ; l'application Safari distribuée directement utilise Google Sign-In natif et conserve les identifiants dans le Trousseau macOS. Les deux méthodes demandent uniquement le scope limité `drive.file` et transfèrent les données directement entre votre appareil et **votre propre Google Drive**. Les jetons OAuth ne sont envoyés à aucun serveur Voyager.
+
+## Mises à jour en ligne du catalogue d'extensions (optionnel)
+
+Sur un site où vous avez activé au moins une extension, Voyager peut récupérer en HTTPS le fichier de catalogue de ce site à l'adresse `https://voyager.nagi.fun/catalog/hosts/<hôte du site>.json`, par exemple `https://voyager.nagi.fun/catalog/hosts/chat.deepseek.com.json`. La vérification a lieu uniquement à l'ouverture d'une telle page ou à l'ouverture de la fenêtre de l'extension sur cette page, et seulement si la dernière vérification est plus ancienne que l'intervalle que vous avez choisi (6 heures par défaut ; 1 heure, 6 heures, 24 heures ou manuel uniquement). Les pages Gemini et AI Studio n'ont pas d'extensions et ne déclenchent donc aucune requête. La requête est un simple GET qui ne transmet ni cookies, ni identifiant de compte ou d'extension, ni contenu de page ou de conversation ; comme pour toute requête web, le serveur voit l'adresse IP à l'origine de la requête et le user agent du navigateur, ainsi que le nom d'hôte du site dans le chemin de l'URL. Sur les sites concernés, la fenêtre de l'extension propose un interrupteur « Mises à jour en ligne des extensions » et le sélecteur d'intervalle ; les deux réglages sont enregistrés dans le stockage synchronisé du navigateur et inclus dans la sauvegarde des paramètres. Interrupteur désactivé, Voyager ne contacte voyager.nagi.fun que si vous appuyez sur « Rechercher les mises à jour d'extensions maintenant ». Si la requête échoue ou si le site n'a pas de fichier de catalogue, l'instantané d'extensions livré avec le module reste utilisé. Un catalogue récupéré ne contient que du CSS et du JSON, validés et assainis avant utilisation ; aucun JavaScript n'est téléchargé ni exécuté.
 
 ## Permissions
 

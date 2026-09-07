@@ -7,10 +7,28 @@ import {
   supportsDynamicContentScriptRegistration,
   supportsOptionalHostPermissions,
 } from '@/core/utils/browser';
+import {
+  type HostCatalogCacheEntry,
+  loadHostCatalogCache,
+  subscribeHostCatalog,
+} from '@/features/plugins/remote/hostCatalogCache';
+import {
+  PLUGIN_CATALOG_CHECK_INTERVALS,
+  type PluginCatalogCheckInterval,
+  normalizeCheckInterval,
+} from '@/features/plugins/remote/hostCatalogPolicy';
+import {
+  DEFAULT_PLUGIN_CATALOG_SETTINGS,
+  type PluginCatalogSettings,
+  loadPluginCatalogSettings,
+  savePluginCatalogSettings,
+  subscribePluginCatalogSettings,
+} from '@/features/plugins/remote/hostCatalogSettings';
 import { PLUGIN_CONTENT_SCRIPT_SYNC_MESSAGE } from '@/features/plugins/runtime/messages';
 import { pluginToOriginPatternsForActiveUrl } from '@/features/plugins/runtime/siteRegistration';
 import { matchesAnyPattern } from '@/features/plugins/sites/matchPattern';
 import { SiteRegistry } from '@/features/plugins/sites/registry';
+import type { BlockedPluginUpdate } from '@/features/plugins/sources/defaultSources';
 import {
   loadCollapsedPlugins,
   loadPluginState,
@@ -20,6 +38,7 @@ import {
   subscribePluginState,
 } from '@/features/plugins/storage/pluginState';
 import type { PluginManifest, PluginSettingValue, SettingField } from '@/features/plugins/types';
+import type { TranslationKey } from '@/utils/translations';
 
 import { Card, CardContent, CardTitle } from '../../../components/ui/card';
 import { Switch } from '../../../components/ui/switch';
@@ -48,6 +67,24 @@ async function requestPluginContentScriptSync(): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * Where a listed plugin came from. Anything else (an unknown source id, or a
+ * manifest the parent could not attribute) shows the version alone rather than
+ * a made-up provenance label.
+ */
+const SOURCE_LABEL_KEYS: Readonly<Record<string, TranslationKey>> = {
+  builtin: 'pluginSourceBuiltin',
+  'bundled-catalog': 'pluginSourceBundled',
+  'host-catalog': 'pluginSourceOnline',
+};
+
+const CHECK_INTERVAL_LABEL_KEYS: Readonly<Record<PluginCatalogCheckInterval, TranslationKey>> = {
+  '1h': 'pluginsIntervalHourly',
+  '6h': 'pluginsIntervalSixHours',
+  '24h': 'pluginsIntervalDaily',
+  manual: 'pluginsIntervalManual',
+};
 
 /** Logo + default accent per known site id. */
 const SITE_BADGES: Record<string, { Icon: typeof IconClaude; color: string }> = {
@@ -193,6 +230,16 @@ export interface PluginManagerProps {
   readonly refreshing?: boolean;
   /** URL of the active tab — selects which platform logo each plugin shows. */
   readonly activeUrl?: string;
+  /**
+   * Source id per plugin id: `builtin` (first-party JS), `bundled-catalog`
+   * (snapshot shipped with this build) or `host-catalog` (fetched from the
+   * remote catalog for the active host). Drives the per-plugin source label.
+   */
+  readonly sourceIds?: Readonly<Record<string, string>>;
+  /** Remote updates held back because they need a newer engine than this build (plan D6). */
+  readonly blockedUpdates?: Readonly<Record<string, BlockedPluginUpdate>>;
+  /** Host whose remote catalog this popup reads; undefined on hosts that can never have one. */
+  readonly catalogHost?: string;
 }
 
 /**
@@ -205,6 +252,9 @@ export function PluginManager({
   onRefresh,
   refreshing = false,
   activeUrl,
+  sourceIds,
+  blockedUpdates,
+  catalogHost,
 }: PluginManagerProps) {
   const { t, language } = useLanguage();
   // The site the popup is currently open on — the "active site" the badge needs
@@ -223,6 +273,14 @@ export function PluginManager({
   const [deniedId, setDeniedId] = useState<string | null>(null);
   const [unsupportedId, setUnsupportedId] = useState<string | null>(null);
   const [missingPermissionIds, setMissingPermissionIds] = useState<Set<string>>(new Set());
+  const [catalogSettings, setCatalogSettings] = useState<PluginCatalogSettings>(
+    DEFAULT_PLUGIN_CATALOG_SETTINGS,
+  );
+  const [catalogEntry, setCatalogEntry] = useState<HostCatalogCacheEntry | null>(null);
+  // Previous `refreshing` value, so a manual check that only moved the attempt
+  // timestamp still refreshes the status line: subscribeHostCatalog
+  // deliberately stays quiet for bookkeeping-only writes.
+  const wasRefreshing = useRef(false);
 
   // Coalesced persistence for setting sliders (see handleSetting). Keyed by
   // `${pluginId}:${settingKey}` so independent sliders keep independent timers.
@@ -280,6 +338,68 @@ export function PluginManager({
       active = false;
     };
   }, [activeUrl, enabledMap, manifests]);
+
+  // The two catalog controls live in sync storage, so another window (or the
+  // settings backup restoring them) must be reflected here while the popup is
+  // open. Only hosts that can have a catalog show the block, so skip the read
+  // entirely elsewhere.
+  useEffect(() => {
+    if (!catalogHost) return;
+    let active = true;
+    void loadPluginCatalogSettings().then((settings) => {
+      if (active) setCatalogSettings(settings);
+    });
+    const unsubscribe = subscribePluginCatalogSettings((settings) => {
+      if (active) setCatalogSettings(settings);
+    });
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [catalogHost]);
+
+  useEffect(() => {
+    if (!catalogHost) {
+      setCatalogEntry(null);
+      return;
+    }
+    let active = true;
+    const read = (): void => {
+      void loadHostCatalogCache(catalogHost).then((entry) => {
+        if (active) setCatalogEntry(entry);
+      });
+    };
+    read();
+    const unsubscribe = subscribeHostCatalog(catalogHost, read);
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [catalogHost]);
+
+  useEffect(() => {
+    const justFinished = wasRefreshing.current && !refreshing;
+    wasRefreshing.current = refreshing;
+    if (!catalogHost || !justFinished) return;
+    let active = true;
+    void loadHostCatalogCache(catalogHost).then((entry) => {
+      if (active) setCatalogEntry(entry);
+    });
+    return () => {
+      active = false;
+    };
+  }, [catalogHost, refreshing]);
+
+  const handleOnlineUpdatesToggle = useCallback((next: boolean) => {
+    setCatalogSettings((previous) => ({ ...previous, onlineUpdatesEnabled: next }));
+    void savePluginCatalogSettings({ onlineUpdatesEnabled: next });
+  }, []);
+
+  const handleCheckIntervalChange = useCallback((value: string) => {
+    const interval = normalizeCheckInterval(value);
+    setCatalogSettings((previous) => ({ ...previous, checkInterval: interval }));
+    void savePluginCatalogSettings({ checkInterval: interval });
+  }, []);
 
   const handleToggle = useCallback(
     async (plugin: PluginManifest, next: boolean) => {
@@ -442,6 +562,20 @@ export function PluginManager({
     });
   }, []);
 
+  /**
+   * One line describing the online catalog for this host: a 404 is a settled
+   * answer ("this site has no catalog"), so it replaces the timestamp rather
+   * than reading as a stale successful check.
+   */
+  const catalogStatusText = ((): string => {
+    if (catalogEntry?.status === 'missing') return t('pluginsNoOnlineCatalog');
+    if (!catalogEntry?.lastAttemptAt) return t('pluginsNeverChecked');
+    return t('pluginsLastChecked').replace(
+      '{time}',
+      new Date(catalogEntry.lastAttemptAt).toLocaleString(),
+    );
+  })();
+
   return (
     <Card className="p-4 transition-all hover:shadow-md">
       <div className="mb-4 flex items-center justify-between">
@@ -489,6 +623,11 @@ export function PluginManager({
           const badge = platformBadge(plugin, currentSiteId, activeUrl);
           const localizedName = pickLocalized(plugin, 'name', language);
           const needsSiteAccess = enabled && missingPermissionIds.has(plugin.id);
+          const sourceLabelKey = SOURCE_LABEL_KEYS[sourceIds?.[plugin.id] ?? ''];
+          const provenance = sourceLabelKey
+            ? `v${plugin.version} · ${t(sourceLabelKey)}`
+            : `v${plugin.version}`;
+          const blockedUpdate = blockedUpdates?.[plugin.id];
           return (
             <div key={plugin.id} className="border-border/60 rounded-lg border p-3">
               <div className="flex items-start justify-between gap-3">
@@ -534,8 +673,9 @@ export function PluginManager({
                       <p className="text-muted-foreground mt-1 text-xs leading-snug">
                         {pickLocalized(plugin, 'description', language)}
                       </p>
-                      <div className="mt-1.5 flex items-center gap-2 text-[11px]">
+                      <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
                         {hosts && <span className="text-muted-foreground">{hosts}</span>}
+                        <span className="text-muted-foreground tabular-nums">{provenance}</span>
                         {plugin.homepage && (
                           <a
                             href={plugin.homepage}
@@ -549,6 +689,14 @@ export function PluginManager({
                           </a>
                         )}
                       </div>
+                      {blockedUpdate && (
+                        <p className="text-muted-foreground mt-1 text-[11px] leading-snug">
+                          {t('pluginUpdateNeedsNewerVoyager').replace(
+                            '{version}',
+                            blockedUpdate.version,
+                          )}
+                        </p>
+                      )}
                     </>
                   )}
 
@@ -648,6 +796,45 @@ export function PluginManager({
             </div>
           );
         })}
+
+        {/* Online-catalog controls. Hidden on hosts that can never have a
+            catalog (Gemini, AI Studio, anything with a port or wildcard), where
+            the switch would promise a check that never runs. */}
+        {catalogHost && (
+          <div className="border-border/60 space-y-2 border-t pt-3">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-xs font-medium">{t('pluginsOnlineUpdates')}</span>
+              <Switch
+                checked={catalogSettings.onlineUpdatesEnabled}
+                aria-label={t('pluginsOnlineUpdates')}
+                onChange={(event) => handleOnlineUpdatesToggle(event.target.checked)}
+              />
+            </div>
+            <p className="text-muted-foreground text-[11px] leading-snug">
+              {t('pluginsOnlineUpdatesHint')}
+            </p>
+            {catalogSettings.onlineUpdatesEnabled && (
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-muted-foreground text-[11px]">
+                  {t('pluginsCheckInterval')}
+                </span>
+                <select
+                  value={catalogSettings.checkInterval}
+                  aria-label={t('pluginsCheckInterval')}
+                  onChange={(event) => handleCheckIntervalChange(event.target.value)}
+                  className="bg-background border-border focus:ring-primary/50 rounded-md border px-2 py-1 text-[11px] transition-all focus:ring-2 focus:outline-none"
+                >
+                  {PLUGIN_CATALOG_CHECK_INTERVALS.map((interval) => (
+                    <option key={interval} value={interval}>
+                      {t(CHECK_INTERVAL_LABEL_KEYS[interval])}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <p className="text-muted-foreground text-[11px]">{catalogStatusText}</p>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

@@ -50,7 +50,7 @@ Use `package.json`, build configs, manifests and CI to verify command names and 
 
 Use `StorageService` where suitable; established direct `chrome.storage`/`browser.storage` paths remain valid for content scripts, popup settings, bulk operations and listeners.
 
-`src/features/plugins/sources/defaultSources.ts` defines active sources: builtin and bundled catalog. The remote `MarketplacePluginSource` is currently disabled. A sibling `../voyager-plugins` clone mirrors that marketplace; bundled official plugins are maintained here.
+`src/features/plugins/sources/defaultSources.ts` defines active sources and the merge rules: builtin, bundled catalog, and the per-host remote catalog (`src/features/plugins/remote/`, read from cache; only the background refresher fetches `https://voyager.nagi.fun/catalog/hosts/<host>.json`, published by `bun run catalog:build` through the docs deploy). Bundled official plugins are maintained here; the retired `../voyager-plugins` marketplace is no longer a source. Design record: `.github/docs/PLUGIN_DISTRIBUTION_PLAN.md`.
 
 Coachmarks require a stable ID, side-effect-free eligibility, cleanup after partial mount failure, all 10 locales, a debug trigger and tests. Skip seen/ineligible guides, then show the remaining guides continuously in registration order with `1/N` progress: confirmation advances; close, Escape or outside click exits the tour.
 

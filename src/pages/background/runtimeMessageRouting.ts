@@ -4,7 +4,10 @@ import {
   CHATGPT_HANDOFF_GET_TAB_ID_MESSAGE,
   CHATGPT_HANDOFF_SCHEDULE_EXPIRY_MESSAGE,
 } from '@/features/plugins/builtin/chatgptTemporaryHandoff/storage';
-import { PLUGIN_CONTENT_SCRIPT_SYNC_MESSAGE } from '@/features/plugins/runtime/messages';
+import {
+  PLUGIN_CATALOG_REFRESH_MESSAGE,
+  PLUGIN_CONTENT_SCRIPT_SYNC_MESSAGE,
+} from '@/features/plugins/runtime/messages';
 
 function parseHttpsUrl(rawUrl: string | undefined): URL | null {
   if (!rawUrl) return null;
@@ -34,6 +37,7 @@ const HANDLED_BACKGROUND_MESSAGE_TYPES = new Set([
   'gv.generatedUi.ensureCapturePermission',
   'gv.generatedUi.captureVisibleTab',
   PLUGIN_CONTENT_SCRIPT_SYNC_MESSAGE,
+  PLUGIN_CATALOG_REFRESH_MESSAGE,
   CHATGPT_HANDOFF_SCHEDULE_EXPIRY_MESSAGE,
   CHATGPT_HANDOFF_CANCEL_EXPIRY_MESSAGE,
   CHATGPT_HANDOFF_GET_TAB_ID_MESSAGE,

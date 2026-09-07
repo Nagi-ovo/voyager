@@ -49,6 +49,7 @@ const BUNDLED_PLUGIN_FILES: Readonly<Record<string, BundledPluginFiles>> = {
 
 export class BundledCatalogPluginSource implements PluginSource {
   readonly id = 'bundled-catalog';
+  readonly kind = 'bundled' as const;
 
   async list(): Promise<readonly PluginManifest[]> {
     const manifests: PluginManifest[] = [];

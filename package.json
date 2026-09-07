@@ -39,6 +39,7 @@
     "verify:katex-export": "bun scripts/verify-katex-export.ts",
     "verify:safari-resources": "node scripts/verify-safari-resources.mjs",
     "commitlint": "commitlint --edit $GIT_PARAMS",
+    "catalog:build": "bun scripts/build-plugin-catalog.ts",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs",

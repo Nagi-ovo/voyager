@@ -89,6 +89,8 @@ export const BACKUPABLE_SYNC_SETTINGS_DEFAULTS = {
   [StorageKeys.QUOTE_REPLY_ENABLED]: true,
   [StorageKeys.RESPONSE_COMPLETE_NOTIFICATION_ENABLED]: false,
   [StorageKeys.REMOTE_ANNOUNCEMENTS_ENABLED]: true,
+  [StorageKeys.PLUGIN_ONLINE_UPDATES_ENABLED]: true,
+  [StorageKeys.PLUGIN_CATALOG_CHECK_INTERVAL]: '6h',
   [StorageKeys.HIGHLIGHT_ENABLED]: true,
   [StorageKeys.HIGHLIGHT_DEFAULT_COLOR]: 'yellow',
   [StorageKeys.HIGHLIGHT_COLOR_PALETTE]: [...DEFAULT_HIGHLIGHT_COLOR_PALETTE],
@@ -399,8 +401,14 @@ export const NON_SETTINGS_BACKUP_POLICIES = {
   },
   [StorageKeys.PLUGIN_CATALOG_CACHE]: {
     storage: 'local',
+    disposition: 'deprecated',
+    reason: 'Legacy whole-catalog cache of the retired marketplace source; ignored, never cleaned.',
+  },
+  [StorageKeys.PLUGIN_HOST_CATALOG_PREFIX]: {
+    storage: 'local',
     disposition: 'cache',
-    reason: 'The plugin catalog is bundled or fetched and can be rebuilt.',
+    reason:
+      'Per-host remote plugin catalogs are re-fetched on the next check and must not be restored.',
   },
   [StorageKeys.PLUGIN_UI_COLLAPSED]: {
     storage: 'local',

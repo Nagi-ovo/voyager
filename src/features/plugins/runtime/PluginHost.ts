@@ -4,11 +4,16 @@
  * Flow on start():
  *   1. resolve the SiteAdapter for the current URL (may be null on unknown sites)
  *   2. load manifests from all configured sources (builtin, bundled catalog,
- *      remote marketplace)
+ *      cached per-host remote catalog)
  *   3. load per-plugin enable state from storage
  *   4. reconcile: mount every plugin that (matches URL) AND (is enabled) AND
  *      (satisfies the engine version) AND (is not entitlement-locked); unmount the rest
  *   5. subscribe to state changes and re-reconcile (live enable/disable)
+ *   6. subscribe to this host's remote catalog cache and reload on content change
+ *   7. in the top frame, when an ENABLED plugin targets this page, ask the
+ *      background to check the remote catalog (it applies the user's interval,
+ *      switch and backoff). Pages without an enabled plugin — every Gemini /
+ *      AI Studio page — never send the request.
  *
  * All providers (registry, sources, entitlement) are injected so the host is
  * fully unit-testable and the monetization/marketplace seams can be swapped
@@ -20,11 +25,12 @@ import { isExtensionContextInvalidatedError } from '@/core/utils/extensionContex
 import { isScriptedTierSupported } from '../capabilities';
 import { PLUGIN_ENGINE_VERSION } from '../constants';
 import { LocalEntitlementProvider } from '../entitlement/LocalEntitlementProvider';
+import { subscribeHostCatalog } from '../remote/hostCatalogCache';
+import { catalogHostFromUrl, hasEnabledPluginForUrl } from '../remote/hostCatalogPolicy';
 import { engineSatisfied } from '../semver';
 import { matchesAnyPattern } from '../sites/matchPattern';
 import { SiteRegistry } from '../sites/registry';
 import { createDefaultPluginSources, listPluginManifests } from '../sources/defaultSources';
-import { subscribeCatalog } from '../storage/catalogCache';
 import { type PluginStateMap, loadPluginState, subscribePluginState } from '../storage/pluginState';
 import type {
   EntitlementProvider,
@@ -32,9 +38,11 @@ import type {
   PluginSettingValue,
   PluginSettings,
   PluginSource,
+  PluginSourceContext,
   SiteAdapter,
 } from '../types';
 import { DeclarativeEngine } from './declarativeEngine';
+import { PLUGIN_CATALOG_REFRESH_MESSAGE } from './messages';
 
 export interface PluginHostOptions {
   readonly url?: string;
@@ -42,6 +50,32 @@ export interface PluginHostOptions {
   readonly sources?: readonly PluginSource[];
   readonly entitlement?: EntitlementProvider;
   readonly doc?: Document;
+  /** Injectable for tests; defaults to a runtime message to the background. */
+  readonly requestCatalogRefresh?: (host: string) => void;
+  /** Injectable for tests; defaults to `window.top === window`. */
+  readonly isTopFrame?: boolean;
+}
+
+/** Fire-and-forget: the background decides whether a network request is due. */
+function sendCatalogRefreshRequest(host: string): void {
+  const runtime = (globalThis as { chrome?: typeof chrome }).chrome?.runtime;
+  if (!runtime?.sendMessage) return;
+  try {
+    runtime.sendMessage({ type: PLUGIN_CATALOG_REFRESH_MESSAGE, payload: { host } }, () => {
+      // Read lastError so a missing receiver never logs "Unchecked runtime.lastError".
+      void runtime.lastError;
+    });
+  } catch {
+    // Extension context gone; nothing to refresh.
+  }
+}
+
+function detectTopFrame(): boolean {
+  try {
+    return typeof window === 'undefined' || window.top === window;
+  } catch {
+    return false;
+  }
 }
 
 export class PluginHost {
@@ -50,6 +84,9 @@ export class PluginHost {
   private readonly sources: readonly PluginSource[];
   private readonly entitlement: EntitlementProvider;
   private readonly doc: Document;
+  private readonly context: PluginSourceContext;
+  private readonly requestCatalogRefresh: (host: string) => void;
+  private readonly isTopFrame: boolean;
 
   private adapter: SiteAdapter | null = null;
   private engine: DeclarativeEngine | null = null;
@@ -77,6 +114,9 @@ export class PluginHost {
     this.sources = options.sources ?? createDefaultPluginSources();
     this.entitlement = options.entitlement ?? new LocalEntitlementProvider();
     this.doc = options.doc ?? document;
+    this.context = { url: this.url, host: catalogHostFromUrl(this.url) };
+    this.requestCatalogRefresh = options.requestCatalogRefresh ?? sendCatalogRefreshRequest;
+    this.isTopFrame = options.isTopFrame ?? detectTopFrame();
   }
 
   get activeAdapter(): SiteAdapter | null {
@@ -106,15 +146,20 @@ export class PluginHost {
         this.state = next;
         void this.enqueue(() => this.reconcile(gen));
       });
-      // A marketplace refresh updates the cached catalog: reload + re-mount so
-      // new/changed plugin CSS applies live without a page reload.
-      this.unsubscribeCatalog = subscribeCatalog(
-        () => void this.enqueue(() => this.reloadCatalog(gen)),
-      );
+      // A background refresh that CHANGES this host's remote catalog: reload +
+      // re-mount so new/changed plugin CSS applies live without a page reload.
+      const host = this.context.host;
+      if (host) {
+        this.unsubscribeCatalog = subscribeHostCatalog(
+          host,
+          () => void this.enqueue(() => this.reloadCatalog(gen)),
+        );
+      }
       logger.info('PluginHost started', {
         site: this.adapter?.id ?? 'unknown',
         manifests: this.manifests.length,
       });
+      this.maybeRequestCatalogRefresh();
     } catch (error) {
       if (isExtensionContextInvalidatedError(error)) return;
       logger.error('PluginHost start failed', { error: String(error) });
@@ -232,6 +277,18 @@ export class PluginHost {
   }
 
   private async loadManifests(): Promise<readonly PluginManifest[]> {
-    return listPluginManifests(this.sources);
+    return listPluginManifests(this.sources, this.context);
+  }
+
+  /**
+   * D4 trigger. Only the top frame of a page that an ENABLED plugin targets
+   * may ask for a check; embedded companion frames and pages without an
+   * enabled plugin (all of Gemini / AI Studio) stay silent.
+   */
+  private maybeRequestCatalogRefresh(): void {
+    const host = this.context.host;
+    if (!host || !this.isTopFrame) return;
+    if (!hasEnabledPluginForUrl(this.manifests, this.state, this.url)) return;
+    this.requestCatalogRefresh(host);
   }
 }

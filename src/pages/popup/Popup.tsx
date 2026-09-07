@@ -40,8 +40,13 @@ import { compareVersions } from '@/core/utils/version';
 import { resolveWatermarkSettings } from '@/core/utils/watermarkSettings';
 import { PromptImportExportService } from '@/features/backup/services/PromptImportExportService';
 import type { FormulaCopyFormat } from '@/features/formulaCopy/FormulaCopyService';
+import { subscribeHostCatalog } from '@/features/plugins/remote/hostCatalogCache';
+import { catalogHostFromUrl } from '@/features/plugins/remote/hostCatalogPolicy';
+import { PLUGIN_CATALOG_REFRESH_MESSAGE } from '@/features/plugins/runtime/messages';
 import { matchesAnyPattern } from '@/features/plugins/sites/matchPattern';
 import {
+  type BlockedPluginUpdate,
+  type SourcedPluginManifest,
   listPluginManifestsWithSources,
   refreshPluginManifestsWithSources,
 } from '@/features/plugins/sources/defaultSources';
@@ -439,8 +444,16 @@ const POPUP_SETTINGS_SEARCH_ITEMS = [
   popupSearchTarget(
     'plugins',
     'controls',
-    ['pluginsDescription', 'pluginsEmpty', 'pluginsRefresh', 'pluginViewSource'],
-    ['extension plugin marketplace add-on 插件 市场 扩展'],
+    [
+      'pluginsDescription',
+      'pluginsEmpty',
+      'pluginsRefresh',
+      'pluginViewSource',
+      'pluginsOnlineUpdates',
+      'pluginsOnlineUpdatesHint',
+      'pluginsCheckInterval',
+    ],
+    ['extension plugin marketplace add-on catalog update 插件 市场 扩展 目录 更新'],
   ),
   popupSectionSearchTarget('general', ['generalOptions']),
   popupSearchTarget('general', 'enableTabTitleUpdate', [
@@ -1094,6 +1107,9 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
   const [activeTabContextLoaded, setActiveTabContextLoaded] = useState(false);
   const [pluginManifests, setPluginManifests] = useState<readonly PluginManifest[]>([]);
   const [pluginSourceIds, setPluginSourceIds] = useState<Readonly<Record<string, string>>>({});
+  const [pluginBlockedUpdates, setPluginBlockedUpdates] = useState<
+    Readonly<Record<string, BlockedPluginUpdate>>
+  >({});
   const [pluginState, setPluginState] = useState<PluginStateMap>({});
   const [pluginStateLoaded, setPluginStateLoaded] = useState(false);
   // Per-site custom accent overrides: Record<siteId, hex>.
@@ -1272,18 +1288,47 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
     [activeSiteId, accentColors],
   );
 
+  // Host of the active tab for the per-host remote plugin catalog; undefined
+  // until the tab is known and for hosts that can never have a catalog file.
+  const pluginCatalogHost = useMemo(() => catalogHostFromUrl(activeUrl), [activeUrl]);
+
+  const applyPluginRecords = useCallback((records: readonly SourcedPluginManifest[]) => {
+    setPluginManifests(records.map(({ manifest }) => manifest));
+    setPluginSourceIds(
+      Object.fromEntries(records.map(({ manifest, sourceId }) => [manifest.id, sourceId])),
+    );
+    setPluginBlockedUpdates(
+      Object.fromEntries(
+        records.flatMap(({ manifest, blockedUpdate }) =>
+          blockedUpdate ? [[manifest.id, blockedUpdate] as const] : [],
+        ),
+      ),
+    );
+  }, []);
+
   const handleRefreshPlugins = useCallback(async () => {
     setPluginsRefreshing(true);
     try {
-      const records = await refreshPluginManifestsWithSources();
-      setPluginManifests(records.map(({ manifest }) => manifest));
-      setPluginSourceIds(
-        Object.fromEntries(records.map(({ manifest, sourceId }) => [manifest.id, sourceId])),
+      // Manual check (plan D4): always allowed, bypasses the interval, the
+      // online-update switch and any failure backoff. The background fetches;
+      // the popup only re-reads the cache afterwards.
+      if (pluginCatalogHost) {
+        try {
+          await browser.runtime.sendMessage({
+            type: PLUGIN_CATALOG_REFRESH_MESSAGE,
+            payload: { host: pluginCatalogHost, force: true },
+          });
+        } catch {
+          // Background unavailable; fall through and re-read what is cached.
+        }
+      }
+      applyPluginRecords(
+        await refreshPluginManifestsWithSources({ url: activeUrl, host: pluginCatalogHost }),
       );
     } finally {
       setPluginsRefreshing(false);
     }
-  }, []);
+  }, [activeUrl, applyPluginRecords, pluginCatalogHost]);
 
   const refreshActiveTabContext = useCallback(async () => {
     try {
@@ -1306,24 +1351,32 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
     void refreshActiveTabContext();
   }, [refreshActiveTabContext]);
 
-  // Load plugin manifests from bundled sources plus the remote marketplace.
+  // Load plugin manifests: builtin + bundled snapshot + the cached remote
+  // catalog for the active tab's host. Waits for the tab context so the remote
+  // tier is read for the right host, and re-reads whenever the background
+  // writes a CHANGED catalog for that host.
   useEffect(() => {
+    if (!activeTabContextLoaded) return;
     let active = true;
-    void listPluginManifestsWithSources()
-      .then((records) => {
-        if (!active) return;
-        setPluginManifests(records.map(({ manifest }) => manifest));
-        setPluginSourceIds(
-          Object.fromEntries(records.map(({ manifest, sourceId }) => [manifest.id, sourceId])),
-        );
-      })
-      .finally(() => {
-        if (active) setPluginsLoading(false);
-      });
+    const context = { url: activeUrl, host: pluginCatalogHost };
+    const load = (): void => {
+      void listPluginManifestsWithSources(undefined, context)
+        .then((records) => {
+          if (active) applyPluginRecords(records);
+        })
+        .finally(() => {
+          if (active) setPluginsLoading(false);
+        });
+    };
+    load();
+    const unsubscribe = pluginCatalogHost
+      ? subscribeHostCatalog(pluginCatalogHost, load)
+      : () => {};
     return () => {
       active = false;
+      unsubscribe();
     };
-  }, []);
+  }, [activeTabContextLoaded, activeUrl, applyPluginRecords, pluginCatalogHost]);
 
   useEffect(() => {
     let active = true;
@@ -2879,6 +2932,9 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
               onRefresh={handleRefreshPlugins}
               refreshing={pluginsRefreshing}
               activeUrl={activeUrl}
+              sourceIds={pluginSourceIds}
+              blockedUpdates={pluginBlockedUpdates}
+              catalogHost={pluginCatalogHost}
             />
           </div>
         )}

@@ -9,6 +9,9 @@ on:
       - '.vitepress/**'
       - '.github/workflows/deploy-docs.yml'
       - 'scripts/update-readme-badges.mjs'
+      - 'scripts/build-plugin-catalog.ts'
+      - 'src/features/plugins/catalog/**'
+      - 'src/features/plugins/sites/**'
       - 'package.json'
       - 'package-lock.json'
       - 'bun.lock'
@@ -46,6 +49,11 @@ jobs:
         run: node scripts/update-readme-badges.mjs
         env:
           GITHUB_TOKEN: ${{ github.token }}
+
+      # Writes docs/public/catalog/hosts/<host>.json; VitePress copies
+      # docs/public/ to the dist root, so it publishes at /catalog/hosts/.
+      - name: Build plugin catalog
+        run: bun run catalog:build
 
       - name: Build docs
         run: bun run docs:build

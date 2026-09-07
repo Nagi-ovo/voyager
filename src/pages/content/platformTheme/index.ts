@@ -22,10 +22,11 @@
  * source of truth for "which site am I on".
  */
 import { StorageKeys } from '@/core/types/common';
+import { subscribeHostCatalog } from '@/features/plugins/remote/hostCatalogCache';
+import { catalogHostFromUrl } from '@/features/plugins/remote/hostCatalogPolicy';
 import { matchesAnyPattern } from '@/features/plugins/sites/matchPattern';
 import { SiteRegistry } from '@/features/plugins/sites/registry';
 import { listPluginManifests } from '@/features/plugins/sources/defaultSources';
-import { subscribeCatalog } from '@/features/plugins/storage/catalogCache';
 import { loadPluginState, subscribePluginState } from '@/features/plugins/storage/pluginState';
 import type { PluginManifest } from '@/features/plugins/types';
 
@@ -198,9 +199,10 @@ async function loadAccentColors(): Promise<AccentColorMap> {
 export function startBrandTheme(url: string = location.href, doc: Document = document): () => void {
   applyBrandTheme(url, [], doc); // immediate: adapter built-in colour (pre-storage)
   let cancelled = false;
+  const host = catalogHostFromUrl(url);
   const recompute = async (): Promise<void> => {
     const [manifests, state, customColors] = await Promise.all([
-      listPluginManifests(),
+      listPluginManifests(undefined, { url, host }),
       loadPluginState(),
       loadAccentColors(),
     ]);
@@ -210,7 +212,8 @@ export function startBrandTheme(url: string = location.href, doc: Document = doc
   };
   void recompute();
   const unState = subscribePluginState(() => void recompute());
-  const unCatalog = subscribeCatalog(() => void recompute());
+  // A remote catalog update for this host can add or drop a plugin's theme.brand.
+  const unCatalog = host ? subscribeHostCatalog(host, () => void recompute()) : () => {};
   // Repaint live when the per-site accent override changes in the popup.
   const onStorage = (changes: Record<string, chrome.storage.StorageChange>, area: string): void => {
     if (area === 'sync' && StorageKeys.ACCENT_COLORS in changes) void recompute();

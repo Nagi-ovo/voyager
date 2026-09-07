@@ -19,6 +19,25 @@ export { matchesUrl, matchesAnyPattern } from './sites/matchPattern';
 export { validateManifest } from './manifest/validate';
 export type { ManifestIssue } from './manifest/validate';
 export { loadPluginState, setPluginEnabled, subscribePluginState } from './storage/pluginState';
+export { HostCatalogSource, HOST_CATALOG_SOURCE_ID } from './remote/HostCatalogSource';
+export {
+  loadHostCatalogCache,
+  subscribeHostCatalog,
+  hostCatalogStorageKey,
+} from './remote/hostCatalogCache';
+export type { HostCatalogCacheEntry, HostCatalogStatus } from './remote/hostCatalogCache';
+export {
+  loadPluginCatalogSettings,
+  savePluginCatalogSettings,
+  subscribePluginCatalogSettings,
+} from './remote/hostCatalogSettings';
+export type { PluginCatalogSettings } from './remote/hostCatalogSettings';
+export {
+  PLUGIN_CATALOG_CHECK_INTERVALS,
+  catalogHostFromUrl,
+  hasEnabledPluginForUrl,
+} from './remote/hostCatalogPolicy';
+export type { PluginCatalogCheckInterval } from './remote/hostCatalogPolicy';
 export { BUILTIN_PLUGINS } from './builtin';
 export {
   createDefaultPluginSources,
@@ -28,7 +47,7 @@ export {
   refreshPluginManifests,
   refreshPluginManifestsWithSources,
 } from './sources/defaultSources';
-export type { SourcedPluginManifest } from './sources/defaultSources';
+export type { BlockedPluginUpdate, SourcedPluginManifest } from './sources/defaultSources';
 export * from './types';
 
 let host: PluginHost | null = null;

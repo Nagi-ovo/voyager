@@ -316,10 +316,23 @@ export const StorageKeys = {
   // Registered external marketplace sources (git-based catalogs). Reserved for
   // the future remote-registry milestone; unused today.
   PLUGIN_MARKETPLACE_SOURCES: 'gvPluginMarketplaceSources',
-  // Cached plugin catalog fetched from the marketplace (chrome.storage.local).
-  // Shape: { manifests: PluginManifest[]; fetchedAt: number }. Local (not sync)
-  // because it's network-derived per-device data, refreshed on a TTL.
+  // LEGACY whole-catalog cache written by the retired MarketplacePluginSource
+  // (chrome.storage.local). Shape: { manifests: PluginManifest[]; fetchedAt }.
+  // No reader remains; the key is ignored and never cleaned (storage only grows).
   PLUGIN_CATALOG_CACHE: 'gvPluginCatalogCache',
+  // Key PREFIX for the per-host remote plugin catalog cache
+  // (chrome.storage.local). Full key: `${prefix}${location.host}`, e.g.
+  // `gvPluginHostCatalog:chat.deepseek.com`. Shape: HostCatalogCacheEntry (see
+  // src/features/plugins/remote/hostCatalogCache.ts). Network-derived per-device
+  // data rebuilt on the next check; never backed up.
+  PLUGIN_HOST_CATALOG_PREFIX: 'gvPluginHostCatalog:',
+  // Master switch for checking voyager.nagi.fun for plugin catalog updates
+  // (chrome.storage.sync, backed up). Off = the extension never contacts the
+  // catalog host except for an explicit manual check in the popup.
+  PLUGIN_ONLINE_UPDATES_ENABLED: 'gvPluginOnlineUpdatesEnabled',
+  // Minimum spacing between automatic catalog checks per host:
+  // '1h' | '6h' | '24h' | 'manual' (chrome.storage.sync, backed up).
+  PLUGIN_CATALOG_CHECK_INTERVAL: 'gvPluginCatalogCheckInterval',
   // Plugin cards the user has collapsed in the popup list (string[] of plugin
   // ids). Local (not sync) — it's a per-device UI preference, not user data.
   PLUGIN_UI_COLLAPSED: 'gvPluginUiCollapsed',
