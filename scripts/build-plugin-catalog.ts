@@ -39,7 +39,7 @@ import {
   HOST_CATALOG_FORMAT,
   validateHostCatalogFile,
 } from '../src/features/plugins/remote/hostCatalogFile';
-import { matchesAnyPattern } from '../src/features/plugins/sites/matchPattern';
+import { matchesAnyPattern, patternWithinAny } from '../src/features/plugins/sites/matchPattern';
 import type { SiteAdapterData } from '../src/features/plugins/sites/siteAdapterData';
 import {
   siteAdapterToData,
@@ -109,21 +109,6 @@ function listSubdirectories(dir: string): readonly string[] {
 }
 
 /**
- * A URL that stands in for a match pattern, so one pattern can be tested
- * against another set of patterns: `https://*.example.com/*` becomes
- * `https://x.example.com/`. `<all_urls>` gets a host no site can claim, which
- * is the point — it escapes every site.
- */
-function probeUrl(pattern: string): string {
-  const trimmed = pattern.trim();
-  if (trimmed === '<all_urls>') return 'https://all-urls.invalid/';
-  return trimmed
-    .replace(/^\*:\/\//, 'https://')
-    .replace(/^(https?:\/\/)\*\./i, '$1x.')
-    .replace(/\*$/, '');
-}
-
-/**
  * Plan D18: a plugin may only target URLs its own site adapter covers. Without
  * this a plugin filed under `sites/claude/` could quietly ship to chatgpt.com,
  * where its semantic selectors mean nothing.
@@ -134,7 +119,7 @@ function assertMatchesStayInSite(
   manifestPath: string,
 ): void {
   for (const pattern of manifest.matches) {
-    if (matchesAnyPattern(probeUrl(pattern), site.adapter.matches)) continue;
+    if (patternWithinAny(pattern, site.adapter.matches)) continue;
     throw new Error(
       `${manifest.id} (${manifestPath}): match pattern "${pattern}" is not covered by site "${site.dir}" (${site.adapter.matches.join(', ')})`,
     );

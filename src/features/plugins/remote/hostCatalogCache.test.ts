@@ -20,7 +20,7 @@ const SITE = {
   selectors: { userTurn: '.ds-message.user' },
   theme: { hostSelector: 'body', lightSelector: 'body.light', darkSelector: 'body.dark' },
   brandColor: '#abcdef',
-  capabilities: ['chat'],
+  capabilities: ['chat' as const],
 };
 
 const HOST = 'chat.deepseek.com';

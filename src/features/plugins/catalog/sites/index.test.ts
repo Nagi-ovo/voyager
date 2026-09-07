@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import { matchesAnyPattern } from '../../sites/matchPattern';
+import { patternWithinAny } from '../../sites/matchPattern';
 import { SEMANTIC_SELECTOR_KEYS } from '../../sites/semanticKeys';
 import { BundledCatalogPluginSource } from '../../sources/BundledCatalogPluginSource';
 import {
@@ -55,8 +55,7 @@ describe('bundled catalog discovery', () => {
       const site = requireBundledSiteAdapter(entry.siteDir);
       expect(manifest, entry.path).toBeDefined();
       for (const pattern of manifest!.matches) {
-        const probe = pattern.replace(/^(\w+):\/\/\*\./, '$1://x.').replace(/\*$/, '');
-        expect(matchesAnyPattern(probe, site.matches), `${entry.path}: ${pattern}`).toBe(true);
+        expect(patternWithinAny(pattern, site.matches), `${entry.path}: ${pattern}`).toBe(true);
       }
     }
   });

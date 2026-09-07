@@ -32,3 +32,56 @@ export function matchesUrl(url: string, pattern: string): boolean {
 export function matchesAnyPattern(url: string, patterns: readonly string[]): boolean {
   return patterns.some((pattern) => matchesUrl(url, pattern));
 }
+
+interface ParsedPattern {
+  readonly scheme: 'https' | 'http' | '*';
+  readonly host: string;
+  readonly path: string;
+}
+
+function parsePattern(pattern: string): ParsedPattern | null {
+  const match = /^(https?|\*):\/\/([^/]+)(\/.*)?$/i.exec(pattern.trim());
+  if (!match) return null;
+  return {
+    scheme: match[1].toLowerCase() as ParsedPattern['scheme'],
+    host: match[2].toLowerCase(),
+    path: match[3] || '/',
+  };
+}
+
+function hostWithin(inner: string, outer: string): boolean {
+  if (outer === '*' || inner === outer) return true;
+  if (outer.startsWith('*.')) {
+    const suffix = outer.slice(2);
+    const bare = inner.startsWith('*.') ? inner.slice(2) : inner;
+    return bare === suffix || bare.endsWith(`.${suffix}`);
+  }
+  return false;
+}
+
+function pathWithin(inner: string, outer: string): boolean {
+  if (outer === '/*' || inner === outer) return true;
+  if (outer.endsWith('*')) return inner.startsWith(outer.slice(0, -1));
+  return false;
+}
+
+/**
+ * True when every URL `inner` can match is also matched by `outer` (plan D18:
+ * a plugin may only target URLs its site adapter covers). Compares the parts,
+ * not one probe URL: `https://*.example.com/*` is NOT within
+ * `https://x.example.com/*`, and `*://example.com/*` is NOT within an
+ * https-only site.
+ */
+export function patternWithin(inner: string, outer: string): boolean {
+  if (outer.trim() === '<all_urls>') return true;
+  if (inner.trim() === '<all_urls>') return false;
+  const a = parsePattern(inner);
+  const b = parsePattern(outer);
+  if (!a || !b) return false;
+  const schemeOk = b.scheme === '*' || a.scheme === b.scheme;
+  return schemeOk && hostWithin(a.host, b.host) && pathWithin(a.path, b.path);
+}
+
+export function patternWithinAny(inner: string, outers: readonly string[]): boolean {
+  return outers.some((outer) => patternWithin(inner, outer));
+}

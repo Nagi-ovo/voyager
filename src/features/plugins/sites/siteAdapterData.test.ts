@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { siteAdapterToData, validateSiteAdapterData } from './siteAdapterData';
+import {
+  isValidSelectorSyntax,
+  siteAdapterToData,
+  validateSiteAdapterData,
+} from './siteAdapterData';
 
 const VALID = {
   id: 'deepseek',
@@ -59,6 +63,27 @@ describe('validateSiteAdapterData', () => {
       'theme.darkSelector',
     ]);
     expect(issuesOf(null)).toEqual(['']);
+  });
+
+  it('rejects selectors that do not parse instead of letting the engine skip them silently', () => {
+    expect(issuesOf({ ...VALID, selectors: { ...VALID.selectors, userTurn: '[' } })).toEqual([
+      'selectors.userTurn',
+    ]);
+    expect(issuesOf({ ...VALID, theme: { ...VALID.theme, darkSelector: 'body]' } })).toEqual([
+      'theme.darkSelector',
+    ]);
+    expect(isValidSelectorSyntax('.ds-message:has(.x):not([data-a="b"])')).toBe(true);
+    // Without a DOM the structural fallback still catches unbalanced input.
+    const doc = globalThis.document;
+    Object.defineProperty(globalThis, 'document', { configurable: true, value: undefined });
+    try {
+      expect(isValidSelectorSyntax('div[data-x="a]"]')).toBe(true);
+      expect(isValidSelectorSyntax('div[data-x')).toBe(false);
+      expect(isValidSelectorSyntax('a:not(.b')).toBe(false);
+      expect(isValidSelectorSyntax("a[title='x]")).toBe(false);
+    } finally {
+      Object.defineProperty(globalThis, 'document', { configurable: true, value: doc });
+    }
   });
 
   it('treats brandColor, capabilities and conversationIdPattern as optional', () => {

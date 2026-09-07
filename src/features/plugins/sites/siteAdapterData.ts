@@ -66,6 +66,40 @@ function isSiteCapability(value: unknown): value is SiteCapability {
   return typeof value === 'string' && (SITE_CAPABILITIES as readonly string[]).includes(value);
 }
 
+/**
+ * A selector that does not parse would make `querySelector` throw at runtime;
+ * the engine swallows that and silently skips the operation, so reject it here.
+ * With a DOM (extension, jsdom) the parser is the judge; the catalog build runs
+ * under Bun without one, where balanced brackets and quotes keep the obvious
+ * typos out.
+ */
+export function isValidSelectorSyntax(selector: string): boolean {
+  const doc = (globalThis as { document?: Document }).document;
+  if (doc?.createDocumentFragment) {
+    try {
+      doc.createDocumentFragment().querySelector(selector);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  const stack: string[] = [];
+  let quote: string | null = null;
+  for (const char of selector) {
+    if (quote) {
+      if (char === quote) quote = null;
+      continue;
+    }
+    if (char === '"' || char === "'") quote = char;
+    else if (char === '(' || char === '[') stack.push(char);
+    else if (char === ')' || char === ']') {
+      const open = stack.pop();
+      if ((char === ')' && open !== '(') || (char === ']' && open !== '[')) return false;
+    }
+  }
+  return quote === null && stack.length === 0;
+}
+
 function readTheme(raw: unknown, issues: ManifestIssue[]): SiteThemeDescriptor | null {
   if (!isRecord(raw)) {
     issues.push({ path: 'theme', message: 'must be an object' });
@@ -77,6 +111,9 @@ function readTheme(raw: unknown, issues: ManifestIssue[]): SiteThemeDescriptor |
     const value = raw[key];
     if (!nonEmptyString(value) || value.length > MAX_SELECTOR_LENGTH) {
       issues.push({ path: `theme.${key}`, message: 'required non-empty selector' });
+      ok = false;
+    } else if (!isValidSelectorSyntax(value)) {
+      issues.push({ path: `theme.${key}`, message: 'selector does not parse' });
       ok = false;
     }
   }
@@ -102,6 +139,10 @@ function readSelectors(raw: unknown, issues: ManifestIssue[]): Record<string, st
     }
     if (!nonEmptyString(value) || value.length > MAX_SELECTOR_LENGTH) {
       issues.push({ path: `selectors.${key}`, message: 'must be a non-empty selector' });
+      continue;
+    }
+    if (!isValidSelectorSyntax(value)) {
+      issues.push({ path: `selectors.${key}`, message: 'selector does not parse' });
       continue;
     }
     selectors[key] = value;

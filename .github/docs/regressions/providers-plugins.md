@@ -183,3 +183,28 @@ or prompt commands.
   `src/pages/content/prompt/__tests__/promptName.test.ts`
   `src/pages/content/prompt/__tests__/slashPrompt.test.ts`
   `src/pages/background/__tests__/runtimeMessageRouting.test.ts`
+
+## D18 scope checks compare match patterns, never one probe URL
+
+- **Trap:** The catalog build and `plugin:check` proved "plugin `matches` stay inside the site" by
+  probing one URL derived from the plugin pattern. `https://*.example.com/*` probed as
+  `https://x.example.com/` and passed under a site that only covers `x.example.com`, although the
+  plugin also applies to every other subdomain; `*://` probed as https and passed an https-only
+  site.
+- **Rule:** Use `patternWithin` / `patternWithinAny` from `sites/matchPattern.ts`: scheme, host
+  wildcard and path scope are compared part by part, so a plugin scope must be the site scope or
+  narrower.
+- **Guard:** `src/features/plugins/sites/matchPattern.test.ts`
+  (`rejects a wildcard host, a wider scheme or a wider path than the site allows`).
+
+## Prompt Manager coverage on plugin platforms listens before it mounts
+
+- **Trap:** The content script mounted the Prompt Manager from the startup coverage read and only
+  then registered the storage listener. A user switching the site off while that read or the
+  first mount was in flight was missed, and the Prompt Manager stayed mounted until a reload.
+- **Rule:** Create the reconciler, register `handleChange`, then feed the startup read through
+  `applyInitial()`; it is queued behind any change already handled and ignored when the listener
+  has already seen a newer value.
+- **Guard:** `src/pages/content/prompt/__tests__/customSiteCoverage.test.ts`
+  (`queues a toggle-off that lands while the startup mount is in flight`,
+  `ignores a startup read that is older than a change already handled`).

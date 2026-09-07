@@ -100,6 +100,36 @@ describe('custom site coverage reconciler', () => {
     expect(started).toBe(0);
   });
 
+  it('queues a toggle-off that lands while the startup mount is in flight', async () => {
+    let release!: (instance: PromptManagerInstance) => void;
+    const pending = new Promise<PromptManagerInstance>((resolve) => {
+      release = resolve;
+    });
+    const slowStart = vi.fn(() => pending);
+    const coverage = createCustomSiteCoverageReconciler({ host: HOST, start: slowStart });
+    coverage.applyInitial(true);
+    // The user switches the site off before the first mount resolves.
+    coverage.handleChange(change([]), 'sync');
+    release(instance());
+    await flush(coverage);
+    expect(slowStart).toHaveBeenCalledTimes(1);
+    expect(destroyed).toBe(1);
+    // Nothing stays mounted: a later re-add mounts again.
+    coverage.handleChange(change([HOST]), 'sync');
+    await flush(coverage);
+    expect(slowStart).toHaveBeenCalledTimes(2);
+  });
+
+  it('ignores a startup read that is older than a change already handled', async () => {
+    const coverage = createCustomSiteCoverageReconciler({ host: HOST, start });
+    coverage.handleChange(change([]), 'sync');
+    await flush(coverage);
+    // The pre-subscription read said "covered", but the listener already saw the removal.
+    coverage.applyInitial(true);
+    await flush(coverage);
+    expect(started).toBe(0);
+  });
+
   it('does not destroy twice when teardown follows a removal', async () => {
     const coverage = createCustomSiteCoverageReconciler({ host: HOST, start, initial: instance() });
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { matchesAnyPattern, matchesUrl } from './matchPattern';
+import { matchesAnyPattern, matchesUrl, patternWithin } from './matchPattern';
 
 describe('matchPattern', () => {
   it('matches exact host + path wildcard', () => {
@@ -40,5 +40,27 @@ describe('matchPattern', () => {
       ]),
     ).toBe(true);
     expect(matchesAnyPattern('https://grok.com/', ['https://claude.ai/*'])).toBe(false);
+  });
+});
+
+describe('patternWithin (plan D18 containment)', () => {
+  it('accepts a plugin scope that is the site scope or narrower', () => {
+    expect(patternWithin('https://claude.ai/*', 'https://claude.ai/*')).toBe(true);
+    expect(patternWithin('https://claude.ai/chat/*', 'https://claude.ai/*')).toBe(true);
+    expect(patternWithin('https://x.example.com/*', 'https://*.example.com/*')).toBe(true);
+    expect(patternWithin('https://example.com/*', 'https://*.example.com/*')).toBe(true);
+    expect(patternWithin('https://claude.ai/*', '*://claude.ai/*')).toBe(true);
+    expect(patternWithin('https://claude.ai/chat/s/*', 'https://claude.ai/chat/*')).toBe(true);
+    expect(patternWithin('https://anything.test/*', '<all_urls>')).toBe(true);
+  });
+
+  it('rejects a wildcard host, a wider scheme or a wider path than the site allows', () => {
+    // One probe URL (x.example.com) would have passed this; y.example.com escapes.
+    expect(patternWithin('https://*.example.com/*', 'https://x.example.com/*')).toBe(false);
+    expect(patternWithin('*://example.com/*', 'https://example.com/*')).toBe(false);
+    expect(patternWithin('https://claude.ai/*', 'https://claude.ai/chat/*')).toBe(false);
+    expect(patternWithin('https://chatgpt.com/*', 'https://claude.ai/*')).toBe(false);
+    expect(patternWithin('<all_urls>', 'https://claude.ai/*')).toBe(false);
+    expect(patternWithin('garbage', 'https://claude.ai/*')).toBe(false);
   });
 });

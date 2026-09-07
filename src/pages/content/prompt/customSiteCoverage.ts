@@ -10,13 +10,23 @@ export interface CustomSiteCoverageOptions {
   host: string;
   /** Mounts the Prompt Manager. Called only when coverage turns on. */
   start: () => Promise<PromptManagerInstance>;
-  /** The instance mounted at startup, or null if the site was not covered. */
-  initial: PromptManagerInstance | null;
+  /**
+   * An instance already mounted when the reconciler is created, if any.
+   * Prefer `applyInitial()`: create the reconciler first, register its
+   * listener, then feed it the startup read, so a toggle that lands while
+   * that read is in flight is not lost.
+   */
+  initial?: PromptManagerInstance | null;
 }
 
 export interface CustomSiteCoverageReconciler {
   /** `chrome.storage.onChanged` listener. */
   handleChange: (changes: Record<string, chrome.storage.StorageChange>, areaName: string) => void;
+  /**
+   * Feed the startup coverage read. Ignored when a storage change has already
+   * been handled: that change is newer than the read.
+   */
+  applyInitial: (covered: boolean) => void;
   /** Resolves once every change queued so far has been applied. */
   settled: () => Promise<void>;
   /** Tears down whatever is currently mounted. */
@@ -38,18 +48,11 @@ export function createCustomSiteCoverageReconciler({
   start,
   initial,
 }: CustomSiteCoverageOptions): CustomSiteCoverageReconciler {
-  let instance: PromptManagerInstance | null = initial;
+  let instance: PromptManagerInstance | null = initial ?? null;
   let queue: Promise<void> = Promise.resolve();
+  let sawChange = false;
 
-  const handleChange = (
-    changes: Record<string, chrome.storage.StorageChange>,
-    areaName: string,
-  ): void => {
-    if (areaName !== 'sync') return;
-    const change = changes[StorageKeys.PROMPT_CUSTOM_WEBSITES];
-    if (!change) return;
-
-    const covered = customWebsitesIncludeHost(change.newValue, host);
+  const apply = (covered: boolean): void => {
     queue = queue
       .then(async () => {
         // Read coverage at apply time, not at enqueue time, so a no-op change
@@ -65,8 +68,22 @@ export function createCustomSiteCoverageReconciler({
       .catch(() => {});
   };
 
+  const handleChange = (
+    changes: Record<string, chrome.storage.StorageChange>,
+    areaName: string,
+  ): void => {
+    if (areaName !== 'sync') return;
+    const change = changes[StorageKeys.PROMPT_CUSTOM_WEBSITES];
+    if (!change) return;
+    sawChange = true;
+    apply(customWebsitesIncludeHost(change.newValue, host));
+  };
+
   return {
     handleChange,
+    applyInitial: (covered) => {
+      if (!sawChange) apply(covered);
+    },
     settled: () => queue,
     destroy: () => {
       instance?.destroy();

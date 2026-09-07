@@ -728,23 +728,24 @@ function handleVisibilityChange(): void {
         // what the popup's "enable Prompt Manager on <site>" toggle edits, and
         // it follows that toggle live instead of waiting for a reload.
         console.log('[Gemini Voyager] Plugin platform: prompt manager follows site coverage');
+        // Listen first, then feed the startup read: a toggle that lands while
+        // the read (or the first mount) is in flight is queued behind it
+        // instead of being missed.
+        const coverage = createCustomSiteCoverageReconciler({
+          host: location.host.toLowerCase(),
+          start: startPromptManager,
+        });
+        chrome.storage?.onChanged?.addListener(coverage.handleChange);
+        cleanupManager.registerCleanupFunction(
+          () => chrome.storage?.onChanged?.removeListener(coverage.handleChange),
+          CleanupPositions.RemoveStorageOnChangedListener,
+        );
+        cleanupManager.registerCleanupFunction(
+          () => coverage.destroy(),
+          CleanupPositions.DestroyPromptManagerInstance,
+        );
         void isCustomWebsite()
-          .then(async (covered) => {
-            const coverage = createCustomSiteCoverageReconciler({
-              host: location.host.toLowerCase(),
-              start: startPromptManager,
-              initial: covered ? await startPromptManager() : null,
-            });
-            chrome.storage?.onChanged?.addListener(coverage.handleChange);
-            cleanupManager.registerCleanupFunction(
-              () => chrome.storage?.onChanged?.removeListener(coverage.handleChange),
-              CleanupPositions.RemoveStorageOnChangedListener,
-            );
-            cleanupManager.registerCleanupFunction(
-              () => coverage.destroy(),
-              CleanupPositions.DestroyPromptManagerInstance,
-            );
-          })
+          .then((covered) => coverage.applyInitial(covered))
           .catch((error) => {
             console.error('[Gemini Voyager] Prompt Manager init error on plugin platform:', error);
           });
