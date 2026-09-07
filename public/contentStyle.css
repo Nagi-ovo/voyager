@@ -576,6 +576,13 @@ html.dark .timeline-dot:not(.active):not(.starred)::after,
   pointer-events: none;
 }
 
+/* Turn-navigator rails (Claude, DeepSeek, ...): a compact tick jumps straight
+ * to its turn; hovering the rail still opens the preview panel. */
+.gemini-timeline-bar[data-gv-turn-navigator].timeline-style-compact .timeline-track,
+.gemini-timeline-bar[data-gv-turn-navigator].timeline-style-compact .timeline-dot {
+  pointer-events: auto;
+}
+
 .gemini-timeline-bar.timeline-style-compact .timeline-dot::before {
   display: none;
 }

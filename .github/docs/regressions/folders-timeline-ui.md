@@ -219,11 +219,38 @@ drop, or hover layout.
   Remembered absolute offsets also drift while Claude remeasures newly mounted content.
 - **Rule:** Keep a grow-only registry stitched across overlapping windows by content hash:
   `c-<textHash>`, with `~n` for duplicates and hash-segment matching for legacy stars. Navigate to
-  unmounted turns iteratively with instant probing and direction-aware bisection, then smooth
-  fine-aim after mount. Make jumps over three viewports instant. Reuse this virtual-window model for
+  unmounted turns iteratively with instant probing and direction-aware bisection, then fine-aim
+  after mount. Every jump is instant: smooth scrolling drifts while Claude re-measures, and mixing
+  smooth short hops with instant long ones reads as erratic. Reuse this virtual-window model for
   future Claude DOM features.
 - **Guard:** `src/features/plugins/builtin/claudeTimeline/index.test.ts` covers sparse-window
   stability, durable IDs, and marker retention during virtualization.
+
+## Turn navigator blocks are filed by scroll position between anchors
+
+- **Trap:** Claude now mounts about four turns plus the latest turn, which stays mounted while the
+  reader sits at the top. Stitching a freshly mounted block "right before its first anchor" filed the
+  conversation's opening turns behind the bottom window, so the preview list, the rail order and
+  the active marker were all wrong after one scroll to the top.
+- **Rule:** Anchors (hash matches) fix the relative order; a block of unknown turns is inserted by
+  its scroll position among the known turns between its two bounding anchors, comparing known
+  centres after the nearest anchor's re-measure drift. Never assume a mounted window is contiguous.
+- **Guard:** `src/features/plugins/builtin/claudeTimeline/index.test.ts`
+  (`keeps the opening turns ahead of the bottom window when Claude leaves the latest turn mounted`,
+  `files a bottom window behind the known opening turns when the first turn stays mounted`).
+
+## Compact turn-navigator ticks spread over the track and stay clickable
+
+- **Trap:** Compact ticks were squeezed into a fixed 240px cluster, so a long conversation rendered
+  as an unreadable barcode on a 1100px track, and `pointer-events: none` on the ticks meant a click
+  only toggled the preview panel instead of jumping.
+- **Rule:** Keep a fixed tick pitch and let the cluster use the whole track (minus end padding);
+  shrink the pitch only when the conversation outgrows the track, and re-space on resize. On
+  `[data-gv-turn-navigator]` rails a tick click navigates (stop propagation so the rail's panel
+  toggle does not fire) while hover still opens the preview; compact ticks show no tooltip.
+- **Guard:** `src/features/plugins/builtin/claudeTimeline/index.test.ts`
+  (`spreads compact ticks over the whole track instead of a fixed cluster`,
+  `jumps from a compact tick without toggling the preview panel or a tooltip`).
 
 ## The chat width sparkle rule also matches the Gemini logo pill
 
