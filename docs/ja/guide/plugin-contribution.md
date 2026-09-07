@@ -12,6 +12,45 @@ Voyager のプラグインシステムは、宣言的なプラグインを優先
 4. スタイルは同じディレクトリの `style.css` に置き、`contributes.styles` から参照します。
 5. ローカルでテストし、PR にテストページ、スクリーンショット、または短い録画を添えてください。公式 catalog に入れるかどうかは成熟度を見て判断します。
 
+## ディレクトリ構成
+
+公式のバンドルプラグインは `src/features/plugins/catalog/` の下にあり、プラグイン対応サイトごとに 1 ディレクトリです。
+
+```
+src/features/plugins/catalog/
+  marketplace.json                        ドキュメントのプラグインストアが読む索引
+  sites/<site>/site.json                  データとしてのサイトアダプタ
+  sites/<site>/plugins/<id>/plugin.json   宣言的プラグイン
+  sites/<site>/plugins/<id>/style.css     そのスタイル
+  sites/<site>/plugins/<id>/README.md     何をどう直すかの説明
+```
+
+検出は自動です。`catalog/sites/index.ts` が `import.meta.glob` で各 `site.json` と各 `plugin.json` を見つけるため、サイトやプラグインの追加はファイルの追加だけで済み、書き換えるべき対応表はありません。
+
+`marketplace.json` はその対応表ではなく、ドキュメントのプラグインストアが読む索引です。テストが検出結果との一致を保証しているので、新しいプラグインはここにも 1 件追加します。`source` は catalog からの相対パスで、たとえば `sites/deepseek/plugins/reading-width/plugin.json` です。
+
+`site.json` はサイトアダプタそのものをデータとして書いたものです。現在のプラグイン対応サイトは ChatGPT、Claude、DeepSeek です。Gemini と AI Studio は Voyager のネイティブ画面なので TypeScript アダプタのままですが、`sites/adapters/claude.ts`、`chatgpt.ts`、`deepseek.ts` は `site.json` を読むだけの 1 行のシェルです。TypeScript ではなく JSON を編集してください。公開されるホスト別カタログはサイトデータも運ぶため、セレクタ修正は拡張機能をリリースしなくてもユーザーに届きます。
+
+プラグインの `matches` は、それが置かれているサイトの `matches` の内側に収まっていなければなりません。はみ出したプラグインはビルドを失敗させます。
+
+## 意味的セレクタキー
+
+`site.json` は固定語彙の意味的キーをサイト固有の CSS セレクタに対応づけます。語彙は `src/features/plugins/sites/semanticKeys.ts` で定義されており、`site.json` はこのリストのキーしか使えません。未知のキーは拒否されます。
+
+- `userTurn`: ユーザーメッセージのコンテナ。
+- `assistantTurn`: アシスタントメッセージのコンテナ。
+- `thinkingBlock`: アシスタント応答内の思考部分。
+- `codeBlock`: 描画済みのコードブロック。
+- `composer`: ユーザーが入力するプロンプト欄。
+- `sidebar`: 会話一覧またはナビゲーションレール。
+- `sidePanel`: artifacts や canvas などの副次パネル。
+- `headerActions`: 会話画面右上の操作エリア。
+- `scrollContainer`: 会話をスクロールさせる要素。
+
+サイトは実際に提供できるキーだけを宣言します。プラグインはセレクタを直接書かず、DOM 操作の `target` に `{ "kind": "semantic", "key": "userTurn" }` と書いてキーを参照するので、サイトの改修は `site.json` 1 ファイルの修正で済みます。
+
+`conversationIdPattern` はセレクタではなく `site.json` の別フィールドです。URL パスに対する正規表現で、最初のキャプチャグループが会話 ID になります。たとえば `^/chat/([^/?#]+)` です。
+
 ## プラグインの粒度
 
 プラグインは「ユーザーが解決したい問題」で区切るべきで、プラットフォームごとに機械的に分割する必要はありません。
@@ -103,7 +142,7 @@ Voyager のプラグインシステムは、宣言的なプラグインを優先
 - `setStyle`：インラインスタイルまたは CSS 変数を設定する。
 - `hide`：対象要素を非表示にする。
 
-対象は CSS セレクタ、または Voyager のサイトアダプタが提供する意味的セレクタを使えます。意味的セレクタはより安定しますが、対象サイトに対応アダプタが必要です。
+対象は CSS セレクタ、または上のリストにある意味的キーを `{ "kind": "semantic", "key": "userTurn" }` と書いて指定できます。意味的キーはより安定しますが、対象サイトのアダプタがそのキーを宣言している必要があります。
 
 宣言的操作は、取り消し可能で、何度実行しても安全である必要があります。一度きりのページ状態に依存せず、DOM が永遠に変わらないとも仮定しないでください。
 
@@ -121,6 +160,7 @@ JavaScript の実行、リクエストの遮断、Voyager 内部データの読�
 - `matches` が無関係なサイトを含んでいない。
 - リモートリソースを参照していない。
 - プラグインディレクトリに `plugin.json`、必要な CSS ファイル、短い README がある。
+- 公式プラグインなら、ディレクトリが `catalog/sites/<site>/plugins/<id>/` にあり、`matches` がサイトの `matches` の内側で、`catalog/marketplace.json` に登録されている。
 - PR でテストページ、スクリーンショットまたは録画、影響を受けるページ領域を説明している。
 
 シンプルで、控えめで、取り消し可能にしてください。1 つの明確な問題を解くプラグインほど、マージと保守がしやすくなります。

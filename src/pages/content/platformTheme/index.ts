@@ -24,11 +24,15 @@
 import { StorageKeys } from '@/core/types/common';
 import { subscribeHostCatalog } from '@/features/plugins/remote/hostCatalogCache';
 import { catalogHostFromUrl } from '@/features/plugins/remote/hostCatalogPolicy';
+import {
+  loadSiteOverrideForHost,
+  resolveSiteAdapterForUrl,
+} from '@/features/plugins/remote/siteOverride';
 import { matchesAnyPattern } from '@/features/plugins/sites/matchPattern';
 import { SiteRegistry } from '@/features/plugins/sites/registry';
 import { listPluginManifests } from '@/features/plugins/sources/defaultSources';
 import { loadPluginState, subscribePluginState } from '@/features/plugins/storage/pluginState';
-import type { PluginManifest } from '@/features/plugins/types';
+import type { PluginManifest, SiteAdapter } from '@/features/plugins/types';
 
 /** Body class flag: Voyager UI on this page uses a platform brand accent. */
 export const PLATFORM_THEME_CLASS = 'gv-platform-themed';
@@ -120,8 +124,8 @@ export function resolveBrandColor(
   url: string = location.href,
   manifests: readonly PluginManifest[] = [],
   customColors: AccentColorMap = {},
+  adapter: SiteAdapter | null = SiteRegistry.createDefault().resolveByUrl(url),
 ): string | null {
-  const adapter = SiteRegistry.createDefault().resolveByUrl(url);
   // 1. Per-site user override wins over everything for this site.
   const custom = adapter?.id ? customColors[adapter.id] : undefined;
   if (typeof custom === 'string' && custom.trim()) return custom;
@@ -142,8 +146,9 @@ export function effectiveAccentForDisplay(
   url: string = location.href,
   manifests: readonly PluginManifest[] = [],
   customColors: AccentColorMap = {},
+  adapter: SiteAdapter | null = SiteRegistry.createDefault().resolveByUrl(url),
 ): string {
-  return resolveBrandColor(url, manifests, customColors) ?? DEFAULT_ACCENT;
+  return resolveBrandColor(url, manifests, customColors, adapter) ?? DEFAULT_ACCENT;
 }
 
 /**
@@ -158,8 +163,9 @@ export function applyBrandTheme(
   manifests: readonly PluginManifest[] = [],
   doc: Document = document,
   customColors: AccentColorMap = {},
+  adapter: SiteAdapter | null = SiteRegistry.createDefault().resolveByUrl(url),
 ): void {
-  const color = resolveBrandColor(url, manifests, customColors);
+  const color = resolveBrandColor(url, manifests, customColors, adapter);
   const root = doc.documentElement;
   if (!root) return;
   if (color) {
@@ -200,15 +206,19 @@ export function startBrandTheme(url: string = location.href, doc: Document = doc
   applyBrandTheme(url, [], doc); // immediate: adapter built-in colour (pre-storage)
   let cancelled = false;
   const host = catalogHostFromUrl(url);
+  const registry = SiteRegistry.createDefault();
   const recompute = async (): Promise<void> => {
-    const [manifests, state, customColors] = await Promise.all([
+    const [manifests, state, customColors, override] = await Promise.all([
       listPluginManifests(undefined, { url, host }),
       loadPluginState(),
       loadAccentColors(),
+      loadSiteOverrideForHost(host),
     ]);
     if (cancelled) return;
     const active = manifests.filter((m) => m.theme?.brand && state[m.id]?.enabled);
-    applyBrandTheme(url, active, doc, customColors);
+    // A published site override can change the brand colour without a release.
+    const adapter = resolveSiteAdapterForUrl(url, registry, override);
+    applyBrandTheme(url, active, doc, customColors, adapter);
   };
   void recompute();
   const unState = subscribePluginState(() => void recompute());

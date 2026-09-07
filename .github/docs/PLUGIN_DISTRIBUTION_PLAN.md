@@ -212,7 +212,7 @@ Claude、ChatGPT 的现有 builtin 清单改写为使用原语的 JSON，随本�
 | Firefox 清单的 `data_collection_permissions` 由构建期写入                                        | `vite.config.firefox.ts`                                                                                                                                         |
 | `SettingsBackupService` 有「每个 StorageKeys 必须分类」的覆盖测试                                | `src/core/services/SettingsBackupService.ts` ~159                                                                                                                |
 | 适配器均为纯数据（含 deepseek），无函数                                                          | `sites/adapters/*.ts`                                                                                                                                            |
-| DeepSeek 适配器与目录插件已在 main                                                               | `sites/adapters/deepseek.ts`；`catalog/plugins/deepseek-reading-width/`                                                                                          |
+| DeepSeek 适配器与目录插件已在 main                                                               | `catalog/sites/deepseek/site.json`；`catalog/sites/deepseek/plugins/reading-width/`（P2 重排后）                                                                 |
 | `pluginScope.ts` 注释引用的 `.github/docs/CORDIS_CTX_RESEARCH.md` 不存在                         | 顺手修注释                                                                                                                                                       |
 
 ### 12.2 顺序与冲突
@@ -267,3 +267,13 @@ Claude、ChatGPT 的现有 builtin 清单改写为使用原语的 JSON，随本�
   - popup 设置区只在可算出 host 的插件站点显示；文案键见 `pluginsOnlineUpdates*`。
 - 证据（Chrome 150，未打包 `dist_chrome`）：ChatGPT 标签页（已启用导出插件）触发恰好一次 `hosts/chatgpt.com.json` 请求（当前 404 → `missing`），两个 ChatGPT 标签页共用一次；手动检查再发一次；标签页刷新不再请求；Gemini 页面零请求、无控制台错误；popup 显示版本与来源标签、在线更新开关、间隔选择与状态行。
 - 待办：目录尚未部署（合并后由 Pages 发布并配置 Cloudflare purge）；Firefox/Safari 实机未测；文档站 8 个旧结构语种的隐私页只追加了本功能一节。
+
+### P2（分支 `feat/plugin-catalog-sites-p2`，基于 P1，2026-09-07）
+
+- 目录重排为 `catalog/sites/<site>/{site.json, plugins/<id>/}`；`catalog/sites/index.ts` 用 `import.meta.glob` 自动发现站点与插件，手工映射表删除。`marketplace.json` 保留为文档站插件商店的索引，测试保证它与发现结果一致（后续可改为读取已发布目录的索引）。
+- Claude / ChatGPT / DeepSeek 适配器数据化为 `site.json`，TS 文件只剩薄壳；Gemini / AI Studio 是原生站点、选择器来自第一方代码，保持 TS（D14 本就不进目录）。
+- 语义键词汇表 `sites/semanticKeys.ts`；`site.json` 校验器 `sites/siteAdapterData.ts`（手写 guard，D17）拒绝词汇表之外的键；`conversationIdPattern` 作为适配器字段。
+- 远程覆盖：host 文件 `site` 段经校验并要求 `matches` 覆盖该 host 后写入缓存；`HostCatalogSource.siteOverride` 提供，`remote/siteOverride.ts` 统一优先级（覆盖 > 内置）；PluginHost 首次挂载即用覆盖，目录变化且适配器不同则重建引擎；品牌色（内容脚本与 popup）读同一来源。
+- Prompt Manager 路径统一（§7）：插件平台与自定义站点同走 `createCustomSiteCoverageReconciler`，只有 host 在自定义站点列表里才挂载，并跟随 popup 开关实时增删；popup 站点名改读适配器 `label`，手写映射删除。
+- 通用参数化测试 `sources/bundledPluginsLifecycle.test.ts` 遍历所有目录插件：mount → updateSettings → unmount 还原宿主；`vitest.config.ts` 对目录 CSS 开启真实读取（此前 vitest 会把 CSS 导入替换成空字符串）。
+- `.github/CODEOWNERS` 按站点目录分配；构建脚本改读 `sites/*/site.json`（Bun 不支持 `import.meta.glob`，不能 import 注册表）并强制 D18 子集校验。

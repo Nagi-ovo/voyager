@@ -44,7 +44,7 @@
   "author": "voyager-official",
   "category": "render-fix",
   "license": "MIT",
-  "homepage": "https://github.com/Nagi-ovo/voyager/tree/main/src/features/plugins/catalog/plugins/claude-cjk-render-fix",
+  "homepage": "https://github.com/Nagi-ovo/voyager/tree/main/src/features/plugins/catalog/sites/claude/plugins/cjk-render-fix",
   "engine": ">=1.2.0",
   "tier": "declarative",
   "matches": ["https://claude.ai/*"],

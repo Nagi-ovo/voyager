@@ -27,6 +27,11 @@ import { PLUGIN_ENGINE_VERSION } from '../constants';
 import { LocalEntitlementProvider } from '../entitlement/LocalEntitlementProvider';
 import { subscribeHostCatalog } from '../remote/hostCatalogCache';
 import { catalogHostFromUrl, hasEnabledPluginForUrl } from '../remote/hostCatalogPolicy';
+import {
+  isSameSiteAdapter,
+  resolveSiteAdapterForUrl,
+  resolveSiteOverride,
+} from '../remote/siteOverride';
 import { engineSatisfied } from '../semver';
 import { matchesAnyPattern } from '../sites/matchPattern';
 import { SiteRegistry } from '../sites/registry';
@@ -133,7 +138,12 @@ export class PluginHost {
     this.started = true;
     const gen = ++this.generation;
     try {
-      this.adapter = this.registry.resolveByUrl(this.url);
+      // A published site override (plan §3) beats the bundled adapter for
+      // pages it covers; resolved before the engine exists so semantic
+      // selectors use the newest site knowledge from the first mount.
+      const adapter = await this.resolveAdapter();
+      if (this.generation !== gen) return;
+      this.adapter = adapter;
       this.engine = new DeclarativeEngine({ doc: this.doc, adapter: this.adapter });
       // Subscribe BEFORE the initial reads: a state or catalog write that lands
       // while they are in flight must still reach this instance. Both
@@ -209,16 +219,29 @@ export class PluginHost {
     return op;
   }
 
-  /** Reload manifests from the (refreshed) catalog and re-mount so new CSS applies. */
+  /**
+   * Reload manifests from the (refreshed) catalog and re-mount so new CSS
+   * applies. A changed site adapter (remote override arrived or was
+   * withdrawn) rebuilds the engine so semantic selectors resolve against it.
+   */
   private async reloadCatalog(gen: number): Promise<void> {
     const engine = this.engine;
     if (!engine || this.generation !== gen) return;
-    const manifests = await this.loadManifests();
+    const [manifests, adapter] = await Promise.all([this.loadManifests(), this.resolveAdapter()]);
     if (this.generation !== gen) return;
     this.manifests = manifests;
     engine.unmountAll();
     this.pushedSettings.clear();
+    if (!isSameSiteAdapter(adapter, this.adapter)) {
+      this.adapter = adapter;
+      this.engine = new DeclarativeEngine({ doc: this.doc, adapter });
+    }
     await this.reconcile(gen);
+  }
+
+  private async resolveAdapter(): Promise<SiteAdapter | null> {
+    const override = await resolveSiteOverride(this.sources, this.context);
+    return resolveSiteAdapterForUrl(this.url, this.registry, override);
   }
 
   private async reconcile(gen: number): Promise<void> {

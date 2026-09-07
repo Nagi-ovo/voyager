@@ -75,7 +75,7 @@
   "author": "voyager-official",
   "category": "readability",
   "license": "MIT",
-  "homepage": "https://github.com/Nagi-ovo/voyager/tree/main/src/features/plugins/catalog/plugins/deepseek-reading-width",
+  "homepage": "https://github.com/Nagi-ovo/voyager/tree/main/src/features/plugins/catalog/sites/deepseek/plugins/reading-width",
   "engine": ">=1.2.0",
   "tier": "declarative",
   "matches": ["https://chat.deepseek.com/*"],

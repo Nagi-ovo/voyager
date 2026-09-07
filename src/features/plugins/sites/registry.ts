@@ -5,20 +5,21 @@
  * mutable so future work (or tests) can register additional sites without
  * touching the runtime.
  */
+import { BUNDLED_SITE_ADAPTERS } from '../catalog/sites';
 import type { SiteAdapter, SiteId } from '../types';
 import { aistudioAdapter } from './adapters/aistudio';
-import { chatgptAdapter } from './adapters/chatgpt';
-import { claudeAdapter } from './adapters/claude';
-import { deepseekAdapter } from './adapters/deepseek';
 import { geminiAdapter } from './adapters/gemini';
 import { matchesAnyPattern } from './matchPattern';
 
+/**
+ * Gemini and AI Studio are native surfaces whose selectors come from Voyager's
+ * own first-party code; every plugin platform (Claude, ChatGPT, DeepSeek, …) is
+ * data in `catalog/sites/<site>/site.json`, discovered at build time.
+ */
 export const DEFAULT_ADAPTERS: readonly SiteAdapter[] = [
   geminiAdapter,
   aistudioAdapter,
-  chatgptAdapter,
-  claudeAdapter,
-  deepseekAdapter,
+  ...BUNDLED_SITE_ADAPTERS,
 ];
 
 /**

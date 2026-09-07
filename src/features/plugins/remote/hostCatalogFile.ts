@@ -9,11 +9,13 @@
  *
  * Shape:
  *   { format: 1, host: "chat.deepseek.com", generatedAt: "<ISO>",
- *     site?: <adapter data, ignored until P2>,
+ *     site?: <site.json data; a valid one covering the host overrides the bundled adapter>,
  *     plugins: [<raw manifest with CSS inlined as contributes.styles[].css>] }
  */
 import { type ManifestIssue, validateManifest } from '../manifest/validate';
-import type { PluginManifest } from '../types';
+import { matchesAnyPattern } from '../sites/matchPattern';
+import { validateSiteAdapterData } from '../sites/siteAdapterData';
+import type { PluginManifest, SiteAdapter } from '../types';
 
 export const HOST_CATALOG_FORMAT = 1;
 
@@ -25,6 +27,12 @@ export interface HostCatalogFileValidation {
   /** Per-plugin problems for entries that were skipped (logged, never fatal). */
   readonly issues: readonly ManifestIssue[];
   readonly generatedAt?: string;
+  /**
+   * The site adapter published for this host, when the file carries a valid
+   * one whose `matches` cover the host. Overrides the bundled adapter at
+   * runtime (plan §3); an invalid section is reported and ignored.
+   */
+  readonly site?: SiteAdapter;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -69,9 +77,24 @@ export function validateHostCatalogFile(
     manifests.push(result.data);
   });
 
+  let site: SiteAdapter | undefined;
+  if (raw.site !== undefined) {
+    const result = validateSiteAdapterData(raw.site);
+    if (!result.success) {
+      issues.push(
+        ...result.error.map((issue) => ({ path: `site.${issue.path}`, message: issue.message })),
+      );
+    } else if (!matchesAnyPattern(`https://${expectedHost}/`, result.data.matches)) {
+      issues.push({ path: 'site.matches', message: 'does not cover this host' });
+    } else {
+      site = result.data;
+    }
+  }
+
   return {
     manifests,
     issues,
     ...(typeof raw.generatedAt === 'string' ? { generatedAt: raw.generatedAt } : {}),
+    ...(site ? { site } : {}),
   };
 }

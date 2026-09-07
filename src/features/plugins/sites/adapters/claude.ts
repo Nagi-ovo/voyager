@@ -1,23 +1,9 @@
-import type { SiteAdapter, SiteCapability } from '../../types';
+import { requireBundledSiteAdapter } from '../../catalog/sites';
+import type { SiteAdapter } from '../../types';
 
 /**
- * Claude.ai adapter. Best-effort selectors (see chatgpt.ts caveat).
+ * Thin shell over `catalog/sites/claude/site.json` — the adapter is data
+ * (plan §2 layer 1) so the published per-host catalog can update it without a
+ * release. Edit the JSON, not this file.
  */
-export const claudeAdapter: SiteAdapter = {
-  id: 'claude',
-  label: 'Claude',
-  matches: ['https://claude.ai/*', 'https://*.frame.claudeusercontent.com/*'],
-  selectors: {
-    userTurn: '[data-testid="user-message"]',
-    assistantTurn: '.font-claude-message, [data-testid="assistant-message"]',
-    composer: 'div[contenteditable="true"].ProseMirror',
-    sidebar: 'nav[aria-label], [data-testid="menu-sidebar"]',
-  },
-  theme: {
-    hostSelector: ':root',
-    lightSelector: ':root:not(.dark)',
-    darkSelector: ':root.dark',
-  },
-  brandColor: '#d97757', // Claude clay / terracotta
-  capabilities: new Set<SiteCapability>(['chat', 'sidebar', 'composer', 'darkMode']),
-};
+export const claudeAdapter: SiteAdapter = requireBundledSiteAdapter('claude');

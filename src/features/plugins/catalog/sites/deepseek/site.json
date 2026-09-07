@@ -1,0 +1,20 @@
+{
+  "$schema": "https://voyager.nagi.fun/site.schema.json",
+  "id": "deepseek",
+  "label": "DeepSeek",
+  "matches": ["https://chat.deepseek.com/*"],
+  "selectors": {
+    "userTurn": ".ds-message:has(.ds-collapsible-text):not(:has(.ds-assistant-message-main-content, .ds-think-content))",
+    "assistantTurn": ".ds-message:has(.ds-assistant-message-main-content, .ds-think-content)",
+    "thinkingBlock": ".ds-think-content",
+    "composer": "textarea.ds-scroll-area[placeholder*=\"DeepSeek\" i]"
+  },
+  "theme": {
+    "hostSelector": "body",
+    "lightSelector": "body.light",
+    "darkSelector": "body.dark"
+  },
+  "brandColor": "#4d6bfe",
+  "capabilities": ["chat", "composer", "darkMode"],
+  "conversationIdPattern": "^/a/chat/s/([^/?#]+)"
+}

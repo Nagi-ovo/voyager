@@ -27,18 +27,14 @@ const EXPECTED_SITES: Readonly<Record<string, string>> = {
 
 const tempRoots: string[] = [];
 
-function makeTempOutDir(): string {
+function makeTempDir(): string {
   const root = mkdtempSync(join(tmpdir(), 'gv-catalog-'));
   tempRoots.push(root);
   return root;
 }
 
-function build(outDir: string) {
-  return writeHostCatalogs({
-    catalogDir: DEFAULT_CATALOG_DIR,
-    outDir,
-    generatedAt: GENERATED_AT,
-  });
+function build(outDir: string, catalogDir = DEFAULT_CATALOG_DIR) {
+  return writeHostCatalogs({ catalogDir, outDir, generatedAt: GENERATED_AT });
 }
 
 function readHostFile(outDir: string, host: string): Record<string, unknown> {
@@ -48,13 +44,55 @@ function readHostFile(outDir: string, host: string): Record<string, unknown> {
   >;
 }
 
+function writeJson(path: string, value: unknown): void {
+  mkdirSync(join(path, '..'), { recursive: true });
+  writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
+}
+
+/**
+ * A minimal catalog with one site and one plugin, so a rule can be exercised
+ * without touching the shipped snapshot. `pluginMatches` is the knob under test.
+ */
+function makeFixtureCatalog(pluginMatches: readonly string[]): string {
+  const catalogDir = join(makeTempDir(), 'catalog');
+  const siteDir = join(catalogDir, 'sites', 'demo');
+  const pluginDir = join(siteDir, 'plugins', 'widen');
+
+  writeJson(join(siteDir, 'site.json'), {
+    id: 'demo',
+    label: 'Demo',
+    matches: ['https://demo.example/*'],
+    selectors: { composer: 'textarea' },
+    theme: { hostSelector: 'html', lightSelector: 'html.light', darkSelector: 'html.dark' },
+    capabilities: ['chat'],
+    conversationIdPattern: '^/c/([^/?#]+)',
+  });
+  writeJson(join(pluginDir, 'plugin.json'), {
+    id: 'demo.widen',
+    name: 'Demo · Widen',
+    version: '1.0.0',
+    description: 'A fixture plugin.',
+    author: 'voyager-official',
+    category: 'readability',
+    license: 'MIT',
+    engine: '>=1.2.0',
+    tier: 'declarative',
+    matches: pluginMatches,
+    contributes: { styles: [{ file: 'style.css' }] },
+  });
+  mkdirSync(pluginDir, { recursive: true });
+  writeFileSync(join(pluginDir, 'style.css'), 'body { color: red; }\n', 'utf8');
+
+  return catalogDir;
+}
+
 afterEach(() => {
   for (const root of tempRoots.splice(0)) rmSync(root, { force: true, recursive: true });
 });
 
 describe('build-plugin-catalog', () => {
   it('publishes one file per concrete host in the bundled catalog', async () => {
-    const outDir = makeTempOutDir();
+    const outDir = makeTempDir();
     await build(outDir);
 
     const names = readdirSync(join(outDir, 'hosts')).sort();
@@ -69,7 +107,7 @@ describe('build-plugin-catalog', () => {
   });
 
   it('writes files the runtime validator accepts, with the site adapter attached', async () => {
-    const outDir = makeTempOutDir();
+    const outDir = makeTempDir();
     await build(outDir);
 
     for (const [host, siteId] of Object.entries(EXPECTED_SITES)) {
@@ -82,16 +120,21 @@ describe('build-plugin-catalog', () => {
       expect(site.id).toBe(siteId);
       expect(Array.isArray(site.capabilities)).toBe(true);
       expect((site.capabilities as unknown[]).length).toBeGreaterThan(0);
+      // site.json owns the conversation-id regex; clients need it to tell one
+      // conversation from another without a per-site branch.
+      expect(typeof site.conversationIdPattern).toBe('string');
+      expect(String(site.conversationIdPattern).length).toBeGreaterThan(0);
 
       const validation = validateHostCatalogFile(file, host);
       expect(validation, `${host} was rejected outright`).not.toBeNull();
       expect(validation?.issues).toEqual([]);
       expect(validation?.manifests.length).toBe((file.plugins as unknown[]).length);
+      expect(validation?.site?.id).toBe(siteId);
     }
   });
 
   it('inlines every style file as css', async () => {
-    const outDir = makeTempOutDir();
+    const outDir = makeTempDir();
     await build(outDir);
 
     for (const host of Object.keys(EXPECTED_SITES)) {
@@ -111,7 +154,7 @@ describe('build-plugin-catalog', () => {
   });
 
   it('is byte-identical across runs with the same generatedAt', async () => {
-    const outDir = makeTempOutDir();
+    const outDir = makeTempDir();
     await build(outDir);
     const first = readdirSync(join(outDir, 'hosts')).map((name) => [
       name,
@@ -128,7 +171,7 @@ describe('build-plugin-catalog', () => {
   });
 
   it('removes host files it no longer produces', async () => {
-    const outDir = makeTempOutDir();
+    const outDir = makeTempDir();
     const hostsDir = join(outDir, 'hosts');
     mkdirSync(hostsDir, { recursive: true });
     const stale = join(hostsDir, 'old.example.json');
@@ -138,6 +181,31 @@ describe('build-plugin-catalog', () => {
 
     expect(existsSync(stale)).toBe(false);
     expect(existsSync(join(hostsDir, 'claude.ai.json'))).toBe(true);
+  });
+
+  it('publishes a fixture plugin that stays inside its site', async () => {
+    const outDir = makeTempDir();
+    const catalogDir = makeFixtureCatalog(['https://demo.example/*']);
+
+    const written = await build(outDir, catalogDir);
+
+    expect(written.map((entry) => entry.host)).toEqual(['demo.example']);
+    const file = readHostFile(outDir, 'demo.example');
+    expect((file.site as Record<string, unknown>).id).toBe('demo');
+    expect(validateHostCatalogFile(file, 'demo.example')?.issues).toEqual([]);
+  });
+
+  it('fails the build when a plugin targets a host its site does not cover', async () => {
+    const outDir = makeTempDir();
+    const catalogDir = makeFixtureCatalog([
+      'https://demo.example/*',
+      'https://elsewhere.example/*',
+    ]);
+
+    await expect(build(outDir, catalogDir)).rejects.toThrow(
+      /demo\.widen.*https:\/\/elsewhere\.example\/\*.*not covered by site "demo"/s,
+    );
+    expect(existsSync(join(outDir, 'hosts', 'demo.example.json'))).toBe(false);
   });
 
   it('parses --out and --now, and rejects unknown flags', () => {

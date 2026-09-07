@@ -723,11 +723,25 @@ function handleVisibilityChange(): void {
       if (pluginPlatformId) {
         initialized = true;
         if (isPluginSubframe) return;
-        console.log('[Gemini Voyager] Plugin platform: prompt manager');
-        void startPromptManager()
-          .then((instance) => {
+        // Same path as custom websites (plan §7): the Prompt Manager mounts
+        // only while this host is in the user's custom-website list, which is
+        // what the popup's "enable Prompt Manager on <site>" toggle edits, and
+        // it follows that toggle live instead of waiting for a reload.
+        console.log('[Gemini Voyager] Plugin platform: prompt manager follows site coverage');
+        void isCustomWebsite()
+          .then(async (covered) => {
+            const coverage = createCustomSiteCoverageReconciler({
+              host: location.host.toLowerCase(),
+              start: startPromptManager,
+              initial: covered ? await startPromptManager() : null,
+            });
+            chrome.storage?.onChanged?.addListener(coverage.handleChange);
             cleanupManager.registerCleanupFunction(
-              () => instance.destroy(),
+              () => chrome.storage?.onChanged?.removeListener(coverage.handleChange),
+              CleanupPositions.RemoveStorageOnChangedListener,
+            );
+            cleanupManager.registerCleanupFunction(
+              () => coverage.destroy(),
               CleanupPositions.DestroyPromptManagerInstance,
             );
           })

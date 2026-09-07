@@ -20,9 +20,14 @@ import type {
   PluginSource,
   PluginSourceContext,
   PluginSourceListing,
+  SiteAdapter,
 } from '../types';
 import { isRemotePluginCatalogEnabledAtBuild } from './config';
-import { type HostCatalogCacheEntry, loadHostCatalogCache } from './hostCatalogCache';
+import {
+  type HostCatalogCacheEntry,
+  loadHostCatalogCache,
+  siteAdapterFromEntry,
+} from './hostCatalogCache';
 import { isEligibleCatalogHost, isHostCatalogEntryUsable } from './hostCatalogPolicy';
 
 export const HOST_CATALOG_SOURCE_ID = 'host-catalog';
@@ -63,6 +68,10 @@ export class HostCatalogSource implements PluginSource {
     return entry
       ? { manifests: entry.manifests, authoritative: true }
       : { manifests: [], authoritative: false };
+  }
+
+  async siteOverride(context?: PluginSourceContext): Promise<SiteAdapter | null> {
+    return siteAdapterFromEntry(await this.usableEntry(context), this.extensionVersion);
   }
 
   private async usableEntry(context?: PluginSourceContext): Promise<HostCatalogCacheEntry | null> {

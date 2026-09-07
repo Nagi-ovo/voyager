@@ -41,8 +41,16 @@ EntitlementProvider  ─► entitled?         │  styles + domOps, reversible, 
   `DomOperation` (discriminated union — the main extension point), `SiteAdapter`,
   and the `PluginSource` / `EntitlementProvider` seams.
 - **`sites/`** — `SiteAdapter` per site + a `SiteRegistry` that resolves the
-  current URL. Site-specific selectors live **only** here, behind semantic keys
-  (`userTurn`, `composer`, …), so a site redesign is a one-file fix.
+  current URL. Site-specific selectors live **only** in an adapter, behind the
+  fixed semantic vocabulary in `sites/semanticKeys.ts` (`userTurn`,
+  `assistantTurn`, `thinkingBlock`, `codeBlock`, `composer`, `sidebar`,
+  `sidePanel`, `headerActions`, `scrollContainer`), so a site redesign is a
+  one-file fix. Gemini and AI Studio are native surfaces and stay TypeScript
+  adapters; every plugin platform is data, so `adapters/claude.ts`,
+  `adapters/chatgpt.ts` and `adapters/deepseek.ts` are one-line shells over their
+  `site.json`: edit the JSON, not the TS. `sites/siteAdapterData.ts` holds
+  `validateSiteAdapterData`, the one validator for the bundled `site.json`, the
+  remote override and `catalog:build`.
 - **`runtime/declarativeEngine.ts`** — applies a manifest's `styles` + `domOps`.
   Reversible (full teardown), idempotent, and uses a `childList`-only
   MutationObserver so its own mutations can't loop. Pure DOM → all platforms.
@@ -59,9 +67,33 @@ EntitlementProvider  ─► entitled?         │  styles + domOps, reversible, 
   owns `mergePluginRecords`, the rules that pick which copy of a plugin id wins.
 - **`remote/`** — the per-host remote catalog channel: a read-only source over a
   storage cache, plus a background-only fetcher. See below.
-- **`catalog/`** — official declarative plugins bundled with the extension. This
+- **`catalog/`** — the bundled official data: one directory per plugin platform,
+  each holding that platform's `site.json` and its declarative plugins. This
   keeps official CSS/JSON changes in the same PR, CI run, and release as engine
   or popup changes.
+
+```
+catalog/
+  marketplace.json                        index for the docs plugin store
+  sites/index.ts                          import.meta.glob discovery
+  sites/<site>/site.json                  the site adapter, as data
+  sites/<site>/plugins/<id>/plugin.json   a declarative plugin
+  sites/<site>/plugins/<id>/style.css     its styles
+  sites/<site>/plugins/<id>/README.md     what it fixes and why
+```
+
+`catalog/sites/index.ts` finds every `site.json` and `plugin.json` with
+`import.meta.glob`, so adding a site or a plugin is adding files: there is no
+mapping table. (`scripts/build-plugin-catalog.ts` reads the same tree from disk,
+because `import.meta.glob` does not exist under Bun.) Sites today are `chatgpt`,
+`claude` and `deepseek`. A plugin's `matches` must stay inside its site's
+`matches` (plan D18) or the build fails, and `bun run catalog:build` validates
+every site and plugin before publishing.
+
+`catalog/marketplace.json` is **not** that mapping table. It is only the index
+the docs plugin-store page fetches, and a test keeps it in sync with discovery,
+so a new plugin also needs an entry there whose `source` is the catalog-relative
+path (`sites/deepseek/plugins/reading-width/plugin.json`).
 
 ## Authoring a declarative plugin
 
@@ -84,6 +116,20 @@ EntitlementProvider  ─► entitled?         │  styles + domOps, reversible, 
 }
 ```
 
+An official plugin is authored as files under its platform's directory:
+
+1. Pick the site it belongs to. If that site has no `catalog/sites/<site>/`
+   directory yet, write its `site.json` first (`id` equal to the directory name,
+   `label`, `matches`, `selectors` keyed by the semantic vocabulary, `theme`,
+   `brandColor`, `capabilities`, optional `conversationIdPattern`). Nothing
+   registers it: the registry picks it up from the file.
+2. Create `catalog/sites/<site>/plugins/<id>/` with `plugin.json`, `style.css`
+   and a short `README.md`.
+3. Keep the plugin's `matches` inside the site's `matches` (D18).
+4. Add the entry to `catalog/marketplace.json` so the docs plugin store lists it.
+5. Run the suite: discovery, D18 and the marketplace index are all asserted in
+   `catalog/sites/index.test.ts`.
+
 Manifests may keep tiny CSS inline with `{ "css": "..." }`, but the preferred
 authoring shape is `{ "file": "style.css" }` next to `plugin.json`. The bundled
 source and the published catalog file both resolve that CSS to inline text,
@@ -95,14 +141,17 @@ use a normal custom property and for a `setStyle` op to set that variable from a
 setting.
 
 `target` is a CSS selector string, or `{ "kind": "semantic", "key": "userTurn" }`
-to use the site adapter's stable selector. Supported ops: `addClass`,
+to use the site adapter's stable selector for one of the nine semantic keys in
+`sites/semanticKeys.ts`; a `site.json` may not invent a key outside that
+vocabulary. Supported ops: `addClass`,
 `setAttribute`, `setStyle`, `hide`. All are reversible. Classes must be `gv-`
 prefixed (content-script rule).
 
 ## Boundaries
 
-- **Official CSS/JSON plugins** live in `catalog/` and load through
-  `BundledCatalogPluginSource`.
+- **Official CSS/JSON plugins** live in `catalog/sites/<site>/plugins/<id>/` and
+  load through `BundledCatalogPluginSource`. Their site adapters live beside
+  them in `catalog/sites/<site>/site.json`.
 - **First-party features that need JS** live in `builtin/` and register native
   handlers in the content script. `voyager.formula-copy` is the model here.
 - **Updates to those official plugins** can also reach users between releases
@@ -116,7 +165,10 @@ same data is published per site at `<base>/hosts/<host>.json` (default base
 `https://voyager.nagi.fun/catalog`, so DeepSeek is
 `https://voyager.nagi.fun/catalog/hosts/chat.deepseek.com.json`). A selector fix
 can therefore reach users without a store release, while the engine that reads
-the data still ships in the package.
+the data still ships in the package. The host file's optional `site` section is
+adapter data validated by the same `validateSiteAdapterData`, and it overrides
+the bundled adapter for that host, so a `site.json` fix travels the same way a
+plugin fix does.
 
 - **`remote/HostCatalogSource.ts`** — a read-only `PluginSource`
   (`kind: 'remote'`). `list({ host })` serves whatever the cache holds for that
@@ -143,10 +195,11 @@ the data still ships in the package.
   recording a failed or byte-identical attempt must not remount plugin CSS or
   feed back into another refresh.
 - **`remote/hostCatalogFile.ts`** — validates the published file (`format: 1`,
-  matching `host`, a plugin array), which `scripts/build-plugin-catalog.ts`
-  generates from `catalog/` with the CSS inlined. Every entry passes the same
-  `validateManifest` as the bundled snapshot; a bad entry is skipped and logged,
-  a bad file is discarded whole.
+  matching `host`, a plugin array, an optional `site` section), which
+  `scripts/build-plugin-catalog.ts` generates from `catalog/` with the CSS
+  inlined. Every entry passes the same `validateManifest` as the bundled
+  snapshot and the `site` section the same `validateSiteAdapterData`; a bad
+  entry or a bad `site` is skipped and logged, a bad file is discarded whole.
 - **`remote/config.ts`** — build-time flags injected through Vite `define`:
   `VOYAGER_PLUGIN_CATALOG_URL` repoints the base URL (https only) for a preview
   environment, and `VOYAGER_PLUGIN_CATALOG_REMOTE=off` compiles a build that
@@ -183,10 +236,10 @@ plugin id:
 
 ## What is NOT done yet (next milestones)
 
-- **A remote-only NEW site.** The catalog updates plugins for hosts the
-  extension already knows: the file is fetched per host, but site adapters, host
-  permissions and manifest entries still ship in the package. Adding a site is
-  still an extension release.
+- **A remote-only NEW site.** The catalog updates plugins _and_ adapter data for
+  hosts the extension already knows, but the file is fetched per host, and host
+  permissions plus content-script registration still ship in the package. Adding
+  a site is still an extension release.
 - **Full setting UI coverage.** The schema accepts boolean/string/color/select;
   the popup currently renders boolean switches and number/range controls, while
   string, color and select controls remain future work.

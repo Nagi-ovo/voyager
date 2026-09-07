@@ -12,6 +12,45 @@ Voyager 的插件系统优先支持声明式插件：用 `plugin.json` 描述插
 4. 将样式放进同目录的 `style.css`，再由 `plugin.json` 的 `contributes.styles` 引用。
 5. 本地测试后提交 PR，并附上测试页面、截图或录屏。维护者会根据插件成熟度决定是否进入官方 catalog。
 
+## 目录结构
+
+官方内置插件都放在 `src/features/plugins/catalog/` 下面，一个插件平台一个目录：
+
+```
+src/features/plugins/catalog/
+  marketplace.json                        文档站插件市场读取的索引
+  sites/<site>/site.json                  站点适配器（数据形式）
+  sites/<site>/plugins/<id>/plugin.json   一个声明式插件
+  sites/<site>/plugins/<id>/style.css     它的样式
+  sites/<site>/plugins/<id>/README.md     它修了什么、为什么这么修
+```
+
+发现过程是自动的：`catalog/sites/index.ts` 用 `import.meta.glob` 找出每个 `site.json` 和每个 `plugin.json`，所以新增站点或插件就是新增文件，没有映射表需要维护。
+
+`marketplace.json` 不是那张映射表，它只是文档站插件市场读取的索引；有测试保证它和自动发现的结果一致，所以新插件还要在里面加一条，`source` 写 catalog 相对路径，例如 `sites/deepseek/plugins/reading-width/plugin.json`。
+
+`site.json` 就是站点适配器本身，只是写成了数据。目前的插件平台是 ChatGPT、Claude 和 DeepSeek。Gemini 和 AI Studio 是 Voyager 的原生界面，仍然使用 TypeScript 适配器；而 `sites/adapters/claude.ts`、`chatgpt.ts`、`deepseek.ts` 现在只是 `site.json` 的一行壳，要改就改 JSON，不要改 TypeScript。发布的分站点目录里也带上了站点数据，所以选择器修复不发新版本也能到达用户。
+
+插件的 `matches` 必须落在所属站点的 `matches` 范围内；越界的插件会让构建失败。
+
+## 语义选择器键
+
+`site.json` 把一组固定的语义键映射到站点自己的 CSS 选择器。这组词表定义在 `src/features/plugins/sites/semanticKeys.ts`，`site.json` 只能使用表内的键，用了表外的键会被拒绝。
+
+- `userTurn`：用户消息容器。
+- `assistantTurn`：助手消息容器。
+- `thinkingBlock`：助手回答里的思考段落。
+- `codeBlock`：渲染后的代码块。
+- `composer`：用户输入框。
+- `sidebar`：会话列表或导航栏。
+- `sidePanel`：次级面板，例如 artifacts 或 canvas。
+- `headerActions`：会话页右上角的操作区。
+- `scrollContainer`：负责滚动会话的元素。
+
+站点只需要声明它真正能提供的键。插件用 `{ "kind": "semantic", "key": "userTurn" }` 作为 DOM 操作的 `target` 来引用语义键，而不是写死选择器，这样站点改版时只要改 `site.json` 一个文件。
+
+`conversationIdPattern` 是 `site.json` 里的另一个字段，不是选择器：它是一个匹配 URL 路径的正则，第一个捕获组就是会话 id，例如 `^/chat/([^/?#]+)`。
+
 ## 插件粒度
 
 插件应该以“用户要解决的问题”为边界，而不是机械地按平台拆开。
@@ -103,7 +142,7 @@ Voyager 的插件系统优先支持声明式插件：用 `plugin.json` 描述插
 - `setStyle`：设置内联样式或 CSS 变量。
 - `hide`：隐藏目标元素。
 
-目标可以是 CSS 选择器，也可以使用 Voyager 站点适配器提供的语义选择器。语义选择器更稳，但需要当前站点已有对应适配。
+目标可以是 CSS 选择器，也可以是上面列出的语义键，写成 `{ "kind": "semantic", "key": "userTurn" }`。语义键更稳，但需要当前站点适配器声明了这个键。
 
 声明式操作必须是可撤销、可重复执行的。不要依赖一次性的页面状态，也不要假设页面 DOM 永远不变。
 
@@ -121,6 +160,7 @@ Voyager 的插件系统优先支持声明式插件：用 `plugin.json` 描述插
 - `matches` 没有覆盖无关网站。
 - 没有远程资源引用。
 - 插件目录包含 `plugin.json`、必要的 CSS 文件和简短 README。
+- 官方插件的目录位于 `catalog/sites/<site>/plugins/<id>/`，`matches` 落在站点 `matches` 范围内，并且 `catalog/marketplace.json` 里有对应条目。
 - PR 描述里写清楚测试页面、截图或录屏，以及可能影响的页面区域。
 
 保持简单、克制、可撤销。一个插件只解决一个明确问题，通常会更容易合并和维护。

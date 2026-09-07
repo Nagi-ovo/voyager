@@ -12,6 +12,45 @@ Cette approche rend les plugins plus faciles à relire et à maintenir. Si vous 
 4. Placez les styles dans `style.css` dans le même dossier, puis référencez-le depuis `contributes.styles`.
 5. Testez localement et ajoutez à la PR des pages de test, captures d'écran ou une courte vidéo. Les mainteneurs décideront ensuite si le plugin est prêt pour le catalog officiel.
 
+## Arborescence
+
+Les plugins officiels fournis avec l'extension vivent sous `src/features/plugins/catalog/`, un dossier par plateforme :
+
+```
+src/features/plugins/catalog/
+  marketplace.json                        index lu par le magasin de la documentation
+  sites/<site>/site.json                  l'adaptateur de site, sous forme de données
+  sites/<site>/plugins/<id>/plugin.json   un plugin déclaratif
+  sites/<site>/plugins/<id>/style.css     ses styles
+  sites/<site>/plugins/<id>/README.md     ce qu'il corrige et pourquoi
+```
+
+La découverte est automatique : `catalog/sites/index.ts` trouve chaque `site.json` et chaque `plugin.json` avec `import.meta.glob`. Ajouter un site ou un plugin revient donc à ajouter des fichiers, sans table de correspondance à modifier.
+
+`marketplace.json` n'est pas cette table : c'est seulement l'index que lit le magasin de plugins de la documentation. Un test le garde synchronisé avec la découverte, donc un nouveau plugin doit aussi y figurer. Son `source` est le chemin relatif au catalog, par exemple `sites/deepseek/plugins/reading-width/plugin.json`.
+
+`site.json` est l'adaptateur de site lui-même, écrit comme des données. Les plateformes actuelles sont ChatGPT, Claude et DeepSeek. Gemini et AI Studio sont des surfaces natives de Voyager et restent des adaptateurs TypeScript, tandis que `sites/adapters/claude.ts`, `chatgpt.ts` et `deepseek.ts` ne sont plus que des coquilles d'une ligne au-dessus de leur `site.json` : modifiez le JSON, pas le TypeScript. Le catalogue publié par hôte transporte aussi les données du site, donc une correction de sélecteur atteint les utilisateurs sans nouvelle version de l'extension.
+
+Les `matches` d'un plugin doivent rester à l'intérieur des `matches` de son site. Un plugin qui déborde fait échouer le build.
+
+## Clés de sélecteurs sémantiques
+
+`site.json` associe un vocabulaire fixe de clés sémantiques aux sélecteurs CSS propres au site. Ce vocabulaire est défini dans `src/features/plugins/sites/semanticKeys.ts` ; un `site.json` ne peut utiliser que ces clés, et toute clé inconnue est rejetée.
+
+- `userTurn` : le conteneur d'un message utilisateur.
+- `assistantTurn` : le conteneur d'un message de l'assistant.
+- `thinkingBlock` : la section de raisonnement dans une réponse.
+- `codeBlock` : un bloc de code rendu.
+- `composer` : le champ de saisie du prompt.
+- `sidebar` : la liste des conversations ou le rail de navigation.
+- `sidePanel` : un panneau secondaire, par exemple artifacts ou canvas.
+- `headerActions` : le groupe d'actions en haut à droite de la conversation.
+- `scrollContainer` : l'élément qui fait défiler la conversation.
+
+Un site ne déclare que les clés qu'il peut réellement fournir. Les plugins référencent une clé plutôt qu'un sélecteur brut en écrivant `{ "kind": "semantic", "key": "userTurn" }` comme `target` d'une opération DOM ; une refonte du site se corrige alors dans le seul `site.json`.
+
+`conversationIdPattern` est un champ distinct de `site.json`, pas un sélecteur : une expression régulière sur le chemin de l'URL dont le premier groupe capturant est l'identifiant de conversation, par exemple `^/chat/([^/?#]+)`.
+
 ## Périmètre d'un plugin
 
 Le périmètre d'un plugin doit suivre le problème utilisateur, pas une séparation mécanique par plateforme.
@@ -103,7 +142,7 @@ Les plugins déclaratifs prennent actuellement en charge :
 - `setStyle` : définit un style inline ou une variable CSS.
 - `hide` : masque les éléments ciblés.
 
-La cible peut être un sélecteur CSS ou un sélecteur sémantique fourni par les adaptateurs de site Voyager. Les sélecteurs sémantiques sont souvent plus stables, mais ils nécessitent que l'adaptateur du site expose déjà la cible.
+La cible peut être un sélecteur CSS ou l'une des clés sémantiques listées plus haut, écrite `{ "kind": "semantic", "key": "userTurn" }`. Les clés sémantiques sont souvent plus stables, mais l'adaptateur du site doit déclarer la clé.
 
 Les opérations déclaratives doivent être réversibles et sûres à exécuter plusieurs fois. Ne dépendez pas d'un état ponctuel de la page et ne supposez pas que le DOM ne change jamais.
 
@@ -121,6 +160,7 @@ Ouvrez d'abord une Issue pour expliquer le besoin. Si une capacité intégrée e
 - `matches` ne couvre pas de sites sans rapport.
 - Aucune ressource distante n'est référencée.
 - Le dossier du plugin contient `plugin.json`, les fichiers CSS nécessaires et un court README.
+- Pour un plugin officiel, le dossier se trouve sous `catalog/sites/<site>/plugins/<id>/`, ses `matches` restent dans ceux du site, et `catalog/marketplace.json` le référence.
 - La PR décrit les pages de test, captures ou vidéos, ainsi que les zones de page affectées.
 
 Restez simple, ciblé et réversible. Un plugin qui résout un problème clair est beaucoup plus facile à fusionner et maintenir.

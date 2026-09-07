@@ -63,6 +63,12 @@ export interface SiteAdapter {
    */
   readonly brandColor?: string;
   readonly capabilities: ReadonlySet<SiteCapability>;
+  /**
+   * Regular expression over `location.pathname` whose first capture group is
+   * the conversation id (e.g. `^/chat/([^/?#]+)` on Claude). Consumed by
+   * navigation primitives; absent for sites without per-conversation routes.
+   */
+  readonly conversationIdPattern?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -280,6 +286,12 @@ export interface PluginSource {
    * when present.
    */
   listWithAuthority?(context?: PluginSourceContext): Promise<PluginSourceListing>;
+  /**
+   * Remote sources only: the site adapter published for `context.host`, when
+   * a usable cached catalog carries one. Replaces the bundled adapter for
+   * pages it covers (plan §3).
+   */
+  siteOverride?(context?: PluginSourceContext): Promise<SiteAdapter | null>;
 }
 
 export interface PluginSourceListing {

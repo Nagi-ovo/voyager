@@ -42,8 +42,13 @@ import { PromptImportExportService } from '@/features/backup/services/PromptImpo
 import type { FormulaCopyFormat } from '@/features/formulaCopy/FormulaCopyService';
 import { subscribeHostCatalog } from '@/features/plugins/remote/hostCatalogCache';
 import { catalogHostFromUrl } from '@/features/plugins/remote/hostCatalogPolicy';
+import {
+  loadSiteOverrideForHost,
+  resolveSiteAdapterForUrl,
+} from '@/features/plugins/remote/siteOverride';
 import { PLUGIN_CATALOG_REFRESH_MESSAGE } from '@/features/plugins/runtime/messages';
 import { matchesAnyPattern } from '@/features/plugins/sites/matchPattern';
+import { SiteRegistry } from '@/features/plugins/sites/registry';
 import {
   type BlockedPluginUpdate,
   type SourcedPluginManifest,
@@ -55,12 +60,8 @@ import {
   loadPluginState,
   subscribePluginState,
 } from '@/features/plugins/storage/pluginState';
-import type { PluginManifest } from '@/features/plugins/types';
-import {
-  effectiveAccentForDisplay,
-  resolveBrandColor,
-  resolveSiteId,
-} from '@/pages/content/platformTheme';
+import type { PluginManifest, SiteAdapter } from '@/features/plugins/types';
+import { effectiveAccentForDisplay, resolveBrandColor } from '@/pages/content/platformTheme';
 import { createPopupBrandThemeStyle } from '@/pages/popup/utils/brandTheme';
 import {
   extractDmgDownloadUrl,
@@ -1110,6 +1111,9 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
   const [pluginBlockedUpdates, setPluginBlockedUpdates] = useState<
     Readonly<Record<string, BlockedPluginUpdate>>
   >({});
+  // Site adapter published for the active host through the remote catalog, if
+  // any; it replaces the bundled adapter's label and brand colour.
+  const [pluginSiteOverride, setPluginSiteOverride] = useState<SiteAdapter | null>(null);
   const [pluginState, setPluginState] = useState<PluginStateMap>({});
   const [pluginStateLoaded, setPluginStateLoaded] = useState(false);
   // Per-site custom accent overrides: Record<siteId, hex>.
@@ -1191,27 +1195,25 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
   // Brand accent for the popup, matching the tab the user is on (adapter
   // built-in, or a plugin's declared theme). Drives --primary/--ring/--accent so
   // the whole popup — not just primary buttons — adopts the platform colour.
+  // The adapter for the active tab: the remote site override when one covers
+  // the page, else the bundled adapter. Single source for id, label and brand.
+  const activeSiteAdapter = useMemo(
+    () => resolveSiteAdapterForUrl(activeUrl, SiteRegistry.createDefault(), pluginSiteOverride),
+    [activeUrl, pluginSiteOverride],
+  );
   const activeBrand = useMemo(
-    () => resolveBrandColor(activeUrl, pluginManifests, accentColors),
-    [activeUrl, pluginManifests, accentColors],
+    () => resolveBrandColor(activeUrl, pluginManifests, accentColors, activeSiteAdapter),
+    [activeUrl, pluginManifests, accentColors, activeSiteAdapter],
   );
 
   // Theme-colour picker: which site the override applies to, that site's
-  // default (what "reset" returns to), and a friendly scope label.
-  const activeSiteId = useMemo(() => resolveSiteId(activeUrl), [activeUrl]);
+  // default (what "reset" returns to), and the site's own display label.
+  const activeSiteId = activeSiteAdapter?.id ?? null;
   const activeSiteDefault = useMemo(
-    () => effectiveAccentForDisplay(activeUrl, pluginManifests, {}),
-    [activeUrl, pluginManifests],
+    () => effectiveAccentForDisplay(activeUrl, pluginManifests, {}, activeSiteAdapter),
+    [activeUrl, pluginManifests, activeSiteAdapter],
   );
-  const activeSiteLabel = useMemo(() => {
-    const labels: Record<string, string> = {
-      gemini: 'Gemini',
-      aistudio: 'AI Studio',
-      claude: 'Claude',
-      chatgpt: 'ChatGPT',
-    };
-    return activeSiteId ? (labels[activeSiteId] ?? activeSiteId) : '';
-  }, [activeSiteId]);
+  const activeSiteLabel = activeSiteAdapter?.label ?? '';
 
   // The host of the active tab (with port, so a port-pinned entry round-trips),
   // used by the top-of-popup "enable Prompt Manager here" toggle on third-party
@@ -1367,6 +1369,9 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
         .finally(() => {
           if (active) setPluginsLoading(false);
         });
+      void loadSiteOverrideForHost(pluginCatalogHost).then((override) => {
+        if (active) setPluginSiteOverride(override);
+      });
     };
     load();
     const unsubscribe = pluginCatalogHost

@@ -22,6 +22,7 @@
 import { logger } from '@/core/services/LoggerService';
 import { EXTENSION_VERSION } from '@/core/utils/version';
 
+import { siteAdapterToData } from '../sites/siteAdapterData';
 import { listPluginManifests } from '../sources/defaultSources';
 import { loadPluginState } from '../storage/pluginState';
 import { isRemotePluginCatalogEnabledAtBuild, resolvePluginCatalogBaseUrl } from './config';
@@ -179,6 +180,7 @@ export class HostCatalogRefresher {
         failureCount: (entry?.failureCount ?? 0) + 1,
         extensionVersion: entry?.extensionVersion || this.extensionVersion,
         ...(entry?.generatedAt ? { generatedAt: entry.generatedAt } : {}),
+        ...(entry?.site ? { site: entry.site } : {}),
       });
       return { ok: true, status: 'failed', reason, checkedAt: now };
     } finally {
@@ -230,6 +232,7 @@ export class HostCatalogRefresher {
       failureCount: 0,
       extensionVersion: this.extensionVersion,
       ...(validation.generatedAt ? { generatedAt: validation.generatedAt } : {}),
+      ...(validation.site ? { site: siteAdapterToData(validation.site) } : {}),
     };
     const changed = hostCatalogSignature(entry) !== hostCatalogSignature(next);
     await this.saveEntry(next);

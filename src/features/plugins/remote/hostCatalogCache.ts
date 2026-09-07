@@ -16,7 +16,8 @@ import { StorageKeys } from '@/core/types/common';
 import { isExtensionContextInvalidatedError } from '@/core/utils/extensionContext';
 
 import { validateManifest } from '../manifest/validate';
-import type { PluginManifest } from '../types';
+import { type SiteAdapterData, validateSiteAdapterData } from '../sites/siteAdapterData';
+import type { PluginManifest, SiteAdapter } from '../types';
 
 /**
  * `ok`      a valid catalog file was fetched; `manifests` is the truth for the host.
@@ -40,6 +41,8 @@ export interface HostCatalogCacheEntry {
   readonly extensionVersion: string;
   /** `generatedAt` reported by the server for the cached content, when known. */
   readonly generatedAt?: string;
+  /** Site adapter published with the catalog (JSON form); overrides the bundled one. */
+  readonly site?: SiteAdapterData;
 }
 
 const PREFIX = StorageKeys.PLUGIN_HOST_CATALOG_PREFIX;
@@ -84,6 +87,10 @@ export function normalizeHostCatalogCacheEntry(
       if (result.success) manifests.push(result.data);
     }
   }
+  const site =
+    status === 'ok' && raw.site !== undefined && validateSiteAdapterData(raw.site).success
+      ? (raw.site as SiteAdapterData)
+      : undefined;
   return {
     host,
     status,
@@ -93,7 +100,22 @@ export function normalizeHostCatalogCacheEntry(
     failureCount: Math.max(0, Math.floor(finiteNumber(raw.failureCount))),
     extensionVersion: typeof raw.extensionVersion === 'string' ? raw.extensionVersion : '',
     ...(typeof raw.generatedAt === 'string' ? { generatedAt: raw.generatedAt } : {}),
+    ...(site ? { site } : {}),
   };
+}
+
+/**
+ * The published site adapter of a USABLE entry (successful fetch by the running
+ * extension version), validated again on the way out; null otherwise.
+ */
+export function siteAdapterFromEntry(
+  entry: HostCatalogCacheEntry | null | undefined,
+  extensionVersion: string,
+): SiteAdapter | null {
+  if (!entry || entry.status !== 'ok' || entry.extensionVersion !== extensionVersion) return null;
+  if (!entry.site) return null;
+  const result = validateSiteAdapterData(entry.site);
+  return result.success ? result.data : null;
 }
 
 export async function loadHostCatalogCache(host: string): Promise<HostCatalogCacheEntry | null> {
@@ -135,6 +157,7 @@ export function hostCatalogSignature(raw: unknown): string {
       status: raw.status,
       extensionVersion: raw.extensionVersion,
       manifests: raw.status === 'ok' ? raw.manifests : [],
+      site: raw.status === 'ok' ? (raw.site ?? null) : null,
     });
   } catch {
     return '';

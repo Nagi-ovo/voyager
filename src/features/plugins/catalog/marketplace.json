@@ -6,26 +6,26 @@
     "name": "voyager-official",
     "url": "https://github.com/Nagi-ovo/voyager"
   },
-  "description": "Bundled official plugin catalog for Voyager — declarative plugins that enhance AI chat sites (Claude, ChatGPT, DeepSeek, …).",
+  "description": "Index of the bundled official plugins for the docs plugin store. The extension discovers sites/*/site.json and sites/*/plugins/*/plugin.json itself; keep this list in sync (a test enforces it).",
   "plugins": [
     {
       "name": "claude-cjk-render-fix",
-      "source": "plugins/claude-cjk-render-fix/plugin.json",
+      "source": "sites/claude/plugins/cjk-render-fix/plugin.json",
       "official": true
     },
     {
       "name": "claude-reading-width",
-      "source": "plugins/claude-reading-width/plugin.json",
+      "source": "sites/claude/plugins/reading-width/plugin.json",
       "official": true
     },
     {
       "name": "chatgpt-reading-width",
-      "source": "plugins/chatgpt-reading-width/plugin.json",
+      "source": "sites/chatgpt/plugins/reading-width/plugin.json",
       "official": true
     },
     {
       "name": "deepseek-reading-width",
-      "source": "plugins/deepseek-reading-width/plugin.json",
+      "source": "sites/deepseek/plugins/reading-width/plugin.json",
       "official": true
     }
   ]

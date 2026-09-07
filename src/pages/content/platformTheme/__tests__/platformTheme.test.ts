@@ -36,6 +36,43 @@ const themedPlugin = (brand: string, matches: string[]): PluginManifest => ({
   theme: { brand },
 });
 
+describe('resolveBrandColor with a published site override', () => {
+  const remoteClaude = {
+    id: 'claude',
+    label: 'Claude',
+    matches: ['https://claude.ai/*'],
+    selectors: {},
+    theme: { hostSelector: ':root', lightSelector: ':root', darkSelector: ':root.dark' },
+    brandColor: '#112233',
+    capabilities: new Set<'chat'>(['chat']),
+  };
+
+  it('uses the override brand colour instead of the bundled one', () => {
+    expect(resolveBrandColor('https://claude.ai/chat/1', [], {}, remoteClaude)).toBe('#112233');
+    expect(resolveBrandColor('https://claude.ai/chat/1', [], {})).toBe('#d97757');
+  });
+
+  it('still lets a user accent and an enabled plugin theme win over the override', () => {
+    expect(
+      resolveBrandColor('https://claude.ai/chat/1', [], { claude: '#abcdef' }, remoteClaude),
+    ).toBe('#abcdef');
+    expect(
+      resolveBrandColor(
+        'https://claude.ai/chat/1',
+        [themedPlugin('#00ff00', ['https://claude.ai/*'])],
+        {},
+        remoteClaude,
+      ),
+    ).toBe('#00ff00');
+  });
+
+  it('paints the override colour on the document root', () => {
+    applyBrandTheme('https://claude.ai/chat/1', [], document, {}, remoteClaude);
+    expect(document.documentElement.style.getPropertyValue('--gv-pm-brand')).toBe('#112233');
+    expect(document.documentElement.classList.contains(PLATFORM_THEME_CLASS)).toBe(true);
+  });
+});
+
 describe('resolveBrandColor', () => {
   it('uses the adapter brandColor for Claude, ChatGPT and DeepSeek', () => {
     expect(resolveBrandColor('https://claude.ai/chat/1')).toBe('#d97757');

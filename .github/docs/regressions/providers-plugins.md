@@ -19,6 +19,19 @@ or prompt commands.
   `src/features/plugins/remote/hostCatalogPolicy.test.ts`,
   `src/features/plugins/remote/hostCatalogRefresh.test.ts` (`ineligible` case).
 
+## Catalog CSS must be read for real under Vitest
+
+- **Trap:** Vitest replaces every CSS import with an empty module unless the file matches
+  `test.css.include`, and that stub wins over a `?raw` query too. The bundled plugins loaded
+  under test therefore carried empty `contributes.styles[].css` for months without any assertion
+  noticing; a lifecycle test that checks the injected style text would have passed on nothing.
+- **Rule:** Keep `css.include` in `vitest.config.ts` matching
+  `src/features/plugins/catalog/**/*.css` with an optional `?raw` suffix; assert CSS content
+  through the loaded manifest, not only through `readFileSync`.
+- **Guard:** `src/features/plugins/sources/bundledPluginsLifecycle.test.ts` (injected style text
+  is non-empty) and `src/features/plugins/catalog/sites/index.test.ts` (discovered style files
+  are non-empty).
+
 ## A missing or failed remote catalog must never unmount bundled plugins
 
 - **Trap:** The remote catalog is authoritative for a host (a bundled plugin it no longer lists is

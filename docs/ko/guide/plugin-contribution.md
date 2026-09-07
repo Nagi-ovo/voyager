@@ -12,6 +12,45 @@ Voyager의 플러그인 시스템은 선언형 플러그인을 우선합니다. 
 4. 스타일은 같은 디렉터리의 `style.css`에 넣고 `contributes.styles`에서 참조하세요.
 5. 로컬에서 테스트한 뒤 PR에 테스트 페이지, 스크린샷 또는 짧은 녹화를 첨부하세요. 유지관리자는 완성도를 보고 공식 catalog 포함 여부를 결정합니다.
 
+## 디렉터리 구조
+
+공식 번들 플러그인은 `src/features/plugins/catalog/` 아래에 있고, 플러그인 플랫폼마다 디렉터리가 하나씩 있습니다.
+
+```
+src/features/plugins/catalog/
+  marketplace.json                        문서 플러그인 스토어가 읽는 색인
+  sites/<site>/site.json                  데이터로 표현한 사이트 어댑터
+  sites/<site>/plugins/<id>/plugin.json   선언형 플러그인
+  sites/<site>/plugins/<id>/style.css     해당 스타일
+  sites/<site>/plugins/<id>/README.md     무엇을 왜 고치는지에 대한 설명
+```
+
+탐색은 자동입니다. `catalog/sites/index.ts`가 `import.meta.glob`으로 모든 `site.json`과 `plugin.json`을 찾으므로, 사이트나 플러그인을 추가하는 일은 파일을 추가하는 일입니다. 손으로 관리하는 매핑 표는 없습니다.
+
+`marketplace.json`은 그 매핑 표가 아니라 문서 플러그인 스토어가 읽는 색인입니다. 테스트가 탐색 결과와의 동기화를 강제하므로 새 플러그인은 여기에도 항목을 추가해야 합니다. `source`는 catalog 기준 상대 경로이며, 예를 들어 `sites/deepseek/plugins/reading-width/plugin.json`입니다.
+
+`site.json`은 사이트 어댑터 자체를 데이터로 적은 것입니다. 현재 플러그인 플랫폼은 ChatGPT, Claude, DeepSeek입니다. Gemini와 AI Studio는 Voyager의 네이티브 화면이라 TypeScript 어댑터로 남아 있고, `sites/adapters/claude.ts`, `chatgpt.ts`, `deepseek.ts`는 `site.json`을 감싼 한 줄짜리 껍데기입니다. TypeScript가 아니라 JSON을 수정하세요. 게시되는 호스트별 카탈로그가 사이트 데이터도 함께 싣기 때문에, 선택자 수정은 확장 프로그램을 새로 배포하지 않아도 사용자에게 전달됩니다.
+
+플러그인의 `matches`는 그 플러그인이 속한 사이트의 `matches` 안에 있어야 합니다. 범위를 벗어나면 빌드가 실패합니다.
+
+## 의미 선택자 키
+
+`site.json`은 고정된 의미 키 어휘를 사이트별 CSS 선택자에 연결합니다. 어휘는 `src/features/plugins/sites/semanticKeys.ts`에 정의되어 있고, `site.json`은 이 목록의 키만 사용할 수 있으며 모르는 키는 거부됩니다.
+
+- `userTurn`: 사용자 메시지 컨테이너.
+- `assistantTurn`: 어시스턴트 메시지 컨테이너.
+- `thinkingBlock`: 어시스턴트 응답 안의 추론 영역.
+- `codeBlock`: 렌더링된 코드 블록.
+- `composer`: 사용자가 입력하는 프롬프트 입력창.
+- `sidebar`: 대화 목록 또는 내비게이션 레일.
+- `sidePanel`: artifacts나 canvas 같은 보조 패널.
+- `headerActions`: 대화 화면 오른쪽 위의 동작 영역.
+- `scrollContainer`: 대화를 스크롤하는 요소.
+
+사이트는 실제로 제공할 수 있는 키만 선언합니다. 플러그인은 선택자를 직접 쓰지 않고 DOM 작업의 `target`에 `{ "kind": "semantic", "key": "userTurn" }`을 적어 키를 참조하므로, 사이트가 개편되어도 `site.json` 한 파일만 고치면 됩니다.
+
+`conversationIdPattern`은 선택자가 아니라 `site.json`의 별도 필드입니다. URL 경로에 대한 정규식이며 첫 번째 캡처 그룹이 대화 id입니다. 예를 들면 `^/chat/([^/?#]+)`입니다.
+
 ## 플러그인 범위
 
 플러그인은 플랫폼별로 기계적으로 나누기보다, 사용자가 해결하려는 문제를 기준으로 나누는 것이 좋습니다.
@@ -103,7 +142,7 @@ Voyager의 플러그인 시스템은 선언형 플러그인을 우선합니다. 
 - `setStyle`: 인라인 스타일 또는 CSS 변수를 설정합니다.
 - `hide`: 대상 요소를 숨깁니다.
 
-대상은 CSS 선택자이거나 Voyager 사이트 어댑터가 제공하는 의미 선택자일 수 있습니다. 의미 선택자는 보통 더 안정적이지만, 현재 사이트 어댑터가 해당 대상을 제공해야 합니다.
+대상은 CSS 선택자이거나 위에 나열한 의미 키를 `{ "kind": "semantic", "key": "userTurn" }` 형태로 쓴 것일 수 있습니다. 의미 키는 보통 더 안정적이지만, 현재 사이트 어댑터가 그 키를 선언해야 합니다.
 
 선언형 작업은 되돌릴 수 있고 반복 실행해도 안전해야 합니다. 한 번뿐인 페이지 상태에 의존하지 말고, DOM이 항상 그대로라고 가정하지 마세요.
 
@@ -121,6 +160,7 @@ JavaScript 실행, 요청 가로채기, Voyager 내부 데이터 읽기/쓰기, 
 - `matches`가 관련 없는 사이트를 포함하지 않습니다.
 - 원격 리소스 참조가 없습니다.
 - 플러그인 디렉터리에 `plugin.json`, 필요한 CSS 파일, 짧은 README가 있습니다.
+- 공식 플러그인이라면 디렉터리가 `catalog/sites/<site>/plugins/<id>/`에 있고, `matches`가 사이트의 `matches` 안에 있으며, `catalog/marketplace.json`에 등록되어 있습니다.
 - PR 설명에 테스트 페이지, 스크린샷 또는 녹화, 영향을 받을 페이지 영역을 적었습니다.
 
 단순하고 절제되며 되돌릴 수 있게 유지하세요. 하나의 분명한 문제를 해결하는 플러그인이 보통 더 쉽게 병합되고 유지보수됩니다.

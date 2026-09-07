@@ -9,8 +9,19 @@ import {
   loadHostCatalogCache,
   normalizeHostCatalogCacheEntry,
   saveHostCatalogCache,
+  siteAdapterFromEntry,
   subscribeHostCatalog,
 } from './hostCatalogCache';
+
+const SITE = {
+  id: 'deepseek',
+  label: 'DeepSeek',
+  matches: ['https://chat.deepseek.com/*'],
+  selectors: { userTurn: '.ds-message.user' },
+  theme: { hostSelector: 'body', lightSelector: 'body.light', darkSelector: 'body.dark' },
+  brandColor: '#abcdef',
+  capabilities: ['chat'],
+};
 
 const HOST = 'chat.deepseek.com';
 const KEY = 'gvPluginHostCatalog:chat.deepseek.com';
@@ -176,6 +187,48 @@ describe('subscribeHostCatalog', () => {
     const listener = registeredListener();
     unsubscribe();
     expect(chrome.storage.onChanged.removeListener).toHaveBeenCalledWith(listener);
+  });
+});
+
+describe('site override on the entry', () => {
+  it('keeps a valid site through normalisation and drops an invalid one', () => {
+    expect(normalizeHostCatalogCacheEntry(entry({ site: SITE }), HOST)?.site).toEqual(SITE);
+    expect(
+      normalizeHostCatalogCacheEntry(entry({ site: { ...SITE, brandColor: 'red' } }), HOST)?.site,
+    ).toBeUndefined();
+    expect(
+      normalizeHostCatalogCacheEntry(entry({ status: 'missing', site: SITE }), HOST)?.site,
+    ).toBeUndefined();
+  });
+
+  it('exposes the site only for a usable entry', () => {
+    expect(siteAdapterFromEntry(entry({ site: SITE }), '1.8.3')?.brandColor).toBe('#abcdef');
+    expect(siteAdapterFromEntry(entry({ site: SITE }), '1.8.3')?.capabilities).toEqual(
+      new Set(['chat']),
+    );
+    expect(
+      siteAdapterFromEntry(entry({ site: SITE, extensionVersion: '1.8.2' }), '1.8.3'),
+    ).toBeNull();
+    expect(siteAdapterFromEntry(entry({ site: SITE, status: 'missing' }), '1.8.3')).toBeNull();
+    expect(siteAdapterFromEntry(entry(), '1.8.3')).toBeNull();
+    expect(siteAdapterFromEntry(null, '1.8.3')).toBeNull();
+  });
+
+  it('a changed site wakes subscribers even when the plugin set is unchanged', () => {
+    const callback = vi.fn();
+    subscribeHostCatalog(HOST, callback);
+    const listener = registeredListener();
+    listener({ [KEY]: { oldValue: entry(), newValue: entry({ site: SITE }) } }, 'local');
+    listener(
+      {
+        [KEY]: {
+          oldValue: entry({ site: SITE }),
+          newValue: entry({ site: { ...SITE, brandColor: '#000000' } }),
+        },
+      },
+      'local',
+    );
+    expect(callback).toHaveBeenCalledTimes(2);
   });
 });
 

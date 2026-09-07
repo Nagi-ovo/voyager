@@ -66,6 +66,41 @@ describe('validateHostCatalogFile', () => {
     });
   });
 
+  it('accepts a site section that covers the host and reports one that does not', () => {
+    const site = {
+      id: 'deepseek',
+      label: 'DeepSeek',
+      matches: ['https://chat.deepseek.com/*'],
+      selectors: { userTurn: '.ds-message.user' },
+      theme: { hostSelector: 'body', lightSelector: 'body.light', darkSelector: 'body.dark' },
+      brandColor: '#123456',
+      capabilities: ['chat'],
+    };
+    const ok = validateHostCatalogFile(file([VALID], { site }), 'chat.deepseek.com');
+    expect(ok?.site?.brandColor).toBe('#123456');
+    expect(ok?.site?.capabilities).toEqual(new Set(['chat']));
+    expect(ok?.issues).toEqual([]);
+
+    const foreign = validateHostCatalogFile(
+      file([VALID], { site: { ...site, matches: ['https://claude.ai/*'] } }),
+      'chat.deepseek.com',
+    );
+    expect(foreign?.site).toBeUndefined();
+    expect(foreign?.issues).toContainEqual({
+      path: 'site.matches',
+      message: 'does not cover this host',
+    });
+
+    const invalid = validateHostCatalogFile(
+      file([VALID], { site: { ...site, selectors: { bogus: '.x' } } }),
+      'chat.deepseek.com',
+    );
+    expect(invalid?.site).toBeUndefined();
+    expect(invalid?.issues.some((issue) => issue.path === 'site.selectors.bogus')).toBe(true);
+    // Plugins still load when only the site section is bad.
+    expect(invalid?.manifests).toHaveLength(1);
+  });
+
   it('rejects CSS the bundled validator would reject (remote CSS is untrusted)', () => {
     const remoteImport = {
       ...VALID,

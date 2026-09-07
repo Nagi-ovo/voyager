@@ -12,19 +12,91 @@ This keeps plugins easier to review and maintain. If you want to contribute a pl
 4. Put styles in `style.css` in the same plugin directory, then reference it from `contributes.styles`.
 5. Test locally and include test pages, screenshots, or a short recording in the PR. Maintainers will decide whether it is ready for the official catalog.
 
+## Directory layout
+
+Official bundled plugins live under `src/features/plugins/catalog/`, one
+directory per plugin platform:
+
+```
+src/features/plugins/catalog/
+  marketplace.json                        index read by the docs plugin store
+  sites/<site>/site.json                  the site adapter, as data
+  sites/<site>/plugins/<id>/plugin.json   a declarative plugin
+  sites/<site>/plugins/<id>/style.css     its styles
+  sites/<site>/plugins/<id>/README.md     what it fixes and why
+```
+
+Discovery is automatic: `catalog/sites/index.ts` finds every `site.json` and
+every `plugin.json` with `import.meta.glob`, so adding a site or a plugin means
+adding files. There is no mapping table to edit.
+
+`marketplace.json` is not that mapping table. It is only the index the
+documentation plugin store reads, and a test keeps it in sync with discovery, so
+a new plugin also needs an entry there. Its `source` is the catalog-relative
+path, for example `sites/deepseek/plugins/reading-width/plugin.json`.
+
+A plugin's `matches` must stay inside the `matches` of the site it lives under.
+A plugin that reaches outside its own site fails the build.
+
+## Semantic selector keys
+
+`site.json` maps a fixed vocabulary of semantic keys to site-specific CSS
+selectors. The vocabulary is defined in
+`src/features/plugins/sites/semanticKeys.ts`; a `site.json` may only use keys
+from this list, and an unknown key is rejected.
+
+- `userTurn`: a user message container.
+- `assistantTurn`: an assistant message container.
+- `thinkingBlock`: the reasoning section inside an assistant turn.
+- `codeBlock`: a rendered code block.
+- `composer`: the prompt input the user types into.
+- `sidebar`: the conversation list or navigation rail.
+- `sidePanel`: a secondary panel, such as artifacts or canvas.
+- `headerActions`: the top-right action cluster of the conversation view.
+- `scrollContainer`: the element that scrolls the conversation.
+
+A site only declares the keys it can actually provide. Plugins reference a key
+instead of a raw selector by using `{ "kind": "semantic", "key": "userTurn" }` as
+a DOM operation `target`, so a site redesign is a one-file fix in `site.json`.
+
+`conversationIdPattern` is a separate `site.json` field rather than a selector:
+it is a regular expression over the URL path whose first capture group is the
+conversation id, such as `^/chat/([^/?#]+)`.
+
 ## Adding a new platform
 
 Adding a new chat website has two separate layers:
 
-1. The **site adapter** teaches Voyager how to recognize the website and find
-   its user turns, assistant turns, composer, sidebar, and theme markers.
-2. A **plugin** solves one user-facing problem on that website, such as reading
-   width or a rendering fix.
+1. The **site adapter**, `catalog/sites/<site>/site.json`, teaches Voyager how to
+   recognize the website and find its user turns, assistant turns, composer,
+   sidebar, and theme markers.
+2. A **plugin** under `catalog/sites/<site>/plugins/<id>/` solves one
+   user-facing problem on that website, such as reading width or a rendering
+   fix.
+
+A `site.json` carries `id` (equal to its directory name), `label`, `matches`,
+`selectors`, `theme`, `brandColor`, `capabilities`, and an optional
+`conversationIdPattern`. `validateSiteAdapterData` in
+`src/features/plugins/sites/siteAdapterData.ts` validates it, and
+`bun run catalog:build` validates every site and plugin before publishing.
+
+Every plugin platform is data. Sites today are ChatGPT, Claude, and DeepSeek.
+Gemini and AI Studio are native Voyager surfaces and stay TypeScript adapters
+(`src/features/plugins/sites/adapters/gemini.ts` and `aistudio.ts`). The
+TypeScript files for the plugin platforms, `adapters/claude.ts`, `chatgpt.ts`
+and `deepseek.ts`, are now one-line shells over their `site.json`: edit the JSON,
+not the TypeScript.
+
+The published per-host catalog carries the site data too, so a selector fix in
+`site.json` can reach users without an extension release. A brand new site still
+needs one, because it also needs host permission and content-script registration
+that ship inside the package.
 
 For a new platform such as DeepSeek, keep the adapter work focused on the
-platform contract. Put the adapter, registry entry, required selector tests,
-and the minimum documentation needed to explain the support in one complete
-change. Do not add a new adapter for every plugin.
+platform contract. Put the `site.json`, the required selector tests, and the
+minimum documentation needed to explain the support in one complete change. The
+site registry picks the new adapter up from the file itself, so there is no
+registration list to edit. Do not add a new site for every plugin.
 
 After the adapter is accepted, follow-up plugins can be submitted as separate
 focused changes. If several changes depend on one another, a stacked PR chain
@@ -137,7 +209,7 @@ Declarative plugins currently support:
 - `setStyle`: set inline styles or CSS variables.
 - `hide`: hide target elements.
 
-Targets can be CSS selectors or semantic selectors provided by Voyager site adapters. Semantic selectors are usually more stable, but they require the current site adapter to expose the target.
+Targets can be CSS selectors or the semantic keys listed above, written as `{ "kind": "semantic", "key": "userTurn" }`. Semantic keys are usually more stable, but they require the current site adapter to declare that key.
 
 Declarative operations must be reversible and safe to run repeatedly. Do not depend on one-time page state, and do not assume the page DOM never changes.
 
@@ -155,6 +227,7 @@ Open an Issue first and describe the need. If it truly requires built-in capabil
 - `matches` does not cover unrelated sites.
 - There are no remote resources.
 - The plugin directory includes `plugin.json`, required CSS files, and a short README.
+- For an official plugin, the directory sits under `catalog/sites/<site>/plugins/<id>/`, its `matches` stay inside the site's `matches`, and `catalog/marketplace.json` lists it.
 - The PR describes test pages, screenshots or recordings, and affected page areas.
 
 Keep it simple, focused, and reversible. A plugin that solves one clear problem is much easier to merge and maintain.

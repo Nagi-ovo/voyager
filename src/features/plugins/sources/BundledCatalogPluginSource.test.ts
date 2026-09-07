@@ -10,10 +10,11 @@ describe('BundledCatalogPluginSource', () => {
   it('loads the bundled official declarative plugins with resolved CSS', async () => {
     const manifests = await new BundledCatalogPluginSource().list();
 
+    // Discovery order: site directory, then plugin directory.
     expect(manifests.map((plugin) => plugin.id)).toEqual([
+      'voyager.chatgpt-reading-width',
       'voyager.claude-cjk-render-fix',
       'voyager.claude-reading-width',
-      'voyager.chatgpt-reading-width',
       'voyager.deepseek-reading-width',
     ]);
 
@@ -29,17 +30,17 @@ describe('BundledCatalogPluginSource', () => {
 
   it('keeps the bundled CSS source files non-empty', () => {
     for (const file of [
-      '../catalog/plugins/claude-cjk-render-fix/style.css',
-      '../catalog/plugins/claude-reading-width/style.css',
-      '../catalog/plugins/chatgpt-reading-width/style.css',
-      '../catalog/plugins/deepseek-reading-width/style.css',
+      '../catalog/sites/claude/plugins/cjk-render-fix/style.css',
+      '../catalog/sites/claude/plugins/reading-width/style.css',
+      '../catalog/sites/chatgpt/plugins/reading-width/style.css',
+      '../catalog/sites/deepseek/plugins/reading-width/style.css',
     ]) {
       expect(readFileSync(new URL(file, import.meta.url), 'utf8').length).toBeGreaterThan(0);
     }
   });
 
   it('keeps ChatGPT footer structural wrapper full-width', () => {
-    const file = '../catalog/plugins/chatgpt-reading-width/style.css';
+    const file = '../catalog/sites/chatgpt/plugins/reading-width/style.css';
     const css = readFileSync(new URL(file, import.meta.url), 'utf8');
 
     expect(css).not.toContain(':not(#thread-bottom-container)');
@@ -72,7 +73,7 @@ describe('BundledCatalogPluginSource', () => {
     const deepseekWidth = manifests.find(
       (plugin) => plugin.id === 'voyager.deepseek-reading-width',
     );
-    const file = '../catalog/plugins/deepseek-reading-width/style.css';
+    const file = '../catalog/sites/deepseek/plugins/reading-width/style.css';
     const css = readFileSync(new URL(file, import.meta.url), 'utf8');
 
     expect(deepseekWidth?.matches).toEqual(['https://chat.deepseek.com/*']);
@@ -98,7 +99,7 @@ describe('BundledCatalogPluginSource', () => {
   it('widens Claude document artifacts inside their cross-origin frame', async () => {
     const manifests = await new BundledCatalogPluginSource().list();
     const claudeWidth = manifests.find((plugin) => plugin.id === 'voyager.claude-reading-width');
-    const file = '../catalog/plugins/claude-reading-width/style.css';
+    const file = '../catalog/sites/claude/plugins/reading-width/style.css';
     const css = readFileSync(new URL(file, import.meta.url), 'utf8');
 
     expect(claudeWidth?.matches).toEqual([

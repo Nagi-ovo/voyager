@@ -7,54 +7,53 @@
  * exactly what the background refresher fetches (see
  * `src/features/plugins/remote/config.ts` and `HostCatalogSource`).
  *
- * The build reads the same sources as `BundledCatalogPluginSource`
- * (marketplace.json -> plugin.json + its CSS files), inlines every
- * `contributes.styles[].file` as `css`, and validates each manifest with the
- * runtime's own `validateManifest`. An invalid bundled manifest aborts the
- * build: the snapshot we ship is expected to be clean, and a broken host file
- * would be silently discarded by every client.
+ * The build reads the same per-site layout as `BundledCatalogPluginSource`:
  *
- * Output is deterministic — hosts and plugin ids are sorted — so a re-run with
- * the same `generatedAt` produces byte-identical files.
+ *   catalog/sites/<site>/site.json                 the adapter as data
+ *   catalog/sites/<site>/plugins/<id>/plugin.json  a declarative plugin
+ *   catalog/sites/<site>/plugins/<id>/*.css        its style files
+ *
+ * `src/features/plugins/catalog/sites/index.ts` discovers the same files with
+ * `import.meta.glob`, which does not exist under Bun — hence the disk walk here
+ * rather than an import. `marketplace.json` is an index for the docs plugin
+ * store only and is deliberately not read.
+ *
+ * Every `site.json` passes `validateSiteAdapterData`, every `plugin.json` passes
+ * `validateManifest` with its `contributes.styles[].file` inlined as `css`, and
+ * a plugin may not target a URL its own site does not cover (plan D18). Any
+ * violation aborts the build: the snapshot we ship is expected to be clean, and
+ * a broken host file would be silently discarded by every client.
+ *
+ * Output is deterministic — sites, hosts and plugin ids are sorted — so a re-run
+ * with the same `generatedAt` produces byte-identical files.
  *
  * Usage: bun scripts/build-plugin-catalog.ts [--out <dir>] [--now <ISO>]
  */
-import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import type { ManifestIssue } from '../src/features/plugins/manifest/validate';
 import { validateManifest } from '../src/features/plugins/manifest/validate';
 import {
   HOST_CATALOG_FORMAT,
   validateHostCatalogFile,
 } from '../src/features/plugins/remote/hostCatalogFile';
 import { matchesAnyPattern } from '../src/features/plugins/sites/matchPattern';
-import { DEFAULT_ADAPTERS } from '../src/features/plugins/sites/registry';
+import type { SiteAdapterData } from '../src/features/plugins/sites/siteAdapterData';
+import {
+  siteAdapterToData,
+  validateSiteAdapterData,
+} from '../src/features/plugins/sites/siteAdapterData';
 import { resolveStyleFileContributions } from '../src/features/plugins/sources/styleFiles';
-import type {
-  PluginManifest,
-  SiteAdapter,
-  SiteCapability,
-  SiteThemeDescriptor,
-} from '../src/features/plugins/types';
-
-/** The `site` section of a host file: `SiteAdapter` with its Set flattened. */
-export interface HostCatalogSite {
-  readonly id: string;
-  readonly label: string;
-  readonly matches: readonly string[];
-  readonly selectors: Readonly<Record<string, string>>;
-  readonly theme: SiteThemeDescriptor;
-  readonly brandColor?: string;
-  readonly capabilities: readonly SiteCapability[];
-}
+import type { PluginManifest, SiteAdapter } from '../src/features/plugins/types';
 
 /** One published `hosts/<host>.json`. Consumed by `validateHostCatalogFile`. */
 export interface HostCatalogFile {
   readonly format: typeof HOST_CATALOG_FORMAT;
   readonly host: string;
   readonly generatedAt: string;
-  readonly site?: HostCatalogSite;
+  readonly site?: SiteAdapterData;
   readonly plugins: readonly PluginManifest[];
 }
 
@@ -83,9 +82,12 @@ const CONCRETE_HTTPS_MATCH = /^https:\/\/([^/*]+)\/\*$/i;
 /** Plain domain labels; anything else (ports, credentials, `..`) is a mistake. */
 const PLAIN_HOST = /^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/;
 
-interface MarketplaceEntry {
-  readonly name?: string;
-  readonly source?: string;
+/** A `sites/<dir>` entry: its validated adapter plus its validated plugins. */
+interface CatalogSite {
+  /** Directory name under `sites/`; equals the adapter id. */
+  readonly dir: string;
+  readonly adapter: SiteAdapter;
+  readonly plugins: readonly PluginManifest[];
 }
 
 function compareStrings(a: string, b: string): number {
@@ -93,41 +95,118 @@ function compareStrings(a: string, b: string): number {
   return a < b ? -1 : 1;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+function formatIssues(issues: readonly ManifestIssue[]): string {
+  return issues.map((issue) => `  - ${issue.path}: ${issue.message}`).join('\n');
+}
+
+/** Directory names directly under `dir`, sorted; empty when `dir` is absent. */
+function listSubdirectories(dir: string): readonly string[] {
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort(compareStrings);
 }
 
 /**
- * Read every plugin listed in `marketplace.json`, inline its CSS files and
- * validate it. Throws on the first unusable entry.
+ * A URL that stands in for a match pattern, so one pattern can be tested
+ * against another set of patterns: `https://*.example.com/*` becomes
+ * `https://x.example.com/`. `<all_urls>` gets a host no site can claim, which
+ * is the point — it escapes every site.
  */
-async function readCatalogManifests(catalogDir: string): Promise<readonly PluginManifest[]> {
-  const marketplacePath = join(catalogDir, 'marketplace.json');
-  const raw: unknown = JSON.parse(readFileSync(marketplacePath, 'utf8'));
-  if (!isRecord(raw) || !Array.isArray(raw.plugins)) {
-    throw new Error(`${marketplacePath}: expected an object with a "plugins" array`);
+function probeUrl(pattern: string): string {
+  const trimmed = pattern.trim();
+  if (trimmed === '<all_urls>') return 'https://all-urls.invalid/';
+  return trimmed
+    .replace(/^\*:\/\//, 'https://')
+    .replace(/^(https?:\/\/)\*\./i, '$1x.')
+    .replace(/\*$/, '');
+}
+
+/**
+ * Plan D18: a plugin may only target URLs its own site adapter covers. Without
+ * this a plugin filed under `sites/claude/` could quietly ship to chatgpt.com,
+ * where its semantic selectors mean nothing.
+ */
+function assertMatchesStayInSite(
+  manifest: PluginManifest,
+  site: { readonly dir: string; readonly adapter: SiteAdapter },
+  manifestPath: string,
+): void {
+  for (const pattern of manifest.matches) {
+    if (matchesAnyPattern(probeUrl(pattern), site.adapter.matches)) continue;
+    throw new Error(
+      `${manifest.id} (${manifestPath}): match pattern "${pattern}" is not covered by site "${site.dir}" (${site.adapter.matches.join(', ')})`,
+    );
+  }
+}
+
+/** Read and validate `sites/<siteDir>/site.json`. Throws on anything unusable. */
+function readSiteAdapter(catalogDir: string, siteDir: string): SiteAdapter {
+  const sitePath = join(catalogDir, 'sites', siteDir, 'site.json');
+  const relPath = relative(catalogDir, sitePath);
+  if (!existsSync(sitePath)) {
+    throw new Error(`${relPath}: every directory under sites/ needs a site.json`);
   }
 
+  const result = validateSiteAdapterData(JSON.parse(readFileSync(sitePath, 'utf8')) as unknown);
+  if (!result.success) {
+    throw new Error(`${relPath}: invalid site.json\n${formatIssues(result.error)}`);
+  }
+  if (result.data.id !== siteDir) {
+    throw new Error(
+      `${relPath}: id "${result.data.id}" must equal its directory name "${siteDir}"`,
+    );
+  }
+  return result.data;
+}
+
+/**
+ * Read every `sites/<site>/plugins/<id>/plugin.json`, inline its CSS files and
+ * validate it against both the manifest schema and its site.
+ */
+async function readSitePlugins(
+  catalogDir: string,
+  site: { readonly dir: string; readonly adapter: SiteAdapter },
+): Promise<readonly PluginManifest[]> {
+  const pluginsRoot = join(catalogDir, 'sites', site.dir, 'plugins');
   const manifests: PluginManifest[] = [];
-  for (const entry of raw.plugins as readonly MarketplaceEntry[]) {
-    const source = entry?.source;
-    if (!source) continue;
-    const name = entry.name ?? source;
-    const manifestPath = join(catalogDir, source);
-    const pluginDir = dirname(manifestPath);
+
+  for (const pluginDir of listSubdirectories(pluginsRoot)) {
+    const dir = join(pluginsRoot, pluginDir);
+    const manifestPath = join(dir, 'plugin.json');
+    if (!existsSync(manifestPath)) continue;
+    const relPath = relative(catalogDir, manifestPath);
 
     const parsed: unknown = JSON.parse(readFileSync(manifestPath, 'utf8'));
-    const resolved = await resolveStyleFileContributions(parsed, name, async (file) =>
-      readFileSync(join(pluginDir, file), 'utf8'),
+    const resolved = await resolveStyleFileContributions(parsed, relPath, async (file) =>
+      readFileSync(join(dir, file), 'utf8'),
     );
     const result = validateManifest(resolved);
     if (!result.success) {
-      const issues = result.error.map((issue) => `  - ${issue.path}: ${issue.message}`).join('\n');
-      throw new Error(`${name} (${manifestPath}): invalid plugin manifest\n${issues}`);
+      throw new Error(`${relPath}: invalid plugin manifest\n${formatIssues(result.error)}`);
     }
+    assertMatchesStayInSite(result.data, site, relPath);
     manifests.push(result.data);
   }
+
   return manifests;
+}
+
+/** Walk `catalogDir/sites/` in directory order. Throws on the first problem. */
+async function readCatalogSites(catalogDir: string): Promise<readonly CatalogSite[]> {
+  const sitesRoot = join(catalogDir, 'sites');
+  if (!existsSync(sitesRoot)) {
+    throw new Error(`${sitesRoot}: the catalog has no sites/ directory`);
+  }
+
+  const sites: CatalogSite[] = [];
+  for (const dir of listSubdirectories(sitesRoot)) {
+    const adapter = readSiteAdapter(catalogDir, dir);
+    const plugins = await readSitePlugins(catalogDir, { dir, adapter });
+    sites.push({ dir, adapter, plugins });
+  }
+  return sites;
 }
 
 /**
@@ -149,27 +228,6 @@ function concreteHosts(matches: readonly string[]): readonly string[] {
   return [...hosts];
 }
 
-function findAdapter(host: string): SiteAdapter | undefined {
-  const url = `https://${host}/`;
-  return DEFAULT_ADAPTERS.find((adapter) => matchesAnyPattern(url, adapter.matches));
-}
-
-function serializeSite(adapter: SiteAdapter): HostCatalogSite {
-  return {
-    id: adapter.id,
-    label: adapter.label,
-    matches: [...adapter.matches],
-    selectors: { ...adapter.selectors },
-    theme: {
-      hostSelector: adapter.theme.hostSelector,
-      lightSelector: adapter.theme.lightSelector,
-      darkSelector: adapter.theme.darkSelector,
-    },
-    ...(adapter.brandColor ? { brandColor: adapter.brandColor } : {}),
-    capabilities: [...adapter.capabilities].sort(compareStrings),
-  };
-}
-
 /**
  * Build every host file from a catalog directory. Pure: nothing is written and
  * nothing outside `catalogDir` is read.
@@ -177,26 +235,36 @@ function serializeSite(adapter: SiteAdapter): HostCatalogSite {
 export async function buildHostCatalogs(
   options: BuildOptions,
 ): Promise<Map<string, HostCatalogFile>> {
-  const manifests = await readCatalogManifests(options.catalogDir);
+  const sites = await readCatalogSites(options.catalogDir);
 
   const byHost = new Map<string, PluginManifest[]>();
-  for (const manifest of manifests) {
-    for (const host of concreteHosts(manifest.matches)) {
-      const bucket = byHost.get(host);
-      if (bucket) bucket.push(manifest);
-      else byHost.set(host, [manifest]);
+  for (const site of sites) {
+    for (const manifest of site.plugins) {
+      for (const host of concreteHosts(manifest.matches)) {
+        const bucket = byHost.get(host);
+        if (bucket) bucket.push(manifest);
+        else byHost.set(host, [manifest]);
+      }
     }
   }
 
   const files = new Map<string, HostCatalogFile>();
   for (const host of [...byHost.keys()].sort(compareStrings)) {
     const plugins = [...(byHost.get(host) ?? [])].sort((a, b) => compareStrings(a.id, b.id));
-    const adapter = findAdapter(host);
+    const site = sites.find((entry) =>
+      matchesAnyPattern(`https://${host}/`, entry.adapter.matches),
+    );
+    // Every plugin lives under a site whose matches cover its own, so a host
+    // without an adapter means the layout is broken, not that the site is
+    // optional — publishing it would strip the selectors clients rely on.
+    if (!site) {
+      throw new Error(`${host}: no site.json under sites/ covers this host`);
+    }
     files.set(host, {
       format: HOST_CATALOG_FORMAT,
       host,
       generatedAt: options.generatedAt,
-      ...(adapter ? { site: serializeSite(adapter) } : {}),
+      site: siteAdapterToData(site.adapter),
       plugins,
     });
   }
@@ -227,10 +295,7 @@ export async function writeHostCatalogs(
       throw new Error(`${host}: host catalog file was rejected by validateHostCatalogFile`);
     }
     if (validation.issues.length > 0) {
-      const issues = validation.issues
-        .map((issue) => `  - ${issue.path}: ${issue.message}`)
-        .join('\n');
-      throw new Error(`${host}: host catalog file has plugin issues\n${issues}`);
+      throw new Error(`${host}: host catalog file has issues\n${formatIssues(validation.issues)}`);
     }
     if (validation.manifests.length !== file.plugins.length) {
       throw new Error(
