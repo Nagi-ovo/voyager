@@ -334,7 +334,12 @@ export class DeclarativeEngine {
   }
 
   private updatePrimitiveSettings(entry: ActivePlugin, settings: PluginSettings): void {
-    if (!entry.primitiveScope) return;
+    if (!entry.primitiveScope) {
+      // No live scope: either the plugin has no primitives, or a restart is
+      // still disposing and these settings must queue behind it.
+      if (entry.primitiveRestart) this.restartPrimitives(entry, settings);
+      return;
+    }
     const handles = entry.primitiveHandles;
     const allInPlace =
       handles.length === entry.primitiveActivations &&
