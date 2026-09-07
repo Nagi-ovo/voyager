@@ -22,7 +22,7 @@ import {
   requiredSemanticKeys,
 } from '../../src/features/plugins/runtime/pluginStatus';
 import { engineSatisfied, parseSemver } from '../../src/features/plugins/semver';
-import { matchesAnyPattern } from '../../src/features/plugins/sites/matchPattern';
+import { patternWithinAny } from '../../src/features/plugins/sites/matchPattern';
 import { validateSiteAdapterData } from '../../src/features/plugins/sites/siteAdapterData';
 import type { PluginManifest, SiteAdapter } from '../../src/features/plugins/types';
 import type { PrimitiveContract } from '../../src/features/plugins/verbs/contracts';
@@ -54,21 +54,6 @@ export function listSubdirectories(dir: string): readonly string[] {
 }
 
 /**
- * A URL that stands in for a match pattern, so one pattern can be tested
- * against another set of patterns: `https://*.example.com/*` becomes
- * `https://x.example.com/`. `<all_urls>` gets a host no site can claim, which
- * is the point — it escapes every site.
- */
-export function probeUrl(pattern: string): string {
-  const trimmed = pattern.trim();
-  if (trimmed === '<all_urls>') return 'https://all-urls.invalid/';
-  return trimmed
-    .replace(/^\*:\/\//, 'https://')
-    .replace(/^(https?:\/\/)\*\./i, '$1x.')
-    .replace(/\*$/, '');
-}
-
-/**
  * Plan D18: a plugin may only target URLs its own site adapter covers. Without
  * this a plugin filed under `sites/claude/` could quietly ship to chatgpt.com,
  * where its semantic selectors mean nothing.
@@ -80,7 +65,7 @@ export function checkMatchesStayInSite(
 ): readonly string[] {
   const issues: string[] = [];
   for (const pattern of manifest.matches) {
-    if (matchesAnyPattern(probeUrl(pattern), site.adapter.matches)) continue;
+    if (patternWithinAny(pattern, site.adapter.matches)) continue;
     issues.push(
       `${manifest.id} (${manifestPath}): match pattern "${pattern}" is not covered by site "${site.dir}" (${site.adapter.matches.join(', ')})`,
     );

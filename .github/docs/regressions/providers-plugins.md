@@ -259,3 +259,17 @@ while an active plugin has domOps`).
 - **Guard:** `src/pages/content/prompt/__tests__/customSiteCoverage.test.ts`
   (`queues a toggle-off that lands while the startup mount is in flight`,
   `ignores a startup read that is older than a change already handled`).
+
+## Data-supplied regular expressions follow the safe subset
+
+- **Trap:** `conversationIdPattern` reaches the content thread from site.json, plugin params and
+  the remote catalog, and `turnNavigator` executed it against the URL path after a syntax check
+  only. A pattern such as `^/(a+)+$` backtracks exponentially: a remote catalog entry could stall
+  every page of that host.
+- **Rule:** Validate with `isSafeRegexSource` (`sites/safeRegex.ts`): no lookarounds, no
+  backreferences, no quantifier on a group that contains a quantifier, at most 200 characters;
+  bound the subject with `MAX_REGEX_INPUT_LENGTH`. Apply the same policy wherever a pattern comes
+  from data.
+- **Guard:** `src/features/plugins/sites/safeRegex.test.ts`,
+  `src/features/plugins/verbs/turnNavigator.test.ts`
+  (`validates selectors, the id pattern and the rail side`).

@@ -24,7 +24,7 @@
  * Usage: bun scripts/plugin-new.ts <id-segment> --site <site> [--dry-run]
  */
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
-import { dirname, join, relative, resolve } from 'node:path';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { PLUGIN_ENGINE_VERSION } from '../src/features/plugins/constants';
@@ -384,7 +384,9 @@ export function scaffoldPlugin(options: ScaffoldOptions): ScaffoldResult {
   }
 
   const source = `sites/${site.dir}/plugins/${segment}/plugin.json`;
-  const checkPath = `src/features/plugins/catalog/${source.replace('/plugin.json', '')}`;
+  // The README's check command must point at the directory actually written,
+  // also when --catalog selects another tree.
+  const checkPath = relative(process.cwd(), pluginDir).split(sep).join('/');
   const files: readonly ScaffoldedFile[] = [
     { path: join(pluginDir, 'plugin.json'), contents: buildManifest(site, segment, engineVersion) },
     { path: join(pluginDir, 'style.css'), contents: buildStyle(site, segment) },

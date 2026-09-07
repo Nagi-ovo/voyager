@@ -1,6 +1,6 @@
 import { cpSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, relative, sep } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { PLUGIN_ENGINE_VERSION } from '@/features/plugins/constants';
@@ -114,9 +114,12 @@ describe('plugin:new scaffold', () => {
     const result = scaffoldPlugin({ catalogDir, site: 'deepseek', segment: 'reading-guide' });
 
     const readme = readFileSync(join(result.pluginDir, 'README.md'), 'utf8');
+    // The command names the directory that was actually written, so a
+    // --catalog run does not tell the contributor to check the default tree.
     expect(readme).toContain(
-      'bun run plugin:check src/features/plugins/catalog/sites/deepseek/plugins/reading-guide',
+      `bun run plugin:check ${relative(process.cwd(), result.pluginDir).split(sep).join('/')}`,
     );
+    expect(readme).toContain('sites/deepseek/plugins/reading-guide');
     expect(readme).toContain('Light theme');
     expect(readme).toContain('Dark theme');
     expect(readme).toContain('Target match count');

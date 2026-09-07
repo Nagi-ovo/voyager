@@ -87,21 +87,42 @@ interface StartInputVimModeOptions {
 
 let configuredComposerSelector: string | null = null;
 
+/**
+ * Resolve a configured composer selector to the editable control Vim should
+ * drive. A site file may name a wrapper or match a hidden duplicate, so each
+ * match is narrowed to itself or its first editable descendant, and only a
+ * rendered control wins; with `requireVisible` off, the first editable match
+ * is the fallback.
+ */
+export function resolveConfiguredComposer(
+  selector: string,
+  options: { requireVisible?: boolean } = {},
+  doc: Document = document,
+): HTMLElement | null {
+  const requireVisible = options.requireVisible ?? true;
+  let fallback: HTMLElement | null = null;
+  try {
+    for (const element of Array.from(doc.querySelectorAll(selector))) {
+      if (!(element instanceof HTMLElement)) continue;
+      const editable = element.matches(EDITABLE_SELECTOR)
+        ? element
+        : element.querySelector<HTMLElement>(EDITABLE_SELECTOR);
+      if (!editable) continue;
+      if (!fallback) fallback = editable;
+      if (editable.getBoundingClientRect().height > 0) return editable;
+    }
+  } catch {
+    // Invalid selector from a site file: fall back to the generic lookup.
+    return null;
+  }
+  return requireVisible ? null : fallback;
+}
+
 /** The configured composer when it resolves, else the generic chat-input lookup. */
 function locateChatInput(options: { requireVisible?: boolean } = {}): HTMLElement | null {
-  const requireVisible = options.requireVisible ?? true;
   if (configuredComposerSelector) {
-    try {
-      let fallback: HTMLElement | null = null;
-      for (const element of Array.from(document.querySelectorAll(configuredComposerSelector))) {
-        if (!(element instanceof HTMLElement)) continue;
-        if (!fallback) fallback = element;
-        if (element.getBoundingClientRect().height > 0) return element;
-      }
-      if (fallback && !requireVisible) return fallback;
-    } catch {
-      // Invalid selector from a site file: fall back to the generic lookup.
-    }
+    const configured = resolveConfiguredComposer(configuredComposerSelector, options);
+    if (configured) return configured;
   }
   return findChatInput(options);
 }

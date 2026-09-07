@@ -94,6 +94,11 @@ describe('turnNavigator primitive', () => {
     };
     expect(issues({ position: 'top' })).toEqual(['params.position']);
     expect(issues({ conversationIdPattern: '(' })).toEqual(['params.conversationIdPattern']);
+    // Remote data must not hand the content thread a backtracking bomb.
+    expect(issues({ conversationIdPattern: '^/(a+)+$' })).toEqual(['params.conversationIdPattern']);
+    expect(issues({ conversationIdPattern: '^/(?=x)(.*)' })).toEqual([
+      'params.conversationIdPattern',
+    ]);
     expect(issues({ turn: '' })).toEqual(['params.turn']);
     expect(issues({ speed: 3 })).toEqual(['params.speed']);
   });

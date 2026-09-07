@@ -17,6 +17,7 @@ import type { Result } from '@/core/types/common';
 
 import type { ManifestIssue } from '../manifest/validate';
 import type { SiteAdapter, SiteCapability, SiteThemeDescriptor } from '../types';
+import { isSafeRegexSource } from './safeRegex';
 import { isSemanticSelectorKey } from './semanticKeys';
 
 /** JSON-serializable adapter: `capabilities` is an array instead of a Set. */
@@ -201,15 +202,12 @@ export function validateSiteAdapterData(input: unknown): Result<SiteAdapter, Man
       input.conversationIdPattern.length > MAX_PATTERN_LENGTH
     ) {
       issues.push({ path: 'conversationIdPattern', message: 'must be a non-empty string' });
-    } else {
-      try {
-        new RegExp(input.conversationIdPattern);
-      } catch {
-        issues.push({
-          path: 'conversationIdPattern',
-          message: 'must be a valid regular expression',
-        });
-      }
+    } else if (!isSafeRegexSource(input.conversationIdPattern)) {
+      issues.push({
+        path: 'conversationIdPattern',
+        message:
+          'must be a valid regular expression without lookarounds, backreferences or nested quantifiers',
+      });
     }
   }
 

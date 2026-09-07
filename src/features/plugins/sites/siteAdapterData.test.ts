@@ -58,6 +58,9 @@ describe('validateSiteAdapterData', () => {
     expect(issuesOf({ ...VALID, brandColor: 'blue' })).toEqual(['brandColor']);
     expect(issuesOf({ ...VALID, capabilities: ['chat', 'voice'] })).toEqual(['capabilities[1]']);
     expect(issuesOf({ ...VALID, conversationIdPattern: '(' })).toEqual(['conversationIdPattern']);
+    expect(issuesOf({ ...VALID, conversationIdPattern: '^/(a+)+$' })).toEqual([
+      'conversationIdPattern',
+    ]);
     expect(issuesOf({ ...VALID, theme: { hostSelector: 'body' } })).toEqual([
       'theme.lightSelector',
       'theme.darkSelector',

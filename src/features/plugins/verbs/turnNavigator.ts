@@ -6,6 +6,7 @@
 import { logger } from '@/core/services/LoggerService';
 
 import type { ManifestIssue } from '../manifest/validate';
+import { isSafeRegexSource } from '../sites/safeRegex';
 import { getPrimitiveContract } from './contracts';
 import {
   TIMELINE_STYLE_COACHMARK_ID,
@@ -67,13 +68,13 @@ export const turnNavigatorPrimitive: Primitive<TurnNavigatorParams> = {
           });
           continue;
         }
-        try {
-          new RegExp(value);
+        if (isSafeRegexSource(value)) {
           params.conversationIdPattern = value;
-        } catch {
+        } else {
           issues.push({
             path: 'params.conversationIdPattern',
-            message: 'must be a valid regular expression',
+            message:
+              'must be a valid regular expression without lookarounds, backreferences or nested quantifiers',
           });
         }
         continue;

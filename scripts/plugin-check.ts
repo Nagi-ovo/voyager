@@ -172,7 +172,10 @@ export async function checkPluginDir(dir: string): Promise<PluginCheckResult> {
 
   const pluginsRoot = dirname(pluginDir);
   const siteDir = dirname(pluginsRoot);
-  if (basename(pluginsRoot) !== 'plugins') {
+  // The no-argument run only scans <catalog>/sites/<site>/plugins/<id>; a
+  // plugin that passes here from any other parent would silently drop out of
+  // CI, so demand the same shape.
+  if (basename(pluginsRoot) !== 'plugins' || basename(dirname(siteDir)) !== 'sites') {
     return {
       dir: pluginDir,
       ok: false,

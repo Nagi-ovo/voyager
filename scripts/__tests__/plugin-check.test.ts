@@ -154,6 +154,29 @@ describe('plugin-check', () => {
     );
   });
 
+  it('rejects a wildcard host or a wider scheme than the site, not just a foreign host (D18)', async () => {
+    const wildcard = await checkPluginDir(
+      makeFixturePlugin({ manifest: { matches: ['https://*.example/*'] } }),
+    );
+    expect(wildcard.ok).toBe(false);
+    expect(wildcard.issues.join('\n')).toMatch(/"https:\/\/\*\.example\/\*" is not covered/);
+
+    const scheme = await checkPluginDir(
+      makeFixturePlugin({ manifest: { matches: ['*://demo.example/*'] } }),
+    );
+    expect(scheme.ok).toBe(false);
+    expect(scheme.issues.join('\n')).toMatch(/"\*:\/\/demo\.example\/\*" is not covered/);
+  });
+
+  it('rejects a plugin directory outside <catalog>/sites/<site>/plugins/', async () => {
+    const stray = join(makeTempDir(), 'catalog', 'other', 'demo', 'plugins', 'widen');
+    mkdirSync(stray, { recursive: true });
+    writeJson(join(stray, '..', '..', 'site.json'), { id: 'demo' });
+    const result = await checkPluginDir(stray);
+    expect(result.ok).toBe(false);
+    expect(result.issues[0]).toMatch(/sites\/<site>\/plugins\/<id>/);
+  });
+
   it('reports a primitive this build does not ship', async () => {
     const result = await checkPluginDir(
       makeFixturePlugin({

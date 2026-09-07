@@ -25,6 +25,7 @@ import { showTimelineStyleCoachmark } from '@/pages/content/timeline/timelineSty
 import type { PreviewMarkerData } from '@/pages/content/timeline/types';
 import { initI18n } from '@/utils/i18n';
 
+import { MAX_REGEX_INPUT_LENGTH } from '../../sites/safeRegex';
 import type { PrimitiveHandle } from '../types';
 
 export interface TurnNavigatorConfig {
@@ -70,7 +71,10 @@ export function buildConversationId(
   try {
     const url = new URL(input, location.origin);
     if (config.conversationIdPattern) {
-      const match = new RegExp(config.conversationIdPattern).exec(url.pathname);
+      // The pattern policy (sites/safeRegex.ts) forbids the constructs that
+      // backtrack catastrophically; a bounded subject caps the rest.
+      const subject = url.pathname.slice(0, MAX_REGEX_INPUT_LENGTH);
+      const match = new RegExp(config.conversationIdPattern).exec(subject);
       if (match?.[1]) return `${config.siteId}:conv:${match[1]}`;
     }
     return `${config.siteId}:${hashString(`${url.origin}${url.pathname}`)}`;

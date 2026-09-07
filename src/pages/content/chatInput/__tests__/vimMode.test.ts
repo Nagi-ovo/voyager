@@ -1912,3 +1912,35 @@ describe('input Vim mode', () => {
     cleanup();
   });
 });
+
+describe('resolveConfiguredComposer', () => {
+  const tall = (element: HTMLElement): void => {
+    element.getBoundingClientRect = () =>
+      ({ top: 0, left: 0, width: 300, height: 40, bottom: 40, right: 300 }) as DOMRect;
+  };
+
+  it('narrows a wrapper match to its rendered editable control and skips hidden duplicates', async () => {
+    const { resolveConfiguredComposer } = await import('../vimMode');
+    document.body.innerHTML = `
+      <div class="composer"><textarea id="ghost"></textarea></div>
+      <div class="composer"><div><div id="live" contenteditable="true"></div></div></div>
+    `;
+    tall(document.getElementById('live')!);
+    expect(resolveConfiguredComposer('.composer')?.id).toBe('live');
+  });
+
+  it('returns nothing for matches without an editable control or for an invalid selector', async () => {
+    const { resolveConfiguredComposer } = await import('../vimMode');
+    document.body.innerHTML = '<div class="composer"><span>label</span></div>';
+    tall(document.querySelector<HTMLElement>('.composer')!);
+    expect(resolveConfiguredComposer('.composer')).toBeNull();
+    expect(resolveConfiguredComposer('[')).toBeNull();
+  });
+
+  it('falls back to the first editable match only when visibility is not required', async () => {
+    const { resolveConfiguredComposer } = await import('../vimMode');
+    document.body.innerHTML = '<div class="composer"><textarea id="hidden"></textarea></div>';
+    expect(resolveConfiguredComposer('.composer')).toBeNull();
+    expect(resolveConfiguredComposer('.composer', { requireVisible: false })?.id).toBe('hidden');
+  });
+});
