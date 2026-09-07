@@ -2,8 +2,9 @@
   "$schema": "https://voyager.nagi.fun/plugin.schema.json",
   "id": "voyager.claude-reading-width",
   "name": "Claude · Comfortable Reading Width",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "Widen Claude's conversation to one centered, adjustable column, with user and assistant messages aligned together.",
+  "changelog": "Follows Claude's new outer column cap (max-w-[50.5rem]) so the reading width applies again.",
   "i18n": {
     "zh": {
       "name": "Claude · 舒适阅读宽度",
@@ -14,7 +15,8 @@
           "minLabel": "更窄",
           "maxLabel": "更宽"
         }
-      }
+      },
+      "changelog": "跟进 Claude 新增的外层列宽上限（max-w-[50.5rem]），阅读宽度重新生效。"
     },
     "zh_TW": {
       "name": "Claude · 舒適閱讀寬度",
@@ -25,7 +27,8 @@
           "minLabel": "更窄",
           "maxLabel": "更寬"
         }
-      }
+      },
+      "changelog": "跟進 Claude 新增的外層欄寬上限（max-w-[50.5rem]），閱讀寬度重新生效。"
     },
     "ja": {
       "name": "Claude · 快適な読書幅",
@@ -36,7 +39,8 @@
           "minLabel": "狭く",
           "maxLabel": "広く"
         }
-      }
+      },
+      "changelog": "Claude が追加した外側の列幅上限（max-w-[50.5rem]）に追従し、読書幅が再び効くようにしました。"
     },
     "ko": {
       "name": "Claude · 편안한 읽기 너비",
@@ -47,7 +51,8 @@
           "minLabel": "좁게",
           "maxLabel": "넓게"
         }
-      }
+      },
+      "changelog": "Claude가 추가한 바깥쪽 열 너비 상한(max-w-[50.5rem])을 따라가 읽기 너비가 다시 적용됩니다."
     },
     "fr": {
       "name": "Claude · Largeur de lecture confortable",
@@ -58,7 +63,8 @@
           "minLabel": "Plus étroit",
           "maxLabel": "Plus large"
         }
-      }
+      },
+      "changelog": "Suit la nouvelle limite de largeur externe de Claude (max-w-[50.5rem]) pour que la largeur de lecture s'applique à nouveau."
     },
     "es": {
       "name": "Claude · Ancho de lectura cómodo",
@@ -69,7 +75,8 @@
           "minLabel": "Más estrecho",
           "maxLabel": "Más ancho"
         }
-      }
+      },
+      "changelog": "Sigue el nuevo límite de ancho exterior de Claude (max-w-[50.5rem]) para que el ancho de lectura vuelva a aplicarse."
     },
     "pt": {
       "name": "Claude · Largura de leitura confortável",
@@ -80,7 +87,8 @@
           "minLabel": "Mais estreito",
           "maxLabel": "Mais largo"
         }
-      }
+      },
+      "changelog": "Acompanha o novo limite de largura externo do Claude (max-w-[50.5rem]) para que a largura de leitura volte a valer."
     },
     "ru": {
       "name": "Claude · Удобная ширина чтения",
@@ -91,7 +99,8 @@
           "minLabel": "Уже",
           "maxLabel": "Шире"
         }
-      }
+      },
+      "changelog": "Учитывает новый внешний предел ширины колонки Claude (max-w-[50.5rem]), чтобы ширина чтения снова применялась."
     },
     "ar": {
       "name": "Claude · عرض قراءة مريح",
@@ -102,7 +111,8 @@
           "minLabel": "أضيق",
           "maxLabel": "أوسع"
         }
-      }
+      },
+      "changelog": "يواكب حدّ عرض العمود الخارجي الجديد في Claude (max-w-[50.5rem]) حتى يعود عرض القراءة إلى العمل."
     }
   },
   "author": "voyager-official",
@@ -124,7 +134,11 @@
         "max": 1600
       }
     },
-    "styles": [{ "file": "style.css" }],
+    "styles": [
+      {
+        "file": "style.css"
+      }
+    ],
     "domOps": [
       {
         "op": "addClass",
@@ -134,7 +148,9 @@
       {
         "op": "setStyle",
         "target": "body",
-        "styles": { "--gv-plugin-reading-width": "{{width}}px" }
+        "styles": {
+          "--gv-plugin-reading-width": "{{width}}px"
+        }
       }
     ]
   }

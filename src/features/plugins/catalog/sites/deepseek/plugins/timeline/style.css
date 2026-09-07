@@ -1,0 +1,8 @@
+/* DeepSeek ships its own message navigator on the right edge: a fixed rail of
+ * ticks with a hover list. While the Voyager timeline is mounted there must be
+ * one rail to see and one to hit, so the native one is hidden. The hook is the
+ * custom property DeepSeek sets on the rail's container, which outlives its
+ * hashed class names. */
+div[style*='--scroll-nav-page-padding'] {
+  display: none !important;
+}

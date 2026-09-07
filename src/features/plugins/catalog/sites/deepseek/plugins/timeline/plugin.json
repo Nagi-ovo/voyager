@@ -2,14 +2,14 @@
   "$schema": "https://voyager.nagi.fun/plugin.schema.json",
   "id": "voyager.deepseek-timeline",
   "name": "DeepSeek · Timeline",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Adds a compact conversation timeline to DeepSeek with starred messages and search.",
-  "changelog": "First release: the timeline rail on DeepSeek through the turnNavigator primitive.",
+  "changelog": "Hides DeepSeek's own message navigator while the Voyager timeline is on, so there is one rail to see and to click.",
   "i18n": {
     "zh": {
       "name": "DeepSeek · 时间线",
       "description": "为 DeepSeek 添加紧凑的对话时间线，支持星标消息和搜索。",
-      "changelog": "首个版本：通过 turnNavigator 原语在 DeepSeek 上提供时间线。",
+      "changelog": "开启 Voyager 时间线时隐藏 DeepSeek 自带的消息导航，只保留一条可看可点的轨道。",
       "settings": {
         "compactView": {
           "label": "使用紧凑索引"
@@ -19,7 +19,7 @@
     "zh_TW": {
       "name": "DeepSeek · 時間線",
       "description": "為 DeepSeek 加入緊湊的對話時間線，支援星標訊息與搜尋。",
-      "changelog": "首個版本：透過 turnNavigator 原語在 DeepSeek 上提供時間線。",
+      "changelog": "開啟 Voyager 時間線時隱藏 DeepSeek 內建的訊息導覽，只保留一條可看可點的軌道。",
       "settings": {
         "compactView": {
           "label": "使用精簡索引"
@@ -29,7 +29,7 @@
     "ja": {
       "name": "DeepSeek · タイムライン",
       "description": "DeepSeek にコンパクトな会話タイムラインを追加し、スター付きメッセージと検索に対応します。",
-      "changelog": "初版：turnNavigator プリミティブで DeepSeek にタイムラインを提供します。",
+      "changelog": "Voyager タイムラインが有効な間は DeepSeek 標準のメッセージナビゲーターを隠し、見えるレールと押せるレールを一本にします。",
       "settings": {
         "compactView": {
           "label": "コンパクト表示を使う"
@@ -39,7 +39,7 @@
     "ko": {
       "name": "DeepSeek · 타임라인",
       "description": "DeepSeek에 별표 메시지와 검색을 지원하는 간단한 대화 타임라인을 추가합니다.",
-      "changelog": "첫 릴리스: turnNavigator 프리미티브로 DeepSeek 타임라인을 제공합니다.",
+      "changelog": "Voyager 타임라인이 켜져 있는 동안 DeepSeek 자체 메시지 내비게이터를 숨겨, 보이고 누를 수 있는 레일을 하나로 유지합니다.",
       "settings": {
         "compactView": {
           "label": "컴팩트 타임라인 사용"
@@ -49,7 +49,7 @@
     "fr": {
       "name": "DeepSeek · Timeline",
       "description": "Ajoute une timeline compacte à DeepSeek avec messages favoris et recherche.",
-      "changelog": "Première version : la timeline sur DeepSeek via la primitive turnNavigator.",
+      "changelog": "Masque le navigateur de messages intégré de DeepSeek tant que la timeline Voyager est active, pour n'avoir qu'un seul rail visible et cliquable.",
       "settings": {
         "compactView": {
           "label": "Utiliser la chronologie compacte"
@@ -59,7 +59,7 @@
     "es": {
       "name": "DeepSeek · Línea de tiempo",
       "description": "Añade a DeepSeek una línea de tiempo compacta con mensajes destacados y búsqueda.",
-      "changelog": "Primera versión: la línea de tiempo en DeepSeek mediante la primitiva turnNavigator.",
+      "changelog": "Oculta el navegador de mensajes propio de DeepSeek mientras la línea de tiempo de Voyager está activa, para que haya un solo carril visible y pulsable.",
       "settings": {
         "compactView": {
           "label": "Usar cronología compacta"
@@ -69,7 +69,7 @@
     "pt": {
       "name": "DeepSeek · Linha do tempo",
       "description": "Adiciona ao DeepSeek uma linha do tempo compacta com mensagens favoritas e busca.",
-      "changelog": "Primeira versão: a linha do tempo no DeepSeek pela primitiva turnNavigator.",
+      "changelog": "Oculta o navegador de mensagens do próprio DeepSeek enquanto a linha do tempo do Voyager está ativa, deixando um único trilho visível e clicável.",
       "settings": {
         "compactView": {
           "label": "Usar linha do tempo compacta"
@@ -79,7 +79,7 @@
     "ru": {
       "name": "DeepSeek · Таймлайн",
       "description": "Добавляет в DeepSeek компактную шкалу диалога со звёздами и поиском.",
-      "changelog": "Первая версия: шкала диалога в DeepSeek через примитив turnNavigator.",
+      "changelog": "Скрывает собственный навигатор сообщений DeepSeek, пока включена шкала Voyager, чтобы на экране была одна шкала: видимая и кликабельная.",
       "settings": {
         "compactView": {
           "label": "Использовать компактную шкалу"
@@ -89,7 +89,7 @@
     "ar": {
       "name": "DeepSeek · المخطط الزمني",
       "description": "يضيف إلى DeepSeek مخططًا زمنيًا موجزًا مع الرسائل المميزة والبحث.",
-      "changelog": "الإصدار الأول: المخطط الزمني في DeepSeek عبر الأساسية turnNavigator.",
+      "changelog": "يخفي متصفّح الرسائل المدمج في DeepSeek أثناء تفعيل مخطط Voyager الزمني، فيبقى مسار واحد يمكن رؤيته والنقر عليه.",
       "settings": {
         "compactView": {
           "label": "استخدام المخطط الزمني المضغوط"
@@ -116,6 +116,11 @@
         "default": false
       }
     },
+    "styles": [
+      {
+        "file": "style.css"
+      }
+    ],
     "domOps": [
       {
         "op": "native",

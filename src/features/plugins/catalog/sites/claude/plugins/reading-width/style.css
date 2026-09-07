@@ -10,6 +10,16 @@
   max-width: var(--gv-plugin-reading-width, 768px) !important;
 }
 
+/* Claude (September 2026) wraps the turn column in a second cap,
+ * max-w-[50.5rem] (808px = 768px plus the column's 20px side padding). Follow
+ * it with the same padding allowance, otherwise the inner cap widens but its
+ * parent still clamps the column at 808px. Matched structurally, as the parent
+ * of the max-w-3xl column, so the rule survives the next arbitrary-value class
+ * rename. */
+.gv-plugin-claude-readable div:has(> div[class*='max-w-3xl']) {
+  max-width: calc(var(--gv-plugin-reading-width, 768px) + 2.5rem) !important;
+}
+
 .gv-plugin-claude-readable div[class*='items-end']:has([data-testid='user-message']) {
   align-items: flex-start !important;
 }
