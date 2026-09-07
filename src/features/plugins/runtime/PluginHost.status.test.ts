@@ -217,6 +217,32 @@ describe('PluginHost status machine (plan §4.2)', () => {
     host.stop();
   });
 
+  it('unmounts a primitive plugin whose update no longer targets this page instead of freezing it', async () => {
+    mockState({ 'x.formula': { enabled: true, installedAt: 1 } });
+    const v1 = manifest('x.formula', {
+      contributes: { domOps: [{ op: 'native', handler: 'formulaCopy', params: {} }] },
+    });
+    const listed = { current: [v1] };
+    const host = new PluginHost({
+      url: URL,
+      sources: [remoteSource(listed)],
+      doc: document,
+      requestCatalogRefresh: () => {},
+      isTopFrame: true,
+    });
+    await host.start();
+    const scope = vi.mocked(activateFormulaCopy).mock.calls[0][0];
+
+    // 1.1.0 moves the plugin to claude.ai: for this DeepSeek page that is a removal.
+    listed.current = [{ ...v1, version: '1.1.0', matches: ['https://claude.ai/*'] }];
+    fireCatalogChange();
+    await flush();
+
+    expect(scope.isDisposed).toBe(true);
+    expect(host.getStatuses()).toEqual([]);
+    host.stop();
+  });
+
   it('unmounts plugins the refreshed catalog no longer lists, frozen primitives included', async () => {
     mockState({
       'x.css': { enabled: true, installedAt: 1 },

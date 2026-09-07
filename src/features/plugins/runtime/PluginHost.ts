@@ -306,6 +306,13 @@ export class PluginHost {
     for (const next of manifests) {
       const mounted = this.frozen.get(next.id)?.mounted ?? previous.get(next.id);
       if (!mounted || !engine.isActive(next.id)) continue;
+      // An update that drops this page from its `matches` is a removal for
+      // this page, never a pending version: unfreeze so the unmount below
+      // sees it and reconcile() cannot revive it from the frozen manifest.
+      if (!matchesAnyPattern(this.url, next.matches)) {
+        this.frozen.delete(next.id);
+        continue;
+      }
       if (!hasNativeOps(mounted) && !hasNativeOps(next)) continue;
       if (mounted.version === next.version && sameContributions(mounted, next)) {
         this.frozen.delete(next.id);
