@@ -96,6 +96,11 @@ import { useWidthAdjuster } from '../../hooks/useWidthAdjuster';
 import { CloudSyncSettings } from './components/CloudSyncSettings';
 import { ContextSyncSettings } from './components/ContextSyncSettings';
 import { DiagnosticsExportCard } from './components/DiagnosticsExportCard';
+import {
+  type AiStructureCopyStatus,
+  FolderSettingsCard,
+  type FolderSettingsValues,
+} from './components/FolderSettingsCard';
 import { FormulaCopySettings } from './components/FormulaCopySettings';
 import { KeyboardShortcutSettings } from './components/KeyboardShortcutSettings';
 import { PluginManager } from './components/PluginManager';
@@ -103,6 +108,11 @@ import { StarredHistory } from './components/StarredHistory';
 import { StorageManager } from './components/StorageManager';
 import { StorageQuotaCard } from './components/StorageQuotaCard';
 import { ThemeColorButton } from './components/ThemeColorButton';
+import {
+  type ScrollMode,
+  TimelineSettingsCard,
+  type TimelineSettingsValues,
+} from './components/TimelineSettingsCard';
 import { ToolbarPinHint } from './components/ToolbarPinHint';
 import {
   IconChatGPT,
@@ -118,6 +128,7 @@ import { useEchartsPopupSettings } from './hooks/useEchartsPopupSettings';
 import { useFormulaCopyPopupSettings } from './hooks/useFormulaCopyPopupSettings';
 import { usePopupScrollRestoration } from './hooks/usePopupScrollRestoration';
 import { useWaveDromPopupSettings } from './hooks/useWaveDromPopupSettings';
+import { type SettingSetters, applySettingsPatch } from './utils/settingsPatch';
 import {
   type SettingsSearchItem,
   getSettingsSearchMatches,
@@ -136,8 +147,6 @@ function MaterialGlyphIcon({ path, className }: { path: string; className?: stri
     </svg>
   );
 }
-
-type ScrollMode = 'jump' | 'flow';
 
 /**
  * Reorderable popup section IDs — order here is the default display order.
@@ -1132,9 +1141,7 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
   const promptImportInputRef = useRef<HTMLInputElement | null>(null);
   const [pluginsLoading, setPluginsLoading] = useState<boolean>(true);
   const [pluginsRefreshing, setPluginsRefreshing] = useState<boolean>(false);
-  const [aiStructureCopyStatus, setAiStructureCopyStatus] = useState<
-    'idle' | 'loading' | 'copied' | 'empty' | 'error'
-  >('idle');
+  const [aiStructureCopyStatus, setAiStructureCopyStatus] = useState<AiStructureCopyStatus>('idle');
   const [sectionOrder, setSectionOrder] = useState<PopupSectionId[]>([...DEFAULT_SECTION_ORDER]);
   const [settingsSearchQuery, setSettingsSearchQuery] = useState<string>('');
 
@@ -2715,6 +2722,59 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
     });
   };
 
+  // Extracted settings cards report one changed key at a time; mirror it into
+  // the matching state and persist through the same `apply` path as before.
+  const timelineSetters = useMemo<SettingSetters<TimelineSettingsValues>>(
+    () => ({
+      timelineStyle: setTimelineStyle,
+      mode: setMode,
+      hideContainer: setHideContainer,
+      draggableTimeline: setDraggableTimeline,
+      timelinePreviewPinned: setTimelinePreviewPinned,
+      preventAutoScrollEnabled: setPreventAutoScrollEnabled,
+      markerLevelEnabled: setMarkerLevelEnabled,
+      showMessageTimestamps: setShowMessageTimestamps,
+    }),
+    [],
+  );
+  const handleTimelineChange = useCallback(
+    (patch: Partial<TimelineSettingsValues>) => {
+      applySettingsPatch(timelineSetters, patch);
+      apply(patch);
+    },
+    [apply, timelineSetters],
+  );
+  const folderSetters = useMemo<SettingSetters<FolderSettingsValues>>(
+    () => ({
+      folderEnabled: setFolderEnabled,
+      floatingModeEnabled: setFloatingModeEnabled,
+      floatingOpenOnStart: setFloatingOpenOnStart,
+      hideArchivedConversations: setHideArchivedConversations,
+      folderSearchEnabled: setFolderSearchEnabled,
+      forkEnabled: setForkEnabled,
+      folderProjectEnabled: setFolderProjectEnabled,
+    }),
+    [],
+  );
+  const handleFolderChange = useCallback(
+    (patch: Partial<FolderSettingsValues>) => {
+      applySettingsPatch(folderSetters, patch);
+      apply(patch);
+    },
+    [apply, folderSetters],
+  );
+  const handleAccountIsolationChange = useCallback(
+    (enabled: boolean) => {
+      if (isAIStudio) {
+        setAccountIsolationEnabledAIStudio(enabled);
+      } else {
+        setAccountIsolationEnabledGemini(enabled);
+      }
+      apply({ accountIsolationEnabled: enabled, accountIsolationPlatform: activeAccountPlatform });
+    },
+    [activeAccountPlatform, apply, isAIStudio],
+  );
+
   const wrapSection = (
     id: PopupSectionId,
     content: React.ReactNode,
@@ -2986,548 +3046,50 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
         {/* Timeline Options */}
         {wrapSection(
           'timeline',
-          <Card className="p-4 transition-all hover:shadow-md">
-            <CardTitle className="mb-4">{t('timelineOptions')}</CardTitle>
-            <CardContent className="space-y-4 p-0">
-              <div hidden={!shouldShowSetting('timeline', 'timelineStyle')}>
-                <Label className="mb-2 block text-sm font-medium">{t('timelineStyle')}</Label>
-                <div className="bg-secondary/60 relative grid grid-cols-3 gap-1 rounded-xl p-1">
-                  <div
-                    className="bg-primary pointer-events-none absolute top-1 bottom-1 w-[calc(33.333%-4px)] rounded-lg shadow-sm transition-all duration-300 ease-out"
-                    style={{
-                      left:
-                        timelineStyle === 'dots'
-                          ? '4px'
-                          : timelineStyle === 'ruler'
-                            ? 'calc(33.333% + 2px)'
-                            : '66.666%',
-                    }}
-                  />
-                  <button
-                    className={`relative z-10 rounded-lg px-2 py-2 text-sm font-bold transition-all duration-200 ${
-                      timelineStyle === 'dots'
-                        ? 'text-primary-foreground'
-                        : 'text-muted-foreground hover:text-foreground'
-                    }`}
-                    onClick={() => {
-                      setTimelineStyle('dots');
-                      apply({ timelineStyle: 'dots' });
-                    }}
-                  >
-                    {t('timelineStyleDots')}
-                  </button>
-                  <button
-                    className={`relative z-10 rounded-lg px-2 py-2 text-sm font-bold transition-all duration-200 ${
-                      timelineStyle === 'ruler'
-                        ? 'text-primary-foreground'
-                        : 'text-muted-foreground hover:text-foreground'
-                    }`}
-                    onClick={() => {
-                      setTimelineStyle('ruler');
-                      apply({ timelineStyle: 'ruler' });
-                    }}
-                  >
-                    {t('timelineStyleRuler')}
-                  </button>
-                  <button
-                    className={`relative z-10 rounded-lg px-2 py-2 text-sm font-bold transition-all duration-200 ${
-                      timelineStyle === 'compact'
-                        ? 'text-primary-foreground'
-                        : 'text-muted-foreground hover:text-foreground'
-                    }`}
-                    onClick={() => {
-                      setTimelineStyle('compact');
-                      apply({ timelineStyle: 'compact' });
-                    }}
-                  >
-                    {t('timelineStyleCompact')}
-                  </button>
-                </div>
-              </div>
-              {/* Scroll Mode */}
-              <div hidden={!shouldShowSetting('timeline', 'scrollMode')}>
-                <Label className="mb-2 block text-sm font-medium">{t('scrollMode')}</Label>
-                <div className="bg-secondary/60 relative grid grid-cols-2 gap-1 rounded-xl p-1">
-                  <div
-                    className="bg-primary pointer-events-none absolute top-1 bottom-1 w-[calc(50%-4px)] rounded-lg shadow-sm transition-all duration-300 ease-out"
-                    style={{ left: mode === 'flow' ? '4px' : 'calc(50% + 2px)' }}
-                  />
-                  <button
-                    className={`relative z-10 rounded-lg px-3 py-2 text-sm font-bold transition-all duration-200 ${
-                      mode === 'flow'
-                        ? 'text-primary-foreground'
-                        : 'text-muted-foreground hover:text-foreground'
-                    }`}
-                    onClick={() => {
-                      setMode('flow');
-                      apply({ mode: 'flow' });
-                    }}
-                  >
-                    {t('flow')}
-                  </button>
-                  <button
-                    className={`relative z-10 rounded-lg px-3 py-2 text-sm font-bold transition-all duration-200 ${
-                      mode === 'jump'
-                        ? 'text-primary-foreground'
-                        : 'text-muted-foreground hover:text-foreground'
-                    }`}
-                    onClick={() => {
-                      setMode('jump');
-                      apply({ mode: 'jump' });
-                    }}
-                  >
-                    {t('jump')}
-                  </button>
-                </div>
-              </div>
-              <div
-                hidden={!shouldShowSetting('timeline', 'hideOuterContainer')}
-                className="group flex items-center justify-between"
-              >
-                <Label
-                  htmlFor="hide-container"
-                  className="group-hover:text-primary cursor-pointer text-sm font-medium transition-colors"
-                >
-                  {t('hideOuterContainer')}
-                </Label>
-                <Switch
-                  id="hide-container"
-                  checked={hideContainer}
-                  onChange={(e) => {
-                    setHideContainer(e.target.checked);
-                    apply({ hideContainer: e.target.checked });
-                  }}
-                />
-              </div>
-              <div
-                hidden={!shouldShowSetting('timeline', 'draggableTimeline')}
-                className="group flex items-center justify-between"
-              >
-                <Label
-                  htmlFor="draggable-timeline"
-                  className="group-hover:text-primary cursor-pointer text-sm font-medium transition-colors"
-                >
-                  {t('draggableTimeline')}
-                </Label>
-                <Switch
-                  id="draggable-timeline"
-                  checked={draggableTimeline}
-                  onChange={(e) => {
-                    setDraggableTimeline(e.target.checked);
-                    apply({ draggableTimeline: e.target.checked });
-                  }}
-                />
-              </div>
-              <div
-                hidden={!shouldShowSetting('timeline', 'pinTimelinePreview')}
-                className="group flex items-center justify-between"
-              >
-                <div className="flex-1">
-                  <Label
-                    htmlFor="timeline-preview-pinned"
-                    className="group-hover:text-primary cursor-pointer text-sm font-medium transition-colors"
-                  >
-                    {t('pinTimelinePreview')}
-                  </Label>
-                  <p className="text-muted-foreground mt-1 text-xs">
-                    {t('pinTimelinePreviewHint')}
-                  </p>
-                </div>
-                <Switch
-                  id="timeline-preview-pinned"
-                  checked={timelinePreviewPinned}
-                  onChange={(e) => {
-                    setTimelinePreviewPinned(e.target.checked);
-                    apply({ timelinePreviewPinned: e.target.checked });
-                  }}
-                />
-              </div>
-              <div
-                hidden={!shouldShowSetting('timeline', 'preventAutoScroll')}
-                className="group flex items-center justify-between"
-              >
-                <div className="flex-1">
-                  <Label
-                    htmlFor="prevent-auto-scroll"
-                    className="group-hover:text-primary cursor-pointer text-sm font-medium transition-colors"
-                  >
-                    {t('preventAutoScroll')}
-                  </Label>
-                  <p className="text-muted-foreground mt-1 text-xs">{t('preventAutoScrollHint')}</p>
-                </div>
-                <Switch
-                  id="prevent-auto-scroll"
-                  checked={preventAutoScrollEnabled}
-                  onChange={(e) => {
-                    setPreventAutoScrollEnabled(e.target.checked);
-                    apply({ preventAutoScrollEnabled: e.target.checked });
-                  }}
-                />
-              </div>
-              <div
-                hidden={!shouldShowSetting('timeline', 'enableMarkerLevel')}
-                className="group flex items-center justify-between"
-              >
-                <div className="flex-1">
-                  <Label
-                    htmlFor="marker-level-enabled"
-                    className="group-hover:text-primary flex cursor-pointer items-center gap-1 text-sm font-medium transition-colors"
-                  >
-                    {t('enableMarkerLevel')}
-                    <span
-                      className="material-symbols-outlined cursor-help text-[16px] leading-none opacity-50 transition-opacity hover:opacity-100"
-                      title={t('experimentalLabel')}
-                      style={{ fontVariationSettings: "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20" }}
-                    >
-                      experiment
-                    </span>
-                  </Label>
-                  <p className="text-muted-foreground mt-1 text-xs">{t('enableMarkerLevelHint')}</p>
-                </div>
-                <Switch
-                  id="marker-level-enabled"
-                  checked={markerLevelEnabled}
-                  onChange={(e) => {
-                    setMarkerLevelEnabled(e.target.checked);
-                    apply({ markerLevelEnabled: e.target.checked });
-                  }}
-                />
-              </div>
-              {/* Message Timestamps */}
-              <div
-                hidden={!shouldShowSetting('timeline', 'showMessageTimestamps')}
-                className="group flex items-center justify-between"
-              >
-                <div className="flex-1">
-                  <Label
-                    htmlFor="show-message-timestamps"
-                    className="group-hover:text-primary flex cursor-pointer items-center gap-1 text-sm font-medium transition-colors"
-                  >
-                    {t('showMessageTimestamps')}
-                    <span
-                      className="material-symbols-outlined cursor-help text-[16px] leading-none opacity-50 transition-opacity hover:opacity-100"
-                      title={t('experimentalLabel')}
-                      style={{ fontVariationSettings: "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20" }}
-                    >
-                      experiment
-                    </span>
-                  </Label>
-                  <p className="text-muted-foreground mt-1 text-xs">
-                    {t('showMessageTimestampsHint')}
-                  </p>
-                </div>
-                <Switch
-                  id="show-message-timestamps"
-                  checked={showMessageTimestamps}
-                  onChange={(e) => {
-                    setShowMessageTimestamps(e.target.checked);
-                    apply({ showMessageTimestamps: e.target.checked });
-                  }}
-                />
-              </div>
-              {/* Reset Timeline Position Button */}
-              <Button
-                hidden={!shouldShowSetting('timeline', 'resetTimelinePosition')}
-                variant="outline"
-                size="sm"
-                className="group hover:border-primary/50 mt-2 w-full"
-                onClick={() => {
-                  apply({ resetPosition: true });
-                }}
-              >
-                <span className="text-xs transition-transform group-hover:scale-105">
-                  {t('resetTimelinePosition')}
-                </span>
-              </Button>
-              {/* View Starred History Button */}
-              <Button
-                hidden={!shouldShowSetting('timeline', 'viewStarredHistory')}
-                variant="outline"
-                size="sm"
-                className="group hover:border-primary/50 mt-2 w-full"
-                onClick={() => setShowStarredHistory(true)}
-              >
-                <span className="flex items-center gap-1.5 text-xs transition-transform group-hover:scale-105">
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="text-primary"
-                  >
-                    <path
-                      d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"
-                      fill="currentColor"
-                    />
-                  </svg>
-                  {t('viewStarredHistory')}
-                </span>
-              </Button>
-            </CardContent>
-          </Card>,
+          <TimelineSettingsCard
+            values={{
+              timelineStyle,
+              mode,
+              hideContainer,
+              draggableTimeline,
+              timelinePreviewPinned,
+              preventAutoScrollEnabled,
+              markerLevelEnabled,
+              showMessageTimestamps,
+            }}
+            onChange={handleTimelineChange}
+            onResetPosition={() => apply({ resetPosition: true })}
+            onViewStarredHistory={() => setShowStarredHistory(true)}
+            isVisible={(settingId) => shouldShowSetting('timeline', settingId)}
+            t={t}
+          />,
         )}
         {/* Folder Options */}
         {wrapSection(
           'folder',
-          <Card className="p-4 transition-all hover:shadow-md">
-            <CardTitle className="mb-4">{t('folderOptions')}</CardTitle>
-            <CardContent className="space-y-4 p-0">
-              <div
-                hidden={!shouldShowSetting('folder', 'enableFolderFeature')}
-                className="group flex items-center justify-between"
-              >
-                <Label
-                  htmlFor="folder-enabled"
-                  className="group-hover:text-primary cursor-pointer text-sm font-medium transition-colors"
-                >
-                  {t('enableFolderFeature')}
-                </Label>
-                <Switch
-                  id="folder-enabled"
-                  checked={folderEnabled}
-                  onChange={(e) => {
-                    setFolderEnabled(e.target.checked);
-                    apply({ folderEnabled: e.target.checked });
-                  }}
-                />
-              </div>
-              <div
-                hidden={!shouldShowSetting('folder', 'enableFolderFloatingMode')}
-                className="group flex items-center justify-between gap-3"
-              >
-                <div className="min-w-0 flex-1">
-                  <Label
-                    htmlFor="floating-mode"
-                    className="group-hover:text-primary flex cursor-pointer items-center gap-1 text-sm font-medium transition-colors"
-                  >
-                    {t('enableFolderFloatingMode')}
-                    <span
-                      className="material-symbols-outlined cursor-help text-[16px] leading-none opacity-50 transition-opacity hover:opacity-100"
-                      title={t('experimentalLabel')}
-                      style={{ fontVariationSettings: "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20" }}
-                    >
-                      experiment
-                    </span>
-                  </Label>
-                  <p className="text-muted-foreground mt-1 text-xs">
-                    {t('enableFolderFloatingModeHint')}
-                  </p>
-                </div>
-                <Switch
-                  id="floating-mode"
-                  checked={floatingModeEnabled}
-                  onChange={(e) => {
-                    setFloatingModeEnabled(e.target.checked);
-                    apply({ floatingModeEnabled: e.target.checked });
-                  }}
-                />
-              </div>
-              {floatingModeEnabled &&
-                shouldShowSetting('folder', 'openFloatingFolderOnStartup') && (
-                  <div className="group flex items-center justify-between gap-3 pl-4">
-                    <div className="min-w-0 flex-1">
-                      <Label
-                        htmlFor="floating-open-on-start"
-                        className="group-hover:text-primary cursor-pointer text-sm font-medium transition-colors"
-                      >
-                        {t('openFloatingFolderOnStartup')}
-                      </Label>
-                      <p className="text-muted-foreground mt-1 text-xs">
-                        {t('openFloatingFolderOnStartupHint')}
-                      </p>
-                    </div>
-                    <Switch
-                      id="floating-open-on-start"
-                      checked={floatingOpenOnStart}
-                      onChange={(e) => {
-                        setFloatingOpenOnStart(e.target.checked);
-                        apply({ floatingOpenOnStart: e.target.checked });
-                      }}
-                    />
-                  </div>
-                )}
-              <div
-                hidden={!shouldShowSetting('folder', 'hideArchivedConversations')}
-                className="group flex items-center justify-between"
-              >
-                <Label
-                  htmlFor="hide-archived"
-                  className="group-hover:text-primary cursor-pointer text-sm font-medium transition-colors"
-                >
-                  {t('hideArchivedConversations')}
-                </Label>
-                <Switch
-                  id="hide-archived"
-                  checked={hideArchivedConversations}
-                  onChange={(e) => {
-                    setHideArchivedConversations(e.target.checked);
-                    apply({ hideArchivedConversations: e.target.checked });
-                  }}
-                />
-              </div>
-              <div
-                hidden={!shouldShowSetting('folder', 'showFolderSearch')}
-                className="group flex items-center justify-between"
-              >
-                <Label
-                  htmlFor="folder-search-enabled"
-                  className="group-hover:text-primary cursor-pointer text-sm font-medium transition-colors"
-                >
-                  {t('showFolderSearch')}
-                </Label>
-                <Switch
-                  id="folder-search-enabled"
-                  checked={folderSearchEnabled}
-                  onChange={(e) => {
-                    setFolderSearchEnabled(e.target.checked);
-                    apply({ folderSearchEnabled: e.target.checked });
-                  }}
-                />
-              </div>
-              <div
-                hidden={!shouldShowSetting('folder', 'enableForkFeature')}
-                className="group flex items-center justify-between"
-              >
-                <div className="flex-1">
-                  <Label
-                    htmlFor="fork-enabled"
-                    className="group-hover:text-primary flex cursor-pointer items-center gap-1 text-sm font-medium transition-colors"
-                  >
-                    {t('enableForkFeature')}
-                    <span
-                      className="material-symbols-outlined cursor-help text-[16px] leading-none opacity-50 transition-opacity hover:opacity-100"
-                      title={t('experimentalLabel')}
-                      style={{ fontVariationSettings: "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20" }}
-                    >
-                      experiment
-                    </span>
-                  </Label>
-                  <p className="text-muted-foreground mt-1 text-xs">{t('enableForkFeatureHint')}</p>
-                </div>
-                <Switch
-                  id="fork-enabled"
-                  checked={forkEnabled}
-                  onChange={(e) => {
-                    setForkEnabled(e.target.checked);
-                    apply({ forkEnabled: e.target.checked });
-                  }}
-                />
-              </div>
-              <div
-                hidden={!shouldShowSetting('folder', 'enableAccountIsolation')}
-                className="group flex items-center justify-between"
-              >
-                <div className="flex-1">
-                  <Label
-                    htmlFor="account-isolation-enabled"
-                    className="group-hover:text-primary flex cursor-pointer items-center gap-1 text-sm font-medium transition-colors"
-                  >
-                    {t('enableAccountIsolation')}
-                    <span
-                      className="material-symbols-outlined cursor-help text-[16px] leading-none opacity-50 transition-opacity hover:opacity-100"
-                      title={t('experimentalLabel')}
-                      style={{
-                        fontVariationSettings: "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20",
-                      }}
-                    >
-                      experiment
-                    </span>
-                  </Label>
-                  <p className="text-muted-foreground mt-1 text-xs">
-                    {t('enableAccountIsolationHint')}
-                  </p>
-                  <div className="mt-1 flex items-center gap-2 text-xs">
-                    <span className="text-muted-foreground">{t('currentPlatform')}:</span>
-                    <span className="bg-secondary text-foreground rounded px-1.5 py-0.5 font-medium">
-                      {currentPlatformLabel}
-                    </span>
-                  </div>
-                </div>
-                <Switch
-                  id="account-isolation-enabled"
-                  checked={
-                    isAIStudio ? accountIsolationEnabledAIStudio : accountIsolationEnabledGemini
-                  }
-                  onChange={(e) => {
-                    if (isAIStudio) {
-                      setAccountIsolationEnabledAIStudio(e.target.checked);
-                    } else {
-                      setAccountIsolationEnabledGemini(e.target.checked);
-                    }
-                    apply({
-                      accountIsolationEnabled: e.target.checked,
-                      accountIsolationPlatform: activeAccountPlatform,
-                    });
-                  }}
-                />
-              </div>
-              <div
-                hidden={!shouldShowSetting('folder', 'folderAsProject')}
-                className="group flex items-center justify-between"
-              >
-                <div className="flex-1">
-                  <Label
-                    htmlFor="folder-project-enabled"
-                    className="group-hover:text-primary flex cursor-pointer items-center gap-1 text-sm font-medium transition-colors"
-                  >
-                    {t('folderAsProject_enable')}
-                    <span
-                      className="material-symbols-outlined cursor-help text-[16px] leading-none opacity-50 transition-opacity hover:opacity-100"
-                      title={t('experimentalLabel')}
-                      style={{ fontVariationSettings: "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20" }}
-                    >
-                      experiment
-                    </span>
-                  </Label>
-                  <p className="text-muted-foreground mt-1 text-xs">
-                    {t('folderAsProject_description')}
-                  </p>
-                </div>
-                <Switch
-                  id="folder-project-enabled"
-                  checked={folderProjectEnabled}
-                  onChange={(e) => {
-                    setFolderProjectEnabled(e.target.checked);
-                    apply({ folderProjectEnabled: e.target.checked });
-                  }}
-                />
-              </div>
-              {/* Copy folder structure for AI organization */}
-              <div
-                hidden={!shouldShowSetting('folder', 'aiOrgCopy')}
-                className="border-border/50 border-t pt-3"
-              >
-                <Button
-                  variant="outline"
-                  className="w-full text-sm"
-                  onClick={handleCopyFolderStructureForAI}
-                  disabled={aiStructureCopyStatus === 'loading'}
-                >
-                  <span className="inline-flex items-center justify-center gap-1.5">
-                    <span
-                      className="material-symbols-outlined translate-y-px text-[16px] leading-none"
-                      style={{ fontVariationSettings: "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20" }}
-                    >
-                      {aiStructureCopyStatus === 'copied' ? 'check' : 'content_copy'}
-                    </span>
-                    <span className="leading-5">
-                      {aiStructureCopyStatus === 'copied'
-                        ? t('aiOrgCopied')
-                        : aiStructureCopyStatus === 'empty'
-                          ? t('aiOrgNoConversations')
-                          : aiStructureCopyStatus === 'error'
-                            ? t('aiOrgError')
-                            : t('aiOrgCopyButton')}
-                    </span>
-                  </span>
-                </Button>
-                <p className="text-muted-foreground mt-1.5 text-center text-[11px] leading-tight">
-                  {t('aiOrgCopyHint')}
-                </p>
-              </div>
-            </CardContent>
-          </Card>,
+          <FolderSettingsCard
+            values={{
+              folderEnabled,
+              floatingModeEnabled,
+              floatingOpenOnStart,
+              hideArchivedConversations,
+              folderSearchEnabled,
+              forkEnabled,
+              folderProjectEnabled,
+            }}
+            onChange={handleFolderChange}
+            accountIsolation={{
+              enabled: isAIStudio ? accountIsolationEnabledAIStudio : accountIsolationEnabledGemini,
+              platformLabel: currentPlatformLabel,
+              onChange: handleAccountIsolationChange,
+            }}
+            aiStructureCopy={{
+              status: aiStructureCopyStatus,
+              onCopy: handleCopyFolderStructureForAI,
+            }}
+            isVisible={(settingId) => shouldShowSetting('folder', settingId)}
+            t={t}
+          />,
         )}
         {/* Folder Spacing */}
         {wrapSection(
