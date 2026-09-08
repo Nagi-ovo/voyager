@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -39,7 +39,11 @@ describe('file-size ratchet', () => {
   });
 
   it('fails a baselined file that grew, passes one that held or shrank', () => {
-    writeBaseline({ 'src/grew.ts': 11, 'src/held.ts': 11, 'src/shrank.ts': 15 });
+    writeBaseline({
+      'src/grew.ts': 11,
+      'src/held.ts': 11,
+      'src/shrank.ts': 15,
+    });
     writeSource('src/grew.ts', 12);
     writeSource('src/held.ts', 11);
     writeSource('src/shrank.ts', 11);
@@ -59,8 +63,24 @@ describe('file-size ratchet', () => {
     expect(result.shrunk.sort()).toEqual(['src/gone.ts', 'src/now-small.ts']);
   });
 
+  it('skips symlinks, so a cyclic directory link or a linked file outside src cannot be measured', () => {
+    writeBaseline({});
+    writeSource('src/small.ts', 3);
+    writeSource('outside/big.ts', 12);
+    symlinkSync('.', path.join(root, 'src/loop'), 'dir');
+    symlinkSync(path.join(root, 'outside/big.ts'), path.join(root, 'src/linked.ts'), 'file');
+
+    const result = checkFileSizes(root);
+    expect(result.errors).toEqual([]);
+    expect(result.oversized).toEqual({});
+  });
+
   it('update lowers or removes entries but never raises one', () => {
-    writeBaseline({ 'src/shrank.ts': 15, 'src/grew.ts': 11, 'src/now-small.ts': 20 });
+    writeBaseline({
+      'src/shrank.ts': 15,
+      'src/grew.ts': 11,
+      'src/now-small.ts': 20,
+    });
     writeSource('src/shrank.ts', 12);
     writeSource('src/grew.ts', 14);
     writeSource('src/now-small.ts', 4);

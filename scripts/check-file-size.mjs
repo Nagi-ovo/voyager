@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -23,9 +23,13 @@ function listSourceFiles(root) {
   const walk = (directory) => {
     for (const entry of readdirSync(directory).sort()) {
       const full = path.join(directory, entry);
-      if (statSync(full).isDirectory()) {
+      // lstat, not stat: a symlinked directory could recurse forever and a
+      // symlinked file would measure something outside the source tree.
+      const stats = lstatSync(full);
+      if (stats.isSymbolicLink()) continue;
+      if (stats.isDirectory()) {
         if (entry !== 'node_modules') walk(full);
-      } else if (EXTENSIONS.has(path.extname(entry))) {
+      } else if (stats.isFile() && EXTENSIONS.has(path.extname(entry))) {
         files.push(full);
       }
     }
