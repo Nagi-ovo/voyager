@@ -80,6 +80,7 @@ export async function getTranslation(key: TranslationKey): Promise<string> {
  * This is less accurate but faster for scenarios where async is not possible
  */
 let cachedLanguage: AppLanguage | null = null;
+let languageListenerInstalled = false;
 
 export function getTranslationSync(key: TranslationKey): string {
   const language = cachedLanguage || 'en';
@@ -98,7 +99,10 @@ export function getTranslationSyncUnsafe(key: string): string {
 export async function initI18n(): Promise<void> {
   cachedLanguage = await getCurrentLanguage();
 
-  // Listen for language changes
+  // Listen for language changes. Several features call initI18n on their own
+  // start, so register once per page instead of once per caller.
+  if (languageListenerInstalled) return;
+  languageListenerInstalled = true;
   browser.storage.onChanged.addListener((changes, areaName) => {
     const next = changes[StorageKeys.LANGUAGE]?.newValue;
     if ((areaName === 'sync' || areaName === 'local') && typeof next === 'string') {

@@ -152,6 +152,7 @@ describe('willCleanUp tests module', () => {
       'CleanupCodeBlockCollapse',
       'CleanupUsageStatus',
       'CleanupWatermarkNativeNotice',
+      'CleanupGemsHider',
       'RemoveStorageOnChangedListener',
     ]);
   });

@@ -24,5 +24,6 @@ export enum CleanupPositions {
   CleanupCodeBlockCollapse,
   CleanupUsageStatus,
   CleanupWatermarkNativeNotice,
+  CleanupGemsHider,
   RemoveStorageOnChangedListener,
 }

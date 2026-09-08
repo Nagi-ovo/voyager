@@ -36,18 +36,19 @@ Use `package.json`, build configs, manifests and CI to verify command names and 
 
 ## Where changes belong
 
-| Responsibility               | Entry points                                                                                                                                                                         |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Shared services and storage  | `src/core/services/`; `StorageKeys` in `src/core/types/common.ts`; sync-backed settings also need `SettingsBackupService.ts` defaults/migrations                                     |
-| Feature logic and UI         | `src/features/*/services/` or hooks; functional React UI. Content modules in `src/pages/content/` remain self-contained                                                              |
-| Folders                      | Schema: `src/core/types/folder.ts`; content `types.ts` re-exports it and owns drag data. Logic: `src/features/folder/`; host/UI: `src/pages/content/folder/`                         |
-| Timeline and highlights      | [Owner map and lifecycle boundaries](src/pages/content/timeline/README.md); start with the owner of the behavior before editing a manager                                            |
-| Popup settings and shortcuts | `src/pages/popup/Popup.tsx` and its `components/`; shortcuts use `src/core/services/KeyboardShortcutService.ts`, related types and `components/KeyboardShortcutSettings.tsx`         |
-| Cloud sync                   | `src/core/services/GoogleDriveSyncService.ts`                                                                                                                                        |
-| Translations                 | `src/locales/*/messages.json`: all 10 locales for new/removed user-facing keys                                                                                                       |
-| Content styles               | Shared/static CSS in `public/contentStyle.css`; computed feature CSS stays local, uses `gv-` prefixes and has teardown                                                               |
-| Coachmarks                   | Reuse `src/pages/content/coachmark/`; keep consumers beside the feature and register Gemini guides in `showOnboardingCoachmarksWhenChangelogIsIdle` in `src/pages/content/index.tsx` |
-| Plugins                      | `src/features/plugins/`; official CSS/JSON in `catalog/` with `BundledCatalogPluginSource.ts` mapping/tests; native JS in `builtin/index.ts`                                         |
+| Responsibility               | Entry points                                                                                                                                                                                    |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Shared services and storage  | `src/core/services/`; `StorageKeys` in `src/core/types/common.ts`; sync-backed settings also need `SettingsBackupService.ts` defaults/migrations                                                |
+| Feature logic and UI         | `src/features/*/services/` or hooks; functional React UI. Content modules in `src/pages/content/` remain self-contained                                                                         |
+| Folders                      | Schema: `src/core/types/folder.ts`; content `types.ts` re-exports it and owns drag data. Logic: `src/features/folder/`; host/UI: `src/pages/content/folder/`                                    |
+| Timeline and highlights      | [Owner map and lifecycle boundaries](src/pages/content/timeline/README.md); start with the owner of the behavior before editing a manager                                                       |
+| Popup settings and shortcuts | `src/pages/popup/Popup.tsx` and its `components/`; shortcuts use `src/core/services/KeyboardShortcutService.ts`, related types and `components/KeyboardShortcutSettings.tsx`                    |
+| Cloud sync                   | `src/core/services/GoogleDriveSyncService.ts`                                                                                                                                                   |
+| Translations                 | `src/locales/*/messages.json`: all 10 locales for new/removed user-facing keys                                                                                                                  |
+| Content styles               | Shared/static CSS in `public/contentStyle.css`; computed feature CSS stays local, uses `gv-` prefixes and has teardown                                                                          |
+| Coachmarks                   | Reuse `src/pages/content/coachmark/`; keep consumers beside the feature and register Gemini guides in `showOnboardingCoachmarksWhenChangelogIsIdle` in `src/pages/content/index.tsx`            |
+| Plugins                      | `src/features/plugins/`; official CSS/JSON in `catalog/` with `BundledCatalogPluginSource.ts` mapping/tests; native JS in `builtin/index.ts`                                                    |
+| Native feature lifecycle     | Contract in `src/pages/content/featureLifecycle.ts`; register a module that returns a stop in `nativeFeatures.ts` and start it from there; `__tests__/nativeFeatureLifecycle.test.ts` covers it |
 
 Use `StorageService` where suitable; established direct `chrome.storage`/`browser.storage` paths remain valid for content scripts, popup settings, bulk operations and listeners.
 

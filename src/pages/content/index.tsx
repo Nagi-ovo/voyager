@@ -13,24 +13,24 @@ import { startPluginHost } from '@/features/plugins';
 import { resolvePluginPlatformId } from '@/features/plugins/sites/registry';
 import { initI18n } from '@/utils/i18n';
 
-import { startAccountContextBridge } from './accountContext';
 import { startCanvasExport } from './canvasExport/index';
 import { startChangelog } from './changelog/index';
 import { startChatFontSizeAdjuster } from './chatFontSize/index';
-import { startInputVimMode } from './chatInput/vimMode';
 import { startChatLineHeightAdjuster } from './chatLineHeight/index';
 import { startChatParagraphSpacingAdjuster } from './chatParagraphSpacing/index';
 import { startChatWidthAdjuster } from './chatWidth/index';
 import { runCoachmarkSequence } from './coachmark';
-import { startCodeBlockCollapse } from './codeBlockCollapse';
 import { startContextSync } from './contextSync';
 import { startDeepResearchExport } from './deepResearch/index';
 import DefaultModelManager from './defaultModel/modelLocker';
-import { startDraftSave } from './draftSave/index';
 import { startEcharts } from './echarts/index';
-import { startEdgeFinalVersionNotice } from './edgeFinalVersionNotice';
 import { startEditInputWidthAdjuster } from './editInputWidth/index';
 import { startExportButton } from './export/index';
+import {
+  createNativeFeatureToggle,
+  mountNativeFeature,
+  type NativeFeatureToggleController,
+} from './featureLifecycle';
 import { folderActivityCoachmarkStep } from './folder/activityCoachmark';
 import { startAIStudioFolderManager } from './folder/aistudio';
 import { conversationSortCoachmarkStep } from './folder/conversationSortCoachmark';
@@ -39,17 +39,13 @@ import { startFolderManager } from './folder/index';
 import { startFolderItemFontSizeAdjuster } from './folderItemFontSize/index';
 import { startFolderProject } from './folderProject/index';
 import { startFolderSpacingAdjuster } from './folderSpacing/index';
-import { isForkFeatureEnabledValue } from './fork/featureFlag';
-import { startFork } from './fork/index';
 import { startNativeFormulaCopyForContent } from './formulaCopyStartup';
-import { startGemsHider } from './gemsHider/index';
-import { startGemsSidebar } from './gemsSidebar/index';
 import { startInputCollapse } from './inputCollapse/index';
 import { startInputHaloHider } from './inputHaloHider/index';
 import { initKaTeXConfig } from './katexConfig';
 import { startMarkdownPatcher } from './markdownPatcher/index';
 import { startMermaid } from './mermaid/index';
-import { startBrandTheme } from './platformTheme';
+import { NATIVE_FEATURES } from './nativeFeatures';
 import { registerBuiltinNativeHandlers } from './pluginNativeRegistration';
 import { createPostChangelogFlow } from './postChangelogFlow';
 import { startPreventAutoScroll } from './preventAutoScroll/index';
@@ -58,17 +54,11 @@ import { startPromptManager } from './prompt/index';
 import { startSentPromptChipsFeature } from './prompt/sentPromptChipsFeature';
 import { slashPromptCoachmarkStep } from './prompt/slashPromptCoachmark';
 import { startSlashPromptFeature } from './prompt/slashPromptFeature';
-import { startPromptHistory } from './promptHistory/index';
 import { startQuoteReply } from './quoteReply/index';
-import { startRemoteAnnouncements } from './remoteAnnouncements/index';
-import { startResponseCompleteNotification } from './responseNotification/index';
-import { startSendBehavior } from './sendBehavior/index';
 import { startSidebarAutoHide } from './sidebarAutoHide';
 import { startSidebarWidthAdjuster } from './sidebarWidth';
-import { startStorageQuotaWarningToast } from './storageQuotaWarning';
 import { startTimeline } from './timeline/index';
 import { rulerTimelineCoachmarkStep } from './timeline/rulerTimelineCoachmark';
-import { startUsageStatus } from './usageStatus/index';
 import { usageCoachmarkStep } from './usageStatus/usageCoachmark';
 import { startUserLatex } from './userLatex/index';
 import { startVisualEffects } from './visualEffects';
@@ -111,13 +101,13 @@ const cleanupManager = new CleanupManager();
 
 let initialized = false;
 let initializationTimer: number | null = null;
-let forkCleanup: (() => void) | null = null;
+let forkToggle: NativeFeatureToggleController | null = null;
 let watermarkRemoverStarted = false;
 
 async function isForkFeatureEnabled(): Promise<boolean> {
   try {
     const result = await chrome.storage?.sync?.get({ [StorageKeys.FORK_ENABLED]: false });
-    return isForkFeatureEnabledValue(result?.[StorageKeys.FORK_ENABLED]);
+    return NATIVE_FEATURES.fork.toggle.isEnabled(result?.[StorageKeys.FORK_ENABLED]);
   } catch {
     return false;
   }
@@ -254,10 +244,7 @@ async function initializeFeatures(): Promise<void> {
 
     console.log('[Gemini Voyager] Not a custom website, checking for Gemini/AI Studio');
 
-    cleanupManager.registerCleanupFunction(
-      startEdgeFinalVersionNotice(),
-      CleanupPositions.CleanupEdgeFinalVersionNotice,
-    );
+    await mountNativeFeature(cleanupManager, NATIVE_FEATURES.edgeFinalVersionNotice);
 
     const isEnterprise = isGeminiEnterpriseEnvironment(
       {
@@ -310,17 +297,11 @@ async function initializeFeatures(): Promise<void> {
 
       startInputCollapse();
       startInputHaloHider();
-      cleanupManager.registerCleanupFunction(
-        await startInputVimMode(),
-        CleanupPositions.CleanupInputVimMode,
-      );
+      await mountNativeFeature(cleanupManager, NATIVE_FEATURES.inputVimMode);
       await delay(LIGHT_FEATURE_INIT_DELAY);
 
       // Send behavior must be ready before prevent-auto-scroll reads its bridge state.
-      cleanupManager.registerCleanupFunction(
-        await startSendBehavior('gemini'),
-        CleanupPositions.CleanupSendBehavior,
-      );
+      await mountNativeFeature(cleanupManager, NATIVE_FEATURES.sendBehaviorGemini);
       startPreventAutoScroll();
       await startNativeFormulaCopyForContent({
         registerCleanup: (cleanup) =>
@@ -374,79 +355,39 @@ async function initializeFeatures(): Promise<void> {
       );
       startDeepResearchExport();
       startContextSync();
-      startGemsHider();
+      await mountNativeFeature(cleanupManager, NATIVE_FEATURES.gemsHider);
       await delay(LIGHT_FEATURE_INIT_DELAY);
 
       // These modules only share the extension storage API and can hydrate in
       // parallel without changing their runtime ordering.
-      const [notificationResult, draftResult, gemsResult, usageResult, promptHistoryResult] =
-        await Promise.allSettled([
-          startResponseCompleteNotification(),
-          startDraftSave(),
-          startGemsSidebar(),
-          startUsageStatus(),
-          startPromptHistory(),
-        ]);
-      if (notificationResult.status === 'fulfilled') {
-        cleanupManager.registerCleanupFunction(
-          notificationResult.value,
-          CleanupPositions.CleanupResponseCompleteNotification,
-        );
-      }
-      if (draftResult.status === 'fulfilled') {
-        cleanupManager.registerCleanupFunction(
-          draftResult.value,
-          CleanupPositions.CleanupDraftSave,
-        );
-      }
-      if (gemsResult.status === 'fulfilled') {
-        cleanupManager.registerCleanupFunction(
-          gemsResult.value,
-          CleanupPositions.CleanupGemsSidebar,
-        );
-      }
-      if (usageResult.status === 'fulfilled') {
-        cleanupManager.registerCleanupFunction(
-          usageResult.value,
-          CleanupPositions.CleanupUsageStatus,
-        );
-      }
-
-      if (promptHistoryResult.status === 'fulfilled') {
-        cleanupManager.registerCleanupFunction(
-          promptHistoryResult.value,
-          CleanupPositions.CleanupPromptHistory,
-        );
-      }
-
-      const failedInitializer = [
-        notificationResult,
-        draftResult,
-        gemsResult,
-        usageResult,
-        promptHistoryResult,
-      ].find((result): result is PromiseRejectedResult => result.status === 'rejected');
+      const parallelResults = await Promise.allSettled(
+        [
+          NATIVE_FEATURES.responseCompleteNotification,
+          NATIVE_FEATURES.draftSave,
+          NATIVE_FEATURES.gemsSidebar,
+          NATIVE_FEATURES.usageStatus,
+          NATIVE_FEATURES.promptHistory,
+        ].map((feature) => mountNativeFeature(cleanupManager, feature)),
+      );
+      const failedInitializer = parallelResults.find(
+        (result): result is PromiseRejectedResult => result.status === 'rejected',
+      );
       if (failedInitializer) throw failedInitializer.reason;
       await delay(LIGHT_FEATURE_INIT_DELAY);
 
       // DOM enhancements install observers/listeners but do not need separate
       // idle waits between each initializer.
       startMarkdownPatcher();
-      cleanupManager.registerCleanupFunction(
-        startCodeBlockCollapse(),
-        CleanupPositions.CleanupCodeBlockCollapse,
-      );
+      await mountNativeFeature(cleanupManager, NATIVE_FEATURES.codeBlockCollapse);
       DefaultModelManager.getInstance().init();
       startExportButton();
       void startCanvasExport();
       await delay(LIGHT_FEATURE_INIT_DELAY);
 
-      if (await isForkFeatureEnabled()) {
-        forkCleanup = cleanupManager.registerCleanupFunctionAndReturnIt(
-          startFork(),
-          CleanupPositions.CleanupFork,
-        );
-      }
+      // Listen first (the storage listener is already installed), then feed
+      // the startup read: a toggle that lands while the read is in flight wins.
+      forkToggle = createNativeFeatureToggle(cleanupManager, NATIVE_FEATURES.fork);
+      await forkToggle.applyInitial(await isForkFeatureEnabled());
 
       // Release-time interruptions are intentionally sequential: changelog,
       // native-watermark notice, then any eligible feature coachmarks.
@@ -519,10 +460,7 @@ async function initializeFeatures(): Promise<void> {
       await delay(LIGHT_FEATURE_INIT_DELAY);
 
       // Send behavior (Enter to send)
-      cleanupManager.registerCleanupFunction(
-        await startSendBehavior('aistudio'),
-        CleanupPositions.CleanupSendBehavior,
-      );
+      await mountNativeFeature(cleanupManager, NATIVE_FEATURES.sendBehaviorAiStudio);
       await delay(LIGHT_FEATURE_INIT_DELAY);
     }
   } catch (e) {
@@ -597,10 +535,7 @@ function handleVisibilityChange(): void {
     // Saved Library and cloud sync need the same account identity as highlights.
     // This bridge must exist even when optional Folder Manager code never starts.
     if (!isPluginSubframe)
-      cleanupManager.registerCleanupFunction(
-        startAccountContextBridge(),
-        CleanupPositions.CleanupAccountContextBridge,
-      );
+      void mountNativeFeature(cleanupManager, NATIVE_FEATURES.accountContextBridge);
 
     // Plugin ecosystem host. Started up-front on EVERY page the content script is
     // injected into (Gemini / AI Studio, and any site a user enabled a plugin for,
@@ -619,8 +554,7 @@ function handleVisibilityChange(): void {
     // class; CSS derives the rest). Applies the adapter's built-in colour at
     // once, then lets an enabled plugin's declared theme override it live. No-op
     // on Gemini / AI Studio.
-    if (!isPluginSubframe)
-      cleanupManager.registerCleanupFunction(startBrandTheme(), CleanupPositions.CleanupBrandTheme);
+    if (!isPluginSubframe) void mountNativeFeature(cleanupManager, NATIVE_FEATURES.brandTheme);
 
     const onUnhandledRejection = (event: PromiseRejectionEvent) => {
       if (isExtensionContextInvalidatedError(event.reason)) {
@@ -661,22 +595,7 @@ function handleVisibilityChange(): void {
         return;
       }
 
-      const forkSetting = changes[StorageKeys.FORK_ENABLED];
-      if (!forkSetting) return;
-
-      const enabled = isForkFeatureEnabledValue(forkSetting.newValue);
-      if (enabled) {
-        if (!forkCleanup) {
-          forkCleanup = cleanupManager.registerCleanupFunctionAndReturnIt(
-            startFork(),
-            CleanupPositions.CleanupFork,
-          );
-        }
-      } else if (forkCleanup) {
-        forkCleanup();
-        forkCleanup = null;
-        cleanupManager.withdrawCleanupFunctionsByPositionNumber(CleanupPositions.CleanupFork);
-      }
+      forkToggle?.handleChange(changes, areaName);
     };
 
     // Quick check: only run on supported websites
@@ -687,10 +606,7 @@ function handleVisibilityChange(): void {
       hostname.includes('aistudio.google.com') ||
       hostname.includes('aistudio.google.cn');
     if (!isPluginSubframe && (isSupportedSite || pluginPlatformId)) {
-      cleanupManager.registerCleanupFunction(
-        startRemoteAnnouncements(),
-        CleanupPositions.CleanupRemoteAnnouncements,
-      );
+      void mountNativeFeature(cleanupManager, NATIVE_FEATURES.remoteAnnouncements);
     }
 
     // Initialize KaTeX configuration early to suppress Unicode warnings
@@ -699,10 +615,7 @@ function handleVisibilityChange(): void {
       initKaTeXConfig();
       // Initialize i18n early to ensure translations are available
       initI18n().catch((e) => console.error('[Gemini Voyager] i18n init error:', e));
-      cleanupManager.registerCleanupFunction(
-        startStorageQuotaWarningToast(),
-        CleanupPositions.CleanupStorageQuotaWarning,
-      );
+      void mountNativeFeature(cleanupManager, NATIVE_FEATURES.storageQuotaWarning);
     }
 
     // Initialize i18n for plugin platforms (Claude/ChatGPT) so export translations load

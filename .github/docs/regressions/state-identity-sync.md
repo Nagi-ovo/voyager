@@ -163,3 +163,21 @@ mirrors, clear markers, or Drive sync.
 - **Guard:** `src/pages/content/folder/FolderStore.test.ts`
   (`retries a failed account-scope resolution instead of staying unbound`,
   `gives up after a bounded number of account-scope retries`).
+
+## A native feature's stop must remove everything its start registered
+
+- **Trap:** `initI18n()` added a fresh anonymous `storage.onChanged` listener on every call and
+  never removed one, and Usage Status calls it again on its own start, so each start stacked another
+  listener. Gems Hider returned a cleanup that `index.tsx` never registered, so its observer and
+  injected style outlived page teardown. Neither showed up in a feature test: each module's own
+  tests exercise its behavior, not what it leaves on the page.
+- **Rule:** A Gemini / AI Studio native module that returns a stop is registered in
+  `src/pages/content/nativeFeatures.ts` and started only through that entry; its stop removes every
+  listener, observer, timer, storage subscription and injected node the start created, and shared
+  infrastructure such as i18n registers its page-wide listener once. Popup toggles mount and stop the
+  feature through `createNativeFeatureToggle`, never by unmounting on a sidebar remount or an
+  account change, which keep their own lifetimes. Use `inertReason` only for a start that
+  legitimately does nothing under the Gemini fixture, never to hide a leak.
+- **Guard:** `src/pages/content/__tests__/nativeFeatureLifecycle.test.ts` (every registered
+  feature: `start → stop leaves the page as it found it`) and
+  `src/pages/content/__tests__/featureLifecycle.test.ts` (toggle ordering).
