@@ -109,7 +109,7 @@ export function resolveConfiguredComposer(
         : element.querySelector<HTMLElement>(EDITABLE_SELECTOR);
       if (!editable) continue;
       if (!fallback) fallback = editable;
-      if (editable.getBoundingClientRect().height > 0) return editable;
+      if (isVisibleHudMount(editable)) return editable;
     }
   } catch {
     // Invalid selector from a site file: fall back to the generic lookup.

@@ -61,6 +61,12 @@ describe('validateSiteAdapterData', () => {
     expect(issuesOf({ ...VALID, conversationIdPattern: '^/(a+)+$' })).toEqual([
       'conversationIdPattern',
     ]);
+    expect(issuesOf({ ...VALID, conversationIdPattern: '^/(a|aa)+$' })).toEqual([
+      'conversationIdPattern',
+    ]);
+    expect(issuesOf({ ...VALID, conversationIdPattern: '^/((a+))+$' })).toEqual([
+      'conversationIdPattern',
+    ]);
     expect(issuesOf({ ...VALID, theme: { hostSelector: 'body' } })).toEqual([
       'theme.lightSelector',
       'theme.darkSelector',

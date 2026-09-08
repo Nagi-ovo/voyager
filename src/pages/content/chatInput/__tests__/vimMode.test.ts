@@ -1929,6 +1929,17 @@ describe('resolveConfiguredComposer', () => {
     expect(resolveConfiguredComposer('.composer')?.id).toBe('live');
   });
 
+  it('skips a duplicate that keeps its layout box but is not visible', async () => {
+    const { resolveConfiguredComposer } = await import('../vimMode');
+    document.body.innerHTML = `
+      <div class="composer"><textarea id="ghost" style="visibility: hidden"></textarea></div>
+      <div class="composer"><textarea id="live"></textarea></div>
+    `;
+    tall(document.getElementById('ghost')!);
+    tall(document.getElementById('live')!);
+    expect(resolveConfiguredComposer('.composer')?.id).toBe('live');
+  });
+
   it('returns nothing for matches without an editable control or for an invalid selector', async () => {
     const { resolveConfiguredComposer } = await import('../vimMode');
     document.body.innerHTML = '<div class="composer"><span>label</span></div>';

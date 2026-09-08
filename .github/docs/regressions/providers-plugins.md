@@ -267,9 +267,10 @@ while an active plugin has domOps`).
   only. A pattern such as `^/(a+)+$` backtracks exponentially: a remote catalog entry could stall
   every page of that host.
 - **Rule:** Validate with `isSafeRegexSource` (`sites/safeRegex.ts`): no lookarounds, no
-  backreferences, no quantifier on a group that contains a quantifier, at most 200 characters;
-  bound the subject with `MAX_REGEX_INPUT_LENGTH`. Apply the same policy wherever a pattern comes
-  from data.
+  backreferences, no `*`/`+`/`{…}` repetition of a group that holds a quantifier or an alternation
+  at any depth (`(a+)+`, `((a+))+`, `(a|aa)+`; a regex on the source misses the nested and
+  alternation forms, so the check is a small scanner), at most 200 characters; bound the subject
+  with `MAX_REGEX_INPUT_LENGTH`. Apply the same policy wherever a pattern comes from data.
 - **Guard:** `src/features/plugins/sites/safeRegex.test.ts`,
   `src/features/plugins/verbs/turnNavigator.test.ts`
   (`validates selectors, the id pattern and the rail side`).
