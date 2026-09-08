@@ -6,22 +6,27 @@
  * unbounded repetition (`*`, `+`, `{…}`) of a group that itself contains a
  * quantifier or an alternation at any depth: `(a+)+`, `((a+))+`, `(a|aa)+`.
  * Such a group lets the engine split one input in exponentially many ways.
- * The bundled adapters and plugins stay within this subset.
+ * Adjacent quantified atoms (`a*a*a*…`) are only polynomial, but with the
+ * quantifier count as the exponent, so their number is capped as well. The
+ * bundled adapters and plugins stay within this subset.
  */
 export const MAX_SAFE_REGEX_LENGTH = 200;
+export const MAX_SAFE_REGEX_QUANTIFIERS = 8;
 
 const LOOKAROUND_OR_BACKREF = /\(\?<?[=!]|\\[1-9]|\\k</;
 
 /**
  * True when some group repeated with `*`, `+` or `{…}` holds a quantifier or
- * an alternation anywhere inside it. Escapes and character classes are
- * skipped, so `\(`, `\|` and `[+*]` never count. Lookarounds are rejected
- * before this runs, so a `(?` prefix is only `(?:` or a named group.
+ * an alternation anywhere inside it, or when the pattern holds more than
+ * `MAX_SAFE_REGEX_QUANTIFIERS` quantifiers. Escapes and character classes
+ * are skipped, so `\(`, `\|` and `[+*]` never count. Lookarounds are
+ * rejected before this runs, so a `(?` prefix is only `(?:` or a named group.
  */
-function hasAmbiguousRepetition(source: string): boolean {
+function hasUnsafeRepetition(source: string): boolean {
   // One entry per open group: whether its body holds a quantifier or `|`.
   const groups: boolean[] = [];
   let inClass = false;
+  let quantifiers = 0;
   for (let i = 0; i < source.length; i += 1) {
     const ch = source[i];
     if (ch === '\\') {
@@ -61,6 +66,9 @@ function hasAmbiguousRepetition(source: string): boolean {
       case '+':
       case '?':
       case '{':
+        quantifiers += 1;
+        groups.fill(true);
+        break;
       case '|':
         groups.fill(true);
         break;
@@ -68,12 +76,12 @@ function hasAmbiguousRepetition(source: string): boolean {
         break;
     }
   }
-  return false;
+  return quantifiers > MAX_SAFE_REGEX_QUANTIFIERS;
 }
 
 export function isSafeRegexSource(source: string): boolean {
   if (source.length === 0 || source.length > MAX_SAFE_REGEX_LENGTH) return false;
-  if (LOOKAROUND_OR_BACKREF.test(source) || hasAmbiguousRepetition(source)) return false;
+  if (LOOKAROUND_OR_BACKREF.test(source) || hasUnsafeRepetition(source)) return false;
   try {
     new RegExp(source);
     return true;

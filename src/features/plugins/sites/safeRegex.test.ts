@@ -27,6 +27,10 @@ describe('isSafeRegexSource', () => {
     expect(isSafeRegexSource('^((a+)?)+$')).toBe(false);
     expect(isSafeRegexSource('^(a|aa)+$')).toBe(false);
     expect(isSafeRegexSource('^(?:a|aa){2,}$')).toBe(false);
+    // Adjacent quantifiers are polynomial with the count as the exponent: capped.
+    expect(isSafeRegexSource(`^${'a*'.repeat(8)}$`)).toBe(true);
+    expect(isSafeRegexSource(`^${'a*'.repeat(9)}$`)).toBe(false);
+    expect(isSafeRegexSource(`^${'[^/]+/'.repeat(9)}$`)).toBe(false);
     expect(isSafeRegexSource('(')).toBe(false);
     expect(isSafeRegexSource('')).toBe(false);
     expect(isSafeRegexSource('a'.repeat(201))).toBe(false);

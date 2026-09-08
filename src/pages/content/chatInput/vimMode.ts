@@ -104,12 +104,13 @@ export function resolveConfiguredComposer(
   try {
     for (const element of Array.from(doc.querySelectorAll(selector))) {
       if (!(element instanceof HTMLElement)) continue;
-      const editable = element.matches(EDITABLE_SELECTOR)
-        ? element
-        : element.querySelector<HTMLElement>(EDITABLE_SELECTOR);
-      if (!editable) continue;
-      if (!fallback) fallback = editable;
-      if (isVisibleHudMount(editable)) return editable;
+      const editables = element.matches(EDITABLE_SELECTOR)
+        ? [element]
+        : Array.from(element.querySelectorAll<HTMLElement>(EDITABLE_SELECTOR));
+      for (const editable of editables) {
+        if (!fallback) fallback = editable;
+        if (isVisibleHudMount(editable)) return editable;
+      }
     }
   } catch {
     // Invalid selector from a site file: fall back to the generic lookup.

@@ -1940,6 +1940,18 @@ describe('resolveConfiguredComposer', () => {
     expect(resolveConfiguredComposer('.composer')?.id).toBe('live');
   });
 
+  it('scans every editable control inside one wrapper before giving up on it', async () => {
+    const { resolveConfiguredComposer } = await import('../vimMode');
+    document.body.innerHTML = `
+      <div class="composer">
+        <textarea id="ghost" style="display: none"></textarea>
+        <div id="live" contenteditable="true"></div>
+      </div>
+    `;
+    tall(document.getElementById('live')!);
+    expect(resolveConfiguredComposer('.composer')?.id).toBe('live');
+  });
+
   it('returns nothing for matches without an editable control or for an invalid selector', async () => {
     const { resolveConfiguredComposer } = await import('../vimMode');
     document.body.innerHTML = '<div class="composer"><span>label</span></div>';

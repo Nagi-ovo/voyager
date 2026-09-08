@@ -269,8 +269,11 @@ while an active plugin has domOps`).
 - **Rule:** Validate with `isSafeRegexSource` (`sites/safeRegex.ts`): no lookarounds, no
   backreferences, no `*`/`+`/`{…}` repetition of a group that holds a quantifier or an alternation
   at any depth (`(a+)+`, `((a+))+`, `(a|aa)+`; a regex on the source misses the nested and
-  alternation forms, so the check is a small scanner), at most 200 characters; bound the subject
-  with `MAX_REGEX_INPUT_LENGTH`. Apply the same policy wherever a pattern comes from data.
+  alternation forms, so the check is a small scanner), at most 200 characters and at most
+  `MAX_SAFE_REGEX_QUANTIFIERS` quantifiers (adjacent `a*a*…` terms are polynomial with the count as
+  the exponent); bound the subject with `MAX_REGEX_INPUT_LENGTH`. This is defence in depth for a
+  catalog the project publishes itself, not a proof of bounded matching cost. Apply the same policy
+  wherever a pattern comes from data.
 - **Guard:** `src/features/plugins/sites/safeRegex.test.ts`,
   `src/features/plugins/verbs/turnNavigator.test.ts`
   (`validates selectors, the id pattern and the rail side`).
