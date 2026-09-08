@@ -65,6 +65,7 @@ Coachmarks require a stable ID, side-effect-free eligibility, cleanup after part
 - Reuse existing popover integration, such as `gv-pm-confirm`, including outside-click handling, teardown and theme overrides.
 - For visual changes, state the expected result and verify alignment, spacing and behavior in light/dark themes, including external resource dependencies.
 - Record repeatable, non-obvious bugs as Trap/Rule/Guard entries in the matching regression topic; run `bun run regressions:check` after editing notes.
+- `bun run filesize:check` fails when a `src/**/*.ts(x)` file over 1000 lines is added or a baselined one grows: put new code in a new file. Run `bun run filesize:update` after shrinking one; raising an entry in `scripts/file-size-baseline.json` is a deliberate, explained change in the PR.
 
 ## Verification
 
