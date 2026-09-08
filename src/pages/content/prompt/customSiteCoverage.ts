@@ -51,13 +51,14 @@ export function createCustomSiteCoverageReconciler({
   let instance: PromptManagerInstance | null = initial ?? null;
   let queue: Promise<void> = Promise.resolve();
   let sawChange = false;
+  let destroyed = false;
 
   const apply = (covered: boolean): void => {
     queue = queue
       .then(async () => {
         // Read coverage at apply time, not at enqueue time, so a no-op change
         // never remounts an already-mounted instance.
-        if (covered === (instance !== null)) return;
+        if (destroyed || covered === (instance !== null)) return;
         if (covered) {
           instance = await start();
           return;
@@ -86,8 +87,17 @@ export function createCustomSiteCoverageReconciler({
     },
     settled: () => queue,
     destroy: () => {
+      destroyed = true;
       instance?.destroy();
       instance = null;
+      // A mount still in flight assigns its instance after this call returns:
+      // tear that down too, behind whatever the queue is still running.
+      queue = queue
+        .then(() => {
+          instance?.destroy();
+          instance = null;
+        })
+        .catch(() => {});
     },
   };
 }

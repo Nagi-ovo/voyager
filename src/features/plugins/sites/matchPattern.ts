@@ -52,9 +52,11 @@ function parsePattern(pattern: string): ParsedPattern | null {
 function hostWithin(inner: string, outer: string): boolean {
   if (outer === '*' || inner === outer) return true;
   if (outer.startsWith('*.')) {
+    // Same contract as the runtime glob (`*.example.com` becomes `.*\.example\.com`):
+    // a subdomain is required, so the apex host is NOT within the wildcard.
     const suffix = outer.slice(2);
     const bare = inner.startsWith('*.') ? inner.slice(2) : inner;
-    return bare === suffix || bare.endsWith(`.${suffix}`);
+    return bare.endsWith(`.${suffix}`);
   }
   return false;
 }

@@ -48,7 +48,6 @@ describe('patternWithin (plan D18 containment)', () => {
     expect(patternWithin('https://claude.ai/*', 'https://claude.ai/*')).toBe(true);
     expect(patternWithin('https://claude.ai/chat/*', 'https://claude.ai/*')).toBe(true);
     expect(patternWithin('https://x.example.com/*', 'https://*.example.com/*')).toBe(true);
-    expect(patternWithin('https://example.com/*', 'https://*.example.com/*')).toBe(true);
     expect(patternWithin('https://claude.ai/*', '*://claude.ai/*')).toBe(true);
     expect(patternWithin('https://claude.ai/chat/s/*', 'https://claude.ai/chat/*')).toBe(true);
     expect(patternWithin('https://anything.test/*', '<all_urls>')).toBe(true);
@@ -57,6 +56,8 @@ describe('patternWithin (plan D18 containment)', () => {
   it('rejects a wildcard host, a wider scheme or a wider path than the site allows', () => {
     // One probe URL (x.example.com) would have passed this; y.example.com escapes.
     expect(patternWithin('https://*.example.com/*', 'https://x.example.com/*')).toBe(false);
+    // The runtime glob needs a subdomain for *.example.com, so the apex host escapes it.
+    expect(patternWithin('https://example.com/*', 'https://*.example.com/*')).toBe(false);
     expect(patternWithin('*://example.com/*', 'https://example.com/*')).toBe(false);
     expect(patternWithin('https://claude.ai/*', 'https://claude.ai/chat/*')).toBe(false);
     expect(patternWithin('https://chatgpt.com/*', 'https://claude.ai/*')).toBe(false);

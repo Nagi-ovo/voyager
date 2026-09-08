@@ -524,6 +524,62 @@ describe('PluginHost site override (plan §3)', () => {
     );
     document.body.innerHTML = '';
   });
+
+  it('applies a site override written while the initial adapter read is in flight', async () => {
+    document.body.innerHTML = '<div class="first-turn"></div><div class="second-turn"></div>';
+    mockState({ 'voyager.semantic': { enabled: true, installedAt: 1 } });
+    let selector = '.first-turn';
+    let reads = 0;
+    const source: PluginSource = {
+      id: 'host-catalog',
+      kind: 'remote',
+      async list() {
+        return [semanticPlugin];
+      },
+      async isAuthoritative() {
+        return true;
+      },
+      async siteOverride() {
+        const adapter = overrideAdapter(selector);
+        if (reads++ === 0) {
+          // The background refresh lands after this read started: the value
+          // being returned is already stale when the engine is built from it.
+          selector = '.second-turn';
+          for (const [listener] of (chrome.storage.onChanged.addListener as unknown as Mock).mock
+            .calls) {
+            listener(
+              {
+                'gvPluginHostCatalog:claude.ai': {
+                  oldValue: { status: 'ok', extensionVersion: 'x', manifests: [] },
+                  newValue: {
+                    status: 'ok',
+                    extensionVersion: 'x',
+                    manifests: [],
+                    site: { id: 'v2' },
+                  },
+                },
+              },
+              'local',
+            );
+          }
+        }
+        return adapter;
+      },
+    };
+    const host = new PluginHost({
+      url: 'https://claude.ai/chat/1',
+      sources: [source],
+      doc: document,
+      requestCatalogRefresh: () => {},
+      isTopFrame: true,
+    });
+    await host.start();
+    await flush();
+    expect(document.querySelector('.second-turn')?.classList.contains('gv-plugin-turn')).toBe(true);
+    expect(document.querySelector('.first-turn')?.classList.contains('gv-plugin-turn')).toBe(false);
+    host.stop();
+    document.body.innerHTML = '';
+  });
 });
 
 /** Deliver a plugin-state change to every storage.onChanged subscriber. */
