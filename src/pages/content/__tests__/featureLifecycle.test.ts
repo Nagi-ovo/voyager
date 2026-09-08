@@ -60,6 +60,40 @@ describe('createNativeFeatureToggle', () => {
     expect(manager.list()).toEqual([]);
   });
 
+  it('withdraws the cleanup even when stop throws, so teardown and re-enable do not double up', async () => {
+    const manager = new CleanupManager();
+    const throwingStop = vi.fn(() => {
+      throw new Error('Extension context invalidated.');
+    });
+    const nextStop = vi.fn();
+    const start = vi
+      .fn<() => () => void>()
+      .mockReturnValueOnce(throwingStop)
+      .mockReturnValue(nextStop);
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const drain = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+    const toggle = createNativeFeatureToggle(manager, feature(start));
+
+    await toggle.applyInitial(true);
+    toggle.handleChange({ gvProbe: { newValue: false } }, 'sync');
+    await drain();
+    expect(throwingStop).toHaveBeenCalledOnce();
+    expect(toggle.isMounted()).toBe(false);
+    expect(manager.list()).toEqual([]);
+    // An invalidated context is routine on extension reload: no error log.
+    expect(consoleError).not.toHaveBeenCalled();
+
+    toggle.handleChange({ gvProbe: { newValue: true } }, 'sync');
+    await drain();
+    expect(start).toHaveBeenCalledTimes(2);
+    expect(manager.list()).toEqual([{ pos: CleanupPositions.CleanupFork, func: nextStop }]);
+
+    manager.executeCleanups();
+    expect(throwingStop).toHaveBeenCalledOnce();
+    expect(nextStop).toHaveBeenCalledOnce();
+    consoleError.mockRestore();
+  });
+
   it('ignores other keys and non-storage areas, and does not start twice', async () => {
     const start = vi.fn(() => () => {});
     const toggle = createNativeFeatureToggle(new CleanupManager(), feature(start));

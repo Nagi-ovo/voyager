@@ -1,5 +1,6 @@
 import type { CleanupPositions } from '@/core/types/cleanupPositions';
 import type { CleanupManager } from '@/core/utils/cleanupManager';
+import { isExtensionContextInvalidatedError } from '@/core/utils/extensionContext';
 
 /**
  * Lifecycle contract for Gemini / AI Studio native content modules.
@@ -95,8 +96,14 @@ export function createNativeFeatureToggle(
     } else if (!enabled && stop) {
       const current = stop;
       stop = null;
-      current();
-      manager.withdrawCleanupFunctionsByPositionNumber(feature.position);
+      try {
+        current();
+      } finally {
+        // Even when stop throws (e.g. an invalidated extension context), the
+        // registration must go: page teardown must not call it a second time,
+        // and a later enable must not stack another entry at this position.
+        manager.withdrawCleanupFunctionsByPositionNumber(feature.position);
+      }
     }
   };
 
@@ -112,7 +119,12 @@ export function createNativeFeatureToggle(
       const change = changes[toggle.key];
       if (!change) return;
       sawChange = true;
-      void request(toggle.isEnabled(change.newValue));
+      // A start or stop that throws must not surface as an unhandled rejection
+      // from a storage listener; an invalidated context is expected on reload.
+      request(toggle.isEnabled(change.newValue)).catch((error: unknown) => {
+        if (isExtensionContextInvalidatedError(error)) return;
+        console.error(`[Gemini Voyager] ${feature.id}: toggle failed`, error);
+      });
     },
     applyInitial(enabled) {
       if (sawChange) return queue;
