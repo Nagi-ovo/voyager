@@ -17,6 +17,12 @@ describe('matchPattern', () => {
     expect(matchesUrl('https://claude.ai/x', '*://claude.ai/*')).toBe(true);
   });
 
+  it('limits a wildcard scheme to http and https, like <all_urls> and the containment check', () => {
+    expect(matchesUrl('http://claude.ai/x', '*://claude.ai/*')).toBe(true);
+    expect(matchesUrl('HTTPS://claude.ai/x', '*://claude.ai/*')).toBe(true);
+    expect(matchesUrl('ftp://claude.ai/x', '*://claude.ai/*')).toBe(false);
+  });
+
   it('supports subdomain wildcard', () => {
     expect(matchesUrl('https://chat.openai.com/c/1', 'https://*.openai.com/*')).toBe(true);
     expect(matchesUrl('https://openai.com/c/1', 'https://*.openai.com/*')).toBe(false);

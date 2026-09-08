@@ -16,9 +16,13 @@
 
 function patternToRegExp(pattern: string): RegExp {
   if (pattern === '<all_urls>') return /^https?:\/\//i;
+  // A `*://` scheme means http or https, as in Chrome match patterns and in
+  // `parsePattern` below; it must not swallow ftp: or file: URLs.
+  const schemeWildcard = pattern.startsWith('*://');
+  const body = schemeWildcard ? pattern.slice('*://'.length) : pattern;
   // Escape regex metacharacters EXCEPT `*`, then turn `*` into `.*`.
-  const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
-  return new RegExp(`^${escaped}$`, 'i');
+  const escaped = body.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
+  return new RegExp(`^${schemeWildcard ? 'https?://' : ''}${escaped}$`, 'i');
 }
 
 export function matchesUrl(url: string, pattern: string): boolean {
