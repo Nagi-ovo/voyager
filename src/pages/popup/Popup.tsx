@@ -1,9 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { Download, Search, Upload, X } from 'lucide-react';
+import { Search, X } from 'lucide-react';
 import browser from 'webextension-polyfill';
 
-import { CLOUD_SYNC_PATH, CLOUD_UPLOAD_PATH } from '@/core/icons/cloudSyncPaths';
 import {
   type AccountPlatform,
   detectAccountPlatformFromUrl,
@@ -34,7 +33,6 @@ import { requestSafariNativeNotificationPermission } from '@/core/utils/safariNa
 import { shouldShowUpdateReminderForCurrentVersion } from '@/core/utils/updateReminder';
 import { compareVersions } from '@/core/utils/version';
 import { resolveWatermarkSettings } from '@/core/utils/watermarkSettings';
-import { PromptImportExportService } from '@/features/backup/services/PromptImportExportService';
 import type { FormulaCopyFormat } from '@/features/formulaCopy/FormulaCopyService';
 import { resolveSiteAdapterForUrl } from '@/features/plugins/remote/siteOverride';
 import { matchesAnyPattern } from '@/features/plugins/sites/matchPattern';
@@ -79,6 +77,7 @@ import { FormulaCopySettings } from './components/FormulaCopySettings';
 import { GeneralSettingsCard, type GeneralSettingsValues } from './components/GeneralSettingsCard';
 import { KeyboardShortcutSettings } from './components/KeyboardShortcutSettings';
 import { PluginManager } from './components/PluginManager';
+import { PromptDataTransfer } from './components/PromptDataTransfer';
 import { StarredHistory } from './components/StarredHistory';
 import { StorageManager } from './components/StorageManager';
 import { StorageQuotaCard } from './components/StorageQuotaCard';
@@ -104,6 +103,7 @@ import { useEchartsPopupSettings } from './hooks/useEchartsPopupSettings';
 import { useFormulaCopyPopupSettings } from './hooks/useFormulaCopyPopupSettings';
 import { usePopupPlugins } from './hooks/usePopupPlugins';
 import { usePopupScrollRestoration } from './hooks/usePopupScrollRestoration';
+import { usePromptDataTransfer } from './hooks/usePromptDataTransfer';
 import { useWaveDromPopupSettings } from './hooks/useWaveDromPopupSettings';
 import { type SettingSetters, applySettingsPatch } from './utils/settingsPatch';
 import {
@@ -111,19 +111,6 @@ import {
   getSettingsSearchMatches,
   normalizePersistedSettingsSearchQuery,
 } from './utils/settingsSearch';
-
-/**
- * Inline Material Symbols glyph, so the prompt cloud-sync buttons match the
- * injected Gemini folder panel exactly (which also inlines these SVG paths)
- * rather than the thin lucide outline used elsewhere in the popup.
- */
-function MaterialGlyphIcon({ path, className }: { path: string; className?: string }) {
-  return (
-    <svg viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true" className={className}>
-      <path d={path} />
-    </svg>
-  );
-}
 
 /**
  * Reorderable popup section IDs — order here is the default display order.
@@ -170,13 +157,6 @@ function popupSectionSearchTarget(
   aliases?: readonly string[],
 ): PopupSettingsSearchItem {
   return popupSearchTarget(sectionId, POPUP_SECTION_SEARCH_SETTING_ID, keys, aliases);
-}
-
-function isEmptyPromptImportPayload(value: unknown): boolean {
-  if (Array.isArray(value)) return value.length === 0;
-  if (!value || typeof value !== 'object') return false;
-  const items = (value as { items?: unknown }).items;
-  return Array.isArray(items) && items.length === 0;
 }
 
 const POPUP_SETTINGS_SEARCH_ITEMS = [
@@ -1009,11 +989,7 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
   const [promptHistoryEnabled, setPromptHistoryEnabled] = useState<boolean>(false);
   const [slashPromptEnabled, setSlashPromptEnabled] = useState<boolean>(true);
   const [promptInsertOnClickEnabled, setPromptInsertOnClickEnabled] = useState<boolean>(false);
-  const [promptMigrationStatus, setPromptMigrationStatus] = useState<{
-    kind: 'ok' | 'warn' | 'err';
-    text: string;
-  } | null>(null);
-  const [promptMigrationBusy, setPromptMigrationBusy] = useState<boolean>(false);
+  const promptDataTransfer = usePromptDataTransfer(t);
   const [inputCollapseEnabled, setInputCollapseEnabled] = useState<boolean>(false);
   const [inputCollapseWhenNotEmpty, setInputCollapseWhenNotEmpty] = useState<boolean>(false);
   const [inputVimModeEnabled, setInputVimModeEnabled] = useState<boolean>(false);
@@ -1102,7 +1078,6 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
   const [accentColors, setAccentColors] = useState<Record<string, string>>({});
   // Debounce timer for persisting accent changes to throttled sync storage.
   const accentWriteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const promptImportInputRef = useRef<HTMLInputElement | null>(null);
   const [aiStructureCopyStatus, setAiStructureCopyStatus] = useState<AiStructureCopyStatus>('idle');
   const [sectionOrder, setSectionOrder] = useState<PopupSectionId[]>([...DEFAULT_SECTION_ORDER]);
   const [settingsSearchQuery, setSettingsSearchQuery] = useState<string>('');
@@ -1413,153 +1388,6 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
     },
     [activeAccountPlatform, setSyncStorage],
   );
-
-  const handlePromptExport = useCallback(async () => {
-    setPromptMigrationBusy(true);
-    setPromptMigrationStatus(null);
-    try {
-      const result = await PromptImportExportService.loadPrompts();
-      if (!result.success) throw result.error;
-
-      const prompts = result.data;
-      PromptImportExportService.downloadJSON(PromptImportExportService.exportToPayload(prompts));
-      setPromptMigrationStatus({
-        kind: 'ok',
-        text: t('promptExportSuccess').replace('{count}', String(prompts.length)),
-      });
-    } catch (error) {
-      console.error('[Gemini Voyager] Failed to export prompts:', error);
-      setPromptMigrationStatus({ kind: 'err', text: t('promptExportError') });
-    } finally {
-      setPromptMigrationBusy(false);
-    }
-  }, [t]);
-
-  const handlePromptImport = useCallback(
-    async (event: React.ChangeEvent<HTMLInputElement>) => {
-      const file = event.target.files?.[0];
-      if (!file) return;
-
-      setPromptMigrationBusy(true);
-      setPromptMigrationStatus(null);
-      try {
-        const readResult = await PromptImportExportService.readJSONFile(file);
-        if (!readResult.success) throw readResult.error;
-
-        const payloadResult = PromptImportExportService.validatePayload(readResult.data);
-        if (!payloadResult.success) {
-          setPromptMigrationStatus({
-            kind: 'err',
-            text: isEmptyPromptImportPayload(readResult.data)
-              ? t('pm_import_empty')
-              : t('pm_import_invalid'),
-          });
-          return;
-        }
-
-        const importResult = await PromptImportExportService.importFromPayload(payloadResult.data);
-        if (!importResult.success) throw importResult.error;
-
-        const processed = importResult.data.imported + importResult.data.duplicates;
-        setPromptMigrationStatus({
-          kind: importResult.data.nameConflicts > 0 ? 'warn' : 'ok',
-          text:
-            importResult.data.nameConflicts > 0
-              ? t('promptNameConflictsDetected').replace(
-                  '{count}',
-                  String(importResult.data.nameConflicts),
-                )
-              : t('pm_import_success').replace('{count}', String(processed)),
-        });
-      } catch (error) {
-        console.error('[Gemini Voyager] Failed to import prompts:', error);
-        setPromptMigrationStatus({ kind: 'err', text: t('promptImportError') });
-      } finally {
-        event.target.value = '';
-        setPromptMigrationBusy(false);
-      }
-    },
-    [t],
-  );
-
-  // Cloud (Google Drive) prompt sync — prompts-only, merge semantics.
-  // The whole merge runs in the background (see gv.sync.*PromptsMerge) so a
-  // first-time Google account picker closing the popup can't abandon it.
-  const handlePromptCloudPull = useCallback(async () => {
-    setPromptMigrationBusy(true);
-    setPromptMigrationStatus(null);
-    try {
-      const response = (await chrome.runtime.sendMessage({
-        type: 'gv.sync.pullPromptsMerge',
-        payload: { interactive: true },
-      })) as
-        | {
-            ok?: boolean;
-            empty?: boolean;
-            imported?: number;
-            duplicates?: number;
-            nameConflicts?: number;
-          }
-        | undefined;
-
-      if (!response?.ok) {
-        setPromptMigrationStatus({ kind: 'err', text: t('promptCloudError') });
-        return;
-      }
-      if (response.empty) {
-        setPromptMigrationStatus({ kind: 'ok', text: t('promptCloudPullEmpty') });
-        return;
-      }
-
-      const processed = (response.imported ?? 0) + (response.duplicates ?? 0);
-      setPromptMigrationStatus({
-        kind: (response.nameConflicts ?? 0) > 0 ? 'warn' : 'ok',
-        text:
-          (response.nameConflicts ?? 0) > 0
-            ? t('promptNameConflictsDetected').replace(
-                '{count}',
-                String(response.nameConflicts ?? 0),
-              )
-            : t('promptCloudPullSuccess').replace('{count}', String(processed)),
-      });
-    } catch (error) {
-      console.error('[Gemini Voyager] Failed to pull prompts from cloud:', error);
-      setPromptMigrationStatus({ kind: 'err', text: t('promptCloudError') });
-    } finally {
-      setPromptMigrationBusy(false);
-    }
-  }, [t]);
-
-  const handlePromptCloudPush = useCallback(async () => {
-    setPromptMigrationBusy(true);
-    setPromptMigrationStatus(null);
-    try {
-      const response = (await chrome.runtime.sendMessage({
-        type: 'gv.sync.pushPromptsMerge',
-        payload: { interactive: true },
-      })) as { ok?: boolean; count?: number; nameConflicts?: number } | undefined;
-
-      if (!response?.ok) {
-        setPromptMigrationStatus({ kind: 'err', text: t('promptCloudError') });
-        return;
-      }
-      setPromptMigrationStatus({
-        kind: (response.nameConflicts ?? 0) > 0 ? 'warn' : 'ok',
-        text:
-          (response.nameConflicts ?? 0) > 0
-            ? t('promptNameConflictsDetected').replace(
-                '{count}',
-                String(response.nameConflicts ?? 0),
-              )
-            : t('promptCloudPushSuccess').replace('{count}', String(response.count ?? 0)),
-      });
-    } catch (error) {
-      console.error('[Gemini Voyager] Failed to push prompts to cloud:', error);
-      setPromptMigrationStatus({ kind: 'err', text: t('promptCloudError') });
-    } finally {
-      setPromptMigrationBusy(false);
-    }
-  }, [t]);
 
   // Copy folder structure for AI organization
   const handleCopyFolderStructureForAI = useCallback(async () => {
@@ -2450,100 +2278,6 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
     content: React.ReactNode,
   ): React.ReactNode => (shouldShowSetting(sectionId, settingId) ? content : null);
 
-  // Prompt data import/export/cloud-sync panel. The prompt library is global
-  // (shared across Gemini, ChatGPT and Claude), so this is rendered both inside
-  // the native Prompt Manager section AND, standalone, on plugin sites where
-  // wrapSection() would otherwise hide the whole section.
-  const renderPromptDataMigration = (): React.ReactNode => (
-    <div className="space-y-2">
-      <div>
-        <Label className="text-sm font-medium">{t('promptDataMigration')}</Label>
-        <p className="text-muted-foreground mt-1 text-xs">{t('promptDataMigrationHint')}</p>
-      </div>
-      <div className="grid grid-cols-2 gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          className="w-full"
-          disabled={promptMigrationBusy}
-          onClick={() => {
-            void handlePromptExport();
-          }}
-        >
-          <span className="inline-flex items-center gap-1.5">
-            <Download className="h-3.5 w-3.5" />
-            <span>{t('pm_export')}</span>
-          </span>
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          className="w-full"
-          disabled={promptMigrationBusy}
-          onClick={() => promptImportInputRef.current?.click()}
-        >
-          <span className="inline-flex items-center gap-1.5">
-            <Upload className="h-3.5 w-3.5" />
-            <span>{t('pm_import')}</span>
-          </span>
-        </Button>
-      </div>
-      <div className="grid grid-cols-2 gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          className="w-full"
-          disabled={promptMigrationBusy}
-          onClick={() => {
-            void handlePromptCloudPull();
-          }}
-        >
-          <span className="inline-flex items-center gap-1.5">
-            <MaterialGlyphIcon path={CLOUD_SYNC_PATH} className="h-3.5 w-3.5" />
-            <span>{t('promptCloudPull')}</span>
-          </span>
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          className="w-full"
-          disabled={promptMigrationBusy}
-          onClick={() => {
-            void handlePromptCloudPush();
-          }}
-        >
-          <span className="inline-flex items-center gap-1.5">
-            <MaterialGlyphIcon path={CLOUD_UPLOAD_PATH} className="h-3.5 w-3.5" />
-            <span>{t('promptCloudPush')}</span>
-          </span>
-        </Button>
-      </div>
-      <input
-        ref={promptImportInputRef}
-        type="file"
-        aria-label={t('pm_import')}
-        accept=".json,application/json"
-        className="hidden"
-        onChange={(event) => {
-          void handlePromptImport(event);
-        }}
-      />
-      {promptMigrationStatus && (
-        <p
-          className={`text-xs ${
-            promptMigrationStatus.kind === 'ok'
-              ? 'text-emerald-600 dark:text-emerald-400'
-              : promptMigrationStatus.kind === 'warn'
-                ? 'text-amber-600 dark:text-amber-400'
-                : 'text-destructive'
-          }`}
-        >
-          {promptMigrationStatus.text}
-        </p>
-      )}
-    </div>
-  );
-
   const moveSectionInOrder = (sectionId: PopupSectionId, direction: 'up' | 'down') => {
     setSectionOrder((prev) => {
       const idx = prev.indexOf(sectionId);
@@ -2923,7 +2657,9 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
             panel standalone so ChatGPT / Claude users can still migrate prompts. */}
         {isPluginSite && (
           <Card style={{ order: -2 }} className="border-primary/20 p-4">
-            <CardContent className="p-0">{renderPromptDataMigration()}</CardContent>
+            <CardContent className="p-0">
+              {<PromptDataTransfer t={t} transfer={promptDataTransfer} />}
+            </CardContent>
           </Card>
         )}
         {/* Plugin ecosystem — pinned to the top on third-party web pages (just
@@ -3535,7 +3271,11 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
                   />
                 </div>,
               )}
-              {renderSetting('promptManager', 'promptDataMigration', renderPromptDataMigration())}
+              {renderSetting(
+                'promptManager',
+                'promptDataMigration',
+                <PromptDataTransfer t={t} transfer={promptDataTransfer} />,
+              )}
               {renderSetting(
                 'promptManager',
                 'customWebsites',
