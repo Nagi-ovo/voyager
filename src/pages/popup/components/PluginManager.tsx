@@ -166,7 +166,8 @@ function pickLocalized(
 ): string | undefined {
   for (const locale of localeCandidates(lang)) {
     const value = plugin.i18n?.[locale]?.[field];
-    if (value) return value;
+    // A blank localized string must not shadow the base value.
+    if (value?.trim()) return value;
   }
   return plugin[field];
 }
@@ -931,7 +932,7 @@ export function PluginManager({
                 </div>
                 <Switch
                   checked={enabled}
-                  disabled={blockedReason !== null}
+                  disabled={!enabled && blockedReason !== null}
                   onChange={(e) => {
                     void handleToggle(plugin, e.target.checked);
                   }}

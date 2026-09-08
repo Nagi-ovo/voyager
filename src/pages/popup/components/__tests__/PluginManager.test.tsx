@@ -795,13 +795,21 @@ describe('PluginManager plugin status', () => {
     };
   });
 
-  it('names the engine range and blocks the toggle for needs-engine', async () => {
-    await renderManager({
-      statuses: [{ ...READY, kind: 'needs-engine', requiredEngine: '>=2.0.0' }],
-    });
+  it('names the engine range, blocks enabling for needs-engine and still lets an enabled plugin be switched off', async () => {
+    const statuses: PluginManagerProps['statuses'] = [
+      { ...READY, kind: 'needs-engine', requiredEngine: '>=2.0.0' },
+    ];
+    await renderManager({ statuses });
 
     expect(container.textContent).toContain('Needs Voyager plugin engine >=2.0.0');
     expect(container.textContent).not.toContain('{engine}');
+    // Enabled in storage: turning it off is the one action that still makes sense.
+    expect(pluginToggle().disabled).toBe(false);
+
+    pluginState.current = { [PLUGIN_ID]: { enabled: false, installedAt: 0 } };
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await renderManager({ statuses });
     expect(pluginToggle().disabled).toBe(true);
   });
 
@@ -812,6 +820,7 @@ describe('PluginManager plugin status', () => {
   });
 
   it('asks for a newer Voyager without a version for needs-handler', async () => {
+    pluginState.current = { [PLUGIN_ID]: { enabled: false, installedAt: 0 } };
     await renderManager({
       statuses: [{ ...READY, kind: 'needs-handler', missingHandlers: ['formula-copy'] }],
     });
@@ -820,7 +829,8 @@ describe('PluginManager plugin status', () => {
     expect(pluginToggle().disabled).toBe(true);
   });
 
-  it('names the active site for needs-semantic and blocks the toggle', async () => {
+  it('names the active site for needs-semantic and blocks enabling', async () => {
+    pluginState.current = { [PLUGIN_ID]: { enabled: false, installedAt: 0 } };
     await renderManager({
       activeUrl: 'https://claude.ai/chat/current',
       statuses: [{ ...READY, kind: 'needs-semantic', missingSemantic: ['message'] }],
@@ -904,6 +914,20 @@ describe('PluginManager changelog line', () => {
   it('falls back to the manifest changelog for an untranslated language', async () => {
     mockLanguage.current = 'fr';
     await renderManager({ manifests: [changelogPlugin] });
+
+    expect(container.textContent).toContain('Wider maximum width.');
+  });
+
+  it('falls back to the manifest changelog when the localized one is blank', async () => {
+    mockLanguage.current = 'zh';
+    await renderManager({
+      manifests: [
+        {
+          ...changelogPlugin,
+          i18n: { ...changelogPlugin.i18n, zh: { ...changelogPlugin.i18n?.zh, changelog: '   ' } },
+        },
+      ],
+    });
 
     expect(container.textContent).toContain('Wider maximum width.');
   });
