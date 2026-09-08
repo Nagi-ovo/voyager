@@ -57,7 +57,7 @@ function record(id: string, host = 'claude.ai'): SourcedPluginManifest {
       engine: '>=1.0.0',
       category: 'readability',
       license: 'MIT',
-      tier: 'free',
+      tier: 'declarative',
       matches: [`https://${host}/*`],
       contributes: {},
     },

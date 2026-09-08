@@ -39,6 +39,7 @@ describe('usePromptDataTransfer', () => {
   let root: Root;
   let transfer: PromptDataTransferController;
   let store: Record<string, unknown>;
+  const sendMessage = vi.fn<(message: unknown) => Promise<unknown>>();
 
   const render = (visible = true) => {
     act(() => {
@@ -51,9 +52,10 @@ describe('usePromptDataTransfer', () => {
   beforeEach(() => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
     store = {};
+    sendMessage.mockReset();
     vi.stubGlobal('chrome', {
       ...chrome,
-      runtime: { ...chrome.runtime, lastError: null, sendMessage: vi.fn() },
+      runtime: { ...chrome.runtime, lastError: null, sendMessage },
       storage: {
         ...chrome.storage,
         local: {
@@ -250,7 +252,7 @@ describe('usePromptDataTransfer', () => {
   ] as const)(
     '$action reports $text from the background response',
     async ({ action, response, kind, text }) => {
-      vi.mocked(chrome.runtime.sendMessage).mockResolvedValueOnce(response);
+      sendMessage.mockResolvedValueOnce(response);
 
       await act(async () => transfer[action]());
 
@@ -269,7 +271,7 @@ describe('usePromptDataTransfer', () => {
   it.each(['onCloudPull', 'onCloudPush'] as const)(
     '%s reports a rejected background request',
     async (action) => {
-      vi.mocked(chrome.runtime.sendMessage).mockRejectedValueOnce(new Error('Disconnected'));
+      sendMessage.mockRejectedValueOnce(new Error('Disconnected'));
 
       await act(async () => transfer[action]());
 
@@ -284,7 +286,7 @@ describe('usePromptDataTransfer', () => {
     const pending = new Promise<{ ok: boolean; count: number }>((done) => {
       resolve = done;
     });
-    vi.mocked(chrome.runtime.sendMessage).mockReturnValueOnce(pending);
+    sendMessage.mockReturnValueOnce(pending);
 
     act(() => button('promptCloudPush').click());
     expect(transfer.busy).toBe(true);

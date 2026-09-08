@@ -6,9 +6,8 @@ import browser from 'webextension-polyfill';
 import {
   type AccountPlatform,
   detectAccountPlatformFromUrl,
-  getAccountIsolationStorageKey,
 } from '@/core/services/AccountIsolationService';
-import { StorageKeys, type TimelineStyle, isTimelineStyle } from '@/core/types/common';
+import { StorageKeys } from '@/core/types/common';
 import type { ConversationReference, Folder } from '@/core/types/folder';
 import {
   getModifierKey,
@@ -25,11 +24,6 @@ import {
   normalizeCustomWebsite,
   sanitizeCustomWebsites,
 } from '@/core/utils/customWebsites';
-import {
-  ensureNotificationsPermission,
-  hasNotificationsPermission,
-} from '@/core/utils/notificationsPermission';
-import { requestSafariNativeNotificationPermission } from '@/core/utils/safariNativeNotifications';
 import { shouldShowUpdateReminderForCurrentVersion } from '@/core/utils/updateReminder';
 import { compareVersions } from '@/core/utils/version';
 import { resolveWatermarkSettings } from '@/core/utils/watermarkSettings';
@@ -68,13 +62,9 @@ import { useWidthAdjuster } from '../../hooks/useWidthAdjuster';
 import { CloudSyncSettings } from './components/CloudSyncSettings';
 import { ContextSyncSettings } from './components/ContextSyncSettings';
 import { DiagnosticsExportCard } from './components/DiagnosticsExportCard';
-import {
-  type AiStructureCopyStatus,
-  FolderSettingsCard,
-  type FolderSettingsValues,
-} from './components/FolderSettingsCard';
+import { type AiStructureCopyStatus, FolderSettingsCard } from './components/FolderSettingsCard';
 import { FormulaCopySettings } from './components/FormulaCopySettings';
-import { GeneralSettingsCard, type GeneralSettingsValues } from './components/GeneralSettingsCard';
+import { GeneralSettingsCard } from './components/GeneralSettingsCard';
 import { KeyboardShortcutSettings } from './components/KeyboardShortcutSettings';
 import { PluginManager } from './components/PluginManager';
 import { PromptDataTransfer } from './components/PromptDataTransfer';
@@ -82,11 +72,7 @@ import { StarredHistory } from './components/StarredHistory';
 import { StorageManager } from './components/StorageManager';
 import { StorageQuotaCard } from './components/StorageQuotaCard';
 import { ThemeColorButton } from './components/ThemeColorButton';
-import {
-  type ScrollMode,
-  TimelineSettingsCard,
-  type TimelineSettingsValues,
-} from './components/TimelineSettingsCard';
+import { TimelineSettingsCard } from './components/TimelineSettingsCard';
 import { ToolbarPinHint } from './components/ToolbarPinHint';
 import { type VisualEffect, VisualEffectPicker } from './components/VisualEffectPicker';
 import {
@@ -99,13 +85,22 @@ import {
   IconQwen,
 } from './components/WebsiteLogos';
 import WidthSlider from './components/WidthSlider';
-import { useEchartsPopupSettings } from './hooks/useEchartsPopupSettings';
+import {
+  FOLDER_SETTINGS_STORAGE_DEFAULTS,
+  useFolderPopupSettings,
+} from './hooks/useFolderPopupSettings';
 import { useFormulaCopyPopupSettings } from './hooks/useFormulaCopyPopupSettings';
+import {
+  GENERAL_SETTINGS_STORAGE_DEFAULTS,
+  useGeneralPopupSettings,
+} from './hooks/useGeneralPopupSettings';
 import { usePopupPlugins } from './hooks/usePopupPlugins';
 import { usePopupScrollRestoration } from './hooks/usePopupScrollRestoration';
 import { usePromptDataTransfer } from './hooks/usePromptDataTransfer';
-import { useWaveDromPopupSettings } from './hooks/useWaveDromPopupSettings';
-import { type SettingSetters, applySettingsPatch } from './utils/settingsPatch';
+import {
+  TIMELINE_SETTINGS_STORAGE_DEFAULTS,
+  useTimelinePopupSettings,
+} from './hooks/useTimelinePopupSettings';
 import {
   type SettingsSearchItem,
   getSettingsSearchMatches,
@@ -749,18 +744,6 @@ const toReleaseTag = (version?: string | null): string | null => {
 };
 
 interface SettingsUpdate {
-  mode?: ScrollMode | null;
-  timelineStyle?: TimelineStyle;
-  hideContainer?: boolean;
-  draggableTimeline?: boolean;
-  timelinePreviewPinned?: boolean;
-  markerLevelEnabled?: boolean;
-  resetPosition?: boolean;
-  folderEnabled?: boolean;
-  floatingModeEnabled?: boolean;
-  floatingOpenOnStart?: boolean;
-  hideArchivedConversations?: boolean;
-  folderSearchEnabled?: boolean;
   customWebsites?: string[];
   watermarkDownloadEnabled?: boolean;
   watermarkPreviewEnabled?: boolean;
@@ -771,14 +754,6 @@ interface SettingsUpdate {
   inputCollapseEnabled?: boolean;
   inputCollapseWhenNotEmpty?: boolean;
   inputVimModeEnabled?: boolean;
-  mermaidEnabled?: boolean;
-  quoteReplyEnabled?: boolean;
-  highlightEnabled?: boolean;
-  highlightTimelineMarkersEnabled?: boolean;
-  responseCompleteNotificationEnabled?: boolean;
-  remoteAnnouncementEnabled?: boolean;
-  usageStatusEnabled?: boolean;
-  defaultModelAutoApplyEnabled?: boolean;
   ctrlEnterSendEnabled?: boolean;
   aiStudioEnterSendEnabled?: boolean;
   safariEnterFixEnabled?: boolean;
@@ -786,15 +761,7 @@ interface SettingsUpdate {
   sidebarAutoHideEnabled?: boolean;
   sidebarFullHideEnabled?: boolean;
   visualEffect?: 'off' | 'snow' | 'sakura' | 'rain';
-  preventAutoScrollEnabled?: boolean;
-  inputHaloHidden?: boolean;
-  forkEnabled?: boolean;
-  accountIsolationEnabled?: boolean;
-  accountIsolationPlatform?: AccountPlatform;
   aiStudioEnabled?: boolean;
-  showMessageTimestamps?: boolean;
-  folderProjectEnabled?: boolean;
-  persistentExportToolbarEnabled?: boolean;
 }
 
 interface PopupProps {
@@ -957,17 +924,6 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
       }
     });
   }, []);
-  const [mode, setMode] = useState<ScrollMode>('flow');
-  const [timelineStyle, setTimelineStyle] = useState<TimelineStyle>('dots');
-  const [hideContainer, setHideContainer] = useState<boolean>(false);
-  const [draggableTimeline, setDraggableTimeline] = useState<boolean>(false);
-  const [timelinePreviewPinned, setTimelinePreviewPinned] = useState<boolean>(false);
-  const [markerLevelEnabled, setMarkerLevelEnabled] = useState<boolean>(false);
-  const [folderEnabled, setFolderEnabled] = useState<boolean>(true);
-  const [floatingModeEnabled, setFloatingModeEnabled] = useState<boolean>(false);
-  const [floatingOpenOnStart, setFloatingOpenOnStart] = useState<boolean>(true);
-  const [hideArchivedConversations, setHideArchivedConversations] = useState<boolean>(false);
-  const [folderSearchEnabled, setFolderSearchEnabled] = useState<boolean>(true);
   const [customWebsites, setCustomWebsites] = useState<string[]>([]);
   const [newWebsiteInput, setNewWebsiteInput] = useState<string>('');
   const [websiteError, setWebsiteError] = useState<string>('');
@@ -993,61 +949,6 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
   const [inputCollapseEnabled, setInputCollapseEnabled] = useState<boolean>(false);
   const [inputCollapseWhenNotEmpty, setInputCollapseWhenNotEmpty] = useState<boolean>(false);
   const [inputVimModeEnabled, setInputVimModeEnabled] = useState<boolean>(false);
-  // Changelog notification mode: when true, new-version notes announce via a NEW
-  // badge on the floating ball instead of auto-popping the modal.
-  const [changelogBadgeMode, setChangelogBadgeMode] = useState<boolean>(false);
-  const [mermaidEnabled, setMermaidEnabled] = useState<boolean>(true);
-  const {
-    enabled: wavedromEnabled,
-    hydrateFromStorage: hydrateWavedromEnabled,
-    setEnabledFromUser: setWavedromEnabledFromUser,
-  } = useWaveDromPopupSettings(setSyncStorage);
-  const {
-    enabled: echartsEnabled,
-    hydrateFromStorage: hydrateEchartsEnabled,
-    setEnabledFromUser: setEchartsEnabledFromUser,
-  } = useEchartsPopupSettings(setSyncStorage);
-  const [showMessageTimestamps, setShowMessageTimestamps] = useState<boolean>(false);
-  const [quoteReplyEnabled, setQuoteReplyEnabled] = useState<boolean>(true);
-
-  // Load the changelog notification-mode preference (StorageKeys.CHANGELOG_NOTIFY_MODE).
-  useEffect(() => {
-    try {
-      chrome.storage?.local?.get(StorageKeys.CHANGELOG_NOTIFY_MODE, (res) => {
-        setChangelogBadgeMode(res?.[StorageKeys.CHANGELOG_NOTIFY_MODE] === 'badge');
-      });
-    } catch {
-      // Ignore storage errors (e.g. invalidated extension context).
-    }
-  }, []);
-
-  // Mirror the modal's old behavior: switching to badge mode clears the dismissed
-  // version so the NEW badge appears for the current release.
-  const handleChangelogBadgeModeChange = (checked: boolean) => {
-    setChangelogBadgeMode(checked);
-    try {
-      const updates: Record<string, string> = {
-        [StorageKeys.CHANGELOG_NOTIFY_MODE]: checked ? 'badge' : 'popup',
-      };
-      if (checked) {
-        updates[StorageKeys.CHANGELOG_DISMISSED_VERSION] = '';
-      }
-      chrome.storage?.local?.set(updates);
-    } catch {
-      // Ignore storage errors.
-    }
-  };
-  const [highlightEnabled, setHighlightEnabled] = useState<boolean>(true);
-  const [highlightTimelineMarkersEnabled, setHighlightTimelineMarkersEnabled] =
-    useState<boolean>(true);
-  const [responseCompleteNotificationEnabled, setResponseCompleteNotificationEnabled] =
-    useState<boolean>(false);
-  const [remoteAnnouncementEnabled, setRemoteAnnouncementEnabled] = useState<boolean>(true);
-  const [remoteAnnouncementPermissionGranted, setRemoteAnnouncementPermissionGranted] =
-    useState<boolean>(false);
-  const [usageStatusEnabled, setUsageStatusEnabled] = useState<boolean>(false);
-  const [defaultModelAutoApplyEnabled, setDefaultModelAutoApplyEnabled] = useState<boolean>(true);
-  const [folderProjectEnabled, setFolderProjectEnabled] = useState<boolean>(false);
   const [ctrlEnterSendEnabled, setCtrlEnterSendEnabled] = useState<boolean>(false);
   const [aiStudioEnterSendEnabled, setAiStudioEnterSendEnabled] = useState<boolean>(false);
   const [safariEnterFixEnabled, setSafariEnterFixEnabled] = useState<boolean>(false);
@@ -1055,22 +956,39 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
   const [sidebarAutoHideEnabled, setSidebarAutoHideEnabled] = useState<boolean>(false);
   const [sidebarFullHideEnabled, setSidebarFullHideEnabled] = useState<boolean>(false);
   const [visualEffect, setVisualEffect] = useState<VisualEffect>('off');
-  const [preventAutoScrollEnabled, setPreventAutoScrollEnabled] = useState<boolean>(false);
-  const [inputHaloHidden, setInputHaloHidden] = useState<boolean>(false);
-  const [forkEnabled, setForkEnabled] = useState<boolean>(false);
   const [chatWidthEnabled, setChatWidthEnabled] = useState<boolean>(false);
   const [chatFontSizeEnabled, setChatFontSizeEnabled] = useState<boolean>(false);
   const [chatLineHeightEnabled, setChatLineHeightEnabled] = useState<boolean>(false);
   const [editInputWidthEnabled, setEditInputWidthEnabled] = useState<boolean>(false);
   const [sidebarWidthEnabled, setSidebarWidthEnabled] = useState<boolean>(false);
-  const [accountIsolationEnabledGemini, setAccountIsolationEnabledGemini] =
-    useState<boolean>(false);
-  const [accountIsolationEnabledAIStudio, setAccountIsolationEnabledAIStudio] =
-    useState<boolean>(false);
   const [aiStudioEnabled, setAiStudioEnabled] = useState<boolean>(true);
-  const [persistentExportToolbarEnabled, setPersistentExportToolbarEnabled] =
-    useState<boolean>(true);
   const [activeAccountPlatform, setActiveAccountPlatform] = useState<AccountPlatform>('gemini');
+  const isSafariBrowser = getVoyagerBuildTarget() === 'safari' || isSafari();
+  const canUseSystemNotifications = supportsExtensionNotifications();
+  const {
+    values: timelineSettings,
+    onChange: handleTimelineChange,
+    hydrateFromStorage: hydrateTimelineSettings,
+    resetPosition: resetTimelinePosition,
+  } = useTimelinePopupSettings(setSyncStorage);
+  const {
+    values: folderSettings,
+    accountIsolationEnabled,
+    onChange: handleFolderChange,
+    onAccountIsolationChange: handleAccountIsolationChange,
+    hydrateFromStorage: hydrateFolderSettings,
+  } = useFolderPopupSettings({ activeAccountPlatform, writeSyncStorage: setSyncStorage });
+  const {
+    values: generalSettings,
+    onChange: handleGeneralChange,
+    hydrateFromStorage: hydrateGeneralSettings,
+    remoteAnnouncementPermissionGranted,
+    requestRemoteAnnouncementSystemPermission,
+  } = useGeneralPopupSettings({
+    writeSyncStorage: setSyncStorage,
+    isSafariBrowser,
+    canUseSystemNotifications,
+  });
   const [activeUrl, setActiveUrl] = useState<string>('');
   const [activeTabContextLoaded, setActiveTabContextLoaded] = useState(false);
   const [activeTabId, setActiveTabId] = useState<number | null>(null);
@@ -1279,27 +1197,6 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
   const apply = useCallback(
     (settings: SettingsUpdate) => {
       const payload: Record<string, unknown> = {};
-      if (settings.mode) payload.geminiTimelineScrollMode = settings.mode;
-      if (settings.timelineStyle) payload[StorageKeys.TIMELINE_STYLE] = settings.timelineStyle;
-      if (typeof settings.hideContainer === 'boolean')
-        payload.geminiTimelineHideContainer = settings.hideContainer;
-      if (typeof settings.draggableTimeline === 'boolean')
-        payload.geminiTimelineDraggable = settings.draggableTimeline;
-      if (typeof settings.timelinePreviewPinned === 'boolean')
-        payload[StorageKeys.TIMELINE_PREVIEW_PINNED] = settings.timelinePreviewPinned;
-      if (typeof settings.markerLevelEnabled === 'boolean')
-        payload.geminiTimelineMarkerLevel = settings.markerLevelEnabled;
-      if (typeof settings.folderEnabled === 'boolean')
-        payload.geminiFolderEnabled = settings.folderEnabled;
-      if (typeof settings.floatingModeEnabled === 'boolean')
-        payload[StorageKeys.FOLDER_FLOATING_MODE_ENABLED] = settings.floatingModeEnabled;
-      if (typeof settings.floatingOpenOnStart === 'boolean')
-        payload[StorageKeys.FOLDER_FLOATING_OPEN_ON_START] = settings.floatingOpenOnStart;
-      if (typeof settings.hideArchivedConversations === 'boolean')
-        payload.geminiFolderHideArchivedConversations = settings.hideArchivedConversations;
-      if (typeof settings.folderSearchEnabled === 'boolean')
-        payload[StorageKeys.FOLDER_SEARCH_ENABLED] = settings.folderSearchEnabled;
-      if (settings.resetPosition) payload.geminiTimelinePosition = null;
       if (settings.customWebsites) payload.gvPromptCustomWebsites = settings.customWebsites;
       if (typeof settings.watermarkDownloadEnabled === 'boolean') {
         payload[StorageKeys.WATERMARK_DOWNLOAD_ENABLED] = settings.watermarkDownloadEnabled;
@@ -1325,30 +1222,6 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
         payload.gvInputCollapseWhenNotEmpty = settings.inputCollapseWhenNotEmpty;
       if (typeof settings.inputVimModeEnabled === 'boolean')
         payload[StorageKeys.INPUT_VIM_MODE] = settings.inputVimModeEnabled;
-      if (typeof settings.mermaidEnabled === 'boolean')
-        payload.gvMermaidEnabled = settings.mermaidEnabled;
-      if (typeof settings.quoteReplyEnabled === 'boolean')
-        payload.gvQuoteReplyEnabled = settings.quoteReplyEnabled;
-      if (typeof settings.highlightEnabled === 'boolean') {
-        payload[StorageKeys.HIGHLIGHT_ENABLED] = settings.highlightEnabled;
-      }
-      if (typeof settings.highlightTimelineMarkersEnabled === 'boolean') {
-        payload[StorageKeys.HIGHLIGHT_TIMELINE_MARKERS_ENABLED] =
-          settings.highlightTimelineMarkersEnabled;
-      }
-      if (typeof settings.responseCompleteNotificationEnabled === 'boolean') {
-        payload[StorageKeys.RESPONSE_COMPLETE_NOTIFICATION_ENABLED] =
-          settings.responseCompleteNotificationEnabled;
-      }
-      if (typeof settings.remoteAnnouncementEnabled === 'boolean') {
-        payload[StorageKeys.REMOTE_ANNOUNCEMENTS_ENABLED] = settings.remoteAnnouncementEnabled;
-      }
-      if (typeof settings.usageStatusEnabled === 'boolean')
-        payload[StorageKeys.USAGE_STATUS_ENABLED] = settings.usageStatusEnabled;
-      if (typeof settings.defaultModelAutoApplyEnabled === 'boolean')
-        payload[StorageKeys.DEFAULT_MODEL_AUTO_APPLY] = settings.defaultModelAutoApplyEnabled;
-      if (typeof settings.folderProjectEnabled === 'boolean')
-        payload[StorageKeys.FOLDER_PROJECT_ENABLED] = settings.folderProjectEnabled;
       if (typeof settings.ctrlEnterSendEnabled === 'boolean')
         payload.gvCtrlEnterSend = settings.ctrlEnterSendEnabled;
       if (typeof settings.aiStudioEnterSendEnabled === 'boolean')
@@ -1366,27 +1239,11 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
         // Clear legacy key
         payload.gvSnowEffect = false;
       }
-      if (typeof settings.preventAutoScrollEnabled === 'boolean')
-        payload.gvPreventAutoScrollEnabled = settings.preventAutoScrollEnabled;
-      if (typeof settings.inputHaloHidden === 'boolean')
-        payload[StorageKeys.INPUT_HALO_HIDDEN] = settings.inputHaloHidden;
-      if (typeof settings.forkEnabled === 'boolean')
-        payload[StorageKeys.FORK_ENABLED] = settings.forkEnabled;
-      if (typeof settings.accountIsolationEnabled === 'boolean') {
-        const isolationPlatform = settings.accountIsolationPlatform ?? activeAccountPlatform;
-        payload[getAccountIsolationStorageKey(isolationPlatform)] =
-          settings.accountIsolationEnabled;
-      }
       if (typeof settings.aiStudioEnabled === 'boolean')
         payload[StorageKeys.GV_AISTUDIO_ENABLED] = settings.aiStudioEnabled;
-      if (typeof settings.showMessageTimestamps === 'boolean')
-        payload[StorageKeys.GV_SHOW_MESSAGE_TIMESTAMPS] = settings.showMessageTimestamps;
-      if (typeof settings.persistentExportToolbarEnabled === 'boolean')
-        payload[StorageKeys.PERSISTENT_EXPORT_TOOLBAR_ENABLED] =
-          settings.persistentExportToolbarEnabled;
       void setSyncStorage(payload);
     },
-    [activeAccountPlatform, setSyncStorage],
+    [setSyncStorage],
   );
 
   // Copy folder structure for AI organization
@@ -1727,17 +1584,9 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
     try {
       chrome.storage?.sync?.get(
         {
-          geminiTimelineScrollMode: 'flow',
-          [StorageKeys.TIMELINE_STYLE]: 'dots',
-          geminiTimelineHideContainer: false,
-          geminiTimelineDraggable: false,
-          [StorageKeys.TIMELINE_PREVIEW_PINNED]: false,
-          geminiTimelineMarkerLevel: false,
-          geminiFolderEnabled: true,
-          [StorageKeys.FOLDER_FLOATING_MODE_ENABLED]: false,
-          [StorageKeys.FOLDER_FLOATING_OPEN_ON_START]: true,
-          geminiFolderHideArchivedConversations: false,
-          [StorageKeys.FOLDER_SEARCH_ENABLED]: true,
+          ...TIMELINE_SETTINGS_STORAGE_DEFAULTS,
+          ...FOLDER_SETTINGS_STORAGE_DEFAULTS,
+          ...GENERAL_SETTINGS_STORAGE_DEFAULTS,
           gvPromptCustomWebsites: [],
           [StorageKeys.FORMULA_COPY_ENABLED]: true,
           [StorageKeys.FORMULA_COPY_FORMAT]: 'latex',
@@ -1752,15 +1601,6 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
           gvInputCollapseWhenNotEmpty: false,
           [StorageKeys.INPUT_VIM_MODE]: false,
           [StorageKeys.TAB_TITLE_UPDATE_ENABLED]: false,
-          gvMermaidEnabled: true,
-          [StorageKeys.WAVEDROM_ENABLED]: true,
-          [StorageKeys.ECHARTS_ENABLED]: true,
-          gvQuoteReplyEnabled: true,
-          [StorageKeys.HIGHLIGHT_ENABLED]: false,
-          [StorageKeys.HIGHLIGHT_TIMELINE_MARKERS_ENABLED]: true,
-          [StorageKeys.USAGE_STATUS_ENABLED]: false,
-          [StorageKeys.DEFAULT_MODEL_AUTO_APPLY]: true,
-          [StorageKeys.FOLDER_PROJECT_ENABLED]: false,
           gvCtrlEnterSend: false,
           [StorageKeys.AISTUDIO_ENTER_SEND]: false,
           [StorageKeys.SAFARI_ENTER_FIX]: false,
@@ -1769,12 +1609,6 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
           gvSidebarFullHide: false,
           gvVisualEffect: 'off',
           gvSnowEffect: false,
-          gvPreventAutoScrollEnabled: false,
-          [StorageKeys.INPUT_HALO_HIDDEN]: false,
-          [StorageKeys.FORK_ENABLED]: false,
-          [StorageKeys.GV_ACCOUNT_ISOLATION_ENABLED]: false,
-          [StorageKeys.GV_ACCOUNT_ISOLATION_ENABLED_GEMINI]: null,
-          [StorageKeys.GV_ACCOUNT_ISOLATION_ENABLED_AISTUDIO]: null,
           [StorageKeys.GV_AISTUDIO_ENABLED]: true,
           gvChatWidthEnabled: false,
           [StorageKeys.CHAT_FONT_SIZE_ENABLED]: false,
@@ -1786,32 +1620,17 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
           gvSidebarWidthEnabled: false,
           geminiChatWidth: CHAT_PERCENT.defaultValue,
           geminiEditInputWidth: EDIT_PERCENT.defaultValue,
-          [StorageKeys.GV_SHOW_MESSAGE_TIMESTAMPS]: false,
-          [StorageKeys.RESPONSE_COMPLETE_NOTIFICATION_ENABLED]: false,
-          [StorageKeys.REMOTE_ANNOUNCEMENTS_ENABLED]: true,
-          [StorageKeys.PERSISTENT_EXPORT_TOOLBAR_ENABLED]: true,
           [StorageKeys.GV_POPUP_SECTION_ORDER]: null,
         },
         (res) => {
-          const m = res?.geminiTimelineScrollMode as ScrollMode;
-          if (m === 'jump' || m === 'flow') setMode(m);
-          const storedTimelineStyle = res?.[StorageKeys.TIMELINE_STYLE];
-          if (isTimelineStyle(storedTimelineStyle)) {
-            setTimelineStyle(storedTimelineStyle);
-          }
+          hydrateTimelineSettings(res ?? {});
+          hydrateFolderSettings(res ?? {});
+          hydrateGeneralSettings(res ?? {});
+
           hydrateFormulaCopySettings(
             res?.[StorageKeys.FORMULA_COPY_ENABLED],
             res?.[StorageKeys.FORMULA_COPY_FORMAT],
           );
-          setHideContainer(!!res?.geminiTimelineHideContainer);
-          setDraggableTimeline(!!res?.geminiTimelineDraggable);
-          setTimelinePreviewPinned(res?.[StorageKeys.TIMELINE_PREVIEW_PINNED] === true);
-          setMarkerLevelEnabled(!!res?.geminiTimelineMarkerLevel);
-          setFolderEnabled(res?.geminiFolderEnabled !== false);
-          setFloatingModeEnabled(res?.[StorageKeys.FOLDER_FLOATING_MODE_ENABLED] === true);
-          setFloatingOpenOnStart(res?.[StorageKeys.FOLDER_FLOATING_OPEN_ON_START] !== false);
-          setHideArchivedConversations(!!res?.geminiFolderHideArchivedConversations);
-          setFolderSearchEnabled(res?.[StorageKeys.FOLDER_SEARCH_ENABLED] !== false);
           const rawCustomWebsites = Array.isArray(res?.gvPromptCustomWebsites)
             ? res.gvPromptCustomWebsites
             : [];
@@ -1838,21 +1657,6 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
           if (res?.[StorageKeys.TAB_TITLE_UPDATE_ENABLED] !== false) {
             void setSyncStorage({ [StorageKeys.TAB_TITLE_UPDATE_ENABLED]: false });
           }
-          setMermaidEnabled(res?.gvMermaidEnabled !== false);
-          hydrateWavedromEnabled(res?.[StorageKeys.WAVEDROM_ENABLED]);
-          hydrateEchartsEnabled(res?.[StorageKeys.ECHARTS_ENABLED]);
-          setQuoteReplyEnabled(res?.gvQuoteReplyEnabled !== false);
-          setHighlightEnabled(res?.[StorageKeys.HIGHLIGHT_ENABLED] === true);
-          setHighlightTimelineMarkersEnabled(
-            res?.[StorageKeys.HIGHLIGHT_TIMELINE_MARKERS_ENABLED] !== false,
-          );
-          setResponseCompleteNotificationEnabled(
-            res?.[StorageKeys.RESPONSE_COMPLETE_NOTIFICATION_ENABLED] === true,
-          );
-          setRemoteAnnouncementEnabled(res?.[StorageKeys.REMOTE_ANNOUNCEMENTS_ENABLED] !== false);
-          setUsageStatusEnabled(res?.[StorageKeys.USAGE_STATUS_ENABLED] === true);
-          setDefaultModelAutoApplyEnabled(res?.[StorageKeys.DEFAULT_MODEL_AUTO_APPLY] !== false);
-          setFolderProjectEnabled(res?.[StorageKeys.FOLDER_PROJECT_ENABLED] === true);
           setCtrlEnterSendEnabled(res?.gvCtrlEnterSend === true);
           setAiStudioEnterSendEnabled(res?.[StorageKeys.AISTUDIO_ENTER_SEND] === true);
           setSafariEnterFixEnabled(res?.[StorageKeys.SAFARI_ENTER_FIX] === true);
@@ -1872,13 +1676,7 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
           } else {
             setVisualEffect('off');
           }
-          setPreventAutoScrollEnabled(res?.gvPreventAutoScrollEnabled === true);
-          setInputHaloHidden(res?.[StorageKeys.INPUT_HALO_HIDDEN] === true);
-          setForkEnabled(res?.[StorageKeys.FORK_ENABLED] === true);
           setAiStudioEnabled(res?.[StorageKeys.GV_AISTUDIO_ENABLED] !== false);
-          setPersistentExportToolbarEnabled(
-            res?.[StorageKeys.PERSISTENT_EXPORT_TOOLBAR_ENABLED] !== false,
-          );
 
           // Width enabled flags — auto-enable if user previously customized the width
           setChatWidthEnabled(
@@ -1896,21 +1694,6 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
                 res.geminiEditInputWidth !== EDIT_PERCENT.defaultValue),
           );
           setSidebarWidthEnabled(res?.gvSidebarWidthEnabled === true);
-
-          const legacyIsolationEnabled = res?.[StorageKeys.GV_ACCOUNT_ISOLATION_ENABLED] === true;
-          const geminiIsolationRaw = res?.[StorageKeys.GV_ACCOUNT_ISOLATION_ENABLED_GEMINI];
-          const aiStudioIsolationRaw = res?.[StorageKeys.GV_ACCOUNT_ISOLATION_ENABLED_AISTUDIO];
-          setAccountIsolationEnabledGemini(
-            typeof geminiIsolationRaw === 'boolean' ? geminiIsolationRaw : legacyIsolationEnabled,
-          );
-          setAccountIsolationEnabledAIStudio(
-            typeof aiStudioIsolationRaw === 'boolean'
-              ? aiStudioIsolationRaw
-              : legacyIsolationEnabled,
-          );
-
-          // Timestamp settings
-          setShowMessageTimestamps(res?.[StorageKeys.GV_SHOW_MESSAGE_TIMESTAMPS] === true);
 
           // Section order
           const storedOrder = res?.[StorageKeys.GV_POPUP_SECTION_ORDER];
@@ -1963,7 +1746,13 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
         },
       );
     } catch {}
-  }, [hydrateEchartsEnabled, hydrateFormulaCopySettings, hydrateWavedromEnabled, setSyncStorage]);
+  }, [
+    hydrateTimelineSettings,
+    hydrateFolderSettings,
+    hydrateGeneralSettings,
+    hydrateFormulaCopySettings,
+    setSyncStorage,
+  ]);
 
   // Validate and normalize URL
   const normalizeUrl = useCallback((url: string): string | null => {
@@ -2160,31 +1949,8 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
 
   const normalizedCurrentVersion = normalizeVersionString(extVersion);
   const normalizedLatestVersion = normalizeVersionString(latestVersion);
-  const isSafariBrowser = getVoyagerBuildTarget() === 'safari' || isSafari();
-  const canUseSystemNotifications = supportsExtensionNotifications();
   const webStoreRatingChannel = getWebStoreRatingChannel();
   const safariUpdateReminderEnabled = isSafariBrowser && shouldShowSafariUpdateReminder();
-  useEffect(() => {
-    let active = true;
-    if (!canUseSystemNotifications) {
-      setRemoteAnnouncementPermissionGranted(false);
-      return () => {
-        active = false;
-      };
-    }
-    void hasNotificationsPermission().then((granted) => {
-      if (active) setRemoteAnnouncementPermissionGranted(granted);
-    });
-    return () => {
-      active = false;
-    };
-  }, [canUseSystemNotifications]);
-
-  const requestRemoteAnnouncementSystemPermission = useCallback(async () => {
-    if (await ensureNotificationsPermission()) {
-      setRemoteAnnouncementPermissionGranted(true);
-    }
-  }, []);
   const shouldShowUpdateNotification = shouldShowUpdateReminderForCurrentVersion({
     currentVersion: normalizedCurrentVersion,
     isSafariBrowser,
@@ -2296,121 +2062,6 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
       void setSyncStorage({ [StorageKeys.GV_POPUP_SECTION_ORDER]: next });
       return next;
     });
-  };
-
-  // Extracted settings cards report one changed key at a time; mirror it into
-  // the matching state and persist through the same `apply` path as before.
-  const timelineSetters = useMemo<SettingSetters<TimelineSettingsValues>>(
-    () => ({
-      timelineStyle: setTimelineStyle,
-      mode: setMode,
-      hideContainer: setHideContainer,
-      draggableTimeline: setDraggableTimeline,
-      timelinePreviewPinned: setTimelinePreviewPinned,
-      preventAutoScrollEnabled: setPreventAutoScrollEnabled,
-      markerLevelEnabled: setMarkerLevelEnabled,
-      showMessageTimestamps: setShowMessageTimestamps,
-    }),
-    [],
-  );
-  const handleTimelineChange = useCallback(
-    (patch: Partial<TimelineSettingsValues>) => {
-      applySettingsPatch(timelineSetters, patch);
-      apply(patch);
-    },
-    [apply, timelineSetters],
-  );
-  const folderSetters = useMemo<SettingSetters<FolderSettingsValues>>(
-    () => ({
-      folderEnabled: setFolderEnabled,
-      floatingModeEnabled: setFloatingModeEnabled,
-      floatingOpenOnStart: setFloatingOpenOnStart,
-      hideArchivedConversations: setHideArchivedConversations,
-      folderSearchEnabled: setFolderSearchEnabled,
-      forkEnabled: setForkEnabled,
-      folderProjectEnabled: setFolderProjectEnabled,
-    }),
-    [],
-  );
-  const handleFolderChange = useCallback(
-    (patch: Partial<FolderSettingsValues>) => {
-      applySettingsPatch(folderSetters, patch);
-      apply(patch);
-    },
-    [apply, folderSetters],
-  );
-  const handleAccountIsolationChange = useCallback(
-    (enabled: boolean) => {
-      if (isAIStudio) {
-        setAccountIsolationEnabledAIStudio(enabled);
-      } else {
-        setAccountIsolationEnabledGemini(enabled);
-      }
-      apply({ accountIsolationEnabled: enabled, accountIsolationPlatform: activeAccountPlatform });
-    },
-    [activeAccountPlatform, apply, isAIStudio],
-  );
-
-  // General card: most keys mirror into state and persist through `apply`;
-  // four keep the bespoke paths they always had (rendering toggles that
-  // gate a lazy library load, the changelog badge mode, and the completion
-  // notification that first asks for permission).
-  type PlainGeneralSettings = Omit<
-    GeneralSettingsValues,
-    | 'wavedromEnabled'
-    | 'echartsEnabled'
-    | 'changelogBadgeMode'
-    | 'responseCompleteNotificationEnabled'
-  >;
-  const generalSetters = useMemo<SettingSetters<PlainGeneralSettings>>(
-    () => ({
-      persistentExportToolbarEnabled: setPersistentExportToolbarEnabled,
-      mermaidEnabled: setMermaidEnabled,
-      quoteReplyEnabled: setQuoteReplyEnabled,
-      highlightEnabled: setHighlightEnabled,
-      highlightTimelineMarkersEnabled: setHighlightTimelineMarkersEnabled,
-      remoteAnnouncementEnabled: setRemoteAnnouncementEnabled,
-      usageStatusEnabled: setUsageStatusEnabled,
-      inputHaloHidden: setInputHaloHidden,
-      defaultModelAutoApplyEnabled: setDefaultModelAutoApplyEnabled,
-    }),
-    [],
-  );
-  const handleResponseCompleteNotificationChange = async (next: boolean) => {
-    if (next && isSafariBrowser) {
-      setResponseCompleteNotificationEnabled(true);
-      const granted = await requestSafariNativeNotificationPermission();
-      setResponseCompleteNotificationEnabled(granted);
-      return;
-    }
-    if (next) {
-      const granted = await ensureNotificationsPermission();
-      if (!granted) {
-        setResponseCompleteNotificationEnabled(false);
-        return;
-      }
-    }
-    if (next) setRemoteAnnouncementPermissionGranted(true);
-    setResponseCompleteNotificationEnabled(next);
-    apply({ responseCompleteNotificationEnabled: next });
-  };
-  const handleGeneralChange = (patch: Partial<GeneralSettingsValues>) => {
-    const {
-      wavedromEnabled,
-      echartsEnabled,
-      changelogBadgeMode: badgeMode,
-      responseCompleteNotificationEnabled,
-      ...rest
-    } = patch;
-    if (wavedromEnabled !== undefined) setWavedromEnabledFromUser(wavedromEnabled);
-    if (echartsEnabled !== undefined) setEchartsEnabledFromUser(echartsEnabled);
-    if (badgeMode !== undefined) handleChangelogBadgeModeChange(badgeMode);
-    if (responseCompleteNotificationEnabled !== undefined) {
-      void handleResponseCompleteNotificationChange(responseCompleteNotificationEnabled);
-    }
-    if (Object.keys(rest).length === 0) return;
-    applySettingsPatch(generalSetters, rest);
-    apply(rest);
   };
 
   const wrapSection = (
@@ -2658,7 +2309,7 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
         {isPluginSite && (
           <Card style={{ order: -2 }} className="border-primary/20 p-4">
             <CardContent className="p-0">
-              {<PromptDataTransfer t={t} transfer={promptDataTransfer} />}
+              <PromptDataTransfer t={t} transfer={promptDataTransfer} />
             </CardContent>
           </Card>
         )}
@@ -2687,18 +2338,9 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
         {wrapSection(
           'timeline',
           <TimelineSettingsCard
-            values={{
-              timelineStyle,
-              mode,
-              hideContainer,
-              draggableTimeline,
-              timelinePreviewPinned,
-              preventAutoScrollEnabled,
-              markerLevelEnabled,
-              showMessageTimestamps,
-            }}
+            values={timelineSettings}
             onChange={handleTimelineChange}
-            onResetPosition={() => apply({ resetPosition: true })}
+            onResetPosition={resetTimelinePosition}
             onViewStarredHistory={() => setShowStarredHistory(true)}
             isVisible={(settingId) => shouldShowSetting('timeline', settingId)}
             t={t}
@@ -2708,18 +2350,10 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
         {wrapSection(
           'folder',
           <FolderSettingsCard
-            values={{
-              folderEnabled,
-              floatingModeEnabled,
-              floatingOpenOnStart,
-              hideArchivedConversations,
-              folderSearchEnabled,
-              forkEnabled,
-              folderProjectEnabled,
-            }}
+            values={folderSettings}
             onChange={handleFolderChange}
             accountIsolation={{
-              enabled: isAIStudio ? accountIsolationEnabledAIStudio : accountIsolationEnabledGemini,
+              enabled: accountIsolationEnabled,
               platformLabel: currentPlatformLabel,
               onChange: handleAccountIsolationChange,
             }}
@@ -3417,26 +3051,12 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
         {wrapSection(
           'general',
           <GeneralSettingsCard
-            values={{
-              persistentExportToolbarEnabled,
-              mermaidEnabled,
-              wavedromEnabled,
-              echartsEnabled,
-              quoteReplyEnabled,
-              highlightEnabled,
-              highlightTimelineMarkersEnabled,
-              responseCompleteNotificationEnabled,
-              remoteAnnouncementEnabled,
-              changelogBadgeMode,
-              usageStatusEnabled,
-              inputHaloHidden,
-              defaultModelAutoApplyEnabled,
-            }}
+            values={generalSettings}
             onChange={handleGeneralChange}
             isSafariBrowser={isSafariBrowser}
             remoteAnnouncementPermissionCta={{
               visible:
-                remoteAnnouncementEnabled &&
+                generalSettings.remoteAnnouncementEnabled &&
                 canUseSystemNotifications &&
                 !remoteAnnouncementPermissionGranted,
               onRequest: requestRemoteAnnouncementSystemPermission,
