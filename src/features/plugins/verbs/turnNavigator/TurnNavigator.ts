@@ -861,7 +861,7 @@ export class TurnNavigator {
       // landing region mounts, so let the homing loop fine-aim after the jump.
       this.beginPendingNavigation(marker);
       this.pendingNavigationProbed = true;
-      this.scrollToOffset(center, 'auto');
+      this.scrollToOffset(center, 'instant');
       this.schedulePendingNavigationHop();
       return;
     }
@@ -989,7 +989,7 @@ export class TurnNavigator {
       ? marker.center
       : (this.pendingNavigationLo + this.pendingNavigationHi) / 2;
     this.pendingNavigationProbed = true;
-    this.scrollToOffset(probe, 'auto');
+    this.scrollToOffset(probe, 'instant');
     this.schedulePendingNavigationHop();
   };
 
@@ -1123,7 +1123,7 @@ export class TurnNavigator {
    * conversation as Claude re-measures content mid-flight, and mixing smooth
    * short hops with instant long ones read as erratic navigation.
    */
-  private scrollToOffset(center: number, behavior: ScrollBehavior = 'auto'): void {
+  private scrollToOffset(center: number, behavior: ScrollBehavior = 'instant'): void {
     const top = Math.max(0, center - this.getViewportHeight() * ACTIVE_ANCHOR);
     const target = this.scrollTarget;
     if (!target || target === window) {
@@ -1141,7 +1141,7 @@ export class TurnNavigator {
     if (target === window) {
       const top =
         this.getScrollTop() + rect.top + rect.height / 2 - this.getViewportHeight() * ACTIVE_ANCHOR;
-      window.scrollTo({ top: Math.max(0, top), behavior: 'auto' });
+      window.scrollTo({ top: Math.max(0, top), behavior: 'instant' });
       return;
     }
     const container = target as HTMLElement;
@@ -1152,7 +1152,7 @@ export class TurnNavigator {
       containerRect.top -
       container.clientHeight * ACTIVE_ANCHOR +
       rect.height / 2;
-    if (container.scrollTo) container.scrollTo({ top: Math.max(0, top), behavior: 'auto' });
+    if (container.scrollTo) container.scrollTo({ top: Math.max(0, top), behavior: 'instant' });
     else container.scrollTop = Math.max(0, top);
   }
 }

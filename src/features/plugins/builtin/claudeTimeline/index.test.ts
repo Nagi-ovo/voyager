@@ -125,7 +125,7 @@ describe('Claude timeline', () => {
     expect(dots).toHaveLength(2);
 
     dots[0].dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    expect(window.scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'auto' });
+    expect(window.scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'instant' });
     expect(dots[0].classList.contains('active')).toBe(true);
     expect(dots[0].getAttribute('aria-current')).toBe('true');
   });
@@ -233,7 +233,7 @@ describe('Claude timeline', () => {
     ).toBe(false);
 
     dot.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    expect(window.scrollTo).toHaveBeenCalledWith({ top: 450, behavior: 'auto' });
+    expect(window.scrollTo).toHaveBeenCalledWith({ top: 450, behavior: 'instant' });
     expect(bar.getAttribute('aria-expanded')).toBe('false');
     expect(document.querySelector('.timeline-preview-panel')?.classList.contains('visible')).toBe(
       false,
@@ -316,7 +316,7 @@ describe('Claude timeline', () => {
     await flush();
 
     queryDots()[1].click();
-    expect(window.scrollTo).toHaveBeenCalledWith({ top: 450, behavior: 'auto' });
+    expect(window.scrollTo).toHaveBeenCalledWith({ top: 450, behavior: 'instant' });
   });
 
   it('long-presses a dot to star it', async () => {
@@ -645,12 +645,12 @@ describe('Claude timeline', () => {
     // First hop jumps instantly to the remembered offset (center 720 → top 450).
     queryDots()[1].dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(window.scrollTo).toHaveBeenCalledTimes(1);
-    expect(window.scrollTo).toHaveBeenCalledWith({ top: 450, behavior: 'auto' });
+    expect(window.scrollTo).toHaveBeenCalledWith({ top: 450, behavior: 'instant' });
 
     // Still unmounted after a hop interval: bisect further instead of giving up.
     vi.advanceTimersByTime(200);
     expect(window.scrollTo).toHaveBeenCalledTimes(2);
-    expect(window.scrollTo).toHaveBeenLastCalledWith({ top: 1030, behavior: 'auto' });
+    expect(window.scrollTo).toHaveBeenLastCalledWith({ top: 1030, behavior: 'instant' });
 
     // Turn mounts: the next hop aims precisely and stops.
     document.body.appendChild(second);
@@ -658,7 +658,7 @@ describe('Claude timeline', () => {
     vi.advanceTimersByTime(200);
     await flush();
     expect(window.scrollTo).toHaveBeenCalledTimes(3);
-    expect(window.scrollTo).toHaveBeenLastCalledWith({ top: 450, behavior: 'auto' });
+    expect(window.scrollTo).toHaveBeenLastCalledWith({ top: 450, behavior: 'instant' });
 
     vi.advanceTimersByTime(600);
     expect(window.scrollTo).toHaveBeenCalledTimes(3);
@@ -685,18 +685,18 @@ describe('Claude timeline', () => {
     // Target sits between two mounted turns: probe its remembered offset...
     queryDots()[1].dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(window.scrollTo).toHaveBeenCalledTimes(1);
-    expect(window.scrollTo).toHaveBeenCalledWith({ top: 450, behavior: 'auto' });
+    expect(window.scrollTo).toHaveBeenCalledWith({ top: 450, behavior: 'instant' });
 
     // ...then bisect between the mounted neighbours instead of giving up.
     vi.advanceTimersByTime(200);
     expect(window.scrollTo).toHaveBeenCalledTimes(2);
-    expect(window.scrollTo).toHaveBeenLastCalledWith({ top: 400, behavior: 'auto' });
+    expect(window.scrollTo).toHaveBeenLastCalledWith({ top: 400, behavior: 'instant' });
 
     document.body.insertBefore(second, third);
     await flush();
     vi.advanceTimersByTime(200);
     await flush();
-    expect(window.scrollTo).toHaveBeenLastCalledWith({ top: 450, behavior: 'auto' });
+    expect(window.scrollTo).toHaveBeenLastCalledWith({ top: 450, behavior: 'instant' });
   });
 
   it('jumps instantly for long-distance navigation to a mounted turn, then fine-aims', async () => {
@@ -712,12 +712,12 @@ describe('Claude timeline', () => {
     // Distance > 3 viewports: jump, then fine-aim once the region re-measures.
     queryDots()[1].dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(window.scrollTo).toHaveBeenCalledTimes(1);
-    expect(window.scrollTo).toHaveBeenCalledWith({ top: 4750, behavior: 'auto' });
+    expect(window.scrollTo).toHaveBeenCalledWith({ top: 4750, behavior: 'instant' });
 
     // Next hop fine-aims and ends the navigation.
     vi.advanceTimersByTime(200);
     expect(window.scrollTo).toHaveBeenCalledTimes(2);
-    expect(window.scrollTo).toHaveBeenLastCalledWith({ top: 4750, behavior: 'auto' });
+    expect(window.scrollTo).toHaveBeenLastCalledWith({ top: 4750, behavior: 'instant' });
 
     vi.advanceTimersByTime(600);
     expect(window.scrollTo).toHaveBeenCalledTimes(2);
@@ -753,7 +753,7 @@ describe('Claude timeline', () => {
     await flush();
 
     expect(window.scrollTo).toHaveBeenCalledTimes(1);
-    expect(window.scrollTo).toHaveBeenCalledWith({ top: 450, behavior: 'auto' });
+    expect(window.scrollTo).toHaveBeenCalledWith({ top: 450, behavior: 'instant' });
 
     addTurn('third prompt');
     await settleRefresh();

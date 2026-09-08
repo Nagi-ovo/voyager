@@ -220,7 +220,8 @@ drop, or hover layout.
 - **Rule:** Keep a grow-only registry stitched across overlapping windows by content hash:
   `c-<textHash>`, with `~n` for duplicates and hash-segment matching for legacy stars. Navigate to
   unmounted turns iteratively with instant probing and direction-aware bisection, then fine-aim
-  after mount. Every jump is instant: smooth scrolling drifts while Claude re-measures, and mixing
+  after mount. Every jump passes `behavior: 'instant'` (`'auto'` follows the page's CSS
+  `scroll-behavior`, so it can still animate): smooth scrolling drifts while Claude re-measures, and mixing
   smooth short hops with instant long ones reads as erratic. Reuse this virtual-window model for
   future Claude DOM features.
 - **Guard:** `src/features/plugins/builtin/claudeTimeline/index.test.ts` covers sparse-window
