@@ -12,6 +12,12 @@ export interface ChatGptTurnContainer {
 
   /** 顶层 [data-turn-id-container] 容器。 */
   container: HTMLElement;
+
+  /**
+   * ChatGPT 渲染了该 turn 的外框，但其中没有任何消息（例如只产出了已不再展示的文件的回复）。
+   * 仅由 materialize 在内容稳定为空后设置。
+   */
+  empty?: boolean;
 }
 
 export interface ExportSelectionOptions {

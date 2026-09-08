@@ -8,7 +8,11 @@ import { computeConversationFingerprint } from '../topNodePreload';
 import type { ChatGptTurnContainer, ChatGptTurnRole, ExportSelectionOptions } from './type';
 
 const TURN_CONTAINER_SELECTOR = '[data-turn-id-container]';
-const NON_TURN_CONTAINER_IDS = new Set(['client-created-root']);
+// ChatGPT stores virtual-list bookkeeping roots in the same attribute as turns:
+// `client-created-root` for a conversation started in this tab and
+// `paginated-root:<conversation-id>` for one opened from history.
+const NON_TURN_CONTAINER_ID = /-root(?::|$)/;
+const TURN_FRAME_SELECTOR = '[data-turn]';
 const USER_MESSAGE_SELECTOR = '[data-message-author-role="user"]';
 const ASSISTANT_MESSAGE_SELECTOR = '[data-message-author-role="assistant"]';
 const IMAGEGEN_SELECTOR = '[class*="group/imagegen-image"]';
@@ -43,7 +47,19 @@ function resolveTurnRole(container: HTMLElement): ChatGptTurnRole {
     return 'assistant';
   }
 
-  return 'unknown';
+  return resolveTurnFrameRole(container);
+}
+
+function findTurnFrame(container: HTMLElement): Element | null {
+  return container.matches(TURN_FRAME_SELECTOR)
+    ? container
+    : container.querySelector(TURN_FRAME_SELECTOR);
+}
+
+/** ChatGPT labels the rendered turn frame (`section[data-turn]`) even when it holds no message. */
+function resolveTurnFrameRole(container: HTMLElement): ChatGptTurnRole {
+  const role = findTurnFrame(container)?.getAttribute('data-turn');
+  return role === 'user' || role === 'assistant' ? role : 'unknown';
 }
 
 function mergeExtractedContent(
@@ -89,7 +105,7 @@ export function chatgptCollectTurnContainers(root: ParentNode = document): ChatG
 
   for (const container of root.querySelectorAll<HTMLElement>(TURN_CONTAINER_SELECTOR)) {
     const id = container.getAttribute('data-turn-id-container')?.trim();
-    if (!id || NON_TURN_CONTAINER_IDS.has(id)) continue;
+    if (!id || NON_TURN_CONTAINER_ID.test(id)) continue;
 
     const role = resolveTurnRole(container);
     const existing = turnsById.get(id);
@@ -193,6 +209,22 @@ function hasConventionalMountedContent(root: HTMLElement): boolean {
   );
 }
 
+/**
+ * A turn whose frame ChatGPT rendered but that holds no message root at all,
+ * for example a response that only produced a file which is no longer shown.
+ * Unlike an unmounted virtual shell, the frame proves ChatGPT already laid the
+ * turn out, so waiting for content cannot succeed.
+ */
+function isRenderedWithoutMessage(turn: ChatGptTurnContainer): boolean {
+  const { container } = turn;
+  return (
+    findTurnFrame(container) != null &&
+    container.querySelector(
+      `${USER_MESSAGE_SELECTOR},${ASSISTANT_MESSAGE_SELECTOR},${IMAGEGEN_SELECTOR}`,
+    ) == null
+  );
+}
+
 function isGeneratingTurn(turn: ChatGptTurnContainer): boolean {
   if (
     turn.container.matches(STREAMING_TURN_SELECTOR) ||
@@ -208,6 +240,8 @@ function isGeneratingTurn(turn: ChatGptTurnContainer): boolean {
 /**
  * Materialize a virtualized ChatGPT turn. Already-mounted, completed turns use
  * a zero-wait fast path; empty shells wait for a positive role/content signal.
+ * A rendered turn that stays message-less through the idle window is returned
+ * with `empty: true` instead of timing out.
  */
 export async function materializeChatGptTurnContainer(
   turn: ChatGptTurnContainer,
@@ -234,7 +268,13 @@ export async function materializeChatGptTurnContainer(
     if (latest) current = { ...latest, role: resolveTurnRole(latest.container) };
 
     const hasContent = current.role !== 'unknown' && hasMountedContent(current);
-    if (!hasContent && Date.now() - lastPositionAt >= MATERIALIZATION_REPOSITION_MS) {
+    const renderedEmpty =
+      !hasContent && current.role !== 'unknown' && isRenderedWithoutMessage(current);
+    if (
+      !hasContent &&
+      !renderedEmpty &&
+      Date.now() - lastPositionAt >= MATERIALIZATION_REPOSITION_MS
+    ) {
       const rect = current.container.getBoundingClientRect();
       if (rect.bottom <= 0 || rect.top >= window.innerHeight) {
         // ChatGPT reconciles estimated shell heights after nearby turns mount.
@@ -245,14 +285,14 @@ export async function materializeChatGptTurnContainer(
       }
     }
 
-    if (hasContent && !isGeneratingTurn(current)) {
+    if ((hasContent || renderedEmpty) && !isGeneratingTurn(current)) {
       const fingerprint = computeConversationFingerprint(current.container, contentSelectors, 10);
       const signature = `${fingerprint.signature}:${fingerprint.count}`;
       if (signature !== stableSignature) {
         stableSignature = signature;
         stableSince = Date.now();
       } else if (Date.now() - stableSince >= MATERIALIZATION_IDLE_MS) {
-        return current;
+        return renderedEmpty ? { ...current, empty: true } : current;
       }
     } else {
       stableSignature = '';
@@ -366,12 +406,19 @@ export async function buildChatGptTurnsForSelection(
 
   const turns: ChatTurn[] = [];
   let pendingUser: { readonly turn: ChatTurn; readonly sequence: number } | null = null;
-  const extractedIds = new Set<string>();
+  const handledIds = new Set<string>();
 
   try {
     for (const turn of selectedContainers) {
       assertSelectionActive(options);
       const materialized = await materializeChatGptTurnContainer(turn, options);
+      if (materialized.empty) {
+        // Nothing to export for this turn, but not a failure: ChatGPT itself
+        // shows it blank. Pairing stays sequence-based, so a prompt followed by
+        // a blank response exports as a user-only turn.
+        handledIds.add(turn.id);
+        continue;
+      }
       const { container, role } = materialized;
       const sequence = turn.sequence;
 
@@ -397,7 +444,7 @@ export async function buildChatGptTurnsForSelection(
             userContent,
           },
         };
-        extractedIds.add(turn.id);
+        handledIds.add(turn.id);
         continue;
       }
 
@@ -431,7 +478,7 @@ export async function buildChatGptTurnsForSelection(
             assistantContent,
           });
         }
-        extractedIds.add(turn.id);
+        handledIds.add(turn.id);
         continue;
       }
 
@@ -439,7 +486,7 @@ export async function buildChatGptTurnsForSelection(
     }
 
     if (pendingUser) turns.push(pendingUser.turn);
-    if (extractedIds.size !== selectedContainerIds.size) {
+    if (handledIds.size !== selectedContainerIds.size) {
       throw new Error('chatgpt_export_incomplete_selection');
     }
 

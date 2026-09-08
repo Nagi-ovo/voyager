@@ -140,6 +140,32 @@ describe('chatgptCollectTurnContainers', () => {
     expect(turns.map((turn) => turn.sequence)).toEqual([0, 1]);
   });
 
+  it('ignores the paginated history root the same way', () => {
+    document.body.innerHTML = `
+      <div data-turn-id-container="paginated-root:6a9f32f7-3a38-83eb-92c4-0737641a943d"></div>
+      <div data-turn-id-container="user-1">
+        <div data-message-author-role="user">First prompt</div>
+      </div>
+    `;
+
+    expect(chatgptCollectTurnContainers().map((turn) => turn.id)).toEqual(['user-1']);
+  });
+
+  it('resolves the role from the turn frame when ChatGPT renders a turn without a message', () => {
+    document.body.innerHTML = `
+      <div data-turn-id-container="assistant-1">
+        <section data-turn="assistant" data-turn-id-container="assistant-1">
+          <h4>ChatGPT said:</h4>
+          <div></div>
+        </section>
+      </div>
+    `;
+
+    const [turn] = chatgptCollectTurnContainers();
+
+    expect(turn.role).toBe('assistant');
+  });
+
   it('keeps only the first container for each stable turn id', () => {
     document.body.innerHTML = `
       <div data-turn-id-container="user-1">
@@ -348,6 +374,33 @@ describe('chatgptCollectTurnContainers', () => {
     );
     await vi.advanceTimersByTimeAsync(3200);
     await assertion;
+  });
+
+  it('skips a rendered turn without a message instead of failing the export', async () => {
+    vi.useFakeTimers();
+    document.body.innerHTML = `
+      <div data-turn-id-container="user-1"><div data-message-author-role="user">U1</div></div>
+      <div data-turn-id-container="assistant-1">
+        <section data-turn="assistant" data-turn-id-container="assistant-1">
+          <h4>ChatGPT said:</h4>
+          <div></div>
+        </section>
+      </div>
+      <div data-turn-id-container="user-2"><div data-message-author-role="user">U2</div></div>
+      <div data-turn-id-container="assistant-2">
+        <div data-message-author-role="assistant">A2</div>
+      </div>
+    `;
+
+    const exportPromise = buildChatGptTurnsForSelection(
+      new Set(['user-1', 'assistant-1', 'user-2', 'assistant-2']),
+    );
+    await vi.advanceTimersByTimeAsync(1000);
+
+    await expect(exportPromise).resolves.toMatchObject([
+      { user: 'U1', assistant: '' },
+      { user: 'U2', assistant: 'A2' },
+    ]);
   });
 
   it('repositions a virtual shell that moves offscreen after height reconciliation', async () => {

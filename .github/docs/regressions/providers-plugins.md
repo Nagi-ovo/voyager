@@ -16,6 +16,26 @@ or prompt commands.
 - **Guard:** `src/pages/content/export/adapter/__tests__/chatgpt.test.ts`
   (`repositions a virtual shell that moves offscreen after height reconciliation`).
 
+## ChatGPT bookkeeping roots and message-less turns must not abort the export
+
+- **Trap:** Exporting a ChatGPT conversation opened from history failed with
+  `chatgpt_export_message_unavailable:paginated-root:<conversation-id>`, surfaced to the user as the
+  generic "refresh and retry" alert, and select mode showed a phantom checkbox above the first
+  message. ChatGPT stores its virtual-list roots in the same `data-turn-id-container` attribute as
+  turns: `client-created-root` for a conversation started in the tab and `paginated-root:<id>` for
+  one opened from history; only the first was excluded. A turn whose response rendered nothing
+  (`section[data-turn="assistant"]` without any `[data-message-author-role]`) then hit the same
+  timeout because it looked like an unmounted virtual shell.
+- **Rule:** Skip every `*-root` container. Resolve the role from `[data-turn]` when no message root
+  exists, and once a mounted frame stays message-less through the settle window treat the turn as
+  empty: count it as handled, export nothing for it, and keep pairing sequence-based so the
+  preceding prompt becomes a user-only turn. A frame-less shell must still time out.
+- **Guard:** `src/pages/content/export/adapter/__tests__/chatgpt.test.ts`
+  (`ignores the paginated history root the same way`,
+  `resolves the role from the turn frame when ChatGPT renders a turn without a message`,
+  `skips a rendered turn without a message instead of failing the export`,
+  `fails when a selected virtual shell never mounts`).
+
 ## ChatGPT export entry point only where a conversation can exist
 
 - **Trap:** The ChatGPT export plugin matches the whole origin, and the persistent toolbar was
