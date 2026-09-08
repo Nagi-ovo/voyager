@@ -16,9 +16,14 @@ export interface SettingToggleRowProps {
   /** Wider text/switch gap and overflow clamp, as the floating-mode row has always had. */
   gapped?: boolean;
   experimental?: boolean;
+  /** Extra content under the hint, such as a permission call-to-action. */
+  extra?: React.ReactNode;
   checked: boolean;
+  disabled?: boolean;
   onChange: (checked: boolean) => void;
   isVisible: (settingId: string) => boolean;
+  /** Leave the DOM instead of carrying `hidden`, for sections that always did. */
+  unmountWhenHidden?: boolean;
   t: (key: TranslationKey) => string;
 }
 
@@ -30,11 +35,16 @@ export function SettingToggleRow({
   hint,
   gapped,
   experimental,
+  extra,
   checked,
+  disabled,
   onChange,
   isVisible,
+  unmountWhenHidden,
   t,
 }: SettingToggleRowProps) {
+  const visible = isVisible(settingId);
+  if (!visible && unmountWhenHidden) return null;
   const labelNode = (
     <Label
       htmlFor={id}
@@ -48,18 +58,24 @@ export function SettingToggleRow({
   );
   return (
     <div
-      hidden={!isVisible(settingId)}
+      hidden={!visible}
       className={`group flex items-center justify-between${gapped ? ' gap-3' : ''}`}
     >
       {hint ? (
         <div className={gapped ? 'min-w-0 flex-1' : 'flex-1'}>
           {labelNode}
           <p className="text-muted-foreground mt-1 text-xs">{t(hint)}</p>
+          {extra}
         </div>
       ) : (
         labelNode
       )}
-      <Switch id={id} checked={checked} onChange={(event) => onChange(event.target.checked)} />
+      <Switch
+        id={id}
+        checked={checked}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.checked)}
+      />
     </div>
   );
 }

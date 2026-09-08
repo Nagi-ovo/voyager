@@ -102,6 +102,7 @@ import {
   type FolderSettingsValues,
 } from './components/FolderSettingsCard';
 import { FormulaCopySettings } from './components/FormulaCopySettings';
+import { GeneralSettingsCard, type GeneralSettingsValues } from './components/GeneralSettingsCard';
 import { KeyboardShortcutSettings } from './components/KeyboardShortcutSettings';
 import { PluginManager } from './components/PluginManager';
 import { StarredHistory } from './components/StarredHistory';
@@ -2775,6 +2776,68 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
     [activeAccountPlatform, apply, isAIStudio],
   );
 
+  // General card: most keys mirror into state and persist through `apply`;
+  // four keep the bespoke paths they always had (rendering toggles that
+  // gate a lazy library load, the changelog badge mode, and the completion
+  // notification that first asks for permission).
+  type PlainGeneralSettings = Omit<
+    GeneralSettingsValues,
+    | 'wavedromEnabled'
+    | 'echartsEnabled'
+    | 'changelogBadgeMode'
+    | 'responseCompleteNotificationEnabled'
+  >;
+  const generalSetters = useMemo<SettingSetters<PlainGeneralSettings>>(
+    () => ({
+      persistentExportToolbarEnabled: setPersistentExportToolbarEnabled,
+      mermaidEnabled: setMermaidEnabled,
+      quoteReplyEnabled: setQuoteReplyEnabled,
+      highlightEnabled: setHighlightEnabled,
+      highlightTimelineMarkersEnabled: setHighlightTimelineMarkersEnabled,
+      remoteAnnouncementEnabled: setRemoteAnnouncementEnabled,
+      usageStatusEnabled: setUsageStatusEnabled,
+      inputHaloHidden: setInputHaloHidden,
+      defaultModelAutoApplyEnabled: setDefaultModelAutoApplyEnabled,
+    }),
+    [],
+  );
+  const handleResponseCompleteNotificationChange = async (next: boolean) => {
+    if (next && isSafariBrowser) {
+      setResponseCompleteNotificationEnabled(true);
+      const granted = await requestSafariNativeNotificationPermission();
+      setResponseCompleteNotificationEnabled(granted);
+      return;
+    }
+    if (next) {
+      const granted = await ensureNotificationsPermission();
+      if (!granted) {
+        setResponseCompleteNotificationEnabled(false);
+        return;
+      }
+    }
+    if (next) setRemoteAnnouncementPermissionGranted(true);
+    setResponseCompleteNotificationEnabled(next);
+    apply({ responseCompleteNotificationEnabled: next });
+  };
+  const handleGeneralChange = (patch: Partial<GeneralSettingsValues>) => {
+    const {
+      wavedromEnabled,
+      echartsEnabled,
+      changelogBadgeMode: badgeMode,
+      responseCompleteNotificationEnabled,
+      ...rest
+    } = patch;
+    if (wavedromEnabled !== undefined) setWavedromEnabledFromUser(wavedromEnabled);
+    if (echartsEnabled !== undefined) setEchartsEnabledFromUser(echartsEnabled);
+    if (badgeMode !== undefined) handleChangelogBadgeModeChange(badgeMode);
+    if (responseCompleteNotificationEnabled !== undefined) {
+      void handleResponseCompleteNotificationChange(responseCompleteNotificationEnabled);
+    }
+    if (Object.keys(rest).length === 0) return;
+    applySettingsPatch(generalSetters, rest);
+    apply(rest);
+  };
+
   const wrapSection = (
     id: PopupSectionId,
     content: React.ReactNode,
@@ -3887,381 +3950,34 @@ export default function Popup({ sourceTabId }: PopupProps = {}) {
         {/* General Options */}
         {wrapSection(
           'general',
-          <Card className="p-4 transition-all hover:shadow-md">
-            <CardTitle className="mb-4">{t('generalOptions')}</CardTitle>
-            <CardContent className="space-y-4 p-0">
-              {renderSetting(
-                'general',
-                'enableTabTitleUpdate',
-                <div className="flex items-center justify-between opacity-60">
-                  <div className="flex-1">
-                    <Label
-                      htmlFor="tab-title-update"
-                      className="text-muted-foreground cursor-not-allowed text-sm font-medium"
-                    >
-                      {t('enableTabTitleUpdate')}
-                    </Label>
-                    <p className="text-muted-foreground mt-1 text-xs">
-                      {t('enableTabTitleUpdateHint')}
-                    </p>
-                  </div>
-                  <Switch id="tab-title-update" checked={false} disabled className="opacity-70" />
-                </div>,
-              )}
-              {renderSetting(
-                'general',
-                'persistentExportToolbar',
-                <div className="group flex items-center justify-between">
-                  <div className="flex-1">
-                    <Label
-                      htmlFor="persistent-export-toolbar"
-                      className="group-hover:text-primary cursor-pointer text-sm font-medium transition-colors"
-                    >
-                      {t('persistentExportToolbar')}
-                    </Label>
-                    <p className="text-muted-foreground mt-1 text-xs">
-                      {t('persistentExportToolbarHint')}
-                    </p>
-                  </div>
-                  <Switch
-                    id="persistent-export-toolbar"
-                    checked={persistentExportToolbarEnabled}
-                    onChange={(e) => {
-                      setPersistentExportToolbarEnabled(e.target.checked);
-                      apply({ persistentExportToolbarEnabled: e.target.checked });
-                    }}
-                  />
-                </div>,
-              )}
-              {renderSetting(
-                'general',
-                'enableMermaidRendering',
-                <div className="group flex items-center justify-between">
-                  <div className="flex-1">
-                    <Label
-                      htmlFor="mermaid-enabled"
-                      className="group-hover:text-primary cursor-pointer text-sm font-medium transition-colors"
-                    >
-                      {t('enableMermaidRendering')}
-                    </Label>
-                    <p className="text-muted-foreground mt-1 text-xs">
-                      {t('enableMermaidRenderingHint')}
-                    </p>
-                  </div>
-                  <Switch
-                    id="mermaid-enabled"
-                    checked={mermaidEnabled}
-                    onChange={(e) => {
-                      setMermaidEnabled(e.target.checked);
-                      apply({ mermaidEnabled: e.target.checked });
-                    }}
-                  />
-                </div>,
-              )}
-              {renderSetting(
-                'general',
-                'enableWaveDromRendering',
-                <div className="group flex items-center justify-between">
-                  <div className="flex-1">
-                    <Label
-                      htmlFor="wavedrom-enabled"
-                      className="group-hover:text-primary cursor-pointer text-sm font-medium transition-colors"
-                    >
-                      {t('enableWaveDromRendering')}
-                    </Label>
-                    <p className="text-muted-foreground mt-1 text-xs">
-                      {t('enableWaveDromRenderingHint')}
-                    </p>
-                  </div>
-                  <Switch
-                    id="wavedrom-enabled"
-                    checked={wavedromEnabled}
-                    onChange={(e) => {
-                      setWavedromEnabledFromUser(e.target.checked);
-                    }}
-                  />
-                </div>,
-              )}
-              {renderSetting(
-                'general',
-                'enableEchartsRendering',
-                <div className="group flex items-center justify-between">
-                  <div className="flex-1">
-                    <Label
-                      htmlFor="echarts-enabled"
-                      className="group-hover:text-primary cursor-pointer text-sm font-medium transition-colors"
-                    >
-                      {t('enableEchartsRendering')}
-                    </Label>
-                    <p className="text-muted-foreground mt-1 text-xs">
-                      {t('enableEchartsRenderingHint')}
-                    </p>
-                  </div>
-                  <Switch
-                    id="echarts-enabled"
-                    checked={echartsEnabled}
-                    onChange={(e) => {
-                      setEchartsEnabledFromUser(e.target.checked);
-                    }}
-                  />
-                </div>,
-              )}
-              {renderSetting(
-                'general',
-                'enableQuoteReply',
-                <div className="group flex items-center justify-between">
-                  <div className="flex-1">
-                    <Label
-                      htmlFor="quote-reply-enabled"
-                      className="group-hover:text-primary cursor-pointer text-sm font-medium transition-colors"
-                    >
-                      {t('enableQuoteReply')}
-                    </Label>
-                    <p className="text-muted-foreground mt-1 text-xs">
-                      {t('enableQuoteReplyHint')}
-                    </p>
-                  </div>
-                  <Switch
-                    id="quote-reply-enabled"
-                    checked={quoteReplyEnabled}
-                    onChange={(e) => {
-                      setQuoteReplyEnabled(e.target.checked);
-                      apply({ quoteReplyEnabled: e.target.checked });
-                    }}
-                  />
-                </div>,
-              )}
-              {renderSetting(
-                'general',
-                'enableHighlights',
-                <div className="group flex items-center justify-between">
-                  <div className="flex-1">
-                    <Label
-                      htmlFor="highlights-enabled"
-                      className="group-hover:text-primary cursor-pointer text-sm font-medium transition-colors"
-                    >
-                      {t('enableHighlights')}
-                    </Label>
-                    <p className="text-muted-foreground mt-1 text-xs">
-                      {t('enableHighlightsHint')}
-                    </p>
-                  </div>
-                  <Switch
-                    id="highlights-enabled"
-                    checked={highlightEnabled}
-                    onChange={(e) => {
-                      setHighlightEnabled(e.target.checked);
-                      apply({ highlightEnabled: e.target.checked });
-                    }}
-                  />
-                </div>,
-              )}
-              {renderSetting(
-                'general',
-                'showHighlightTimelineMarkers',
-                <div className="group flex items-center justify-between">
-                  <div className="flex-1">
-                    <Label
-                      htmlFor="highlight-timeline-markers-enabled"
-                      className="group-hover:text-primary cursor-pointer text-sm font-medium transition-colors"
-                    >
-                      {t('showHighlightTimelineMarkers')}
-                    </Label>
-                    <p className="text-muted-foreground mt-1 text-xs">
-                      {t('showHighlightTimelineMarkersHint')}
-                    </p>
-                  </div>
-                  <Switch
-                    id="highlight-timeline-markers-enabled"
-                    checked={highlightTimelineMarkersEnabled}
-                    disabled={!highlightEnabled}
-                    onChange={(e) => {
-                      setHighlightTimelineMarkersEnabled(e.target.checked);
-                      apply({ highlightTimelineMarkersEnabled: e.target.checked });
-                    }}
-                  />
-                </div>,
-              )}
-              {renderSetting(
-                'general',
-                'responseCompleteNotification',
-                <div className="group flex items-center justify-between">
-                  <div className="flex-1">
-                    <Label
-                      htmlFor="response-complete-notification"
-                      className="group-hover:text-primary cursor-pointer text-sm font-medium transition-colors"
-                    >
-                      {t('responseCompleteNotification')}
-                    </Label>
-                    <p className="text-muted-foreground mt-1 text-xs">
-                      {t(
-                        isSafariBrowser
-                          ? 'responseCompleteNotificationHintSafari'
-                          : 'responseCompleteNotificationHint',
-                      )}
-                    </p>
-                  </div>
-                  <Switch
-                    id="response-complete-notification"
-                    checked={responseCompleteNotificationEnabled}
-                    onChange={async (e) => {
-                      const next = e.target.checked;
-                      if (next && isSafariBrowser) {
-                        setResponseCompleteNotificationEnabled(true);
-                        const granted = await requestSafariNativeNotificationPermission();
-                        setResponseCompleteNotificationEnabled(granted);
-                        return;
-                      }
-                      if (next) {
-                        const granted = await ensureNotificationsPermission();
-                        if (!granted) {
-                          setResponseCompleteNotificationEnabled(false);
-                          return;
-                        }
-                      }
-                      if (next) setRemoteAnnouncementPermissionGranted(true);
-                      setResponseCompleteNotificationEnabled(next);
-                      apply({ responseCompleteNotificationEnabled: next });
-                    }}
-                  />
-                </div>,
-              )}
-              {renderSetting(
-                'general',
-                'remoteAnnouncementNotification',
-                <div className="group flex items-center justify-between">
-                  <div className="flex-1">
-                    <Label
-                      htmlFor="remote-announcement-notification"
-                      className="group-hover:text-primary cursor-pointer text-sm font-medium transition-colors"
-                    >
-                      {t('remoteAnnouncementNotification')}
-                    </Label>
-                    <p className="text-muted-foreground mt-1 text-xs">
-                      {t('remoteAnnouncementNotificationHint')}
-                    </p>
-                    {remoteAnnouncementEnabled &&
-                      canUseSystemNotifications &&
-                      !remoteAnnouncementPermissionGranted && (
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          size="sm"
-                          className="mt-2 h-7 px-2.5 text-xs"
-                          onClick={requestRemoteAnnouncementSystemPermission}
-                        >
-                          {t('remoteAnnouncementSystemPermissionCta')}
-                        </Button>
-                      )}
-                  </div>
-                  <Switch
-                    id="remote-announcement-notification"
-                    checked={remoteAnnouncementEnabled}
-                    onChange={(e) => {
-                      const next = e.target.checked;
-                      setRemoteAnnouncementEnabled(next);
-                      apply({ remoteAnnouncementEnabled: next });
-                    }}
-                  />
-                </div>,
-              )}
-              {renderSetting(
-                'general',
-                'changelogBadgeMode',
-                <div className="group flex items-center justify-between">
-                  <div className="flex-1">
-                    <Label
-                      htmlFor="changelog-notify-badge"
-                      className="group-hover:text-primary cursor-pointer text-sm font-medium transition-colors"
-                    >
-                      {t('changelog_badge_mode')}
-                    </Label>
-                    <p className="text-muted-foreground mt-1 text-xs">
-                      {t('changelog_badge_mode_hint')}
-                    </p>
-                  </div>
-                  <Switch
-                    id="changelog-notify-badge"
-                    checked={changelogBadgeMode}
-                    onChange={(e) => handleChangelogBadgeModeChange(e.target.checked)}
-                  />
-                </div>,
-              )}
-              {renderSetting(
-                'general',
-                'usageStatusToggle',
-                <div className="group flex items-center justify-between">
-                  <div className="flex-1">
-                    <Label
-                      htmlFor="usage-status-enabled"
-                      className="group-hover:text-primary cursor-pointer text-sm font-medium transition-colors"
-                    >
-                      {t('usageStatusToggle')}
-                    </Label>
-                    <p className="text-muted-foreground mt-1 text-xs">
-                      {t('usageStatusToggleHint')}
-                    </p>
-                  </div>
-                  <Switch
-                    id="usage-status-enabled"
-                    checked={usageStatusEnabled}
-                    onChange={(e) => {
-                      setUsageStatusEnabled(e.target.checked);
-                      apply({ usageStatusEnabled: e.target.checked });
-                    }}
-                  />
-                </div>,
-              )}
-              {renderSetting(
-                'general',
-                'hideInputHalo',
-                <div className="group flex items-center justify-between">
-                  <div className="flex-1">
-                    <Label
-                      htmlFor="input-halo-hidden"
-                      className="group-hover:text-primary cursor-pointer text-sm font-medium transition-colors"
-                    >
-                      {t('hideInputHalo')}
-                    </Label>
-                    <p className="text-muted-foreground mt-1 text-xs">{t('hideInputHaloHint')}</p>
-                  </div>
-                  <Switch
-                    id="input-halo-hidden"
-                    checked={inputHaloHidden}
-                    onChange={(e) => {
-                      setInputHaloHidden(e.target.checked);
-                      apply({ inputHaloHidden: e.target.checked });
-                    }}
-                  />
-                </div>,
-              )}
-              {renderSetting(
-                'general',
-                'enableDefaultModelAutoApply',
-                <div className="group flex items-center justify-between">
-                  <div className="flex-1">
-                    <Label
-                      htmlFor="default-model-auto-apply"
-                      className="group-hover:text-primary cursor-pointer text-sm font-medium transition-colors"
-                    >
-                      {t('enableDefaultModelAutoApply')}
-                    </Label>
-                    <p className="text-muted-foreground mt-1 text-xs">
-                      {t('enableDefaultModelAutoApplyHint')}
-                    </p>
-                  </div>
-                  <Switch
-                    id="default-model-auto-apply"
-                    checked={defaultModelAutoApplyEnabled}
-                    onChange={(e) => {
-                      setDefaultModelAutoApplyEnabled(e.target.checked);
-                      apply({ defaultModelAutoApplyEnabled: e.target.checked });
-                    }}
-                  />
-                </div>,
-              )}
-            </CardContent>
-          </Card>,
+          <GeneralSettingsCard
+            values={{
+              persistentExportToolbarEnabled,
+              mermaidEnabled,
+              wavedromEnabled,
+              echartsEnabled,
+              quoteReplyEnabled,
+              highlightEnabled,
+              highlightTimelineMarkersEnabled,
+              responseCompleteNotificationEnabled,
+              remoteAnnouncementEnabled,
+              changelogBadgeMode,
+              usageStatusEnabled,
+              inputHaloHidden,
+              defaultModelAutoApplyEnabled,
+            }}
+            onChange={handleGeneralChange}
+            isSafariBrowser={isSafariBrowser}
+            remoteAnnouncementPermissionCta={{
+              visible:
+                remoteAnnouncementEnabled &&
+                canUseSystemNotifications &&
+                !remoteAnnouncementPermissionGranted,
+              onRequest: requestRemoteAnnouncementSystemPermission,
+            }}
+            isVisible={(settingId) => shouldShowSetting('general', settingId)}
+            t={t}
+          />,
         )}
 
         {/* Image Refinement Options */}
