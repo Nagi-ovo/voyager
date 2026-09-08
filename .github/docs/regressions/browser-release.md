@@ -104,3 +104,15 @@ behavior, or bundled public assets.
 - **Guard:** `src/features/prompt/model/__tests__/promptTemplate.test.ts`
   (`is built without a RegExp lookbehind so Safari 15.4 can evaluate it`,
   `migrates adjacent single braces with nothing between them`).
+
+## Popup requests and feedback belong to the current source tab and operation
+
+- **Trap:** An embedded popup can change its source tab while a tab query or folder-structure
+  request is pending. An older response could then replace the new platform context or copy the
+  previous tab's structure. A previous copy's feedback timer could also clear a newer copy status.
+- **Rule:** Invalidate pending tab reads when another read starts or the source changes. Folder
+  copy owns its request generation and reset timer: reject obsolete responses before copying,
+  clear the previous timer before starting again, and release pending work on unmount.
+- **Guard:** `src/pages/popup/hooks/__tests__/useActivePopupTab.test.tsx` and
+  `src/pages/popup/hooks/__tests__/useFolderStructureCopy.test.tsx` cover out-of-order responses,
+  source-tab changes, clipboard ownership and reset-timer cleanup.

@@ -45,7 +45,7 @@ function readStorage(keys: unknown, stored: Record<string, unknown>): Record<str
   return { ...stored };
 }
 
-describe('changelog notification setting in Popup', () => {
+describe('Popup settings integration', () => {
   let container: HTMLDivElement;
   let root: Root;
   let local: Record<string, unknown>;
@@ -86,6 +86,7 @@ describe('changelog notification setting in Popup', () => {
     extensionApi.tabs.query.mockResolvedValue([{ id: 7, url: 'https://gemini.google.com/app' }]);
     extensionApi.tabs.sendMessage.mockResolvedValue(undefined);
     extensionApi.permissions.contains.mockResolvedValue(false);
+    extensionApi.permissions.request.mockResolvedValue(true);
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -171,5 +172,84 @@ describe('changelog notification setting in Popup', () => {
       [StorageKeys.MERMAID_ENABLED]: true,
     });
     expect(generalReads()).toHaveLength(1);
+  });
+  it('limits AI Studio to supported controls and writes isolation only for that platform', async () => {
+    extensionApi.tabs.query.mockResolvedValue([
+      { id: 8, url: 'https://aistudio.google.com/prompts/new_chat' },
+    ]);
+    sync[StorageKeys.GV_ACCOUNT_ISOLATION_ENABLED_GEMINI] = false;
+    sync[StorageKeys.GV_ACCOUNT_ISOLATION_ENABLED_AISTUDIO] = true;
+    await mount();
+    expect(container.querySelector('#aistudio-enabled')).not.toBeNull();
+    expect(container.querySelector('#aistudio-enter-send')).not.toBeNull();
+    expect(container.querySelector('#folder-enabled')).not.toBeNull();
+    expect(container.querySelector('#hide-container')).toBeNull();
+    expect(container.querySelector('#input-vim-mode')).toBeNull();
+    expect(container.querySelector('#mermaid-enabled')).toBeNull();
+    expect(container.querySelector('#changelog-notify-badge')).not.toBeNull();
+    const isolation = container.querySelector<HTMLInputElement>('#account-isolation-enabled')!;
+    expect(isolation.checked).toBe(true);
+    await act(async () => isolation.click());
+    expect(extensionApi.storage.sync.set).toHaveBeenCalledExactlyOnceWith({
+      [StorageKeys.GV_ACCOUNT_ISOLATION_ENABLED_AISTUDIO]: false,
+    });
+    expect(sync[StorageKeys.GV_ACCOUNT_ISOLATION_ENABLED_GEMINI]).toBe(false);
+  });
+
+  it('shows shared prompts on plugin sites and unlocks effects after enabling site coverage', async () => {
+    extensionApi.tabs.query.mockResolvedValue([{ id: 9, url: 'https://claude.ai/new' }]);
+    await mount();
+    const enablePrompts = container.querySelector<HTMLInputElement>(
+      '#prompt-manager-site-enabled',
+    )!;
+    expect(enablePrompts.checked).toBe(false);
+    expect(container.querySelector('input[type="file"]')).not.toBeNull();
+    expect(container.querySelector('input[type="search"]')).toBeNull();
+    expect(container.querySelector('#folder-enabled')).toBeNull();
+    expect(container.querySelector('#mermaid-enabled')).toBeNull();
+    expect(container.querySelector('button[aria-pressed]')).toBeNull();
+    await act(async () => enablePrompts.click());
+    expect(enablePrompts.checked).toBe(true);
+    expect(sync[StorageKeys.PROMPT_CUSTOM_WEBSITES]).toEqual(['claude.ai']);
+    expect(extensionApi.permissions.request).toHaveBeenCalledExactlyOnceWith({
+      origins: ['https://*.claude.ai/*', 'http://*.claude.ai/*'],
+    });
+    expect(container.querySelectorAll('button[aria-pressed]')).toHaveLength(4);
+    expect(container.querySelectorAll('button[aria-pressed="true"]')).toHaveLength(1);
+  });
+
+  it('retains dependent input settings when search hides and then restores their card', async () => {
+    await mount();
+    await act(async () =>
+      container.querySelector<HTMLInputElement>('#input-collapse-enabled')!.click(),
+    );
+    await act(async () =>
+      container.querySelector<HTMLInputElement>('#input-collapse-when-not-empty')!.click(),
+    );
+    const search = container.querySelector<HTMLInputElement>('input[type="search"]')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(
+        search,
+        TRANSLATIONS.en.enableMermaidRendering,
+      );
+      search.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    expect(container.querySelector('#input-collapse-enabled')).toBeNull();
+    expect(container.querySelector('#mermaid-enabled')).not.toBeNull();
+    const clear = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.getAttribute('aria-label') === TRANSLATIONS.en.popupSettingsSearchClear,
+    )!;
+    await act(async () => clear.click());
+    expect(container.querySelector<HTMLInputElement>('#input-collapse-enabled')!.checked).toBe(
+      true,
+    );
+    expect(
+      container.querySelector<HTMLInputElement>('#input-collapse-when-not-empty')!.checked,
+    ).toBe(true);
+    const bulkReads = extensionApi.storage.sync.get.mock.calls.filter(
+      ([keys]) =>
+        keys && typeof keys === 'object' && Object.hasOwn(keys, StorageKeys.MERMAID_ENABLED),
+    );
+    expect(bulkReads).toHaveLength(1);
   });
 });
