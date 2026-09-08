@@ -3,8 +3,6 @@
   if (window.__gvPreventAutoScrollInstalled) return;
   window.__gvPreventAutoScrollInstalled = true;
 
-  console.log('[Gemini Voyager] Prevent auto scroll script loaded');
-
   const BRIDGE_ID = 'gv-prevent-auto-scroll-bridge';
   const CHAT_SCROLL_SELECTOR = [
     '#chat-history',

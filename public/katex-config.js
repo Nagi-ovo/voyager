@@ -27,6 +27,4 @@
     // Pass through all other warnings
     return originalWarn.apply(console, args);
   };
-
-  console.log('[Gemini Voyager] KaTeX configuration applied - Unicode warnings suppressed');
 })();

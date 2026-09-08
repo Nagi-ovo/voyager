@@ -23,12 +23,9 @@
 
   // Prevent double injection
   if (window.__gvFetchInterceptorInstalled) {
-    console.log('[Gemini Voyager] Fetch interceptor already installed, skipping');
     return;
   }
   window.__gvFetchInterceptorInstalled = true;
-
-  console.log('[Gemini Voyager] Fetch interceptor loading (MAIN world)...');
 
   /**
    * Gemini's image download is a multi-step chain on `googleusercontent.com`:
@@ -258,8 +255,6 @@
 
       // Use async IIFE only for the user-initiated watermark removal path.
       return (async () => {
-        console.log('[Gemini Voyager] Intercepting download for watermark removal');
-
         // Declare response and blob outside try block so they're accessible in catch
         let response, blob;
 
@@ -371,6 +366,4 @@
     // Pass through: return the ORIGINAL Promise directly (no async wrapping)
     return originalFetch.apply(this, args);
   };
-
-  console.log('[Gemini Voyager] Fetch interceptor active');
 })();
