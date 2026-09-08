@@ -106,6 +106,7 @@ export function VisualEffectPicker({ value, onChange, t }: VisualEffectPickerPro
             <button
               key={option.value}
               type="button"
+              aria-pressed={value === option.value}
               onClick={() => onChange(option.value)}
               className={`flex flex-1 items-center justify-center gap-1.5 rounded-full py-1.5 text-xs font-bold transition-all duration-200 ${
                 value === option.value

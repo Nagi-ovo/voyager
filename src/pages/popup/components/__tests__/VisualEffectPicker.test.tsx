@@ -48,4 +48,19 @@ describe('VisualEffectPicker', () => {
     act(() => buttons[3].click());
     expect(onChange).toHaveBeenCalledWith('rain');
   });
+
+  it('exposes only the current effect as pressed as the selection changes', () => {
+    const effects = ['off', 'snow', 'sakura', 'rain'] as const;
+
+    for (const effect of effects) {
+      act(() => {
+        root.render(<VisualEffectPicker value={effect} onChange={vi.fn()} t={translate} />);
+      });
+
+      const buttons = Array.from(container.querySelectorAll('button'));
+      expect(buttons.map((button) => button.getAttribute('aria-pressed'))).toEqual(
+        effects.map((option) => String(option === effect)),
+      );
+    }
+  });
 });
