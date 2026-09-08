@@ -8,6 +8,7 @@ import {
   isChatGptResponseGenerating,
   resolveChatGptSelectionRoles,
 } from '../chatgpt';
+import { chatgptIsConversationPage } from '../platform/chatgpt';
 import type { ExportPlatformAdapter } from '../platformAdapters';
 
 const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
@@ -67,6 +68,43 @@ afterEach(() => {
   } else {
     delete (HTMLElement.prototype as { scrollIntoView?: unknown }).scrollIntoView;
   }
+});
+
+describe('chatgptIsConversationPage', () => {
+  it('accepts conversation routes, with or without a GPT or account prefix', () => {
+    expect(chatgptIsConversationPage(document, 'https://chatgpt.com/c/6a9f32f7-3a38')).toBe(true);
+    expect(chatgptIsConversationPage(document, 'https://chatgpt.com/g/g-abc/c/6a9f32f7')).toBe(
+      true,
+    );
+    expect(chatgptIsConversationPage(document, 'https://chatgpt.com/u/1/c/6a9f32f7')).toBe(true);
+    expect(chatgptIsConversationPage(document, 'https://chatgpt.com/c/6a9f?model=gpt-5')).toBe(
+      true,
+    );
+  });
+
+  it('rejects the pages ChatGPT serves from the same origin without a conversation', () => {
+    expect(
+      chatgptIsConversationPage(
+        document,
+        'https://chatgpt.com/codex/cloud/settings/analytics#code-review',
+      ),
+    ).toBe(false);
+    expect(chatgptIsConversationPage(document, 'https://chatgpt.com/')).toBe(false);
+    expect(chatgptIsConversationPage(document, 'https://chatgpt.com/g/g-abc')).toBe(false);
+    expect(chatgptIsConversationPage(document, 'https://chatgpt.com/library')).toBe(false);
+    expect(chatgptIsConversationPage(document, 'not a url')).toBe(false);
+  });
+
+  it('accepts a rendered turn on any route, as a temporary chat never leaves the root', () => {
+    document.body.innerHTML = `
+      <div data-turn-id-container="user-1">
+        <div data-message-author-role="user">hello</div>
+      </div>
+    `;
+    expect(chatgptIsConversationPage(document, 'https://chatgpt.com/?temporary-chat=true')).toBe(
+      true,
+    );
+  });
 });
 
 describe('chatgptCollectTurnContainers', () => {

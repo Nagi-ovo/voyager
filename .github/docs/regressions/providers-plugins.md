@@ -16,6 +16,19 @@ or prompt commands.
 - **Guard:** `src/pages/content/export/adapter/__tests__/chatgpt.test.ts`
   (`repositions a virtual shell that moves offscreen after height reconciliation`).
 
+## ChatGPT export entry point only where a conversation can exist
+
+- **Trap:** The ChatGPT export plugin matches the whole origin, and the persistent toolbar was
+  mounted as soon as the plugin started, so it also appeared on Codex, settings and library pages
+  where nothing can be exported, and stayed there as the SPA moved between such pages and chats.
+- **Rule:** Platforms whose chat UI shares an origin with unrelated pages implement
+  `isConversationPage(doc, url)` on their export adapter; `startExportEntryGate` mounts the entry
+  point only while it returns true and re-checks on route changes and settled DOM mutations. For
+  ChatGPT that is a `/c/<id>` route (optionally under `/u/<n>/` or `/g/<gpt>/`) or a rendered
+  turn, because a temporary chat keeps `/?temporary-chat=true`.
+- **Guard:** `src/pages/content/export/adapter/__tests__/chatgpt.test.ts`
+  (`chatgptIsConversationPage`), `src/pages/content/export/__tests__/exportEntryGate.test.ts`.
+
 ## ChatGPT export toolbar must avoid the native header cluster
 
 - **Trap:** The ChatGPT persistent export button sat at `top: 50px` / `right: 84px` and covered

@@ -31,6 +31,27 @@ function extractId(): string | null {
 
 const ROOT_CANDIDATES = ['main', '[role="main"]'];
 
+/** `/c/<id>` or `/g/<gpt>/c/<id>`, optionally under `/u/<index>/`. */
+const CONVERSATION_ROUTE = /^(?:\/u\/[^/]+)?(?:\/g\/[^/]+)?\/c\/[^/?#]+/;
+/** A turn ChatGPT has actually rendered, whatever the route says. */
+const MOUNTED_TURN_SELECTOR =
+  '[data-turn-id-container] [data-message-author-role], [data-turn-id-container][data-turn], section[data-turn]';
+
+/**
+ * ChatGPT serves Codex, settings and other non-chat pages from the same
+ * origin. A conversation lives on a `/c/<id>` route, or, for a temporary chat
+ * that never leaves `/?temporary-chat=true`, wherever a turn is rendered.
+ */
+export function chatgptIsConversationPage(doc: Document, url: string): boolean {
+  let pathname: string;
+  try {
+    pathname = new URL(url).pathname;
+  } catch {
+    return false;
+  }
+  return CONVERSATION_ROUTE.test(pathname) || doc.querySelector(MOUNTED_TURN_SELECTOR) !== null;
+}
+
 function resolveRoot(_userSelectors: string[], doc: Document = document): HTMLElement {
   for (const selector of ROOT_CANDIDATES) {
     const element = doc.querySelector<HTMLElement>(selector);
@@ -219,6 +240,7 @@ export function buildChatGptAdapter(site: SiteAdapter): ExportPlatformAdapter {
     extractConversationTitle: extractTitle,
     extractConversationIdFromUrl: extractId,
     shouldPreloadHistory: () => false,
+    isConversationPage: chatgptIsConversationPage,
     resolveConversationRoot: resolveRoot,
     extractUserImage,
     extractUserText: chatgptExtractUserText,

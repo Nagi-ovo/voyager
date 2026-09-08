@@ -34,6 +34,7 @@ import { resolveExportErrorMessage } from '../../../features/export/ui/ExportErr
 import { showExportToast } from '../../../features/export/ui/ExportToast';
 import { isServerTurnId } from '../fork/turnId';
 import { historyTimestampStore } from '../timestamp/historyTimestamps';
+import { watchRouteChanges } from '../utils/routeWatcher';
 import { ExportPlatformAdapter, resolveExportAdapter } from './adapter/platformAdapters';
 import { assistantHasCanvasDoc, extractAllCanvasDocs, isAnyCanvasOpen } from './canvasDocExtractor';
 import {
@@ -47,6 +48,7 @@ import {
   injectResponseMenuExportButton,
 } from './conversationMenuInjection';
 import { withExportCollectingBanner } from './exportCollectingBanner';
+import { startExportEntryGate } from './exportEntryGate';
 import { resolveExportLogoAnchor } from './exportLogoAnchor';
 import {
   type PendingExportState,
@@ -2416,12 +2418,39 @@ export async function startExportButton(
 
   // Platforms without Gemini's logo/menu UI: mount the persistent toolbar directly.
   if (!exportAdapter.shouldPreloadHistory()) {
-    const toolbarHandle = mountPersistentExportToolbar({
-      label: t('pm_export'),
-      tooltip: t('exportChatJson'),
-      onClick: () => void showExportDialog(dict, lang, { signal: options.signal }),
-    });
-    toolbarHandle.root.setAttribute('data-gv-platform', exportAdapter.site.id);
+    let toolbarHandle: ReturnType<typeof mountPersistentExportToolbar> | null = null;
+    const mountToolbar = () => {
+      toolbarHandle = mountPersistentExportToolbar({
+        label: t('pm_export'),
+        tooltip: t('exportChatJson'),
+        onClick: () => void showExportDialog(dict, lang, { signal: options.signal }),
+      });
+      toolbarHandle.root.setAttribute('data-gv-platform', exportAdapter.site.id);
+    };
+    const unmountToolbar = () => {
+      cancelActiveExportOperation();
+      toolbarHandle?.remove();
+      toolbarHandle = null;
+      activeExportDialog?.hide();
+      activeExportDialog = null;
+    };
+    // A host whose chat UI shares the origin with unrelated pages only gets
+    // the entry point where a conversation can exist, and loses it again when
+    // the SPA navigates away from one.
+    const isConversationPage = exportAdapter.isConversationPage;
+    let stopEntryGate: () => void;
+    if (isConversationPage) {
+      stopEntryGate = startExportEntryGate({
+        isEligible: () => isConversationPage(document, location.href),
+        mount: mountToolbar,
+        unmount: unmountToolbar,
+        watchRoute: watchRouteChanges,
+        root: document.body,
+      });
+    } else {
+      mountToolbar();
+      stopEntryGate = unmountToolbar;
+    }
     const onStorageChange = (
       changes: Record<string, chrome.storage.StorageChange>,
       area: string,
@@ -2431,7 +2460,7 @@ export async function startExportButton(
       if (typeof nextRaw === 'string') {
         const next = normalizeLang(nextRaw);
         lang = next;
-        toolbarHandle.setText(
+        toolbarHandle?.setText(
           dict[next]?.['pm_export'] ?? dict.en?.['pm_export'] ?? 'Export',
           dict[next]?.['exportChatJson'] ?? dict.en?.['exportChatJson'] ?? 'Export chat history',
         );
@@ -2441,13 +2470,10 @@ export async function startExportButton(
       chrome.storage?.onChanged?.addListener(onStorageChange);
     } catch {}
     return () => {
-      cancelActiveExportOperation();
-      toolbarHandle.remove();
+      stopEntryGate();
       try {
         chrome.storage?.onChanged?.removeListener(onStorageChange);
       } catch {}
-      activeExportDialog?.hide();
-      activeExportDialog = null;
     };
   }
 

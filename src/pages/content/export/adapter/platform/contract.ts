@@ -57,6 +57,14 @@ export interface ExportPlatformAdapter {
     textParts: string[],
   ) => boolean | undefined;
 
+  /**
+   * Whether this page can hold a conversation. Hosts whose chat UI shares the
+   * origin with unrelated pages (ChatGPT: Codex, settings) return false there,
+   * and the export entry point stays unmounted until the SPA reaches a
+   * conversation. Omitted: every page on the host is eligible.
+   */
+  isConversationPage?: (doc: Document, url: string) => boolean;
+
   collectTurnContainers?: () => ChatGptTurnContainer[];
   buildTurnsForSelection?: (
     selectedMessageIds: ReadonlySet<string>,
