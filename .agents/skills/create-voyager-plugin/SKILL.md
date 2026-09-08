@@ -2,7 +2,7 @@
 name: create-voyager-plugin
 description: Build a Voyager plugin, a site adapter change, or a primitive, from picking the right path to the evidence a PR must carry. Use for "写一个插件", "add a plugin for <site>", a selector fix in site.json, a new native primitive under verbs/, or any change under src/features/plugins/catalog, verbs or sites.
 metadata:
-  version: '1.0.0'
+  version: '1.1.0'
 ---
 
 # Create a Voyager plugin
@@ -92,8 +92,10 @@ bun run verify:pr
 ```
 
 `plugin:check` is the gate: manifest, CSS, site containment, primitive handlers
-and the engine floor, semantic keys, ten-locale metadata, README presence. Fix
-what it reports rather than arguing with it.
+and the engine floor, semantic keys, selector syntax, the regex subset,
+ten-locale metadata, README presence. It only accepts a directory under
+`catalog/sites/<site>/plugins/`. Fix what it reports rather than arguing with
+it.
 
 ### (b) Site adapter change
 
@@ -101,7 +103,10 @@ Edit `catalog/sites/<site>/site.json` and nothing else; the TypeScript adapters
 for plugin platforms are one-line shells over the JSON. Only keys from
 `src/features/plugins/sites/semanticKeys.ts` are accepted, and a key the site
 cannot honestly provide is **left out**, not filled with a guess: a wrong
-selector fails silently on every plugin that trusts it. Widening `matches`
+selector fails silently on every plugin that trusts it, while a plugin that
+names a key the site leaves out shows `needs-semantic` in the popup, which is
+the honest outcome. Every selector must parse; the site file's validation
+rejects one that does not before it can throw in the page. Widening `matches`
 widens every plugin under that site, so recheck each one still stays inside it.
 
 A new site also needs its directory, a `CODEOWNERS` line, and an extension
@@ -182,7 +187,16 @@ in both themes without opening a browser themselves.
   `{ "kind": "semantic", "key": "userTurn" }`. Raw selectors are for what the
   vocabulary cannot name, and they are the first thing to break on a redesign.
 - A plugin's `matches` stays inside its site's `matches` (D18).
-  `catalog:build` fails otherwise.
+  `catalog:build` fails otherwise. Patterns are read as Chrome reads them:
+  `*.example.com` needs a subdomain (the apex host is outside it) and `*://`
+  means http or https only; the build and the runtime agree, so a pattern that
+  passes the build also resolves a site.
+- `conversationIdPattern`, in `site.json` or as a `turnNavigator` param, is a
+  plain anchored capture such as `^/c/([^/?#]+)`: no lookarounds or
+  backreferences, no repeated group that holds a quantifier or `|`, at most
+  eight quantifiers and 200 characters. It runs on the page's main thread
+  against every URL, so the gate (`sites/safeRegex.ts`) refuses anything that
+  can backtrack.
 - `requires.handlers` lists every primitive the plugin invokes, and `engine`'s
   minimum is at least each primitive's `sinceEngine`. That ordering is the
   point: an old build then says "update Voyager" (`needs-engine`) instead of
