@@ -1,0 +1,65 @@
+{
+  "$schema": "https://voyager.nagi.fun/plugin.schema.json",
+  "id": "voyager.deepseek-vim-input",
+  "name": "DeepSeek · Vim Input",
+  "version": "1.0.0",
+  "description": "Use Vim-style modal editing and cursor navigation in the DeepSeek prompt composer.",
+  "i18n": {
+    "zh": {
+      "name": "DeepSeek · Vim 输入",
+      "description": "在 DeepSeek 提示词输入框中使用 Vim 风格的模式编辑和光标导航。"
+    },
+    "zh_TW": {
+      "name": "DeepSeek · Vim 輸入",
+      "description": "在 DeepSeek 提示詞輸入框中使用 Vim 風格的模式編輯與游標導覽。"
+    },
+    "ja": {
+      "name": "DeepSeek · Vim 入力",
+      "description": "DeepSeek のプロンプト入力欄で Vim スタイルのモード編集とカーソル移動を使えます。"
+    },
+    "ko": {
+      "name": "DeepSeek · Vim 입력",
+      "description": "DeepSeek 프롬프트 입력창에서 Vim 스타일의 모드 편집과 커서 이동을 사용합니다."
+    },
+    "fr": {
+      "name": "DeepSeek · Saisie Vim",
+      "description": "Utilisez l'édition modale et la navigation du curseur de style Vim dans le champ de saisie de DeepSeek."
+    },
+    "es": {
+      "name": "DeepSeek · Entrada Vim",
+      "description": "Usa la edición modal y la navegación del cursor al estilo Vim en el campo de entrada de DeepSeek."
+    },
+    "pt": {
+      "name": "DeepSeek · Entrada Vim",
+      "description": "Use a edição modal e a navegação do cursor no estilo Vim no campo de entrada do DeepSeek."
+    },
+    "ru": {
+      "name": "DeepSeek · Ввод Vim",
+      "description": "Используйте модальное редактирование и перемещение курсора в стиле Vim в поле ввода DeepSeek."
+    },
+    "ar": {
+      "name": "DeepSeek · إدخال Vim",
+      "description": "استخدم التحرير بالأوضاع والتنقل بالمؤشر بأسلوب Vim في حقل إدخال المطالبات في DeepSeek."
+    }
+  },
+  "author": "voyager-official",
+  "category": "productivity",
+  "license": "GPL-3.0-or-later",
+  "homepage": "https://github.com/Nagi-ovo/voyager/tree/main/src/features/plugins/catalog/sites/deepseek/plugins/vim-input",
+  "engine": ">=1.4.0",
+  "tier": "declarative",
+  "matches": ["https://chat.deepseek.com/*"],
+  "requires": {
+    "handlers": ["vimInput"],
+    "semantic": ["composer"]
+  },
+  "contributes": {
+    "domOps": [
+      {
+        "op": "native",
+        "handler": "vimInput",
+        "params": {}
+      }
+    ]
+  }
+}

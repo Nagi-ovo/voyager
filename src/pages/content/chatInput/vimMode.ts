@@ -3,6 +3,7 @@ import { isExtensionContextInvalidatedError } from '@/core/utils/extensionContex
 
 import { expandInputWithCursorAtEnd } from '../inputCollapse';
 import { findChatInput } from './index';
+import { getVimComposerMount } from './vimComposerMount';
 
 type VimMode = 'insert' | 'normal' | 'visual';
 type PendingOperator = 'd' | 'c' | 'y';
@@ -1136,19 +1137,8 @@ function queryHudMountCandidates(): HTMLElement[] {
 }
 
 function getCrossSiteComposerMount(input: HTMLElement | null): HTMLElement | null {
-  if (!input) return null;
-
-  if (input.matches('#prompt-textarea[contenteditable="true"]')) {
-    return input.closest<HTMLElement>('form');
-  }
-
-  if (input.matches('[data-testid="chat-input"][contenteditable="true"]')) {
-    return input.closest<HTMLElement>('fieldset');
-  }
-
-  return null;
+  return getVimComposerMount(input, configuredComposerSelector);
 }
-
 function getCrossSiteEditMount(input: HTMLElement | null): HTMLElement | null {
   if (!input?.matches('textarea[aria-label="Edit message"]')) return null;
 
@@ -2697,6 +2687,8 @@ function activateListener(): void {
   hudRetryAttempts = 0;
   updateHud();
   isListenerActive = true;
+  const focused = document.activeElement;
+  if (focused instanceof HTMLElement) setActiveInput(findVimInputFromTarget(focused));
 }
 
 function deactivateListener(): void {
