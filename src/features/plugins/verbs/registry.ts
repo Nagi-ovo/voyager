@@ -8,11 +8,13 @@
  */
 import { PRIMITIVE_CONTRACTS } from './contracts';
 import { formulaCopyPrimitive } from './formulaCopy';
+import { tableCopyPrimitive } from './tableCopy';
 import { turnNavigatorPrimitive } from './turnNavigator';
 import type { Primitive } from './types';
 import { vimInputPrimitive } from './vimInput';
 
 const PRIMITIVES: ReadonlyMap<string, Primitive<never>> = new Map<string, Primitive<never>>([
+  [tableCopyPrimitive.contract.name, tableCopyPrimitive as Primitive<never>],
   [formulaCopyPrimitive.contract.name, formulaCopyPrimitive as Primitive<never>],
   [vimInputPrimitive.contract.name, vimInputPrimitive as Primitive<never>],
   [turnNavigatorPrimitive.contract.name, turnNavigatorPrimitive as Primitive<never>],

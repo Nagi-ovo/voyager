@@ -1,6 +1,10 @@
 {
   "$comment": "Published primitive contracts (plan D9). verbs/contracts.test.ts fails when a listed primitive disappears, a listed param changes type or becomes required, or a new param is required. Append here when a primitive ships; never edit an existing entry.",
   "primitives": {
+    "tableCopy": {
+      "sinceEngine": "1.5.0",
+      "params": { "table": { "type": "selector", "required": false } }
+    },
     "formulaCopy": {
       "sinceEngine": "1.3.0",
       "params": {}

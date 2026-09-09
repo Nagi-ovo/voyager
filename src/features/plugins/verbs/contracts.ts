@@ -38,6 +38,19 @@ export const PRIMITIVE_NAME_PATTERN = /^[a-z][a-zA-Z0-9]{1,39}$/;
 
 export const PRIMITIVE_CONTRACTS: readonly PrimitiveContract[] = [
   {
+    name: 'tableCopy',
+    sinceEngine: '1.5.0',
+    semantic: ['assistantTurn'],
+    params: {
+      table: {
+        type: 'selector',
+        required: false,
+        description: 'Table elements inside assistant turns; defaults to table.',
+      },
+    },
+    description: 'Explicitly copy a rendered answer table as Markdown or spreadsheet-safe TSV.',
+  },
+  {
     name: 'formulaCopy',
     sinceEngine: '1.3.0',
     semantic: [],
