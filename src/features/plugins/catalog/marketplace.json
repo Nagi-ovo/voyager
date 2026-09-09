@@ -9,6 +9,11 @@
   "description": "Index of the bundled official plugins for the docs plugin store. The extension discovers sites/*/site.json and sites/*/plugins/*/plugin.json itself; keep this list in sync (a test enforces it).",
   "plugins": [
     {
+      "name": "deepseek-code-collapse",
+      "source": "sites/deepseek/plugins/code-collapse/plugin.json",
+      "official": true
+    },
+    {
       "name": "deepseek-table-copy",
       "source": "sites/deepseek/plugins/table-copy/plugin.json",
       "official": true

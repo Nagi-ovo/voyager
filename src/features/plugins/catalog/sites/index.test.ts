@@ -38,6 +38,7 @@ describe('bundled catalog discovery', () => {
       'sites/chatgpt/plugins/reading-width/plugin.json',
       'sites/claude/plugins/cjk-render-fix/plugin.json',
       'sites/claude/plugins/reading-width/plugin.json',
+      'sites/deepseek/plugins/code-collapse/plugin.json',
       'sites/deepseek/plugins/formula-copy/plugin.json',
       'sites/deepseek/plugins/reading-typography/plugin.json',
       'sites/deepseek/plugins/reading-width/plugin.json',

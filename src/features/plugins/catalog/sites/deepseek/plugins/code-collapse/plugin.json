@@ -1,0 +1,118 @@
+{
+  "$schema": "https://voyager.nagi.fun/plugin.schema.json",
+  "id": "voyager.deepseek-code-collapse",
+  "name": "DeepSeek - Code Folding",
+  "version": "1.0.0",
+  "description": "Fold long code blocks without changing code or native copy controls.",
+  "i18n": {
+    "zh": {
+      "name": "DeepSeek - 代码折叠",
+      "description": "折叠较长代码块，保留完整代码与原生复制按钮。",
+      "settings": {
+        "thresholdLines": {
+          "label": "超过此行数时折叠"
+        }
+      }
+    },
+    "zh_TW": {
+      "name": "DeepSeek - 程式碼摺疊",
+      "description": "摺疊較長的程式碼區塊，保留完整程式碼與原生複製按鈕。",
+      "settings": {
+        "thresholdLines": {
+          "label": "超過此行數時摺疊"
+        }
+      }
+    },
+    "ja": {
+      "name": "DeepSeek - コードの折りたたみ",
+      "description": "コードと標準のコピーボタンを維持したまま、長いコードを折りたたみます。",
+      "settings": {
+        "thresholdLines": {
+          "label": "この行数を超えると折りたたむ"
+        }
+      }
+    },
+    "ko": {
+      "name": "DeepSeek - 코드 접기",
+      "description": "전체 코드와 기본 복사 버튼을 유지하면서 긴 코드 블록을 접습니다.",
+      "settings": {
+        "thresholdLines": {
+          "label": "이 줄 수를 초과하면 접기"
+        }
+      }
+    },
+    "fr": {
+      "name": "DeepSeek - Repli du code",
+      "description": "Replie les longs blocs sans modifier le code ni les boutons de copie natifs.",
+      "settings": {
+        "thresholdLines": {
+          "label": "Replier au-delà de ce nombre de lignes"
+        }
+      }
+    },
+    "es": {
+      "name": "DeepSeek - Plegado de código",
+      "description": "Contrae bloques largos sin modificar el código ni los botones de copia nativos.",
+      "settings": {
+        "thresholdLines": {
+          "label": "Contraer al superar este número de líneas"
+        }
+      }
+    },
+    "pt": {
+      "name": "DeepSeek - Recolhimento de código",
+      "description": "Recolhe blocos longos sem alterar o código nem os botões de cópia nativos.",
+      "settings": {
+        "thresholdLines": {
+          "label": "Recolher acima deste número de linhas"
+        }
+      }
+    },
+    "ru": {
+      "name": "DeepSeek - Сворачивание кода",
+      "description": "Сворачивает длинные блоки, сохраняя весь код и встроенные кнопки копирования.",
+      "settings": {
+        "thresholdLines": {
+          "label": "Сворачивать при превышении числа строк"
+        }
+      }
+    },
+    "ar": {
+      "name": "DeepSeek - طي الأكواد",
+      "description": "يطوي كتل الأكواد الطويلة دون تغيير الكود أو أزرار النسخ الأصلية.",
+      "settings": {
+        "thresholdLines": {
+          "label": "الطي عند تجاوز هذا العدد من الأسطر"
+        }
+      }
+    }
+  },
+  "author": "voyager-official",
+  "category": "readability",
+  "license": "GPL-3.0-or-later",
+  "engine": ">=1.5.0",
+  "tier": "declarative",
+  "matches": ["https://chat.deepseek.com/*"],
+  "requires": {
+    "handlers": ["codeCollapse"],
+    "semantic": ["assistantTurn"]
+  },
+  "contributes": {
+    "settings": {
+      "thresholdLines": {
+        "type": "number",
+        "label": "Fold above this many lines",
+        "default": 20,
+        "min": 5,
+        "max": 200
+      }
+    },
+    "domOps": [
+      {
+        "op": "native",
+        "handler": "codeCollapse",
+        "params": {}
+      }
+    ]
+  }
+}
