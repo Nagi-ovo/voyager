@@ -9,6 +9,11 @@
   "description": "Index of the bundled official plugins for the docs plugin store. The extension discovers sites/*/site.json and sites/*/plugins/*/plugin.json itself; keep this list in sync (a test enforces it).",
   "plugins": [
     {
+      "name": "deepseek-code-table",
+      "source": "sites/deepseek/plugins/code-table/plugin.json",
+      "official": true
+    },
+    {
       "name": "claude-cjk-render-fix",
       "source": "sites/claude/plugins/cjk-render-fix/plugin.json",
       "official": true
