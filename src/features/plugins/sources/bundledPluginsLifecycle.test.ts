@@ -71,6 +71,9 @@ describe('bundled plugin lifecycle (parametric)', async () => {
     it(`${manifest.id}: mount → updateSettings → unmount restores the host`, () => {
       document.body.className = 'host-class';
       document.body.setAttribute('style', '--host-var: 1px;');
+      // Semantic answer operations need real target markup, not an empty body.
+      document.body.innerHTML =
+        '<div class="ds-message"><div class="ds-assistant-message-main-content"><pre><code>sample</code></pre></div></div>';
       const before = {
         head: headWithoutBaseStyle(),
         body: document.body.outerHTML,
