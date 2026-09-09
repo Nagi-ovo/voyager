@@ -1,0 +1,23 @@
+/* Zero is a true no-op: match no rule for that setting. Math/code paragraphs
+ * are left native so inherited font sizes cannot distort their rendering. */
+.gv-plugin-deepseek-typography:not([data-gv-fontsize='0'])
+  .ds-assistant-message-main-content
+  :is(p, li):not(table *, pre *):not(
+    :has(code, .katex, math, .MathJax, mjx-container, [data-math], [data-math-source])
+  ) {
+  font-size: clamp(12px, var(--gv-type-size), 28px) !important;
+}
+.gv-plugin-deepseek-typography:not([data-gv-lineheight='0'])
+  .ds-assistant-message-main-content
+  :is(p, li):not(table *, pre *):not(
+    :has(code, .katex, math, .MathJax, mjx-container, [data-math], [data-math-source])
+  ) {
+  line-height: clamp(120%, var(--gv-type-line), 220%) !important;
+}
+.gv-plugin-deepseek-typography:not([data-gv-paragraphspace='0'])
+  .ds-assistant-message-main-content
+  p:not(table *, pre *):not(
+    :has(code, .katex, math, .MathJax, mjx-container, [data-math], [data-math-source])
+  ) {
+  margin-block-end: var(--gv-type-space) !important;
+}

@@ -39,6 +39,7 @@ describe('bundled catalog discovery', () => {
       'sites/claude/plugins/cjk-render-fix/plugin.json',
       'sites/claude/plugins/reading-width/plugin.json',
       'sites/deepseek/plugins/formula-copy/plugin.json',
+      'sites/deepseek/plugins/reading-typography/plugin.json',
       'sites/deepseek/plugins/reading-width/plugin.json',
       'sites/deepseek/plugins/timeline/plugin.json',
       'sites/deepseek/plugins/vim-input/plugin.json',

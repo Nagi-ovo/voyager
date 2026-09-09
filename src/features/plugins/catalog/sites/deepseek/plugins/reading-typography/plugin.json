@@ -1,0 +1,232 @@
+{
+  "$schema": "https://voyager.nagi.fun/plugin.schema.json",
+  "id": "voyager.deepseek-reading-typography",
+  "name": "DeepSeek · Reading Typography",
+  "description": "Adjust answer text size, line height and paragraph spacing without changing code, formulas or the composer.",
+  "version": "1.0.0",
+  "author": "voyager-official",
+  "category": "readability",
+  "license": "MIT",
+  "engine": ">=1.4.0",
+  "tier": "declarative",
+  "matches": ["https://chat.deepseek.com/*"],
+  "requires": {
+    "semantic": ["assistantTurn"]
+  },
+  "i18n": {
+    "zh": {
+      "name": "DeepSeek · 阅读排版",
+      "description": "调整回答正文的字号、行高和段落间距，不改变代码、公式或输入框。",
+      "settings": {
+        "fontSize": {
+          "label": "正文字号（0 使用原样式）"
+        },
+        "lineHeight": {
+          "label": "行高百分比（0 使用原样式）"
+        },
+        "paragraphSpace": {
+          "label": "段落间距（0 使用原样式）"
+        }
+      }
+    },
+    "zh_TW": {
+      "name": "DeepSeek · 閱讀排版",
+      "description": "調整回覆正文的字級、行高和段落間距，不改變程式碼、公式或輸入框。",
+      "settings": {
+        "fontSize": {
+          "label": "正文字級（0 使用原樣式）"
+        },
+        "lineHeight": {
+          "label": "行高百分比（0 使用原樣式）"
+        },
+        "paragraphSpace": {
+          "label": "段落間距（0 使用原樣式）"
+        }
+      }
+    },
+    "ja": {
+      "name": "DeepSeek · 読書レイアウト",
+      "description": "コード、数式、入力欄を変更せず、回答本文の文字サイズ、行間、段落間隔を調整します。",
+      "settings": {
+        "fontSize": {
+          "label": "文字サイズ（0 は元の表示）"
+        },
+        "lineHeight": {
+          "label": "行間の割合（0 は元の表示）"
+        },
+        "paragraphSpace": {
+          "label": "段落間隔（0 は元の表示）"
+        }
+      }
+    },
+    "ko": {
+      "name": "DeepSeek · 읽기 서식",
+      "description": "코드, 수식, 입력창을 유지하면서 답변 본문의 글자 크기와 줄 및 문단 간격을 조절합니다.",
+      "settings": {
+        "fontSize": {
+          "label": "글자 크기 (0: 원래 스타일)"
+        },
+        "lineHeight": {
+          "label": "줄 높이 비율 (0: 원래 스타일)"
+        },
+        "paragraphSpace": {
+          "label": "문단 간격 (0: 원래 스타일)"
+        }
+      }
+    },
+    "fr": {
+      "name": "DeepSeek · Mise en forme de lecture",
+      "description": "Ajuste le texte des réponses sans modifier le code, les formules ou la saisie.",
+      "settings": {
+        "fontSize": {
+          "label": "Taille du texte (0 : style original)"
+        },
+        "lineHeight": {
+          "label": "Interligne en pourcentage (0 : original)"
+        },
+        "paragraphSpace": {
+          "label": "Espacement des paragraphes (0 : original)"
+        }
+      }
+    },
+    "es": {
+      "name": "DeepSeek · Formato de lectura",
+      "description": "Ajusta el texto de las respuestas sin cambiar código, fórmulas ni el cuadro de entrada.",
+      "settings": {
+        "fontSize": {
+          "label": "Tamaño del texto (0: original)"
+        },
+        "lineHeight": {
+          "label": "Altura de línea en porcentaje (0: original)"
+        },
+        "paragraphSpace": {
+          "label": "Espacio entre párrafos (0: original)"
+        }
+      }
+    },
+    "pt": {
+      "name": "DeepSeek · Formatação de leitura",
+      "description": "Ajusta o texto das respostas sem alterar código, fórmulas ou a caixa de entrada.",
+      "settings": {
+        "fontSize": {
+          "label": "Tamanho do texto (0: original)"
+        },
+        "lineHeight": {
+          "label": "Altura da linha em porcentagem (0: original)"
+        },
+        "paragraphSpace": {
+          "label": "Espaço entre parágrafos (0: original)"
+        }
+      }
+    },
+    "ru": {
+      "name": "DeepSeek · Оформление текста",
+      "description": "Настройка текста ответов без изменения кода, формул и поля ввода.",
+      "settings": {
+        "fontSize": {
+          "label": "Размер текста (0: исходный)"
+        },
+        "lineHeight": {
+          "label": "Высота строки в процентах (0: исходная)"
+        },
+        "paragraphSpace": {
+          "label": "Интервал абзацев (0: исходный)"
+        }
+      }
+    },
+    "ar": {
+      "name": "DeepSeek · تنسيق القراءة",
+      "description": "ضبط نص الردود دون تغيير الشيفرة أو المعادلات أو مربع الإدخال.",
+      "settings": {
+        "fontSize": {
+          "label": "حجم النص (0: النمط الأصلي)"
+        },
+        "lineHeight": {
+          "label": "ارتفاع السطر بالنسبة المئوية (0: الأصلي)"
+        },
+        "paragraphSpace": {
+          "label": "تباعد الفقرات (0: الأصلي)"
+        }
+      }
+    }
+  },
+  "contributes": {
+    "settings": {
+      "fontSize": {
+        "type": "number",
+        "label": "Text size (0: original)",
+        "default": 0,
+        "min": 0,
+        "max": 28
+      },
+      "lineHeight": {
+        "type": "number",
+        "label": "Line height percent (0: original)",
+        "default": 0,
+        "min": 0,
+        "max": 220
+      },
+      "paragraphSpace": {
+        "type": "number",
+        "label": "Paragraph spacing (0: original)",
+        "default": 0,
+        "min": 0,
+        "max": 32
+      }
+    },
+    "styles": [
+      {
+        "file": "style.css"
+      }
+    ],
+    "domOps": [
+      {
+        "op": "addClass",
+        "target": {
+          "kind": "semantic",
+          "key": "assistantTurn"
+        },
+        "className": "gv-plugin-deepseek-typography"
+      },
+      {
+        "op": "setAttribute",
+        "target": {
+          "kind": "semantic",
+          "key": "assistantTurn"
+        },
+        "name": "data-gv-fontsize",
+        "value": "{{fontSize}}"
+      },
+      {
+        "op": "setAttribute",
+        "target": {
+          "kind": "semantic",
+          "key": "assistantTurn"
+        },
+        "name": "data-gv-lineheight",
+        "value": "{{lineHeight}}"
+      },
+      {
+        "op": "setAttribute",
+        "target": {
+          "kind": "semantic",
+          "key": "assistantTurn"
+        },
+        "name": "data-gv-paragraphspace",
+        "value": "{{paragraphSpace}}"
+      },
+      {
+        "op": "setStyle",
+        "target": {
+          "kind": "semantic",
+          "key": "assistantTurn"
+        },
+        "styles": {
+          "--gv-type-size": "{{fontSize}}px",
+          "--gv-type-line": "{{lineHeight}}%",
+          "--gv-type-space": "{{paragraphSpace}}px"
+        }
+      }
+    ]
+  }
+}

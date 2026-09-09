@@ -9,6 +9,11 @@
   "description": "Index of the bundled official plugins for the docs plugin store. The extension discovers sites/*/site.json and sites/*/plugins/*/plugin.json itself; keep this list in sync (a test enforces it).",
   "plugins": [
     {
+      "name": "deepseek-reading-typography",
+      "source": "sites/deepseek/plugins/reading-typography/plugin.json",
+      "official": true
+    },
+    {
       "name": "claude-cjk-render-fix",
       "source": "sites/claude/plugins/cjk-render-fix/plugin.json",
       "official": true
