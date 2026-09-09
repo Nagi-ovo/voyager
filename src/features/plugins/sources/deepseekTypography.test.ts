@@ -1,12 +1,11 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
 import raw from '../catalog/sites/deepseek/plugins/reading-typography/plugin.json';
-import css from '../catalog/sites/deepseek/plugins/reading-typography/style.css?raw';
 import { validateManifest } from '../manifest/validate';
 import { DeclarativeEngine } from '../runtime/declarativeEngine';
 import { deepseekAdapter } from '../sites/adapters/deepseek';
 
-const parsed = validateManifest({ ...raw, contributes: { ...raw.contributes, styles: [{ css }] } });
+const parsed = validateManifest(raw);
 if (!parsed.success) throw new Error(JSON.stringify(parsed.error));
 const manifest = parsed.data;
 
@@ -42,8 +41,7 @@ describe('DeepSeek answer typography', () => {
         expect(rulesFor('item')).toHaveLength(2);
         for (const id of ['user', 'think', 'math', 'inline', 'cell'])
           expect(rulesFor(id), id).toHaveLength(0);
-        const answer = document.getElementById('answer')!;
-        expect(answer.style.getPropertyValue('--gv-type-size')).toBe('18px');
+        expect(document.getElementById('answer')!.getAttribute('style')).toBe('color: red;');
         engine.updateSettings(manifest.id, { fontSize: 0, lineHeight: 0, paragraphSpace: 0 });
         expect(rulesFor('plain')).toHaveLength(0);
         engine.unmount(manifest.id);

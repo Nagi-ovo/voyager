@@ -26,7 +26,7 @@ describe('BundledCatalogPluginSource', () => {
     for (const manifest of manifests) {
       expect(engineSatisfied(manifest.engine, PLUGIN_ENGINE_VERSION)).toBe(true);
       for (const style of manifest.contributes.styles ?? []) {
-        expect(style.source).toBe('style.css');
+        if (style.source !== undefined) expect(style.source).toBe('style.css');
         expect(typeof style.css).toBe('string');
         expect('file' in (style as unknown as Record<string, unknown>)).toBe(false);
       }

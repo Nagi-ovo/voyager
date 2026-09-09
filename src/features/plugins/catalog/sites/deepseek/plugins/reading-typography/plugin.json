@@ -176,7 +176,7 @@
     },
     "styles": [
       {
-        "file": "style.css"
+        "css": "/* Zero is a true no-op: match no rule for that setting. Math/code paragraphs\n * are left native so inherited font sizes cannot distort their rendering. */\n.gv-plugin-deepseek-typography:not([data-gv-fontsize='0'])\n  .ds-assistant-message-main-content\n  :is(p, li):not(table *, pre *):not(\n    :has(code, .katex, math, .MathJax, mjx-container, [data-math], [data-math-source])\n  ) {\n  font-size: clamp(12px, {{fontSize}}px, 28px) !important;\n}\n.gv-plugin-deepseek-typography:not([data-gv-lineheight='0'])\n  .ds-assistant-message-main-content\n  :is(p, li):not(table *, pre *):not(\n    :has(code, .katex, math, .MathJax, mjx-container, [data-math], [data-math-source])\n  ) {\n  line-height: clamp(120%, {{lineHeight}}%, 220%) !important;\n}\n.gv-plugin-deepseek-typography:not([data-gv-paragraphspace='0'])\n  .ds-assistant-message-main-content\n  p:not(table *, pre *):not(\n    :has(code, .katex, math, .MathJax, mjx-container, [data-math], [data-math-source])\n  ) {\n  margin-block-end: {{paragraphSpace}}px !important;\n}\n"
       }
     ],
     "domOps": [
@@ -214,18 +214,6 @@
         },
         "name": "data-gv-paragraphspace",
         "value": "{{paragraphSpace}}"
-      },
-      {
-        "op": "setStyle",
-        "target": {
-          "kind": "semantic",
-          "key": "assistantTurn"
-        },
-        "styles": {
-          "--gv-type-size": "{{fontSize}}px",
-          "--gv-type-line": "{{lineHeight}}%",
-          "--gv-type-space": "{{paragraphSpace}}px"
-        }
       }
     ]
   }
