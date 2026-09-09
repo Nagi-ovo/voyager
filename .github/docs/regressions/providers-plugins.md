@@ -1,5 +1,16 @@
 # Providers and plugins regression notes
 
+## A delayed navigator star read must not replace the current conversation
+
+- **Trap:** A storage-triggered star read from conversation A can resolve after
+  navigation to B, replacing B's starred markers with A's snapshot (DeepSeek #996).
+- **Rule:** Apply a star snapshot only if its request is the newest, its route
+  still matches, and its plugin scope is alive. Preserve the existing startup
+  promise chain so observers are installed at the same point in the lifecycle.
+- **Guard:** `src/features/plugins/verbs/turnNavigatorStarIsolation.test.ts`
+  reproduces A resolving after B;
+  `src/features/plugins/verbs/turnNavigator/starSnapshot.test.ts` guards invalidation.
+
 Read this file when changing ChatGPT or Claude adapters, plugin lifecycles, temporary chat handoff,
 or prompt commands.
 
