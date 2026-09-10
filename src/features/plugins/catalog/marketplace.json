@@ -37,6 +37,11 @@
       "name": "deepseek-timeline",
       "source": "sites/deepseek/plugins/timeline/plugin.json",
       "official": true
+    },
+    {
+      "name": "deepseek-vim-input",
+      "source": "sites/deepseek/plugins/vim-input/plugin.json",
+      "official": true
     }
   ]
 }
