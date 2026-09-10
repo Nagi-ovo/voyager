@@ -1,0 +1,26 @@
+/* Keep changes within the final answer, leaving thinking and controls untouched. */
+.gv-plugin-deepseek-code-table .ds-assistant-message-main-content pre {
+  box-sizing: border-box !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  overflow-x: auto !important;
+  white-space: pre !important;
+}
+
+.gv-plugin-deepseek-code-table[data-gv-code-wrap='true'] .ds-assistant-message-main-content pre,
+.gv-plugin-deepseek-code-table[data-gv-code-wrap='true']
+  .ds-assistant-message-main-content
+  pre
+  code {
+  white-space: pre-wrap !important;
+  overflow-wrap: anywhere !important;
+  word-break: normal !important;
+}
+
+/* Scroll the existing table wrapper, not the table: retain native table semantics. */
+.gv-plugin-deepseek-code-table .ds-assistant-message-main-content div:has(> table) {
+  box-sizing: border-box !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  overflow-x: auto !important;
+}

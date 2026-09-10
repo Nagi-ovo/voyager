@@ -1,0 +1,133 @@
+{
+  "$schema": "https://voyager.nagi.fun/plugin.schema.json",
+  "id": "voyager.deepseek-code-table",
+  "name": "DeepSeek · Code and Table Readability",
+  "version": "1.0.0",
+  "description": "Scroll code blocks and wide tables within assistant replies, with optional code line wrapping.",
+  "i18n": {
+    "zh": {
+      "name": "DeepSeek · 代码与表格阅读",
+      "description": "让助手回答中的代码块和宽表格独立滚动，并可切换代码自动换行。",
+      "settings": {
+        "wrapCode": {
+          "label": "代码自动换行"
+        }
+      }
+    },
+    "zh_TW": {
+      "name": "DeepSeek · 程式碼與表格閱讀",
+      "description": "讓助理回覆中的程式碼區塊和寬表格獨立捲動，並可切換程式碼自動換行。",
+      "settings": {
+        "wrapCode": {
+          "label": "程式碼自動換行"
+        }
+      }
+    },
+    "ja": {
+      "name": "DeepSeek · コードと表の表示",
+      "description": "回答内のコードブロックと横長の表を個別にスクロールし、コードの折り返しを切り替えます。",
+      "settings": {
+        "wrapCode": {
+          "label": "コードを折り返す"
+        }
+      }
+    },
+    "ko": {
+      "name": "DeepSeek · 코드와 표 읽기",
+      "description": "답변의 코드 블록과 넓은 표를 개별적으로 스크롤하고 코드 줄바꿈을 설정합니다.",
+      "settings": {
+        "wrapCode": {
+          "label": "코드 줄바꿈"
+        }
+      }
+    },
+    "fr": {
+      "name": "DeepSeek · Lecture du code et des tableaux",
+      "description": "Fait défiler séparément le code et les tableaux larges des réponses, avec retour à la ligne du code en option.",
+      "settings": {
+        "wrapCode": {
+          "label": "Retour à la ligne du code"
+        }
+      }
+    },
+    "es": {
+      "name": "DeepSeek · Lectura de código y tablas",
+      "description": "Permite desplazar por separado el código y las tablas anchas de las respuestas, con ajuste de líneas opcional.",
+      "settings": {
+        "wrapCode": {
+          "label": "Ajustar líneas de código"
+        }
+      }
+    },
+    "pt": {
+      "name": "DeepSeek · Leitura de código e tabelas",
+      "description": "Permite rolar separadamente o código e as tabelas largas das respostas, com quebra de linhas opcional.",
+      "settings": {
+        "wrapCode": {
+          "label": "Quebrar linhas de código"
+        }
+      }
+    },
+    "ru": {
+      "name": "DeepSeek · Чтение кода и таблиц",
+      "description": "Отдельная прокрутка блоков кода и широких таблиц в ответах с возможностью переноса строк кода.",
+      "settings": {
+        "wrapCode": {
+          "label": "Переносить строки кода"
+        }
+      }
+    },
+    "ar": {
+      "name": "DeepSeek · قراءة الشيفرة والجداول",
+      "description": "تمرير مستقل لكتل الشيفرة والجداول العريضة في الردود مع خيار التفاف أسطر الشيفرة.",
+      "settings": {
+        "wrapCode": {
+          "label": "التفاف أسطر الشيفرة"
+        }
+      }
+    }
+  },
+  "author": "voyager-official",
+  "category": "readability",
+  "license": "MIT",
+  "homepage": "https://github.com/Nagi-ovo/voyager/tree/main/src/features/plugins/catalog/sites/deepseek/plugins/code-table",
+  "engine": ">=1.4.0",
+  "tier": "declarative",
+  "matches": ["https://chat.deepseek.com/*"],
+  "requires": {
+    "semantic": ["assistantTurn"]
+  },
+  "contributes": {
+    "settings": {
+      "wrapCode": {
+        "type": "boolean",
+        "label": "Wrap code lines",
+        "default": false
+      }
+    },
+    "styles": [
+      {
+        "file": "style.css"
+      }
+    ],
+    "domOps": [
+      {
+        "op": "addClass",
+        "target": {
+          "kind": "semantic",
+          "key": "assistantTurn"
+        },
+        "className": "gv-plugin-deepseek-code-table"
+      },
+      {
+        "op": "setAttribute",
+        "target": {
+          "kind": "semantic",
+          "key": "assistantTurn"
+        },
+        "name": "data-gv-code-wrap",
+        "value": "{{wrapCode}}"
+      }
+    ]
+  }
+}
