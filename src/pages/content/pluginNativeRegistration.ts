@@ -11,12 +11,20 @@ import {
 } from '@/features/plugins/builtin/chatgptExport/runtime';
 import { activateChatGptTemporaryHandoff } from '@/features/plugins/builtin/chatgptTemporaryHandoff';
 import {
+  activateChatGptTimeline,
+  updateChatGptTimelineSettings,
+} from '@/features/plugins/builtin/chatgptTimeline';
+import {
   type NativeHandler,
   registerNativeHandler,
   verifyNativeHandlerBindings,
 } from '@/features/plugins/runtime/nativeHandlers';
 
 export const NATIVE_HANDLER_BINDINGS: Readonly<Record<string, NativeHandler>> = {
+  'voyager.chatgpt-timeline': {
+    activate: activateChatGptTimeline,
+    updateSettings: updateChatGptTimelineSettings,
+  },
   // formula-copy, input-vim and claude-timeline invoke primitives through a
   // `native` op in their manifests (see verbs/); they need no binding here.
   'voyager.chatgpt-export': {

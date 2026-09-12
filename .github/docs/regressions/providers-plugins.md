@@ -3,6 +3,26 @@
 Read this file when changing ChatGPT or Claude adapters, plugin lifecycles, temporary chat handoff,
 or prompt commands.
 
+## ChatGPT timeline retains native virtual-list identity
+
+- **Trap:** Empty retained shells, bookkeeping roots and transient duplicate shells are not
+  interchangeable with mounted messages. Content hashes or DOM indices lose navigation and stars
+  when the virtual window changes. Upstream compact rails also disable tick hit-testing by default.
+- **Rule:** ChatGPT's native handler uses the read-only `chatgptDom` contract and a grow-only registry
+  keyed by `data-turn-id-container`, excluding `-root` bookkeeping IDs. Do not materialize the full
+  conversation for discovery. Keep workspace/conversation and star prefixes unchanged, quarantine
+  outgoing SPA shells, and cancel homing on user input. Opt into shared compact tick hit-testing;
+  tick clicks must not also toggle preview. Do not add a competing `turnNavigator` native op.
+  Same-scope draft-to-saved routes may retain their shells: admit them through stable candidate
+  passes, but replace the provisional set if destination shells change. Cancel long presses before
+  replacing marker DOM so detached ticks cannot write stars.
+- **Guard:** `src/features/plugins/sites/chatgptDom.test.ts`,
+  `src/features/plugins/builtin/chatgptTimeline/index.test.ts`,
+  `src/features/plugins/builtin/chatgptTimeline/registry.test.ts`,
+  `src/features/plugins/builtin/chatgptTimeline/geometry.test.ts`,
+  `src/features/plugins/builtin/chatgptTimeline/styles.test.ts`, and
+  `src/features/plugins/builtin/builtin.test.ts`.
+
 ## Remote plugin catalog checks are triggered only by pages an enabled plugin targets
 
 - **Trap:** The plugin host starts on every injected page, including Gemini, AI Studio and

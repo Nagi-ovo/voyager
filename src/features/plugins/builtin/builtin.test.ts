@@ -49,6 +49,16 @@ describe('BUILTIN_PLUGINS', () => {
     expect(exportPlugin?.i18n?.zh?.name).toBe('ChatGPT · 对话导出');
   });
 
+  it('scopes ChatGPT timeline to one native binding and only exposes Compact settings', () => {
+    const timeline = BUILTIN_PLUGINS.find((m) => m.id === 'voyager.chatgpt-timeline');
+    expect(timeline?.matches).toEqual(['https://chatgpt.com/*', 'https://chat.openai.com/*']);
+    expect(timeline?.contributes.domOps ?? []).toEqual([]);
+    expect(timeline?.contributes.settings).toEqual({
+      compactView: { type: 'boolean', label: 'Use compact timeline', default: false },
+    });
+    expect(timeline?.i18n?.zh?.name).toBe('ChatGPT · 时间线');
+  });
+
   it('keeps temporary-chat handoff separate from conversation export', () => {
     const handoff = BUILTIN_PLUGINS.find(
       (plugin) => plugin.id === 'voyager.chatgpt-temporary-handoff',
