@@ -310,11 +310,18 @@ drop, or hover layout.
   measured on the live build, `chat-window-content` still computed `708px` while Voyager's rule
   asked for the slider value. It only looked correct because Voyager re-declares the variables on
   descendant hosts; anything under `chat-window-content` outside that list keeps the narrow default.
+  Furthermore, on `.enable-extended-and-xl-grid`, Gemini applies CSS `@scope (.md-content)` rules
+  `& > :not(#_)` that hardcode `max-width: 708px` (and 740px) on assistant markdown child elements,
+  and hardcodes `max-width: 708px` on response footers, message actions, and thinking overlays.
 - **Rule:** `chatWidth` must assign both luminous variables on the chat-window hosts with
-  `!important` and keep an explicit width on `.conversation-container`. `editInputWidth` must
-  assign the same variables on `input-container`, also with `!important`, and beat chat width's
-  input/overlay selectors when both sliders are enabled. Inheritance still resolves the composer:
-  `input-container` is the nearer ancestor, so the edit slider owns it.
+  `!important` and keep an explicit width on `.conversation-container`. Under
+  `.enable-extended-and-xl-grid`, it must explicitly override `.conversation-container user-query`,
+  `model-response`, `.md-content > :not(#_)`, `.md-content > *`, `message-actions` (including
+  resetting its indented `margin-inline`), `thinking-overlay`, and related response children with
+  `!important`. `editInputWidth` must assign the same variables on `input-container`, also with
+  `!important`, and beat chat width's input/overlay selectors when both sliders are enabled.
+  Inheritance still resolves the composer: `input-container` is the nearer ancestor, so the edit
+  slider owns it.
 - **Guard:** `src/pages/content/chatWidth/__tests__/chatWidth.test.ts` and
   `src/pages/content/editInputWidth/__tests__/editInputWidth.test.ts`.
 

@@ -127,6 +127,13 @@ describe('chatWidth', () => {
     expect(styleText).toContain(`--bard-chat-window-max-width-default: ${expectedPx}px !important`);
     expect(styleText).toContain('.enable-luminous-content-width-update');
     expect(styleText).toContain('.enable-extended-and-xl-grid .conversation-container user-query');
+    expect(styleText).toContain(
+      '.enable-extended-and-xl-grid .conversation-container .md-content > :not(#_)',
+    );
+    expect(styleText).toContain(
+      '.enable-extended-and-xl-grid .conversation-container message-actions',
+    );
+    expect(styleText).toContain('margin-inline: auto !important');
   });
 
   it('excludes the header logo pill wrapper from the sparkle width rule (#875)', async () => {

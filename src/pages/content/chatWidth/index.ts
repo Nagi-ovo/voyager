@@ -140,9 +140,31 @@ function applyWidth(widthPercent: number) {
     }
 
     .enable-extended-and-xl-grid .conversation-container user-query,
-    .enable-extended-and-xl-grid .conversation-container model-response-disclaimers {
+    .enable-extended-and-xl-grid .conversation-container model-response,
+    .enable-extended-and-xl-grid .conversation-container model-response-disclaimers,
+    .enable-extended-and-xl-grid .conversation-container .response-container-header,
+    .enable-extended-and-xl-grid .conversation-container .response-container-footer,
+    .enable-extended-and-xl-grid .conversation-container .response-footer,
+    .enable-extended-and-xl-grid .conversation-container message-actions,
+    .enable-extended-and-xl-grid .conversation-container thinking-overlay,
+    .enable-extended-and-xl-grid .conversation-container .thoughts-container,
+    .enable-extended-and-xl-grid .conversation-container .image-gen-shimmer-placeholder,
+    .enable-extended-and-xl-grid .conversation-container election-info-disclaimer,
+    .enable-extended-and-xl-grid .conversation-container finance-info-disclaimer,
+    .enable-extended-and-xl-grid .conversation-container personal-intelligence-banner,
+    .enable-extended-and-xl-grid .conversation-container remy-goal-status-footer,
+    .enable-extended-and-xl-grid .conversation-container remy-processing-state,
+    .enable-extended-and-xl-grid .conversation-container schedule-annotation,
+    .enable-extended-and-xl-grid .conversation-container schedule-annotation-v2,
+    .enable-extended-and-xl-grid .conversation-container .remy-scheduled-task-confirmation-card-container,
+    .enable-extended-and-xl-grid .conversation-container .md-content > :not(#_),
+    .enable-extended-and-xl-grid .conversation-container .md-content > * {
       max-width: ${widthValue} !important;
       width: min(100%, ${widthValue}) !important;
+    }
+
+    .enable-extended-and-xl-grid .conversation-container message-actions {
+      margin-inline: auto !important;
     }
 
     main > div:has(user-query),
@@ -224,7 +246,9 @@ function applyWidth(widthPercent: number) {
     model-response > * > *,
     response-container,
     response-container > *,
-    response-container > * > * {
+    response-container > * > *,
+    .md-content > :not(#_),
+    .md-content > * {
       max-width: ${widthValue} !important;
     }
 
