@@ -28,6 +28,43 @@ function expectTableRuleWidth(styleText: string, percent: number): void {
   expect(styleText).toMatch(tableRulePattern);
 }
 
+/**
+ * Both markdown rules must keep carrying the slider width, and both must stay
+ * bound to a turn: `.md-content` is a plain class Gemini also renders outside
+ * the thread (canvas, side panels), so an unscoped rule would hand those the
+ * slider's width and clamp them whenever it sits narrower than they are.
+ */
+function expectMarkdownChildrenWidth(styleText: string, percent: number): void {
+  const widthDeclaration = `max-width: ${percentToPixels(percent)}px !important;`;
+
+  // Every selector that reaches `.md-content`, paired with the block it opens.
+  // Comments are stripped before the split: a CSS comment may contain a comma.
+  const markdownSelectors = styleText
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('}')
+    .flatMap((block) => {
+      const [selectors = '', body = ''] = block.split('{');
+      return selectors
+        .split(',')
+        .map((selector) => selector.trim())
+        .filter((selector) => selector.includes('.md-content'))
+        .map((selector) => ({ selector, body }));
+    });
+
+  expect(markdownSelectors.map((rule) => rule.selector).sort()).toEqual([
+    '.conversation-container .md-content > *',
+    '.conversation-container .md-content > :not(#_)',
+    '.enable-extended-and-xl-grid .conversation-container .md-content > *',
+    '.enable-extended-and-xl-grid .conversation-container .md-content > :not(#_)',
+  ]);
+
+  // The list above is exhaustive, so an unscoped `.md-content` rule fails it.
+  // Each of the two blocks must still carry the slider width itself.
+  for (const { body } of markdownSelectors) {
+    expect(body).toContain(widthDeclaration);
+  }
+}
+
 function expectSingleTableScrollbarRules(styleText: string): void {
   expect(styleText).toContain('.table-block.has-scrollbar');
   expect(styleText).toContain('.table-block.new-table-style');
@@ -128,20 +165,10 @@ describe('chatWidth', () => {
     expect(styleText).toContain('.enable-luminous-content-width-update');
     expect(styleText).toContain('.enable-extended-and-xl-grid .conversation-container user-query');
     expect(styleText).toContain(
-      '.enable-extended-and-xl-grid .conversation-container .md-content > :not(#_)',
-    );
-    expect(styleText).toContain(
       '.enable-extended-and-xl-grid .conversation-container message-actions',
     );
     expect(styleText).toContain('margin-inline: auto !important');
-    // `.md-content` is a plain class Gemini also renders outside the thread, so
-    // every rule that widens its children stays bound to a turn. An unscoped
-    // one would clamp canvas and side-panel markdown to the slider's width.
-    const unscopedMdContent = styleText
-      .split('\n')
-      .map((line) => line.trim())
-      .filter((line) => line.startsWith('.md-content'));
-    expect(unscopedMdContent).toEqual([]);
+    expectMarkdownChildrenWidth(styleText, 70);
   });
 
   it('excludes the header logo pill wrapper from the sparkle width rule (#875)', async () => {
