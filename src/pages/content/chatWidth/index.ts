@@ -247,8 +247,13 @@ function applyWidth(widthPercent: number) {
     response-container,
     response-container > *,
     response-container > * > *,
-    .md-content > :not(#_),
-    .md-content > * {
+    /* Keep the markdown children bound to a turn. The custom elements above are
+       Gemini's own and exist only inside the thread, but .md-content is a plain
+       class Gemini also renders outside it (canvas and side panels), and an
+       unscoped rule would hand those the slider's width - clamping them
+       whenever the slider sits narrower than they are. */
+    .conversation-container .md-content > :not(#_),
+    .conversation-container .md-content > * {
       max-width: ${widthValue} !important;
     }
 

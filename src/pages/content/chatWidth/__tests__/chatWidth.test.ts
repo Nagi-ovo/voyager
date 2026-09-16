@@ -134,6 +134,14 @@ describe('chatWidth', () => {
       '.enable-extended-and-xl-grid .conversation-container message-actions',
     );
     expect(styleText).toContain('margin-inline: auto !important');
+    // `.md-content` is a plain class Gemini also renders outside the thread, so
+    // every rule that widens its children stays bound to a turn. An unscoped
+    // one would clamp canvas and side-panel markdown to the slider's width.
+    const unscopedMdContent = styleText
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.startsWith('.md-content'));
+    expect(unscopedMdContent).toEqual([]);
   });
 
   it('excludes the header logo pill wrapper from the sparkle width rule (#875)', async () => {
