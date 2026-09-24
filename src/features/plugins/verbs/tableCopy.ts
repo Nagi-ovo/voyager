@@ -7,6 +7,7 @@ import { PluginScope } from '../runtime/pluginScope';
 import { getPrimitiveContract } from './contracts';
 import { mountTableCopyControls } from './tableCopy/controls';
 import { TABLE_COPY_LABELS } from './tableCopy/i18n';
+import { isTableCopyHidden } from './tableCopy/serializer';
 import type { Primitive } from './types';
 
 export interface TableCopyParams {
@@ -43,11 +44,13 @@ export const tableCopyPrimitive: Primitive<TableCopyParams> = {
     const thinking = context.adapter?.selectors.thinkingBlock;
     const selector = params.table ?? 'table';
     const entries = new Map<HTMLTableElement, { scope: PluginScope; host: HTMLElement }>();
-    context.setTargetCounter(() =>
-      scope.signal.aborted
-        ? 0
-        : Array.from(entries.keys()).filter((table) => table.isConnected).length,
-    );
+    context.setTargetCounter(() => {
+      if (scope.signal.aborted) return 0;
+      const visibilityCache = new Map<Element, boolean>();
+      return Array.from(entries.keys()).filter(
+        (table) => table.isConnected && !isTableCopyHidden(table, visibilityCache),
+      ).length;
+    });
     if (!assistant || scope.signal.aborted) return;
     // Selector syntax needs a DOM; protect direct callers bypassing validation too.
     try {
@@ -65,11 +68,12 @@ export const tableCopyPrimitive: Primitive<TableCopyParams> = {
     const liveHosts = new Set<Node>();
     let scheduled = false;
 
-    const eligible = (table: HTMLTableElement) =>
+    const eligible = (table: HTMLTableElement, visibilityCache?: Map<Element, boolean>) =>
       table.isConnected &&
       table.ownerDocument === doc &&
       table.matches(selector) &&
       Boolean(table.closest(assistant)) &&
+      !isTableCopyHidden(table, visibilityCache) &&
       !table.parentElement?.closest('table') &&
       !(thinking && table.closest(thinking));
 
@@ -95,9 +99,10 @@ export const tableCopyPrimitive: Primitive<TableCopyParams> = {
 
     function reconcileTables() {
       if (scope.signal.aborted) return;
+      const visibilityCache = new Map<Element, boolean>();
       for (const [table, entry] of entries) {
         if (
-          !eligible(table) ||
+          !eligible(table, visibilityCache) ||
           entry.host.nextElementSibling !== table ||
           !entry.host.isConnected
         ) {
@@ -109,7 +114,7 @@ export const tableCopyPrimitive: Primitive<TableCopyParams> = {
       for (const element of doc.querySelectorAll(selector)) {
         if (element.tagName !== 'TABLE') continue;
         const table = element as HTMLTableElement;
-        if (!eligible(table) || entries.has(table)) continue;
+        if (!eligible(table, visibilityCache) || entries.has(table)) continue;
         const child = new PluginScope();
         try {
           const host = mountTableCopyControls(

@@ -154,6 +154,86 @@ describe('tableCopy actual primitive', () => {
       await flush();
       expect(hosts()).toHaveLength(0);
     });
+
+    it('never mounts hidden tables and responds to hidden ancestor changes', async () => {
+      document.body.innerHTML = fixture.html;
+      const table = document.querySelector<HTMLTableElement>('#answer-table')!;
+      const answer = document.querySelector<HTMLElement>('#answer')!;
+      table.hidden = true;
+      const { count } = await activate(fixture);
+      expect(hosts()).toHaveLength(0);
+      expect(count()).toBe(0);
+
+      table.hidden = false;
+      await flush();
+      expect(hosts()).toHaveLength(1);
+      expect(count()).toBe(1);
+      const oldButton = button('tsv');
+      answer.setAttribute('aria-hidden', 'true');
+      expect(count()).toBe(0);
+      oldButton.click();
+      expect(clipboard.writeText).not.toHaveBeenCalled();
+      await flush();
+      expect(hosts()).toHaveLength(0);
+
+      answer.removeAttribute('aria-hidden');
+      await flush();
+      expect(hosts()).toHaveLength(1);
+      answer.hidden = true;
+      await flush();
+      expect(hosts()).toHaveLength(0);
+      answer.hidden = false;
+      await flush();
+      button('tsv').click();
+      expect(clipboard.writeText).toHaveBeenCalledTimes(1);
+    });
+
+    it('tracks CSS-hidden tables and ancestors while keeping offscreen tables eligible', async () => {
+      document.body.innerHTML = fixture.html;
+      const style = document.createElement('style');
+      style.textContent =
+        '.gv-test-gone { display: none } .gv-test-invisible { visibility: hidden }';
+      document.head.appendChild(style);
+      try {
+        const table = document.querySelector<HTMLTableElement>('#answer-table')!;
+        const answer = document.querySelector<HTMLElement>('#answer')!;
+        table.classList.add('gv-test-gone');
+        const { count } = await activate(fixture);
+        expect(hosts()).toHaveLength(0);
+        expect(count()).toBe(0);
+
+        table.classList.remove('gv-test-gone');
+        table.style.position = 'absolute';
+        table.style.top = '-10000px';
+        await flush();
+        expect(hosts()).toHaveLength(1);
+        expect(count()).toBe(1);
+        const oldButton = button('tsv');
+        answer.classList.add('gv-test-invisible');
+        expect(count()).toBe(0);
+        oldButton.click();
+        expect(clipboard.writeText).not.toHaveBeenCalled();
+        await flush();
+        expect(hosts()).toHaveLength(0);
+
+        answer.classList.remove('gv-test-invisible');
+        await flush();
+        answer.classList.add('gv-test-gone');
+        await flush();
+        expect(hosts()).toHaveLength(0);
+        answer.classList.remove('gv-test-gone');
+        await flush();
+        table.classList.add('gv-test-invisible');
+        await flush();
+        expect(hosts()).toHaveLength(0);
+        table.classList.remove('gv-test-invisible');
+        await flush();
+        button('tsv').click();
+        expect(clipboard.writeText).toHaveBeenCalledTimes(1);
+      } finally {
+        style.remove();
+      }
+    });
   });
 
   it('ignores thinking blocks and tracks semantic marker changes', async () => {

@@ -48,6 +48,86 @@ describe('tableCopy serialization', () => {
     expect(serializeTable(source, 'markdown')).toContain('one<br>two<br>three<br>four');
   });
 
+  it('omits hidden rows and sections while keeping hidden cells as empty columns', () => {
+    const source = table(
+      '<thead><tr hidden><th>old</th><th>secret</th></tr>' +
+        '<tr><th>Key</th><th>Value</th></tr></thead>' +
+        '<tbody><tr><td>visible</td><td aria-hidden="TRUE">secret cell</td></tr>' +
+        '<tr hidden><td>hidden row</td><td>secret</td></tr>' +
+        '<tr><td>second</td><td>shown</td></tr></tbody>' +
+        '<tbody aria-hidden="true"><tr><td>hidden section</td><td>secret</td></tr></tbody>',
+    );
+    expect(serializeTable(source, 'tsv')).toBe('Key\tValue\nvisible\t\nsecond\tshown');
+    const markdown = serializeTable(source, 'markdown');
+    expect(markdown).toBe('| Key | Value |\n| --- | --- |\n| visible |  |\n| second | shown |');
+    const rendered = document.createElement('div');
+    rendered.innerHTML = marked.parse(markdown) as string;
+    expect(
+      Array.from(rendered.querySelectorAll('tbody tr'), (row) =>
+        Array.from(row.querySelectorAll('td'), (cell) => cell.textContent?.trim()),
+      ),
+    ).toEqual([
+      ['visible', ''],
+      ['second', 'shown'],
+    ]);
+  });
+
+  it('does not serialize a table hidden by itself or an ancestor', () => {
+    const source = table('<tr><td>secret</td></tr>');
+    const wrapper = document.createElement('div');
+    source.before(wrapper);
+    wrapper.append(source);
+    for (const element of [source, wrapper]) {
+      element.setAttribute('hidden', '');
+      for (const format of ['markdown', 'tsv'] as const) {
+        expect(() => serializeTable(source, format)).toThrow(new TableCopyError('empty'));
+      }
+      element.removeAttribute('hidden');
+    }
+    wrapper.setAttribute('aria-hidden', 'true');
+    expect(() => serializeTable(source, 'tsv')).toThrow(new TableCopyError('empty'));
+  });
+
+  it('omits CSS-hidden rows and cells while preserving visible columns and text', () => {
+    const source = table(
+      '<thead><tr><th>Key</th><th>Value</th><th>Detail</th></tr></thead>' +
+        '<tbody><tr><td>visible</td><td style="visibility:hidden">secret cell</td>' +
+        '<td><span style="display:none">secret text</span>shown</td></tr>' +
+        '<tr style="display:none"><td>hidden row</td><td>secret</td><td>secret</td></tr>' +
+        '<tr style="visibility:hidden"><td>invisible row</td><td>secret</td><td>secret</td></tr>' +
+        '<tr><td>second</td><td style="display:none">secret cell</td><td>shown</td></tr></tbody>' +
+        '<tbody style="display:none"><tr><td>hidden section</td><td>secret</td><td>secret</td></tr></tbody>',
+    );
+    expect(serializeTable(source, 'tsv')).toBe(
+      'Key\tValue\tDetail\nvisible\t\tshown\nsecond\t\tshown',
+    );
+    expect(serializeTable(source, 'markdown')).toBe(
+      '| Key | Value | Detail |\n| --- | --- | --- |\n| visible |  | shown |\n| second |  | shown |',
+    );
+  });
+
+  it('rejects CSS-hidden tables and ancestors but accepts offscreen visible tables', () => {
+    const source = table('<tr><td>visible</td></tr>');
+    const wrapper = document.createElement('div');
+    source.before(wrapper);
+    wrapper.append(source);
+    for (const element of [source, wrapper]) {
+      for (const [property, value] of [
+        ['display', 'none'],
+        ['visibility', 'hidden'],
+      ] as const) {
+        element.style.setProperty(property, value);
+        for (const format of ['markdown', 'tsv'] as const) {
+          expect(() => serializeTable(source, format)).toThrow(new TableCopyError('empty'));
+        }
+        element.style.removeProperty(property);
+      }
+    }
+    wrapper.style.position = 'absolute';
+    wrapper.style.top = '-10000px';
+    expect(serializeTable(source, 'tsv')).toBe('visible');
+  });
+
   it('does not consume data as a header when thead is empty', () => {
     expect(
       serializeTable(table('<thead></thead><tbody><tr><td>first</td></tr></tbody>'), 'markdown'),
@@ -57,6 +137,28 @@ describe('tableCopy serialization', () => {
   it('normalizes TSV separators, escapes quotes and preserves empty cells including trailing ones', () => {
     const source = table('<tr><td></td><td>say "hello"\tthen\nbye</td><td></td></tr>');
     expect(serializeTable(source, 'tsv')).toBe('\t"say ""hello"" then bye"\t');
+  });
+
+  it('keeps emoji joiners but removes stray joiners before formula detection', () => {
+    const family = '\u{1F468}\u200D\u{1F469}\u200D\u{1F467}';
+    const flag = '\u{1F3F3}\uFE0F\u200D\u{1F308}';
+    const source = table('<tr><td></td><td></td></tr>');
+    source.rows[0].cells[0].textContent = family + ' ' + flag;
+    source.rows[0].cells[1].textContent = '\u200D\u200B\uFEFF =SUM(A1)';
+    expect(serializeTable(source, 'tsv')).toBe(family + ' ' + flag + "\t' =SUM(A1)");
+    const markdown = serializeTable(source, 'markdown');
+    expect(markdown).toContain(family + ' ' + flag);
+    expect(markdown).not.toContain('\u200D =SUM');
+  });
+
+  it('escapes literal tildes instead of rendering GFM strikethrough', () => {
+    const source = table('<tr><td>~~sale~~</td></tr>');
+    const markdown = serializeTable(source, 'markdown');
+    expect(markdown).toContain('\\~\\~sale\\~\\~');
+    const rendered = document.createElement('div');
+    rendered.innerHTML = marked.parse(markdown) as string;
+    expect(rendered.querySelector('del')).toBeNull();
+    expect(rendered.querySelector('tbody td')?.textContent).toBe('~~sale~~');
   });
 
   it.each([
