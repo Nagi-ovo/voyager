@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import * as i18n from '@/utils/i18n';
+
 import pluginManifest from '../catalog/sites/deepseek/plugins/code-collapse/plugin.json';
 import { DeclarativeEngine } from '../runtime/declarativeEngine';
 import { PluginScope } from '../runtime/pluginScope';
@@ -32,6 +34,7 @@ let scopes: PluginScope[] = [];
 
 beforeEach(() => {
   vi.useFakeTimers();
+  vi.spyOn(i18n, 'getCurrentLanguage').mockResolvedValue('en');
   vi.stubGlobal('CSS', { supports: () => true });
   vi.spyOn(navigator, 'language', 'get').mockReturnValue('en-US');
 });
@@ -214,6 +217,40 @@ describe.each(fixtures)('codeCollapse on $id', (fixture) => {
     expect(scope.getEffects()).toEqual(effects);
   });
 
+  it('ignores unrelated streaming but still reconciles on route and code changes', async () => {
+    const { code, pre, start } = setup(fixture);
+    const prose = document.createElement('p');
+    pre.parentElement!.parentElement!.append(prose);
+    const reads = vi.spyOn(document, 'createTreeWalker');
+    start();
+    await flush();
+    expect(vi.getTimerCount()).toBe(0);
+    const codeReads = () => reads.mock.calls.filter(([root]) => root === pre).length;
+    const initialReads = codeReads();
+    prose.append('response text');
+    prose.firstChild!.textContent += ' keeps streaming';
+    prose.classList.add('streaming');
+    await flush();
+    expect(codeReads()).toBe(initialReads);
+    code.append('\nstreamed code');
+    await flush();
+    expect(codeReads()).toBeGreaterThan(initialReads);
+
+    toggle()!.click();
+    const oldToggle = toggle();
+    const originalUrl = location.href;
+    try {
+      history.pushState(null, '', '#new-conversation');
+      prose.append('another unrelated update');
+      await flush();
+      expect(oldToggle?.isConnected).toBe(false);
+      expect(pre.style.maxHeight).toBe('20lh');
+      expect(toggle()?.getAttribute('aria-expanded')).toBe('false');
+    } finally {
+      history.replaceState(null, '', originalUrl);
+    }
+  });
+
   it('keeps native copy, original nodes, full text, and exact DOM/styles on disposal', async () => {
     const { pre, code, start, scope, count } = setup(fixture);
     pre.setAttribute(
@@ -324,6 +361,63 @@ describe.each(fixtures)('codeCollapse on $id', (fixture) => {
     expect(toggle()).toBeNull();
   });
 
+  it('respects inherited editable modes and reacts when they change', async () => {
+    const { pre, start } = setup(fixture);
+    const parent = pre.parentElement!;
+    parent.setAttribute('contenteditable', '');
+    start();
+    expect(toggle()).toBeNull();
+    parent.setAttribute('contenteditable', 'false');
+    await flush();
+    expect(toggle()).not.toBeNull();
+    parent.setAttribute('contenteditable', 'plaintext-only');
+    await flush();
+    expect(toggle()).toBeNull();
+    expect(pre.hasAttribute('style')).toBe(false);
+    parent.removeAttribute('contenteditable');
+    await flush();
+    expect(toggle()).not.toBeNull();
+  });
+
+  it('uses the saved language, updates controls, and ignores stale language reads', async () => {
+    vi.mocked(i18n.getCurrentLanguage).mockResolvedValueOnce('zh');
+    const { start, scope } = setup(fixture);
+    start();
+    await flush();
+    expect(toggle()?.getAttribute('aria-label')).toBe('展开代码');
+    expect(toolbarButton('展开全部代码')).not.toBeNull();
+    let resolveOld!: (value: 'en') => void;
+    vi.mocked(i18n.getCurrentLanguage)
+      .mockImplementationOnce(() => new Promise((resolve) => (resolveOld = resolve)))
+      .mockResolvedValueOnce('ja');
+    const listener = vi.mocked(chrome.storage.onChanged.addListener).mock.calls.at(-1)?.[0];
+    listener?.({ language: { newValue: 'en' } }, 'sync');
+    listener?.({ language: { newValue: 'ja' } }, 'sync');
+    await flush();
+    expect(toggle()?.getAttribute('aria-label')).toBe('コードを展開');
+    resolveOld('en');
+    await flush();
+    expect(toggle()?.getAttribute('aria-label')).toBe('コードを展開');
+    toggle()!.click();
+    expect(toggle()?.getAttribute('aria-label')).toBe('コードを折りたたむ');
+    await scope.dispose();
+    expect(chrome.storage.onChanged.removeListener).toHaveBeenCalledWith(listener);
+  });
+
+  it('does not mount controls from a language read that resolves after disposal', async () => {
+    let resolveLanguage!: (value: 'zh') => void;
+    vi.mocked(i18n.getCurrentLanguage).mockImplementationOnce(
+      () => new Promise((resolve) => (resolveLanguage = resolve)),
+    );
+    const { start, scope } = setup(fixture);
+    start();
+    await scope.dispose();
+    resolveLanguage('zh');
+    await flush();
+    expect(toggle()).toBeNull();
+    expect(document.head.querySelector('[data-gv-plugin-scope]')).toBeNull();
+  });
+
   it('honors selector overrides and stays inert for invalid selectors', async () => {
     const { start, scope } = setup(fixture, 25, { code: '[' });
     start();
@@ -349,6 +443,33 @@ describe.each(fixtures)('codeCollapse on $id', (fixture) => {
     expect(pre.style.getPropertyPriority('max-height')).toBe(priorPriority);
     expect(pre.style.overflowY).toBe('scroll');
     expect(pre.style.color).toBe('blue');
+  });
+
+  it('reapplies the clamp after host style writes and returns the host latest values', async () => {
+    const { pre, start, scope } = setup(fixture);
+    pre.style.setProperty('max-height', '333px', 'important');
+    start();
+    await flush();
+    pre.style.setProperty('max-height', '777px', 'important');
+    const hostPriority = pre.style.getPropertyPriority('max-height');
+    pre.style.color = 'blue';
+    await flush();
+    expect(pre.style.maxHeight).toBe('20lh');
+    expect(toggle()?.getAttribute('aria-expanded')).toBe('false');
+    expect(vi.getTimerCount()).toBe(0);
+    await scope.dispose();
+    expect(pre.style.maxHeight).toBe('777px');
+    expect(pre.style.getPropertyPriority('max-height')).toBe(hostPriority);
+    expect(pre.style.color).toBe('blue');
+  });
+
+  it('keeps a last-moment host style replacement when disabled', async () => {
+    const { pre, start, scope } = setup(fixture);
+    start();
+    pre.setAttribute('style', 'max-height: 800px; color: green;');
+    await scope.dispose();
+    expect(pre.getAttribute('style')).toContain('max-height: 800px');
+    expect(pre.style.color).toBe('green');
   });
 
   it('does not duplicate-mount through the engine and handles settings and teardown', async () => {

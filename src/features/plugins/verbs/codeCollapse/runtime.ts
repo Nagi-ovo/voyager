@@ -9,6 +9,9 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 
+import { StorageKeys } from '@/core/types/common';
+import { getCurrentLanguage } from '@/utils/i18n';
+
 import { PluginScope, type Dispose } from '../../runtime/pluginScope';
 import type { PluginSettings } from '../../types';
 import {
@@ -55,10 +58,16 @@ interface Block {
   autoFolded: boolean;
   toggle: HTMLButtonElement | null;
   releaseToggle: Dispose | null;
-  restore: (() => void) | null;
+  clamp: ClampHandle | null;
 }
 
-function clamp(pre: HTMLElement, lines: number): () => void {
+interface ClampHandle {
+  restore(): void;
+  isCurrent(): boolean;
+  reapply(): void;
+}
+
+function clamp(pre: HTMLElement, lines: number): ClampHandle {
   const original = pre.getAttribute('style');
   const prior = CLAMP_PROPERTIES.map((key) => ({
     key,
@@ -70,25 +79,71 @@ function clamp(pre: HTMLElement, lines: number): () => void {
   const lineHeight =
     Number.parseFloat(computed?.lineHeight ?? '') ||
     (Number.parseFloat(computed?.fontSize ?? '') || 16) * 1.5;
-  pre.style.setProperty('max-height', lines * lineHeight + 'px', 'important');
-  if (view?.CSS?.supports('max-height', '1lh')) {
-    pre.style.setProperty('max-height', lines + 'lh', 'important');
-  }
-  pre.style.setProperty('min-height', '0', 'important');
-  pre.style.setProperty('overflow-y', 'hidden', 'important');
-  const applied = pre.style.cssText;
-  return () => {
-    if (pre.style.cssText === applied) {
-      if (original === null) pre.removeAttribute('style');
-      else pre.setAttribute('style', original);
-      return;
-    }
-    // A host update to unrelated inline declarations must survive our rollback.
-    for (const { key, value, priority } of prior) {
-      if (value) pre.style.setProperty(key, value, priority);
-      else pre.style.removeProperty(key);
+  const height = view?.CSS?.supports('max-height', '1lh')
+    ? lines + 'lh'
+    : lines * lineHeight + 'px';
+  let applied = CLAMP_PROPERTIES.map((key) => ({ key, value: '', priority: '' }));
+  let appliedStyle = '';
+  let hostEdited = false;
+  const current = (key: string) => ({
+    value: pre.style.getPropertyValue(key),
+    priority: pre.style.getPropertyPriority(key),
+  });
+  const isCurrent = () =>
+    applied.every(({ key, value, priority }) => {
+      const valueNow = current(key);
+      return valueNow.value === value && valueNow.priority === priority;
+    });
+  const captureHostChanges = () => {
+    if (pre.style.cssText !== appliedStyle) hostEdited = true;
+    for (let i = 0; i < prior.length; i++) {
+      const valueNow = current(prior[i].key);
+      if (valueNow.value !== applied[i].value || valueNow.priority !== applied[i].priority) {
+        prior[i].value = valueNow.value;
+        prior[i].priority = valueNow.priority;
+      }
     }
   };
+  const writeClamp = () => {
+    pre.style.setProperty('max-height', height, 'important');
+    pre.style.setProperty('min-height', '0', 'important');
+    pre.style.setProperty('overflow-y', 'hidden', 'important');
+    applied = CLAMP_PROPERTIES.map((key) => ({ key, ...current(key) }));
+    appliedStyle = pre.style.cssText;
+  };
+  writeClamp();
+  return {
+    isCurrent,
+    reapply() {
+      captureHostChanges();
+      writeClamp();
+    },
+    restore() {
+      captureHostChanges();
+      if (!hostEdited) {
+        if (original === null) pre.removeAttribute('style');
+        else pre.setAttribute('style', original);
+        return;
+      }
+      for (let i = 0; i < prior.length; i++) {
+        const { key, value, priority } = prior[i];
+        const valueNow = current(key);
+        if (valueNow.value !== applied[i].value || valueNow.priority !== applied[i].priority)
+          continue;
+        if (value) pre.style.setProperty(key, value, priority);
+        else pre.style.removeProperty(key);
+      }
+    },
+  };
+}
+
+function isEditable(el: Element): boolean {
+  for (let current: Element | null = el; current; current = current.parentElement) {
+    const value = current.getAttribute('contenteditable')?.toLowerCase();
+    if (value === 'false') return false;
+    if (value === '' || value === 'true' || value === 'plaintext-only') return true;
+  }
+  return false;
 }
 
 function setIcon(button: HTMLButtonElement, icon: LucideIcon, label: string): void {
@@ -104,7 +159,8 @@ export function activateCodeCollapse(
   context: PrimitiveContext,
 ): PrimitiveHandle {
   const { doc } = context;
-  const labels = codeCollapseLabels(doc.defaultView?.navigator.language ?? 'en');
+  let labels = codeCollapseLabels('en');
+  let languageRequest = 0;
   const blocks = new Map<HTMLElement, Block>();
   let threshold = DEFAULT_THRESHOLD_LINES;
   let toolbar: HTMLElement | null = null;
@@ -140,7 +196,7 @@ export function activateCodeCollapse(
           (params.code !== undefined ||
             !context.adapter?.selectors.thinkingBlock ||
             !el.closest(context.adapter.selectors.thinkingBlock)) &&
-          !el.closest('[contenteditable="true"]') &&
+          !isEditable(el) &&
           !el.querySelector('button, input, textarea, [role="button"]'),
       );
     } catch {
@@ -149,8 +205,8 @@ export function activateCodeCollapse(
   }
 
   function resetBlock(block: Block): void {
-    block.restore?.();
-    block.restore = null;
+    block.clamp?.restore();
+    block.clamp = null;
     block.folded = false;
     block.toggle?.remove();
     void block.releaseToggle?.();
@@ -160,9 +216,11 @@ export function activateCodeCollapse(
 
   function apply(block: Block, folded: boolean): void {
     if (block.folded !== folded) {
-      block.restore?.();
-      block.restore = folded ? clamp(block.pre, threshold) : null;
+      block.clamp?.restore();
+      block.clamp = folded ? clamp(block.pre, threshold) : null;
       block.folded = folded;
+    } else if (folded && block.clamp && !block.clamp.isCurrent()) {
+      block.clamp.reapply();
     }
     if (block.toggle) {
       setIcon(
@@ -192,6 +250,31 @@ export function activateCodeCollapse(
     });
     child.mount(el, parent);
     return el;
+  }
+
+  function refreshLabels(): void {
+    const request = ++languageRequest;
+    void getCurrentLanguage()
+      .catch(() => doc.defaultView?.navigator.language ?? 'en')
+      .then((language) => {
+        if (scope.isDisposed || request !== languageRequest) return;
+        labels = codeCollapseLabels(language);
+        for (const block of blocks.values()) {
+          if (block.toggle) {
+            setIcon(
+              block.toggle,
+              block.folded ? ChevronDown : ChevronUp,
+              block.folded ? labels.expand : labels.collapse,
+            );
+          }
+        }
+        if (toolbar) {
+          toolbar.setAttribute('aria-label', labels.toolbar);
+          const buttons = toolbar.querySelectorAll('button');
+          setIcon(buttons[0], ChevronsUpDown, labels.expandAll);
+          setIcon(buttons[1], ChevronsDownUp, labels.collapseAll);
+        }
+      });
   }
 
   function syncToolbar(): void {
@@ -271,7 +354,7 @@ export function activateCodeCollapse(
           autoFolded: false,
           toggle: null,
           releaseToggle: null,
-          restore: null,
+          clamp: null,
         };
         blocks.set(pre, block);
       }
@@ -315,6 +398,38 @@ export function activateCodeCollapse(
     }, 32);
   }
 
+  function containsPre(node: Node): boolean {
+    if (node.nodeType !== Node.ELEMENT_NODE) return false;
+    const el = node as Element;
+    return el.tagName === 'PRE' || el.querySelector('pre') !== null;
+  }
+
+  function insidePre(node: Node): boolean {
+    const el = node.nodeType === Node.ELEMENT_NODE ? (node as Element) : node.parentElement;
+    return Boolean(el?.closest('pre'));
+  }
+
+  function relevantMutation(record: MutationRecord): boolean {
+    if (record.type === 'attributes' && record.attributeName === 'style') {
+      const block = blocks.get(record.target as HTMLElement);
+      return Boolean(block?.clamp && !block.clamp.isCurrent());
+    }
+    if (record.type === 'characterData') return insidePre(record.target);
+    if (record.type === 'attributes') {
+      return insidePre(record.target) || containsPre(record.target);
+    }
+    if (insidePre(record.target)) return true;
+    return [...record.addedNodes, ...record.removedNodes].some(
+      (node) =>
+        node.nodeType === Node.ELEMENT_NODE &&
+        (containsPre(node) ||
+          (node === toolbar && !toolbar?.isConnected) ||
+          [...blocks.values()].some(
+            (block) => block.toggle === node && !block.toggle?.isConnected,
+          )),
+    );
+  }
+
   scope.effect(
     () => () => {
       for (const block of blocks.values()) resetBlock(block);
@@ -337,26 +452,41 @@ export function activateCodeCollapse(
         'data-message-id',
         'data-turn-id',
         'data-message-author-role',
+        'contenteditable',
+        'style',
       ],
     },
     (records) => {
+      let relevant = route !== doc.location?.href;
       for (const record of records) {
+        if (relevantMutation(record)) relevant = true;
         for (const removed of record.removedNodes) {
+          if (!containsPre(removed)) continue;
           for (const [pre, block] of blocks) {
             if (removed === pre || removed.contains(pre)) {
               resetBlock(block);
               blocks.delete(pre);
+              relevant = true;
             }
           }
         }
       }
-      schedule();
+      if (relevant) schedule();
     },
   );
   if (doc.defaultView) {
     scope.on(doc.defaultView, 'popstate', schedule);
     scope.on(doc.defaultView, 'hashchange', schedule);
   }
+  if (typeof chrome !== 'undefined' && chrome.storage?.onChanged) {
+    scope.onChromeEvent(chrome.storage.onChanged, (changes, areaName) => {
+      if (scope.isDisposed) return;
+      if ((areaName === 'sync' || areaName === 'local') && changes[StorageKeys.LANGUAGE]) {
+        refreshLabels();
+      }
+    });
+  }
+  refreshLabels();
   context.setTargetCounter(() => targets().length);
 
   function updateSettings(settings: PluginSettings): void {
@@ -367,8 +497,8 @@ export function activateCodeCollapse(
     if (next !== threshold) {
       threshold = next;
       for (const block of blocks.values()) {
-        block.restore?.();
-        block.restore = block.folded ? clamp(block.pre, threshold) : null;
+        block.clamp?.restore();
+        block.clamp = block.folded ? clamp(block.pre, threshold) : null;
       }
     }
     reconcile();
