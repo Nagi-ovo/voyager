@@ -18,11 +18,17 @@
       "name": "DeepSeek · 阅读排版",
       "description": "调整回答正文的字号、行高和段落间距，不改变代码、公式或输入框。",
       "settings": {
+        "fontSizeEnabled": {
+          "label": "自定义正文字号"
+        },
         "fontSize": {
-          "label": "正文字号（0 使用原样式）"
+          "label": "正文字号（px）"
+        },
+        "lineHeightEnabled": {
+          "label": "自定义行高"
         },
         "lineHeight": {
-          "label": "行高百分比（0 使用原样式）"
+          "label": "行高（%）"
         },
         "paragraphSpace": {
           "label": "段落间距（0 使用原样式）"
@@ -33,11 +39,17 @@
       "name": "DeepSeek · 閱讀排版",
       "description": "調整回覆正文的字級、行高和段落間距，不改變程式碼、公式或輸入框。",
       "settings": {
+        "fontSizeEnabled": {
+          "label": "自訂正文字級"
+        },
         "fontSize": {
-          "label": "正文字級（0 使用原樣式）"
+          "label": "正文字級（px）"
+        },
+        "lineHeightEnabled": {
+          "label": "自訂行高"
         },
         "lineHeight": {
-          "label": "行高百分比（0 使用原樣式）"
+          "label": "行高（%）"
         },
         "paragraphSpace": {
           "label": "段落間距（0 使用原樣式）"
@@ -48,11 +60,17 @@
       "name": "DeepSeek · 読書レイアウト",
       "description": "コード、数式、入力欄を変更せず、回答本文の文字サイズ、行間、段落間隔を調整します。",
       "settings": {
+        "fontSizeEnabled": {
+          "label": "文字サイズを変更"
+        },
         "fontSize": {
-          "label": "文字サイズ（0 は元の表示）"
+          "label": "文字サイズ（px）"
+        },
+        "lineHeightEnabled": {
+          "label": "行間を変更"
         },
         "lineHeight": {
-          "label": "行間の割合（0 は元の表示）"
+          "label": "行間（%）"
         },
         "paragraphSpace": {
           "label": "段落間隔（0 は元の表示）"
@@ -63,11 +81,17 @@
       "name": "DeepSeek · 읽기 서식",
       "description": "코드, 수식, 입력창을 유지하면서 답변 본문의 글자 크기와 줄 및 문단 간격을 조절합니다.",
       "settings": {
+        "fontSizeEnabled": {
+          "label": "글자 크기 변경"
+        },
         "fontSize": {
-          "label": "글자 크기 (0: 원래 스타일)"
+          "label": "글자 크기 (px)"
+        },
+        "lineHeightEnabled": {
+          "label": "줄 높이 변경"
         },
         "lineHeight": {
-          "label": "줄 높이 비율 (0: 원래 스타일)"
+          "label": "줄 높이 (%)"
         },
         "paragraphSpace": {
           "label": "문단 간격 (0: 원래 스타일)"
@@ -78,11 +102,17 @@
       "name": "DeepSeek · Mise en forme de lecture",
       "description": "Ajuste le texte des réponses sans modifier le code, les formules ou la saisie.",
       "settings": {
+        "fontSizeEnabled": {
+          "label": "Personnaliser la taille du texte"
+        },
         "fontSize": {
-          "label": "Taille du texte (0 : style original)"
+          "label": "Taille du texte (px)"
+        },
+        "lineHeightEnabled": {
+          "label": "Personnaliser l'interligne"
         },
         "lineHeight": {
-          "label": "Interligne en pourcentage (0 : original)"
+          "label": "Interligne (%)"
         },
         "paragraphSpace": {
           "label": "Espacement des paragraphes (0 : original)"
@@ -93,11 +123,17 @@
       "name": "DeepSeek · Formato de lectura",
       "description": "Ajusta el texto de las respuestas sin cambiar código, fórmulas ni el cuadro de entrada.",
       "settings": {
+        "fontSizeEnabled": {
+          "label": "Personalizar tamaño del texto"
+        },
         "fontSize": {
-          "label": "Tamaño del texto (0: original)"
+          "label": "Tamaño del texto (px)"
+        },
+        "lineHeightEnabled": {
+          "label": "Personalizar altura de línea"
         },
         "lineHeight": {
-          "label": "Altura de línea en porcentaje (0: original)"
+          "label": "Altura de línea (%)"
         },
         "paragraphSpace": {
           "label": "Espacio entre párrafos (0: original)"
@@ -108,11 +144,17 @@
       "name": "DeepSeek · Formatação de leitura",
       "description": "Ajusta o texto das respostas sem alterar código, fórmulas ou a caixa de entrada.",
       "settings": {
+        "fontSizeEnabled": {
+          "label": "Personalizar tamanho do texto"
+        },
         "fontSize": {
-          "label": "Tamanho do texto (0: original)"
+          "label": "Tamanho do texto (px)"
+        },
+        "lineHeightEnabled": {
+          "label": "Personalizar altura da linha"
         },
         "lineHeight": {
-          "label": "Altura da linha em porcentagem (0: original)"
+          "label": "Altura da linha (%)"
         },
         "paragraphSpace": {
           "label": "Espaço entre parágrafos (0: original)"
@@ -123,11 +165,17 @@
       "name": "DeepSeek · Оформление текста",
       "description": "Настройка текста ответов без изменения кода, формул и поля ввода.",
       "settings": {
+        "fontSizeEnabled": {
+          "label": "Настроить размер текста"
+        },
         "fontSize": {
-          "label": "Размер текста (0: исходный)"
+          "label": "Размер текста (пикс.)"
+        },
+        "lineHeightEnabled": {
+          "label": "Настроить межстрочный интервал"
         },
         "lineHeight": {
-          "label": "Высота строки в процентах (0: исходная)"
+          "label": "Межстрочный интервал (%)"
         },
         "paragraphSpace": {
           "label": "Интервал абзацев (0: исходный)"
@@ -138,11 +186,17 @@
       "name": "DeepSeek · تنسيق القراءة",
       "description": "ضبط نص الردود دون تغيير الشيفرة أو المعادلات أو مربع الإدخال.",
       "settings": {
+        "fontSizeEnabled": {
+          "label": "تخصيص حجم النص"
+        },
         "fontSize": {
-          "label": "حجم النص (0: النمط الأصلي)"
+          "label": "حجم النص (بكسل)"
+        },
+        "lineHeightEnabled": {
+          "label": "تخصيص ارتفاع السطر"
         },
         "lineHeight": {
-          "label": "ارتفاع السطر بالنسبة المئوية (0: الأصلي)"
+          "label": "ارتفاع السطر (%)"
         },
         "paragraphSpace": {
           "label": "تباعد الفقرات (0: الأصلي)"
@@ -152,18 +206,28 @@
   },
   "contributes": {
     "settings": {
+      "fontSizeEnabled": {
+        "type": "boolean",
+        "label": "Custom text size",
+        "default": false
+      },
       "fontSize": {
         "type": "number",
-        "label": "Text size (0: original)",
-        "default": 0,
-        "min": 0,
+        "label": "Text size (px)",
+        "default": 16,
+        "min": 12,
         "max": 28
+      },
+      "lineHeightEnabled": {
+        "type": "boolean",
+        "label": "Custom line height",
+        "default": false
       },
       "lineHeight": {
         "type": "number",
-        "label": "Line height percent (0: original)",
-        "default": 0,
-        "min": 0,
+        "label": "Line height (%)",
+        "default": 160,
+        "min": 120,
         "max": 220
       },
       "paragraphSpace": {
@@ -176,7 +240,7 @@
     },
     "styles": [
       {
-        "css": "/* Zero is a true no-op: match no rule for that setting. Math/code paragraphs\n * are left native so inherited font sizes cannot distort their rendering. */\n.gv-plugin-deepseek-typography:not([data-gv-fontsize='0'])\n  .ds-assistant-message-main-content\n  :is(p, li):not(table *, pre *):not(\n    :has(code, .katex, math, .MathJax, mjx-container, [data-math], [data-math-source])\n  ) {\n  font-size: clamp(12px, {{fontSize}}px, 28px) !important;\n}\n.gv-plugin-deepseek-typography:not([data-gv-lineheight='0'])\n  .ds-assistant-message-main-content\n  :is(p, li):not(table *, pre *):not(\n    :has(code, .katex, math, .MathJax, mjx-container, [data-math], [data-math-source])\n  ) {\n  line-height: clamp(120%, {{lineHeight}}%, 220%) !important;\n}\n.gv-plugin-deepseek-typography:not([data-gv-paragraphspace='0'])\n  .ds-assistant-message-main-content\n  p:not(table *, pre *):not(\n    :has(code, .katex, math, .MathJax, mjx-container, [data-math], [data-math-source])\n  ) {\n  margin-block-end: {{paragraphSpace}}px !important;\n}\n"
+        "css": "/* Disabled settings match no rule. Math/code paragraphs stay native so\n * inherited font sizes cannot distort their rendering. */\n.gv-plugin-deepseek-typography[data-gv-fontsize-enabled='true']\n  .ds-assistant-message-main-content\n  :is(p, li):not(table *, pre *):not(\n    :has(code, .katex, math, .MathJax, mjx-container, [data-math], [data-math-source])\n  ) {\n  font-size: clamp(12px, {{fontSize}}px, 28px) !important;\n}\n.gv-plugin-deepseek-typography[data-gv-lineheight-enabled='true']\n  .ds-assistant-message-main-content\n  :is(p, li):not(table *, pre *):not(\n    :has(code, .katex, math, .MathJax, mjx-container, [data-math], [data-math-source])\n  ) {\n  line-height: {{lineHeight}}% !important;\n  line-height: clamp(120%, {{lineHeight}}%, 220%) !important;\n}\n.gv-plugin-deepseek-typography:not([data-gv-paragraphspace='0'])\n  .ds-assistant-message-main-content\n  p:not(table *, pre *):not(\n    :has(code, .katex, math, .MathJax, mjx-container, [data-math], [data-math-source])\n  ) {\n  margin-block-end: {{paragraphSpace}}px !important;\n}\n"
       }
     ],
     "domOps": [
@@ -194,8 +258,8 @@
           "kind": "semantic",
           "key": "assistantTurn"
         },
-        "name": "data-gv-fontsize",
-        "value": "{{fontSize}}"
+        "name": "data-gv-fontsize-enabled",
+        "value": "{{fontSizeEnabled}}"
       },
       {
         "op": "setAttribute",
@@ -203,8 +267,8 @@
           "kind": "semantic",
           "key": "assistantTurn"
         },
-        "name": "data-gv-lineheight",
-        "value": "{{lineHeight}}"
+        "name": "data-gv-lineheight-enabled",
+        "value": "{{lineHeightEnabled}}"
       },
       {
         "op": "setAttribute",

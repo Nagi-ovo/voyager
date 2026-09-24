@@ -1,10 +1,11 @@
 # DeepSeek Reading Typography
 
-Adjust ordinary answer paragraphs and list items using three numeric settings.
-Each setting defaults to zero, which leaves its native property unchanged;
-return all three to zero to restore native typography. Nonzero text sizes are
-clamped to 12-28 px and line heights to 120-220 percent. Paragraph spacing is
-0-32 px. Turning the plugin off restores all injected attributes and styles.
+Adjust ordinary answer paragraphs and list items with separate font-size and
+line-height switches and three numeric settings. Both switches default to off,
+leaving their native properties unchanged. When enabled, font size ranges from
+12-28 px and line height from 120-220 percent. Paragraph spacing is 0-32 px,
+with zero leaving its native spacing unchanged. Turning the plugin off restores
+all injected attributes and styles.
 
 To preserve math and inline-code rendering, a paragraph or list item containing
 code or recognized math markup is intentionally excluded. Thinking content,
