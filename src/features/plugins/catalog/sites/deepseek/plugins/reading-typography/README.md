@@ -16,7 +16,7 @@ permissions or storage format changes. Related issue: #1016.
 
 ## Acceptance status
 
-DOM and style checks use synthetic fixtures. Before PR publication, verify the
-actual DeepSeek page in light/dark and narrow/desktop layouts, including long
-virtualized conversations, list spacing and simultaneous reading-width use.
-No current real-page screenshots or extension-load proof are claimed here.
+PR #1034 is open. Automated DOM and style checks use synthetic fixtures;
+before merge, verify the actual DeepSeek page in light/dark and narrow/desktop
+layouts, including long virtualized conversations, list spacing and simultaneous
+reading-width use. Live screenshots and browser-version details are still pending.
