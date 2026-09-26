@@ -18,6 +18,7 @@ describe('BundledCatalogPluginSource', () => {
       'voyager.deepseek-formula-copy',
       'voyager.deepseek-reading-typography',
       'voyager.deepseek-reading-width',
+      'voyager.deepseek-table-copy',
       'voyager.deepseek-timeline',
       'voyager.deepseek-vim-input',
       'voyager.deepseek-wrap-code',

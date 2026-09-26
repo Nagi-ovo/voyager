@@ -1,0 +1,64 @@
+{
+  "$schema": "https://voyager.nagi.fun/plugin.schema.json",
+  "id": "voyager.deepseek-table-copy",
+  "name": "DeepSeek - Table Copy",
+  "version": "1.0.0",
+  "description": "Copy assistant tables as Markdown or spreadsheet-safe TSV using explicit copy buttons.",
+  "i18n": {
+    "zh": {
+      "name": "DeepSeek - 表格复制",
+      "description": "使用明确的复制按钮，将助手表格复制为 Markdown 或经过电子表格安全处理的 TSV。"
+    },
+    "zh_TW": {
+      "name": "DeepSeek - 表格複製",
+      "description": "使用明確的複製按鈕，將助理表格複製為 Markdown 或經過試算表安全處理的 TSV。"
+    },
+    "ja": {
+      "name": "DeepSeek - 表のコピー",
+      "description": "専用のコピーボタンで、アシスタントの表を Markdown または表計算ソフト向けの安全な TSV としてコピーします。"
+    },
+    "ko": {
+      "name": "DeepSeek - 표 복사",
+      "description": "복사 버튼으로 어시스턴트의 표를 Markdown 또는 스프레드시트용으로 안전하게 처리된 TSV로 복사합니다."
+    },
+    "fr": {
+      "name": "DeepSeek - Copie de tableaux",
+      "description": "Copiez les tableaux de l’assistant en Markdown ou en TSV sécurisé pour les tableurs avec des boutons dédiés."
+    },
+    "es": {
+      "name": "DeepSeek - Copia de tablas",
+      "description": "Copia las tablas del asistente como Markdown o TSV seguro para hojas de cálculo mediante botones específicos."
+    },
+    "pt": {
+      "name": "DeepSeek - Cópia de tabelas",
+      "description": "Copie tabelas do assistente como Markdown ou TSV seguro para planilhas usando botões específicos."
+    },
+    "ru": {
+      "name": "DeepSeek - Копирование таблиц",
+      "description": "Копируйте таблицы ассистента в Markdown или безопасный для электронных таблиц TSV с помощью отдельных кнопок."
+    },
+    "ar": {
+      "name": "DeepSeek - نسخ الجداول",
+      "description": "انسخ جداول المساعد بتنسيق Markdown أو TSV آمن لجداول البيانات باستخدام أزرار نسخ مخصصة."
+    }
+  },
+  "author": "voyager-official",
+  "category": "productivity",
+  "license": "GPL-3.0-or-later",
+  "engine": ">=1.5.0",
+  "tier": "declarative",
+  "matches": ["https://chat.deepseek.com/*"],
+  "requires": {
+    "handlers": ["tableCopy"],
+    "semantic": ["assistantTurn"]
+  },
+  "contributes": {
+    "domOps": [
+      {
+        "op": "native",
+        "handler": "tableCopy",
+        "params": {}
+      }
+    ]
+  }
+}
