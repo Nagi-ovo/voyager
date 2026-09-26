@@ -1,8 +1,8 @@
 # DeepSeek Table Copy
 
-Local prototype for #1014. Maintainer approval and real DeepSeek light/dark
-verification are still pending. Synthetic tests are not live-browser evidence.
-No PR should be opened until those gates and the automated checks pass.
+PR #1035 implements #1014. The automated checks passed; maintainer approval
+of the primitive contract and documented live-browser evidence are still pending.
+Synthetic tests are not live-browser evidence.
 
 ## Behavior
 
@@ -18,10 +18,11 @@ belongs to an assistant turn.
 
 The first header row becomes the Markdown header. A table without a header gets
 an empty Markdown header, retaining its first data row. Blank cells remain blank.
-Markdown escapes pipes, backticks, backslashes and HTML, and uses inline breaks
-for cell newlines. Cell text is copied without HTML markup, script/style/template
-contents, hidden attributes, or aria-hidden duplicates. This is a text export,
-not a lossless HTML or formatting export; CSS-only visibility is not evaluated.
+Markdown escapes pipes, backticks, backslashes, tildes and HTML, and uses inline
+breaks for cell newlines. Cell text is copied without HTML markup, script/style/
+template contents, hidden or aria-hidden content, or elements hidden by computed
+CSS (display:none or visibility:hidden/collapse). Offscreen but rendered content
+is still copied. This is a text export, not a lossless HTML or formatting export.
 
 TSV normalizes embedded tabs/newlines to spaces, doubles and quotes embedded
 quotation marks, and prefixes an apostrophe before formula-leading cells
@@ -49,21 +50,21 @@ The only optional parameter is **table** (selector, default **table**). Custom
 selectors still only target actual tables within assistant turns. The primitive
 exports **tableCopyPrimitive** and **TableCopyParams** from verbs/tableCopy.ts.
 
-Shared contracts, registry, engine constant, parameter baseline and marketplace
-registration are owned by the main integrator, not this implementation slice.
+The same PR registers the shared contract, primitive, engine version, parameter
+baseline and marketplace entry.
 There is no plugin CSS file: the first-party primitive owns its isolated styles.
 
 ## Verification
 
 - Run **bun run test src/features/plugins/verbs/tableCopy** for serializer and
   actual-primitive tests using DeepSeek and ChatGPT semantic fixtures.
-- After main integrates the shared registration, run **bun run plugin:check
+- Run **bun run plugin:check
   src/features/plugins/catalog/sites/deepseek/plugins/table-copy** and the full
-  repository checks. Test results are reported by the implementing task.
+  repository checks after any behavior change.
 - **Live pending:** real conversation with tables, selector hit counts, light and
   dark screenshots, narrow layout, streaming/replacement behavior, clipboard
-  denial and actual spreadsheet paste. The reachable conversation currently has
-  no sample tables; any test-message submission needs the user's confirmation.
+  denial and actual spreadsheet paste. The contributor reports the feature is
+  visible, but screenshots and detailed clipboard results are not yet recorded.
 
 Disable the plugin to remove controls/listeners/observers. Source tables and
 conversation contents are never rewritten by activation or teardown.

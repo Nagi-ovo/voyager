@@ -1,9 +1,9 @@
-# DeepSeek Code Folding (local prototype)
+# DeepSeek Code Folding
 
-Local prototype for #1015. **Real DeepSeek verification is pending.**
-Neither these fixtures nor a passing build establish live-site compatibility or
-maintainer approval of the new primitive contract. Do not publish this prototype
-as verified until the evidence below is collected.
+PR #1036 implements #1015. The contributor reports that the controls appear on
+DeepSeek, but screenshots, browser-version details and the full live workflows
+below are still pending. Neither synthetic fixtures nor a passing build prove
+live-site compatibility or maintainer approval of the new primitive contract.
 
 ## Behavior
 
@@ -28,13 +28,12 @@ as verified until the evidence below is collected.
   navigated targets release old controls and reset the decision.
 - Disabling restores original inline values and priorities, including the exact
   original style attribute when the host has not independently edited it. Host
-  changes to unrelated inline declarations are retained.
+  updates to managed or unrelated inline declarations are retained.
 
-## Integration ownership
+## Integration
 
-This directory and `verbs/codeCollapse*` contain only the prototype-owned files.
-The coordinating task owns contracts, registry, params baseline, engine 1.5.0,
-and marketplace registration. This plugin should remain opt-in.
+The same PR includes this plugin, the primitive contract and registration,
+parameter baseline, engine 1.5.0 and marketplace entry. It remains opt-in.
 
 ## Verification still required
 
