@@ -1,3 +1,4 @@
+import { codeCollapsePrimitive } from './codeCollapse';
 /**
  * Primitive registry — the whitelist behind the `native` op (plan §5).
  *
@@ -14,6 +15,7 @@ import type { Primitive } from './types';
 import { vimInputPrimitive } from './vimInput';
 
 const PRIMITIVES: ReadonlyMap<string, Primitive<never>> = new Map<string, Primitive<never>>([
+  [codeCollapsePrimitive.contract.name, codeCollapsePrimitive as Primitive<never>],
   [tableCopyPrimitive.contract.name, tableCopyPrimitive as Primitive<never>],
   [formulaCopyPrimitive.contract.name, formulaCopyPrimitive as Primitive<never>],
   [vimInputPrimitive.contract.name, vimInputPrimitive as Primitive<never>],

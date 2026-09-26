@@ -38,6 +38,25 @@ export const PRIMITIVE_NAME_PATTERN = /^[a-z][a-zA-Z0-9]{1,39}$/;
 
 export const PRIMITIVE_CONTRACTS: readonly PrimitiveContract[] = [
   {
+    name: 'codeCollapse',
+    sinceEngine: '1.5.0',
+    semantic: ['assistantTurn'],
+    params: {
+      code: {
+        type: 'selector',
+        required: false,
+        description: 'Code block selector; defaults to pre elements inside assistant turns.',
+      },
+      thresholdLines: {
+        type: 'number',
+        required: false,
+        description: 'Fold code beyond this line count, from 5 to 200; defaults to 20.',
+      },
+    },
+    description:
+      'Reversibly fold long code blocks without changing their text or native copy controls.',
+  },
+  {
     name: 'tableCopy',
     sinceEngine: '1.5.0',
     semantic: ['assistantTurn'],
